@@ -1,8 +1,14 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { tavily } from "@tavily/core";
+import { tavily, type TavilyClient } from "@tavily/core";
 
-const client = tavily({ apiKey: process.env.TAVILY_API_KEY! });
+let client: TavilyClient | null = null;
+function getClient(): TavilyClient {
+  if (!client) {
+    client = tavily({ apiKey: process.env.TAVILY_API_KEY! });
+  }
+  return client;
+}
 
 /**
  * Web search tool powered by Tavily.
@@ -22,7 +28,7 @@ export const webSearchTool = tool({
       .describe("Número máximo de resultados (1-10)"),
   }),
   execute: async ({ query, maxResults }) => {
-    const response = await client.search(query, {
+    const response = await getClient().search(query, {
       maxResults: maxResults ?? 5,
       searchDepth: "basic",
       includeAnswer: true,
