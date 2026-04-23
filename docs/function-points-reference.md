@@ -300,10 +300,10 @@ VAF varia entre 0.65 (TDI=0) e 1.35 (TDI=70).
 | 8 | Atualizacao on-line | 4 | Drag-and-drop, inline edit |
 | 9 | Processamento complexo | 3 | Lead scoring, ROI calc |
 | 10 | Reusabilidade | 4 | DataTable, KanbanBoard, etc |
-| 11 | Facilidade de instalacao | 2 | start.sh, prisma push |
-| 12 | Facilidade de operacao | 1 | SQLite, sem infra complexa |
+| 11 | Facilidade de instalacao | 2 | start.sh, supabase db push |
+| 12 | Facilidade de operacao | 1 | Supabase gerenciado, sem infra complexa |
 | 13 | Multiplos locais | 1 | 1 ambiente por enquanto |
-| 14 | Facilidade de mudanca | 3 | Prisma migrations, modular |
+| 14 | Facilidade de mudanca | 3 | SQL migrations, modular |
 | | **TDI** | **36** | |
 
 ```
