@@ -26,13 +26,6 @@ AGENTS.md
 CLAUDE.md
 README.md
 
-# Prisma: keep schema.prisma, drop migrations + seeds + local db
-prisma/migrations
-prisma/seed*.ts
-prisma/migrate-*.ts
-prisma/*.db
-prisma/*.db-journal
-
 # Misc local
 *.log
 npm-debug.log*
