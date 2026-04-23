@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Play, Trash2, FileText } from "lucide-react";
+import { Play, Trash2, FileText, Pencil } from "lucide-react";
 
 type Session = {
   id: string;
@@ -26,10 +27,10 @@ type Session = {
   totalSteps: number;
   createdAt: string;
   project: { name: string; client: { name: string } };
-  _count: { items: number };
+  items: { id: string }[];
 };
 
-type Project = { id: string; name: string };
+type Project = { id: string; name: string; client: { name: string } };
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -47,32 +48,76 @@ export default function DesignSessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Session | null>(null);
   const [form, setForm] = useState({
     title: "", description: "", type: "inception", projectId: "",
   });
   const router = useRouter();
 
-  const load = () => {
-    fetch("/api/design-sessions").then((r) => r.json()).then(setSessions);
-    fetch("/api/projects").then((r) => r.json()).then(setProjects);
+  const load = async () => {
+    const supabase = createClient();
+    const [sessionsRes, projectsRes] = await Promise.all([
+      supabase
+        .from("DesignSession")
+        .select("*, project:Project(name, client:Client(name)), items:DesignSessionItem(id)")
+        .order("createdAt", { ascending: false }),
+      supabase
+        .from("Project")
+        .select("id, name, client:Client(name)")
+        .order("name"),
+    ]);
+    if (sessionsRes.data) setSessions(sessionsRes.data as Session[]);
+    if (projectsRes.data) setProjects(projectsRes.data as unknown as Project[]);
   };
 
   useEffect(() => { load(); }, []);
 
-  const create = async () => {
-    const res = await fetch("/api/design-sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+  const getNextSessionName = (projectId: string) => {
+    const proj = projects.find((p) => p.id === projectId);
+    if (!proj) return "Session 1";
+    const count = sessions.filter((s) => s.project?.name === proj.name).length;
+    return `Session ${count + 1}`;
+  };
+
+  const save = async () => {
+    const supabase = createClient();
+    if (editing) {
+      await supabase
+        .from("DesignSession")
+        .update({ title: form.title, description: form.description, type: form.type, projectId: form.projectId, updatedAt: new Date().toISOString() })
+        .eq("id", editing.id);
+      setOpen(false);
+      load();
+    } else {
+      const title = getNextSessionName(form.projectId);
+      const { data: session, error } = await supabase
+        .from("DesignSession")
+        .insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), title, description: form.description, type: form.type, projectId: form.projectId })
+        .select("id")
+        .single();
+      if (error || !session) return;
+      setOpen(false);
+      router.push(`/design-sessions/${session.id}/steps/0`);
+    }
+  };
+
+  const openEdit = (s: Session, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditing(s);
+    const proj = projects.find((p) => p.name === s.project.name);
+    setForm({
+      title: s.title,
+      description: "",
+      type: s.type,
+      projectId: proj?.id ?? "",
     });
-    const session = await res.json();
-    setOpen(false);
-    router.push(`/design-sessions/${session.id}/steps/0`);
+    setOpen(true);
   };
 
   const remove = async (id: string) => {
     if (!confirm("Remover esta session?")) return;
-    await fetch(`/api/design-sessions/${id}`, { method: "DELETE" });
+    const supabase = createClient();
+    await supabase.from("DesignSession").delete().eq("id", id);
     load();
   };
 
@@ -86,6 +131,7 @@ export default function DesignSessionsPage() {
         title="Design Sessions"
         description="Sessoes de descoberta e alinhamento com clientes"
         onAdd={() => {
+          setEditing(null);
           setForm({ title: "", description: "", type: "inception", projectId: "" });
           setOpen(true);
         }}
@@ -126,11 +172,14 @@ export default function DesignSessionsPage() {
 
               <div className="mt-3 flex items-center justify-between">
                 <div className="flex gap-3 text-xs text-muted-foreground">
-                  <span>{s._count.items} items</span>
+                  <span>{s.items.length} items</span>
                 </div>
                 <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openSession(s)}>
                     <Play className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => openEdit(s, e)}>
+                    <Pencil className="h-3.5 w-3.5" />
                   </Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(s.id)}>
                     <Trash2 className="h-3.5 w-3.5" />
@@ -152,7 +201,7 @@ export default function DesignSessionsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova Design Session</DialogTitle>
+            <DialogTitle>{editing ? "Editar Session" : "Nova Design Session"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -184,28 +233,36 @@ export default function DesignSessionsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
-              <Label>Titulo</Label>
-              <Input
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Ex: Inception TechCorp App"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Descricao (opcional)</Label>
-              <Textarea
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Objetivo e contexto da sessao"
-                rows={3}
-              />
-            </div>
+            {!editing && form.projectId && (
+              <p className="text-sm text-muted-foreground">
+                {getNextSessionName(form.projectId)}
+              </p>
+            )}
+            {editing && (
+              <div className="grid gap-2">
+                <Label>Titulo</Label>
+                <Input
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
+              </div>
+            )}
+            {editing && (
+              <div className="grid gap-2">
+                <Label>Descricao (opcional)</Label>
+                <Textarea
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Objetivo e contexto da sessao"
+                  rows={3}
+                />
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={create} disabled={!form.title || !form.projectId}>
-              Iniciar Session
+            <Button onClick={save} disabled={!form.projectId || (!!editing && !form.title)}>
+              {editing ? "Salvar" : "Iniciar Session"}
             </Button>
           </div>
         </DialogContent>

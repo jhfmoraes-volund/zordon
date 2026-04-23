@@ -1,0 +1,94 @@
+import type { ToolSet } from "ai";
+
+// ─── Capabilities ────────────────────────────────────────
+
+export interface Capabilities {
+  /** Maximum tool-call steps per run */
+  maxSteps: number;
+  /** Whether the agent can use write tools (set_field, add_item, etc) */
+  writeTools: boolean;
+  /** Whether the agent can use read tools (get_step_data) */
+  readTools: boolean;
+  /** Whether the agent can search the web */
+  webSearch?: boolean;
+  /** Whether the agent can create tasks in the backlog */
+  createTasks?: boolean;
+  /** Project ID for task creation (required when createTasks is true) */
+  projectId?: string;
+  /** Composio integration settings */
+  composio?: {
+    userId: string;
+    toolkits: string[];
+  };
+  /** Per-user Roam API token. Loaded from member_integrations before each run. */
+  roamToken?: string;
+}
+
+// ─── Engine contracts ────────────────────────────────────
+
+/**
+ * Context passed to the prompt builder at runtime.
+ * Generic enough for any agent — each agent picks what it needs.
+ */
+export interface PromptContext {
+  /** Chat message history for context */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  messageHistory: any[];
+  /** Raw capabilities for the run */
+  capabilities: Capabilities;
+  /** Extra context loaded by the agent (session data, sprint data, etc.) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  agentContext: Record<string, any>;
+}
+
+/**
+ * Agent definition — prompt builder + tool assembler + context loader.
+ * Each agent (Vitor, Zordon, ...) implements this interface.
+ */
+export interface AgentDefinition {
+  name: string;
+  /** Builds the system prompt given runtime context */
+  buildPrompt: (ctx: PromptContext) => string;
+  /** Assembles tools for this run */
+  buildTools: (ctx: PromptContext) => ToolSet | Promise<ToolSet>;
+  /** Loads agent-specific context (session data, sprint overview, etc.) */
+  loadContext: (req: AgentRunRequest) => Promise<Record<string, unknown>>;
+}
+
+export interface AgentRunRequest {
+  agent: AgentDefinition;
+  thread: { id: string };
+  capabilities: Capabilities;
+  userMessage: string;
+  /** Extra params agents may need (sessionId, sprintId, etc.) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  params: Record<string, any>;
+}
+
+export interface AgentRunResult {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  streamText: any; // StreamTextResult — generic params vary per tool set
+}
+
+// ─── Chat data ───────────────────────────────────────────
+
+export interface ChatThread {
+  id: string;
+  sessionId: string;
+  channel: "web" | "telegram" | "trigger";
+  title: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  toolCalls: unknown | null;
+  toolResults: unknown | null;
+  actions: unknown | null;
+  createdAt: string;
+}

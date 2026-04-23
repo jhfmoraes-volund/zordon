@@ -1,56 +1,57 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { getUser } from "@/lib/dal";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
-  const member = await prisma.member.findUnique({
-    where: { id },
-    select: { id: true, name: true, fpCapacity: true },
-  });
+  const { id } = await params;
+  const supabase = db();
+
+  const { data: member } = await supabase
+    .from("Member")
+    .select("id, name, fpCapacity")
+    .eq("id", id)
+    .maybeSingle();
 
   if (!member) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
   }
 
-  const assignments = await prisma.taskAssignment.findMany({
-    where: { memberId: id, task: { sprintId: { not: null } } },
-    include: {
-      task: {
-        select: {
-          functionPoints: true,
-          status: true,
-          sprintId: true,
-          sprint: {
-            select: {
-              id: true, name: true, startDate: true, endDate: true,
-              status: true, projectId: true,
-              project: { select: { name: true } },
-            },
-          },
-        },
-      },
-    },
-  });
+  const { data: assignments, error } = await supabase
+    .from("TaskAssignment")
+    .select(`
+      task:Task!inner(
+        functionPoints, status, sprintId,
+        sprint:Sprint!inner(
+          id, name, startDate, endDate, status, projectId,
+          project:Project(name)
+        )
+      )
+    `)
+    .eq("memberId", id)
+    .not("task.sprintId", "is", null);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const sprintMap = new Map<
     string,
     {
       sprintId: string;
       sprintName: string;
-      startDate: Date;
-      endDate: Date;
+      startDate: string;
+      endDate: string;
       sprintStatus: string;
       projects: Map<string, { projectId: string; projectName: string; fp: number }>;
       totalFp: number;
     }
   >();
 
-  for (const a of assignments) {
-    const sprint = a.task.sprint!;
+  for (const a of assignments as any[]) {
+    const sprint = a.task.sprint;
     const fp = a.task.functionPoints ?? 0;
 
     if (!sprintMap.has(sprint.id)) {
@@ -79,7 +80,7 @@ export async function GET(
   }
 
   const sprints = Array.from(sprintMap.values())
-    .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+    .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
     .map(({ projects, ...rest }) => ({
       ...rest,
       projects: Array.from(projects.values()),

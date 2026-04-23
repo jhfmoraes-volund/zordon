@@ -1,29 +1,41 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { getUser } from "@/lib/dal";
 
-export async function GET() {
-  const sprints = await prisma.sprint.findMany({
-    include: {
-      project: { select: { id: true, name: true } },
-      tasks: {
-        select: {
-          status: true,
-          functionPoints: true,
-          assignments: {
-            include: {
-              member: { select: { id: true, name: true, fpCapacity: true } },
-            },
-          },
-        },
-      },
-    },
-    orderBy: { startDate: "desc" },
-  });
+export async function GET(req: NextRequest) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
-  const result = sprints.map(({ tasks, ...sprint }) => {
+  const { searchParams } = new URL(req.url);
+  const statusParam = searchParams.get("status");
+  const supabase = db();
+
+  let query = supabase
+    .from("Sprint")
+    .select(`
+      *,
+      project:Project(id, name),
+      tasks:Task(
+        status, functionPoints,
+        assignments:TaskAssignment(
+          member:Member(id, name, fpCapacity)
+        )
+      )
+    `)
+    .order("startDate", { ascending: false });
+
+  if (statusParam !== "all") {
+    const statuses = statusParam ? [statusParam] : ["active", "planning"];
+    query = query.in("status", statuses);
+  }
+
+  const { data: sprints, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const result = (sprints ?? []).map(({ tasks, ...sprint }: any) => {
     const total = tasks.length;
-    const done = tasks.filter((t) => t.status === "done").length;
-    const totalFp = tasks.reduce((s, t) => s + (t.functionPoints ?? 0), 0);
+    const done = tasks.filter((t: any) => t.status === "done").length;
+    const totalFp = tasks.reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0);
 
     const memberMap = new Map<string, { id: string; name: string; fpCapacity: number; fpAllocated: number }>();
     for (const task of tasks) {
@@ -57,22 +69,30 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const sprint = await prisma.sprint.create({
-    data: body,
-    include: {
-      project: { select: { id: true, name: true } },
-      tasks: { select: { status: true } },
-    },
-  });
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
-  const total = sprint.tasks.length;
-  const done = sprint.tasks.filter((t) => t.status === "done").length;
-  const { tasks, ...rest } = sprint;
+  const body = await req.json();
+  const supabase = db();
+
+  const { data: sprint, error } = await supabase
+    .from("Sprint")
+    .insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), ...body })
+    .select("*, project:Project(id, name)")
+    .single();
+  if (error) {
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { error: "Já existe um sprint com esse nome neste projeto." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({
-    ...rest,
-    taskStats: { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 },
+    ...sprint,
+    taskStats: { total: 0, done: 0, percent: 0 },
     totalFp: 0,
     members: [],
   }, { status: 201 });

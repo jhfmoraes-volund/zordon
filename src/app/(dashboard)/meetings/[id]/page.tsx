@@ -16,7 +16,9 @@ import {
 } from "@/components/ui/dialog";
 import {
   ArrowLeft, Plus, Trash2, CheckCircle2, Circle, Clock,
+  ChevronDown, ChevronRight, ChevronsUpDown,
 } from "lucide-react";
+import { ZordonChat } from "@/components/zordon-chat";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -108,6 +110,8 @@ export default function MeetingDetailPage({
     dueDate: "",
     sourceReviewId: "",
   });
+  const [collapsedPms, setCollapsedPms] = useState<Set<string>>(new Set());
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
   const load = () => {
     fetch(`/api/meetings/${id}`).then((r) => r.json()).then((data) => {
@@ -205,6 +209,36 @@ export default function MeetingDetailPage({
     {}
   );
 
+  const togglePm = (pmId: string) => {
+    setCollapsedPms((prev) => {
+      const next = new Set(prev);
+      if (next.has(pmId)) next.delete(pmId);
+      else next.add(pmId);
+      return next;
+    });
+  };
+
+  const toggleProject = (reviewId: string) => {
+    setCollapsedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(reviewId)) next.delete(reviewId);
+      else next.add(reviewId);
+      return next;
+    });
+  };
+
+  const allPmIds = Object.keys(reviewsByPm);
+  const allCollapsed = allPmIds.length > 0 && allPmIds.every((id) => collapsedPms.has(id));
+
+  const toggleAll = () => {
+    if (allCollapsed) {
+      setCollapsedPms(new Set());
+      setCollapsedProjects(new Set());
+    } else {
+      setCollapsedPms(new Set(allPmIds));
+    }
+  };
+
   const isOverdue = (d: string | null) => {
     if (!d) return false;
     return new Date(d) < new Date() ;
@@ -256,23 +290,51 @@ export default function MeetingDetailPage({
 
       {/* Project Reviews */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Revisão por Projeto</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Revisão por Projeto</h2>
+          {allPmIds.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={toggleAll} className="text-xs text-muted-foreground">
+              <ChevronsUpDown className="mr-1 h-3.5 w-3.5" />
+              {allCollapsed ? "Expandir todos" : "Colapsar todos"}
+            </Button>
+          )}
+        </div>
 
         {Object.entries(reviewsByPm).map(([pmId, reviews]) => {
           const pmName = reviews[0].member.name;
+          const pmCollapsed = collapsedPms.has(pmId);
           return (
             <div key={pmId} className="surface p-4 space-y-4">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                {pmName} (PM)
-              </h3>
+              <button
+                onClick={() => togglePm(pmId)}
+                className="flex items-center gap-2 w-full text-left group"
+              >
+                {pmCollapsed ? (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
+                  {pmName} (PM)
+                </h3>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {reviews.length} {reviews.length === 1 ? "projeto" : "projetos"}
+                </span>
+              </button>
 
-              {reviews.map((review) => (
-                <ReviewCard
-                  key={review.id}
-                  review={review}
-                  onUpdate={(data) => updateReview(review.id, data)}
-                />
-              ))}
+              {!pmCollapsed && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {reviews.map((review) => (
+                    <ReviewCard
+                      key={review.id}
+                      review={review}
+                      collapsed={collapsedProjects.has(review.id)}
+                      onToggle={() => toggleProject(review.id)}
+                      onUpdate={(data) => updateReview(review.id, data)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -466,6 +528,13 @@ export default function MeetingDetailPage({
           </div>
         </DialogContent>
       </Dialog>
+
+      {meeting && (
+        <ZordonChat
+          contextLabel={`Reunião ${meeting.date}`}
+          contextParams={{ meetingId: id }}
+        />
+      )}
     </div>
   );
 }
@@ -474,9 +543,13 @@ export default function MeetingDetailPage({
 
 function ReviewCard({
   review,
+  collapsed,
+  onToggle,
   onUpdate,
 }: {
   review: ProjectReview;
+  collapsed: boolean;
+  onToggle: () => void;
   onUpdate: (data: Partial<ProjectReview>) => void;
 }) {
   const [nextSteps, setNextSteps] = useState(review.nextSteps || "");
@@ -500,6 +573,9 @@ function ReviewCard({
     <div className="surface-inset p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
+          <button onClick={onToggle} className="text-muted-foreground hover:text-foreground transition-colors">
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
           <Link
             href={`/projects/${review.projectId}`}
             className="font-medium hover:underline"
@@ -535,40 +611,43 @@ function ReviewCard({
         </Select>
       </div>
 
-      <div className="grid gap-3">
-        <div className="grid gap-1">
-          <Label className="text-xs text-muted-foreground">Próximos Passos</Label>
-          <Textarea
-            value={nextSteps}
-            onChange={(e) => setNextSteps(e.target.value)}
-            onBlur={() => save()}
-            rows={2}
-            placeholder="Quais são os próximos passos do projeto..."
-          />
-        </div>
+      {!collapsed && (
+        <div className="grid gap-3">
+          <div className="grid gap-1">
+            <Label className="text-xs text-muted-foreground">Próximos Passos</Label>
+            <Textarea
+              value={nextSteps}
+              onChange={(e) => setNextSteps(e.target.value)}
+              onBlur={() => save()}
+              rows={2}
+              placeholder="Quais são os próximos passos do projeto..."
+            />
+          </div>
 
-        <div className="grid gap-1">
-          <Label className="text-xs text-muted-foreground">Pontos de Atenção</Label>
-          <Textarea
-            value={attentionPoints}
-            onChange={(e) => setAttentionPoints(e.target.value)}
-            onBlur={() => save()}
-            rows={2}
-            placeholder="Riscos, bloqueios, preocupações..."
-          />
-        </div>
+          <div className="grid gap-1">
+            <Label className="text-xs text-muted-foreground">Pontos de Atenção</Label>
+            <Textarea
+              value={attentionPoints}
+              onChange={(e) => setAttentionPoints(e.target.value)}
+              onBlur={() => save()}
+              rows={2}
+              placeholder="Riscos, bloqueios, preocupações..."
+            />
+          </div>
 
-        <div className="grid gap-1">
-          <Label className="text-xs text-muted-foreground">OBS</Label>
-          <Textarea
-            value={additionalNotes}
-            onChange={(e) => setAdditionalNotes(e.target.value)}
-            onBlur={() => save()}
-            rows={2}
-            placeholder="Observações adicionais..."
-          />
+          <div className="grid gap-1">
+            <Label className="text-xs text-muted-foreground">OBS</Label>
+            <Textarea
+              value={additionalNotes}
+              onChange={(e) => setAdditionalNotes(e.target.value)}
+              onBlur={() => save()}
+              rows={2}
+              placeholder="Observações adicionais..."
+            />
+          </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 }

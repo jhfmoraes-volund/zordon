@@ -10,8 +10,8 @@ type SprintDeploy = {
   id: string;
   environment: string;
   status: string;
-  tasksIncluded: string;
-  tasksFailed: string;
+  tasksIncluded: string[];
+  tasksFailed: Array<{ taskId: string; error: string }>;
   triggeredBy: string | null;
   commitSha: string | null;
   errorLog: string | null;
@@ -119,8 +119,8 @@ export function SprintDeployPanel({
           <div className="space-y-2">
             <p className="text-sm font-medium text-muted-foreground">Deploy History</p>
             {deploys.map((d) => {
-              const included = JSON.parse(d.tasksIncluded || "[]");
-              const failed = JSON.parse(d.tasksFailed || "[]");
+              const included = d.tasksIncluded ?? [];
+              const failed = d.tasksFailed ?? [];
 
               return (
                 <div

@@ -1,53 +1,69 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { ACTIVE_STATUSES } from "@/lib/function-points";
+import { getUser } from "@/lib/dal";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
   const { id } = await params;
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      client: true,
-      projectSquads: {
-        include: {
-          squad: {
-            include: { members: { include: { member: true } } },
-          },
-        },
-      },
-      sprints: {
-        include: { tasks: { select: { status: true, functionPoints: true, dueDate: true } } },
-        orderBy: { startDate: "desc" },
-      },
-      tasks: {
-        include: {
-          assignments: {
-            include: {
-              member: { select: { id: true, name: true, role: true, fpCapacity: true } },
-              agent: { select: { name: true } },
-            },
-          },
-          sprint: { select: { name: true } },
-        },
-        orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
-      },
-      designSessions: {
-        include: { _count: { select: { items: true } } },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
+  const supabase = db();
+
+  // Decompose the mega-include into parallel queries
+  const [
+    projectRes,
+    squadsRes,
+    membersRes,
+    sprintsRes,
+    tasksRes,
+    sessionsRes,
+  ] = await Promise.all([
+    supabase.from("Project").select("*, client:Client(*)").eq("id", id).maybeSingle(),
+    supabase.from("ProjectSquad").select("*, squad:Squad(*, members:SquadMember(*, member:Member(*)))").eq("projectId", id),
+    supabase.from("ProjectMember").select("*, member:Member(id, name, role, fpCapacity)").eq("projectId", id),
+    supabase.from("Sprint").select("*, tasks:Task(status, functionPoints, dueDate)").eq("projectId", id).order("startDate", { ascending: false }),
+    supabase.from("Task").select("*, assignments:TaskAssignment(*, member:Member(id, name, role, fpCapacity)), sprint:Sprint(name)").eq("projectId", id).order("priority", { ascending: false }).order("createdAt", { ascending: false }),
+    // View doesn't have FK relationships — query without joins
+    supabase.from("design_session_summary").select("*").eq("projectId", id).order("createdAt", { ascending: false }),
+  ]);
+
+  // Check for errors in any query
+  const queryErrors = [
+    projectRes.error && `project: ${projectRes.error.message}`,
+    squadsRes.error && `squads: ${squadsRes.error.message}`,
+    membersRes.error && `members: ${membersRes.error.message}`,
+    sprintsRes.error && `sprints: ${sprintsRes.error.message}`,
+    tasksRes.error && `tasks: ${tasksRes.error.message}`,
+    sessionsRes.error && `sessions: ${sessionsRes.error.message}`,
+  ].filter(Boolean);
+
+  if (queryErrors.length > 0) {
+    console.error("[GET /api/projects/[id]] query errors:", queryErrors);
+    return NextResponse.json({ error: queryErrors.join("; ") }, { status: 500 });
+  }
+
+  const project = projectRes.data;
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const projectSquads = squadsRes.data ?? [];
+  const projectMembers = membersRes.data ?? [];
+  const rawSprints = sprintsRes.data ?? [];
+  const tasks = tasksRes.data ?? [];
+  const designSessions = (sessionsRes.data ?? []).map((s: any) => ({
+    ...s,
+    _count: { items: s.item_count },
+  }));
+
   // ─── Sprint stats ──────────────────────────────────────
-  const sprints = project.sprints.map(({ tasks, ...sprint }) => {
-    const total = tasks.length;
-    const done = tasks.filter((t) => t.status === "done").length;
-    const totalFp = tasks.reduce((s, t) => s + (t.functionPoints ?? 0), 0);
-    const fpDone = tasks.filter((t) => t.status === "done").reduce((s, t) => s + (t.functionPoints ?? 0), 0);
+  const sprints = rawSprints.map(({ tasks: sprintTasks, ...sprint }: any) => {
+    const total = sprintTasks.length;
+    const done = sprintTasks.filter((t: any) => t.status === "done").length;
+    const totalFp = sprintTasks.reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0);
+    const fpDone = sprintTasks.filter((t: any) => t.status === "done").reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0);
     return {
       ...sprint,
       taskStats: { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 },
@@ -58,37 +74,31 @@ export async function GET(
 
   // ─── Task summary ──────────────────────────────────────
   const taskSummary = {
-    total: project.tasks.length,
-    backlog: project.tasks.filter((t) => t.status === "backlog").length,
-    todo: project.tasks.filter((t) => t.status === "todo").length,
-    in_progress: project.tasks.filter((t) => t.status === "in_progress").length,
-    review: project.tasks.filter((t) => t.status === "review").length,
-    done: project.tasks.filter((t) => t.status === "done").length,
+    total: tasks.length,
+    backlog: tasks.filter((t) => t.status === "backlog").length,
+    todo: tasks.filter((t) => t.status === "todo").length,
+    in_progress: tasks.filter((t) => t.status === "in_progress").length,
+    review: tasks.filter((t) => t.status === "review").length,
+    done: tasks.filter((t) => t.status === "done").length,
   };
 
   // ─── Project health ────────────────────────────────────
   const now = new Date();
-
-  // Start date = earliest sprint start
-  const startDate = project.sprints.length > 0
-    ? project.sprints.reduce((min, s) => s.startDate < min ? s.startDate : min, project.sprints[0].startDate)
+  const startDate = rawSprints.length > 0
+    ? rawSprints.reduce((min: string, s: any) => s.startDate < min ? s.startDate : min, rawSprints[0].startDate)
     : null;
 
-  // Progress
-  const totalTasks = project.tasks.length;
-  const doneTasks = project.tasks.filter((t) => t.status === "done").length;
+  const totalTasks = tasks.length;
+  const doneTasks = tasks.filter((t) => t.status === "done").length;
   const progressPercent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+  const totalFp = tasks.reduce((s, t) => s + (t.functionPoints ?? 0), 0);
+  const doneFp = tasks.filter((t) => t.status === "done").reduce((s, t) => s + (t.functionPoints ?? 0), 0);
 
-  const totalFp = project.tasks.reduce((s, t) => s + (t.functionPoints ?? 0), 0);
-  const doneFp = project.tasks.filter((t) => t.status === "done").reduce((s, t) => s + (t.functionPoints ?? 0), 0);
-
-  // Overdue tasks
-  const overdueTasks = project.tasks.filter(
-    (t) => t.dueDate && t.dueDate < now && t.status !== "done"
+  const overdueTasks = tasks.filter(
+    (t) => t.dueDate && new Date(t.dueDate) < now && t.status !== "done"
   );
 
-  // Active sprint behind schedule
-  const activeSprint = sprints.find((s) => s.status === "active");
+  const activeSprint = sprints.find((s: any) => s.status === "active");
   let sprintBehind = false;
   if (activeSprint) {
     const sprintStart = new Date(activeSprint.startDate).getTime();
@@ -98,12 +108,10 @@ export async function GET(
     sprintBehind = activeSprint.taskStats.percent < expectedPercent - 20;
   }
 
-  // Deadline proximity
   const deadlineClose = project.endDate
     ? (new Date(project.endDate).getTime() - now.getTime()) < 7 * 86400000 && progressPercent < 80
     : false;
 
-  // Attention level
   let attentionLevel: "low" | "medium" | "high" | "urgent" = "low";
   const attentionReasons: string[] = [];
 
@@ -122,72 +130,59 @@ export async function GET(
     if (attentionLevel === "low") attentionLevel = "medium";
     attentionReasons.push("Sprint ativo atrasado (>20% abaixo do esperado)");
   }
-
   if (attentionReasons.length === 0) {
     attentionReasons.push("Projeto no ritmo planejado");
   }
 
   // ─── Member capacity (multi-project) ───────────────────
-  // Collect all unique member IDs from this project's squads
-  const memberIds = new Set<string>();
-  for (const ps of project.projectSquads) {
-    for (const sm of ps.squad.members) {
-      memberIds.add(sm.member.id);
+  const allMemberIds = projectMembers.map((pm: any) => pm.member.id);
+
+  let fpByMember = new Map<string, number>();
+  if (allMemberIds.length > 0) {
+    const { data: allAssignments } = await supabase
+      .from("TaskAssignment")
+      .select("memberId, task:Task!inner(functionPoints, status)")
+      .in("memberId", allMemberIds)
+      .in("task.status", [...ACTIVE_STATUSES]);
+
+    for (const a of (allAssignments ?? []) as any[]) {
+      if (!a.memberId) continue;
+      const fp = a.task.functionPoints ?? 0;
+      fpByMember.set(a.memberId, (fpByMember.get(a.memberId) ?? 0) + fp);
     }
   }
 
-  // For each member, get their total FP across ALL projects (active tasks)
-  const memberCapacity = await Promise.all(
-    Array.from(memberIds).map(async (memberId) => {
-      const member = await prisma.member.findUnique({
-        where: { id: memberId },
-        select: { id: true, name: true, role: true, fpCapacity: true },
-      });
-      if (!member) return null;
+  const members = projectMembers.map((pm: any) => {
+    const member = pm.member;
+    const fpThisProject = tasks
+      .filter((t) =>
+        [...ACTIVE_STATUSES].includes(t.status as any) &&
+        (t as any).assignments.some((a: any) => a.member?.id === member.id)
+      )
+      .reduce((s, t) => s + (t.functionPoints ?? 0), 0);
 
-      // FP in THIS project
-      const fpThisProject = project.tasks
-        .filter((t) =>
-          [...ACTIVE_STATUSES].includes(t.status as any) &&
-          t.assignments.some((a) => a.member?.id === memberId)
-        )
-        .reduce((s, t) => s + (t.functionPoints ?? 0), 0);
+    const fpTotal = fpByMember.get(member.id) ?? 0;
+    const fpOtherProjects = fpTotal - fpThisProject;
+    const totalPct = member.fpCapacity > 0 ? fpTotal / member.fpCapacity : 0;
+    const isOverloaded = totalPct > 0.85;
 
-      // FP in ALL projects (total)
-      const allAssignments = await prisma.taskAssignment.findMany({
-        where: {
-          memberId,
-          task: { status: { in: [...ACTIVE_STATUSES] } },
-        },
-        include: { task: { select: { functionPoints: true } } },
-      });
-      const fpTotal = allAssignments.reduce((s, a) => s + (a.task.functionPoints ?? 0), 0);
+    return {
+      id: member.id,
+      name: member.name,
+      role: member.role,
+      fpCapacity: member.fpCapacity,
+      fpThisProject,
+      fpOtherProjects,
+      fpTotal,
+      totalPct,
+      isOverloaded,
+    };
+  });
 
-      const fpOtherProjects = fpTotal - fpThisProject;
-      const totalPct = member.fpCapacity > 0 ? fpTotal / member.fpCapacity : 0;
-      const isOverloaded = totalPct > 0.85;
-
-      return {
-        id: member.id,
-        name: member.name,
-        role: member.role,
-        fpCapacity: member.fpCapacity,
-        fpThisProject,
-        fpOtherProjects,
-        fpTotal,
-        totalPct,
-        isOverloaded,
-      };
-    })
-  );
-
-  const members = memberCapacity.filter(Boolean);
-
-  // Check if any member is overloaded — adds to attention
-  const overloadedMembers = members.filter((m) => m!.isOverloaded);
+  const overloadedMembers = members.filter((m) => m.isOverloaded);
   if (overloadedMembers.length > 0) {
     if (attentionLevel === "low") attentionLevel = "medium";
-    if (attentionLevel === "medium" && overloadedMembers.some((m) => m!.totalPct > 1)) {
+    if (attentionLevel === "medium" && overloadedMembers.some((m) => m.totalPct > 1)) {
       attentionLevel = "high";
     }
     attentionReasons.push(
@@ -197,7 +192,11 @@ export async function GET(
 
   return NextResponse.json({
     ...project,
+    projectSquads,
+    projectMembers,
     sprints,
+    tasks,
+    designSessions,
     taskSummary,
     health: {
       startDate,
@@ -218,9 +217,31 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
   const { id } = await params;
-  const body = await req.json();
-  const project = await prisma.project.update({ where: { id }, data: body });
+  const { memberIds, ...data } = await req.json();
+  const supabase = db();
+
+  if (memberIds !== undefined) {
+    await supabase.from("ProjectMember").delete().eq("projectId", id);
+    if (memberIds.length > 0) {
+      await supabase
+        .from("ProjectMember")
+        .insert(memberIds.map((memberId: string) => ({ id: crypto.randomUUID(), projectId: id, memberId })));
+    }
+  }
+
+  await supabase.from("Project").update(data).eq("id", id);
+
+  const { data: project, error } = await supabase
+    .from("Project")
+    .select("*, projectMembers:ProjectMember(*, member:Member(id, name, role))")
+    .eq("id", id)
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
   return NextResponse.json(project);
 }
 
@@ -228,7 +249,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
   const { id } = await params;
-  await prisma.project.delete({ where: { id } });
+  const { error } = await db().from("Project").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

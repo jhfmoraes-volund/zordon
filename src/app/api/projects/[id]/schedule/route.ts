@@ -1,46 +1,48 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { getUser } from "@/lib/dal";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
   const { id } = await params;
+  const supabase = db();
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    select: { id: true, name: true, startDate: true, endDate: true },
-  });
+  const [projectRes, sprintsRes] = await Promise.all([
+    supabase.from("Project").select("id, name, startDate, endDate").eq("id", id).maybeSingle(),
+    supabase.from("Sprint")
+      .select(`
+        *,
+        tasks:Task(
+          id, title, reference, status, type, functionPoints, dueDate,
+          assignments:TaskAssignment(*, member:Member(id, name))
+        )
+      `)
+      .eq("projectId", id)
+      .order("startDate"),
+  ]);
 
-  if (!project) {
+  if (!projectRes.data) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const sprints = await prisma.sprint.findMany({
-    where: { projectId: id },
-    include: {
-      tasks: {
-        select: {
-          id: true, title: true, reference: true, status: true,
-          type: true, functionPoints: true, dueDate: true, executionMode: true,
-          assignments: {
-            include: {
-              member: { select: { id: true, name: true } },
-              agent: { select: { id: true, name: true } },
-            },
-          },
-        },
-        orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
-      },
-    },
-    orderBy: { startDate: "asc" },
-  });
-
-  const schedule = sprints.map((sprint) => {
+  const schedule = (sprintsRes.data ?? []).map((sprint: any) => {
     let totalFp = 0;
     let tasksDone = 0;
 
-    const tasks = sprint.tasks.map((task) => {
+    // Sort tasks by dueDate asc, priority desc
+    const sortedTasks = [...sprint.tasks].sort((a: any, b: any) => {
+      if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return (b.priority ?? 0) - (a.priority ?? 0);
+    });
+
+    const tasks = sortedTasks.map((task: any) => {
       const fp = task.functionPoints ?? 0;
       totalFp += fp;
       if (task.status === "done") tasksDone++;
@@ -53,8 +55,7 @@ export async function GET(
         type: task.type,
         functionPoints: task.functionPoints,
         dueDate: task.dueDate,
-        executionMode: task.executionMode,
-        assignees: task.assignments.map((a) => a.member?.name || a.agent?.name).filter(Boolean),
+        assignees: task.assignments.map((a: any) => a.member?.name).filter(Boolean),
       };
     });
 
@@ -68,11 +69,11 @@ export async function GET(
       tasksDone,
       totalFp,
       fpDone: sprint.tasks
-        .filter((t) => t.status === "done")
-        .reduce((s, t) => s + (t.functionPoints ?? 0), 0),
+        .filter((t: any) => t.status === "done")
+        .reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0),
       tasks,
     };
   });
 
-  return NextResponse.json({ project, schedule });
+  return NextResponse.json({ project: projectRes.data, schedule });
 }

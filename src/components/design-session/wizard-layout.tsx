@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ChevronLeft, ChevronRight, Menu, Check, Circle, Loader2 } from "lucide-react";
 import type { StepDef } from "@/lib/design-session-steps";
+import { StickyNoteBoard, type Note } from "./sticky-note";
+import { AIChat } from "./ai-chat";
 
 export function WizardLayout({
   sessionTitle,
@@ -15,6 +17,11 @@ export function WizardLayout({
   onPrevious,
   onStepClick,
   saving,
+  notes,
+  onAddNote,
+  onUpdateNote,
+  onDeleteNote,
+  hideSidePanels,
   children,
 }: {
   sessionTitle: string;
@@ -25,6 +32,11 @@ export function WizardLayout({
   onPrevious: () => void;
   onStepClick: (index: number) => void;
   saving?: boolean;
+  notes: Note[];
+  onAddNote: () => void;
+  onUpdateNote: (id: string, text: string) => void;
+  onDeleteNote: (id: string) => void;
+  hideSidePanels?: boolean;
   children: React.ReactNode;
 }) {
   const step = steps[currentStep];
@@ -123,8 +135,23 @@ export function WizardLayout({
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
-        {children}
+        <div className="flex gap-6 h-full">
+          <main className="flex-1 min-w-0">{children}</main>
+          {!hideSidePanels && (
+            <aside className="hidden lg:block shrink-0">
+              <StickyNoteBoard
+                notes={notes}
+                onAdd={onAddNote}
+                onUpdate={onUpdateNote}
+                onDelete={onDeleteNote}
+              />
+            </aside>
+          )}
+        </div>
       </div>
+
+      {/* AI Chat */}
+      {!hideSidePanels && <AIChat />}
     </div>
   );
 }

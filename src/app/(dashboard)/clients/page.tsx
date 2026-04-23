@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import {
   Table,
@@ -28,7 +29,7 @@ type Client = {
   email: string | null;
   phone: string | null;
   notes: string | null;
-  _count: { projects: number };
+  Project: { count: number }[];
 };
 
 export default function ClientsPage() {
@@ -37,10 +38,14 @@ export default function ClientsPage() {
   const [editing, setEditing] = useState<Client | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
 
-  const load = () =>
-    fetch("/api/clients")
-      .then((r) => r.json())
-      .then(setClients);
+  const load = async () => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("Client")
+      .select("*, Project(count)")
+      .order("createdAt", { ascending: false });
+    if (data) setClients(data as Client[]);
+  };
 
   useEffect(() => {
     load();
@@ -64,6 +69,7 @@ export default function ClientsPage() {
   };
 
   const save = async () => {
+    const supabase = createClient();
     const body = {
       name: form.name,
       email: form.email || null,
@@ -71,17 +77,9 @@ export default function ClientsPage() {
       notes: form.notes || null,
     };
     if (editing) {
-      await fetch(`/api/clients/${editing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      await supabase.from("Client").update(body).eq("id", editing.id);
     } else {
-      await fetch("/api/clients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      await supabase.from("Client").insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), ...body });
     }
     setOpen(false);
     load();
@@ -89,7 +87,8 @@ export default function ClientsPage() {
 
   const remove = async (id: string) => {
     if (!confirm("Remover este cliente?")) return;
-    await fetch(`/api/clients/${id}`, { method: "DELETE" });
+    const supabase = createClient();
+    await supabase.from("Client").delete().eq("id", id);
     load();
   };
 
@@ -114,7 +113,7 @@ export default function ClientsPage() {
                 <TableCell className="font-medium">{c.name}</TableCell>
                 <TableCell>{c.email || "—"}</TableCell>
                 <TableCell>{c.phone || "—"}</TableCell>
-                <TableCell>{c._count.projects}</TableCell>
+                <TableCell>{c.Project?.[0]?.count ?? 0}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button
