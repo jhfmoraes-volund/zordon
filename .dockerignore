@@ -1,0 +1,48 @@
+# VCS & editor
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Node / Next build artifacts
+node_modules
+.next
+out
+build
+coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Docs
+docs
+*.md
+AGENTS.md
+CLAUDE.md
+README.md
+
+# Prisma: keep schema.prisma, drop migrations + seeds + local db
+prisma/migrations
+prisma/seed*.ts
+prisma/migrate-*.ts
+prisma/*.db
+prisma/*.db-journal
+
+# Misc local
+*.log
+npm-debug.log*
+.vercel
+.yarn
+.pnp.*
+
+# Docker self
+Dockerfile
+.dockerignore
+
+# Helper scripts
+start.sh
