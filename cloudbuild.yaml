@@ -1,0 +1,50 @@
+steps:
+  - id: Build
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker build --no-cache \
+          --build-arg NEXT_PUBLIC_SUPABASE_URL="${_NEXT_PUBLIC_SUPABASE_URL}" \
+          --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="${_NEXT_PUBLIC_SUPABASE_ANON_KEY}" \
+          -t "southamerica-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/zordon/zordon:$COMMIT_SHA" \
+          -f Dockerfile .
+
+  - id: Push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - southamerica-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/zordon/zordon:$COMMIT_SHA
+
+  - id: Deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run deploy zordon \
+          --image="southamerica-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/zordon/zordon:$COMMIT_SHA" \
+          --region=southamerica-east1 \
+          --project=$PROJECT_ID \
+          --min-instances=0 \
+          --set-env-vars='^@^NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}@NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}@SUPABASE_SERVICE_ROLE_KEY=${_SUPABASE_SERVICE_ROLE_KEY}@RESEND_API_KEY=${_RESEND_API_KEY}@TAVILY_API_KEY=${_TAVILY_API_KEY}@OPENROUTER_API_KEY=${_OPENROUTER_API_KEY}@COMPOSIO_API_KEY=${_COMPOSIO_API_KEY}'
+        gcloud run services update-traffic zordon \
+          --to-latest \
+          --region=southamerica-east1 \
+          --project=$PROJECT_ID
+
+images:
+  - southamerica-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/zordon/zordon:$COMMIT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _NEXT_PUBLIC_SUPABASE_URL: ""
+  _NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
+  _SUPABASE_SERVICE_ROLE_KEY: ""
+  _RESEND_API_KEY: ""
+  _TAVILY_API_KEY: ""
+  _OPENROUTER_API_KEY: ""
+  _COMPOSIO_API_KEY: ""
