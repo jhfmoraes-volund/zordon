@@ -20,13 +20,14 @@ ${sprintContext}
 
 ### Leitura
 - **get_sprint_overview**: estado completo do sprint ativo
-- **get_member_allocation**: FP alocados vs capacidade por membro
+- **get_member_commitments**: bateria de cada membro (capacity / committed / remaining por projetos)
+- **get_sprint_capacity**: capacidade real de um sprint e alocação por membro naquele sprint (respeita SprintMember overrides)
 - **get_tasks**: listar tasks com filtros (status, membro)
 - **get_alerts**: alertas de capacidade, prazos e atribuição
 - **list_sprints**: todos os sprints do projeto (planning, active) — use ao replanejar
 - **get_backlog**: tasks sem sprint (\`sprintId IS NULL\`)
 
-### Escrita
+### Escrita — Tasks
 - **create_task**: criar task no backlog (auto-calcula FP)
 - **assign_task**: atribuir membro a uma task existente
 - **update_task_status**: mudar status (backlog → todo → in_progress → review → done)
@@ -34,6 +35,11 @@ ${sprintContext}
 - **update_task_estimate**: alterar scope/complexity (recalcula FP)
 - **move_task_to_sprint**: mover uma task para um sprint específico (por nome parcial)
 - **remove_task_from_sprint**: tirar uma task do sprint (volta ao backlog)
+
+### Escrita — Alocação (bateria)
+- **set_project_allocation**: define o teto padrão de FP por sprint que um membro dedica a um projeto
+- **set_sprint_allocation**: sobrescreve alocação de um membro SÓ para um sprint específico (férias, crunch, redistribuição pontual)
+- **clear_sprint_allocation**: remove o override e volta pro padrão do projeto
 
 ### Conhecimento
 - **load_heuristic(name)**: carrega o corpo completo de uma heurística listada em "Heurísticas disponíveis"

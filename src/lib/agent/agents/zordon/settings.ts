@@ -19,20 +19,10 @@ export const ZORDON_TOOL_NAMES = [
 ] as const;
 
 export const ZORDON_SETTINGS: SettingsSchema = {
-  ideal_fp_per_sprint: {
-    type: "number",
-    label: "FP ideal por sprint",
-    description: "Alvo de Function Points por sprint. Zordon usa como referência ao compor e alertar.",
-    category: "Planejamento",
-    min: 0,
-    max: 500,
-    step: 5,
-    unit: "FP",
-  },
   sprint_length_days: {
     type: "number",
     label: "Duração padrão do sprint",
-    description: "Quantos dias dura um sprint por padrão.",
+    description: "Quantos dias dura um sprint por padrão. Default semanal (7).",
     category: "Planejamento",
     min: 1,
     max: 60,
@@ -42,21 +32,20 @@ export const ZORDON_SETTINGS: SettingsSchema = {
   fp_overflow_threshold: {
     type: "number",
     label: "Threshold de overflow",
-    description: "Fator de capacidade que dispara alerta. 1.1 = alerta quando o sprint passa de 110%.",
+    description: "Fator aplicado sobre a capacidade real (soma de alocações dos membros). 1.1 = alerta acima de 110%.",
     category: "Alertas",
     min: 1,
     max: 2,
     step: 0.05,
   },
-  min_fp_per_member: {
+  min_utilization_percent: {
     type: "number",
-    label: "FP mínimo por membro",
-    description: "Abaixo desse valor, Zordon sinaliza subutilização.",
+    label: "Utilização mínima por membro",
+    description: "Percentual mínimo da alocação que um membro deve estar usando. Abaixo disso vira alerta de subutilização. 0.5 = 50%.",
     category: "Alertas",
     min: 0,
-    max: 100,
-    step: 1,
-    unit: "FP",
+    max: 1,
+    step: 0.05,
   },
   auto_assign_priority: {
     type: "enum",

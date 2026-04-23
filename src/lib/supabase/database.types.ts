@@ -326,6 +326,13 @@ export type Database = {
             foreignKeyName: "ChatThread_createdBy_fkey"
             columns: ["createdBy"]
             isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ChatThread_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
             referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
@@ -443,6 +450,13 @@ export type Database = {
             foreignKeyName: "DesignSession_createdBy_fkey"
             columns: ["createdBy"]
             isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSession_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
             referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
@@ -547,6 +561,13 @@ export type Database = {
             columns: ["memberId"]
             isOneToOne: false
             referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionParticipant_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
             referencedColumns: ["id"]
           },
           {
@@ -670,6 +691,13 @@ export type Database = {
             foreignKeyName: "MeetingActionItem_assigneeId_fkey"
             columns: ["assigneeId"]
             isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingActionItem_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
             referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
@@ -749,6 +777,13 @@ export type Database = {
             columns: ["memberId"]
             isOneToOne: false
             referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingProjectReview_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
             referencedColumns: ["id"]
           },
           {
@@ -853,6 +888,13 @@ export type Database = {
             foreignKeyName: "MemberIntegration_memberId_fkey"
             columns: ["memberId"]
             isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberIntegration_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
             referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
@@ -937,6 +979,13 @@ export type Database = {
             foreignKeyName: "Project_pmId_fkey"
             columns: ["pmId"]
             isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Project_pmId_fkey"
+            columns: ["pmId"]
+            isOneToOne: false
             referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
@@ -945,18 +994,21 @@ export type Database = {
       ProjectMember: {
         Row: {
           createdAt: string
+          fpAllocation: number
           id: string
           memberId: string
           projectId: string
         }
         Insert: {
           createdAt?: string
+          fpAllocation?: number
           id: string
           memberId: string
           projectId: string
         }
         Update: {
           createdAt?: string
+          fpAllocation?: number
           id?: string
           memberId?: string
           projectId?: string
@@ -974,6 +1026,13 @@ export type Database = {
             columns: ["memberId"]
             isOneToOne: false
             referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
             referencedColumns: ["id"]
           },
           {
@@ -1161,6 +1220,94 @@ export type Database = {
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "SprintDeploy_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_capacity_overview"
+            referencedColumns: ["sprintId"]
+          },
+          {
+            foreignKeyName: "SprintDeploy_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_member_capacity"
+            referencedColumns: ["sprintId"]
+          },
+        ]
+      }
+      SprintMember: {
+        Row: {
+          createdAt: string
+          fpAllocation: number
+          memberId: string
+          sprintId: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          fpAllocation: number
+          memberId: string
+          sprintId: string
+          updatedAt?: string
+        }
+        Update: {
+          createdAt?: string
+          fpAllocation?: number
+          memberId?: string
+          sprintId?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "SprintMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintMember_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "Sprint"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintMember_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_capacity_overview"
+            referencedColumns: ["sprintId"]
+          },
+          {
+            foreignKeyName: "SprintMember_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_member_capacity"
+            referencedColumns: ["sprintId"]
+          },
         ]
       }
       Squad: {
@@ -1213,6 +1360,13 @@ export type Database = {
             columns: ["memberId"]
             isOneToOne: false
             referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SquadMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
             referencedColumns: ["id"]
           },
           {
@@ -1331,6 +1485,20 @@ export type Database = {
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "Task_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_capacity_overview"
+            referencedColumns: ["sprintId"]
+          },
+          {
+            foreignKeyName: "Task_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_member_capacity"
+            referencedColumns: ["sprintId"]
+          },
         ]
       }
       TaskAssignment: {
@@ -1375,6 +1543,13 @@ export type Database = {
             columns: ["memberId"]
             isOneToOne: false
             referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskAssignment_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
             referencedColumns: ["id"]
           },
           {
@@ -1551,6 +1726,13 @@ export type Database = {
             foreignKeyName: "DesignSession_createdBy_fkey"
             columns: ["createdBy"]
             isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSession_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
             referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
@@ -1570,6 +1752,18 @@ export type Database = {
           fp_capacity: number | null
           id: string | null
           name: string | null
+          role: string | null
+        }
+        Relationships: []
+      }
+      member_commitment_overview: {
+        Row: {
+          capacity: number | null
+          committed: number | null
+          id: string | null
+          name: string | null
+          project_count: number | null
+          remaining: number | null
           role: string | null
         }
         Relationships: []
@@ -1616,8 +1810,66 @@ export type Database = {
         }
         Relationships: []
       }
+      sprint_capacity_overview: {
+        Row: {
+          allocated: number | null
+          capacity: number | null
+          remaining: number | null
+          sprintId: string | null
+        }
+        Relationships: []
+      }
+      sprint_member_capacity: {
+        Row: {
+          fp_allocation: number | null
+          fp_used: number | null
+          has_sprint_override: boolean | null
+          member_name: string | null
+          memberId: string | null
+          projectId: string | null
+          sprintId: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectMember_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Sprint_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      can_access_session: { Args: { p_session_id: string }; Returns: boolean }
       create_meeting_with_reviews: {
         Args: { p_carry_actions?: Json; p_date: string; p_reviews: Json }
         Returns: string
@@ -1649,8 +1901,11 @@ export type Database = {
         Args: { p_member_id: string; p_provider: string }
         Returns: string
       }
+      get_my_member_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      is_allocated_to: { Args: { p_project_id: string }; Returns: boolean }
+      is_manager: { Args: never; Returns: boolean }
       next_task_reference: { Args: never; Returns: string }
       set_member_integration: {
         Args: {

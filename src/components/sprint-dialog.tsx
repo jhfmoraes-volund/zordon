@@ -137,7 +137,8 @@ export function SprintDialog({
     }
   }, [open, editing]);
 
-  const handleProjectChange = (projectId: string) => {
+  const handleProjectChange = (projectId: string | null) => {
+    if (!projectId) return;
     const defaults = getNextSprintDefaults(sprintsForProject(projectId));
     setForm({
       ...form,

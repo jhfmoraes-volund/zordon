@@ -229,11 +229,32 @@ export default function ProjectDetailPage({
 
     await supabase.from("Project").update(projectData).eq("id", id);
 
-    // Sync project members
-    await supabase.from("ProjectMember").delete().eq("projectId", id);
-    if (editForm.memberIds.length > 0) {
+    // Sync project members — preserva fpAllocation existente, só adiciona/remove.
+    const { data: existingMembers } = await supabase
+      .from("ProjectMember")
+      .select("memberId")
+      .eq("projectId", id);
+    const existingIds = new Set((existingMembers || []).map((m) => m.memberId));
+    const nextIds = new Set(editForm.memberIds);
+
+    const toRemove = Array.from(existingIds).filter((m) => !nextIds.has(m));
+    const toAdd = Array.from(nextIds).filter((m) => !existingIds.has(m));
+
+    if (toRemove.length > 0) {
+      await supabase
+        .from("ProjectMember")
+        .delete()
+        .eq("projectId", id)
+        .in("memberId", toRemove);
+    }
+    if (toAdd.length > 0) {
       await supabase.from("ProjectMember").insert(
-        editForm.memberIds.map((memberId) => ({ id: crypto.randomUUID(), projectId: id, memberId }))
+        toAdd.map((memberId) => ({
+          id: crypto.randomUUID(),
+          projectId: id,
+          memberId,
+          fpAllocation: 0,
+        }))
       );
     }
 

@@ -10,20 +10,18 @@ export const ZORDON_AGENT_ID = "agent-zordon";
 
 export interface ZordonConfig {
   fp_matrix: FpMatrix;
-  ideal_fp_per_sprint: number;
   sprint_length_days: number;
   fp_overflow_threshold: number;
-  min_fp_per_member: number;
+  min_utilization_percent: number;
   auto_assign_priority: "urgency" | "capacity" | "skill_match";
   require_approval_for: string[];
 }
 
 const CONFIG_DEFAULTS: ZordonConfig = {
   fp_matrix: FP_MATRIX_DEFAULT,
-  ideal_fp_per_sprint: 80,
-  sprint_length_days: 15,
+  sprint_length_days: 7,
   fp_overflow_threshold: 1.1,
-  min_fp_per_member: 5,
+  min_utilization_percent: 0.5,
   auto_assign_priority: "urgency",
   require_approval_for: ["delete_task", "bulk_move_tasks", "split_task"],
 };
@@ -31,10 +29,6 @@ const CONFIG_DEFAULTS: ZordonConfig = {
 function resolveConfig(raw: Record<string, unknown>): ZordonConfig {
   return {
     fp_matrix: (raw.fp_matrix as FpMatrix) ?? CONFIG_DEFAULTS.fp_matrix,
-    ideal_fp_per_sprint:
-      typeof raw.ideal_fp_per_sprint === "number"
-        ? raw.ideal_fp_per_sprint
-        : CONFIG_DEFAULTS.ideal_fp_per_sprint,
     sprint_length_days:
       typeof raw.sprint_length_days === "number"
         ? raw.sprint_length_days
@@ -43,10 +37,10 @@ function resolveConfig(raw: Record<string, unknown>): ZordonConfig {
       typeof raw.fp_overflow_threshold === "number"
         ? raw.fp_overflow_threshold
         : CONFIG_DEFAULTS.fp_overflow_threshold,
-    min_fp_per_member:
-      typeof raw.min_fp_per_member === "number"
-        ? raw.min_fp_per_member
-        : CONFIG_DEFAULTS.min_fp_per_member,
+    min_utilization_percent:
+      typeof raw.min_utilization_percent === "number"
+        ? raw.min_utilization_percent
+        : CONFIG_DEFAULTS.min_utilization_percent,
     auto_assign_priority:
       raw.auto_assign_priority === "capacity" || raw.auto_assign_priority === "skill_match"
         ? raw.auto_assign_priority
@@ -58,17 +52,18 @@ function resolveConfig(raw: Record<string, unknown>): ZordonConfig {
 }
 
 /**
- * Builds sprint overview context for Zordon's prompt.
- * Loads active sprint, sprint list, backlog, members, tuning config and heuristic index.
+ * Builds operational context for Zordon's prompt.
+ * Loads active sprint, sprint list, backlog, member commitments (bateria),
+ * real sprint capacity (respecting sprint/project allocations), tuning config
+ * and heuristic index.
  */
 export async function buildOpsContext(): Promise<Record<string, unknown>> {
   const supabase = db();
 
-  // Fire everything in parallel
   const [
     { data: activeSprint },
     { data: allSprints },
-    { data: members },
+    { data: commitments },
     rawConfig,
     heuristics,
   ] = await Promise.all([
@@ -85,20 +80,27 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
       .neq("status", "done")
       .order("startDate", { ascending: true })
       .limit(20),
-    supabase.from("member_capacity_overview").select("*"),
+    supabase.from("member_commitment_overview").select("*"),
     loadAgentConfig(ZORDON_AGENT_ID),
     loadAgentHeuristicsIndex(ZORDON_AGENT_ID),
   ]);
 
   const config = resolveConfig(rawConfig);
+  const commitList = commitments || [];
 
-  // Load tasks for active sprint + backlog in parallel
-  const [{ data: sprintTasks }, { data: backlogTasks }] = await Promise.all([
-    activeSprint
+  // Sprint-level loads: tasks + capacity + per-member allocation
+  const sprintId = activeSprint?.id ?? null;
+  const [
+    { data: sprintTasks },
+    { data: backlogTasks },
+    { data: sprintCapacity },
+    { data: sprintMembers },
+  ] = await Promise.all([
+    sprintId
       ? supabase
           .from("Task")
           .select("id, reference, title, status, type, functionPoints, complexity, scope, dueDate, priority, assignments:TaskAssignment(member:Member(id, name))")
-          .eq("sprintId", activeSprint.id)
+          .eq("sprintId", sprintId)
           .order("priority", { ascending: false })
           .order("createdAt", { ascending: false })
       : Promise.resolve({ data: [] }),
@@ -109,24 +111,60 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
       .order("priority", { ascending: false })
       .order("createdAt", { ascending: false })
       .limit(30),
+    sprintId
+      ? supabase
+          .from("sprint_capacity_overview")
+          .select("*")
+          .eq("sprintId", sprintId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    sprintId
+      ? supabase
+          .from("sprint_member_capacity")
+          .select("*")
+          .eq("sprintId", sprintId)
+      : Promise.resolve({ data: [] }),
   ]);
 
-  const memberList = members || [];
   const taskList = sprintTasks || [];
   const backlog = backlogTasks || [];
   const sprintList = allSprints || [];
+  const membersInSprint = sprintMembers || [];
 
-  // Alerts
+  // ─── Alertas em 3 níveis ──────────────────────────────────
   const alerts: string[] = [];
 
-  for (const m of memberList) {
-    const allocated = Number(m.fp_allocated) || 0;
-    const capacity = Number(m.fp_capacity) || 0;
-    if (capacity > 0 && allocated > capacity * config.fp_overflow_threshold) {
-      alerts.push(`⚠ ${m.name} sobrecarregado: ${allocated}/${capacity} FP (threshold ${Math.round(config.fp_overflow_threshold * 100)}%)`);
+  // Nível 1: BATERIA (membro geral) — committed > capacity
+  for (const m of commitList) {
+    const cap = Number(m.capacity) || 0;
+    const committed = Number(m.committed) || 0;
+    if (cap > 0 && committed > cap) {
+      alerts.push(`⚠ Bateria: ${m.name} com overcommit (${committed}/${cap} FP comprometidos em ${m.project_count} projeto(s))`);
     }
-    if (capacity > 0 && allocated < config.min_fp_per_member) {
-      alerts.push(`⚠ ${m.name} subutilizado: ${allocated} FP (mínimo esperado: ${config.min_fp_per_member})`);
+  }
+
+  // Nível 2: PROJETO/SPRINT — uso > alocação no projeto daquele sprint
+  for (const m of membersInSprint) {
+    const alloc = Number(m.fp_allocation) || 0;
+    const used = Number(m.fp_used) || 0;
+    if (alloc > 0 && used > alloc * config.fp_overflow_threshold) {
+      const tag = m.has_sprint_override ? " (override)" : "";
+      alerts.push(`⚠ Sprint: ${m.member_name} estourou alocação no projeto${tag} (${used}/${alloc} FP)`);
+    }
+    if (alloc > 0 && used < alloc * config.min_utilization_percent) {
+      alerts.push(`⚠ Subutilização: ${m.member_name} usando ${used}/${alloc} FP (< ${Math.round(config.min_utilization_percent * 100)}%)`);
+    }
+    if (alloc === 0) {
+      alerts.push(`⚠ Sem alocação: ${m.member_name} está no projeto mas sem fpAllocation definido`);
+    }
+  }
+
+  // Nível 3: TIME — allocated total do sprint > capacity total
+  if (sprintCapacity) {
+    const cap = Number(sprintCapacity.capacity) || 0;
+    const alloc = Number(sprintCapacity.allocated) || 0;
+    if (cap > 0 && alloc > cap * config.fp_overflow_threshold) {
+      alerts.push(`⚠ Sprint acima da capacidade do time: ${alloc}/${cap} FP (threshold ${Math.round(config.fp_overflow_threshold * 100)}%)`);
     }
   }
 
@@ -135,27 +173,16 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
       (!t.assignments || t.assignments.length === 0)
   );
   if (unassigned.length > 0) {
-    alerts.push(`⚠ ${unassigned.length} task(s) ativas sem atribuição: ${unassigned.map(t => t.reference).join(", ")}`);
+    alerts.push(`⚠ ${unassigned.length} task(s) ativa(s) sem atribuição: ${unassigned.map(t => t.reference).join(", ")}`);
   }
 
-  const threeDaysAgo = new Date();
-  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-  const stuckTodo = taskList.filter(
-    (t) => t.status === "todo" && t.dueDate && new Date(t.dueDate) < threeDaysAgo
+  const now = new Date();
+  const overdue = taskList.filter(
+    (t) => ACTIVE_STATUSES.includes(t.status as typeof ACTIVE_STATUSES[number])
+      && t.dueDate && new Date(t.dueDate) < now
   );
-  if (stuckTodo.length > 0) {
-    alerts.push(`⚠ ${stuckTodo.length} task(s) em "todo" com prazo vencido: ${stuckTodo.map(t => t.reference).join(", ")}`);
-  }
-
-  const totalFP = taskList
-    .filter((t) => ACTIVE_STATUSES.includes(t.status as typeof ACTIVE_STATUSES[number]))
-    .reduce((sum, t) => sum + (t.functionPoints || 0), 0);
-  const totalCapacity = memberList.reduce((sum, m) => sum + (Number(m.fp_capacity) || 0), 0);
-  if (totalCapacity > 0 && totalFP > totalCapacity * config.fp_overflow_threshold) {
-    alerts.push(`⚠ Sprint acima da capacidade: ${totalFP}/${totalCapacity} FP`);
-  }
-  if (activeSprint && totalFP > config.ideal_fp_per_sprint * config.fp_overflow_threshold) {
-    alerts.push(`⚠ Sprint acima do FP ideal: ${totalFP}/${config.ideal_fp_per_sprint} FP alvo`);
+  if (overdue.length > 0) {
+    alerts.push(`⚠ ${overdue.length} task(s) com prazo vencido: ${overdue.map(t => t.reference).join(", ")}`);
   }
 
   // ─── Prompt formatting ────────────────────────────────────
@@ -165,8 +192,9 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
         `- **Projeto:** ${(activeSprint.project as { name: string } | null)?.name || "N/A"}`,
         `- **Período:** ${activeSprint.startDate || "?"} a ${activeSprint.endDate || "?"}`,
         `- **Status:** ${activeSprint.status}`,
-        `- **Tasks ativas:** ${taskList.filter(t => ACTIVE_STATUSES.includes(t.status as typeof ACTIVE_STATUSES[number])).length}`,
-        `- **FP total ativo:** ${totalFP}/${totalCapacity} (capacidade do time) — alvo ${config.ideal_fp_per_sprint}`,
+        `- **Capacidade do sprint:** ${sprintCapacity?.capacity ?? 0} FP (soma de alocações no projeto)`,
+        `- **Alocado:** ${sprintCapacity?.allocated ?? 0} FP (tasks ativas)`,
+        `- **Restante:** ${sprintCapacity?.remaining ?? 0} FP`,
       ].join("\n")
     : "## Sprint Ativo\nNenhum sprint ativo encontrado.";
 
@@ -180,16 +208,32 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
       ].join("\n")
     : "";
 
-  const membersBlock = [
-    "## Equipe",
-    ...memberList.map((m) => {
-      const allocated = Number(m.fp_allocated) || 0;
-      const capacity = Number(m.fp_capacity) || 0;
-      const remaining = capacity - allocated;
-      const flag = remaining < 0 ? " 🔴" : remaining === 0 ? " 🟡" : "";
-      return `- **${m.name}** (${m.role}): ${allocated}/${capacity} FP alocados (${remaining} restantes)${flag}`;
+  // Tabela de bateria (visão por membro)
+  const batteryBlock = [
+    "## Bateria por membro",
+    ...commitList.map((m) => {
+      const cap = Number(m.capacity) || 0;
+      const committed = Number(m.committed) || 0;
+      const rem = Number(m.remaining) || 0;
+      const pc = Number(m.project_count) || 0;
+      const flag = rem < 0 ? " 🔴 overcommit" : rem === 0 ? " 🟡 cheia" : "";
+      return `- **${m.name}** (${m.role}): ${committed}/${cap} FP comprometidos em ${pc} projeto(s), ${rem} livre${flag}`;
     }),
   ].join("\n");
+
+  // Alocação dos membros no sprint ativo
+  const sprintMembersBlock = membersInSprint.length > 0
+    ? [
+        "## Alocação do time no sprint ativo",
+        ...membersInSprint.map((m) => {
+          const alloc = Number(m.fp_allocation) || 0;
+          const used = Number(m.fp_used) || 0;
+          const pct = alloc > 0 ? Math.round((used / alloc) * 100) : 0;
+          const tag = m.has_sprint_override ? " [override]" : "";
+          return `- **${m.member_name}**${tag}: ${used}/${alloc} FP (${pct}%)`;
+        }),
+      ].join("\n")
+    : "";
 
   const tasksBlock = [
     "## Tasks do Sprint Ativo",
@@ -213,18 +257,15 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
 
   const paramsBlock = [
     "## Parâmetros operacionais atuais",
-    `- FP ideal por sprint: **${config.ideal_fp_per_sprint}**`,
-    `- Duração padrão do sprint: ${config.sprint_length_days} dias`,
-    `- Threshold de overflow: ${Math.round(config.fp_overflow_threshold * 100)}% (alerta acima disso)`,
-    `- FP mínimo por membro: ${config.min_fp_per_member}`,
+    `- Duração do sprint: ${config.sprint_length_days} dias`,
+    `- Threshold de overflow: ${Math.round(config.fp_overflow_threshold * 100)}%`,
+    `- Utilização mínima esperada por membro: ${Math.round(config.min_utilization_percent * 100)}%`,
     `- Critério de atribuição automática: ${config.auto_assign_priority}`,
     `- Ferramentas que exigem confirmação: ${config.require_approval_for.join(", ") || "nenhuma"}`,
   ].join("\n");
 
   const matrixBlock = renderFpMatrix(config.fp_matrix);
-
   const heuristicsBlock = renderHeuristicsIndex(heuristics);
-
   const alertsBlock = alerts.length > 0
     ? ["## Alertas", ...alerts].join("\n")
     : "## Alertas\nNenhum alerta.";
@@ -239,7 +280,8 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
     sprintBlock,
     ...(sprintListBlock ? ["", sprintListBlock] : []),
     "",
-    membersBlock,
+    batteryBlock,
+    ...(sprintMembersBlock ? ["", sprintMembersBlock] : []),
     "",
     tasksBlock,
     "",
@@ -252,7 +294,7 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
     sprintContext,
     sprintId: activeSprint?.id,
     projectId: activeSprint?.projectId,
-    members: memberList,
+    commitments: commitList,
     tasks: taskList,
     alerts,
     config,

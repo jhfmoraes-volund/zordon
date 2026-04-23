@@ -45,3 +45,12 @@ next-env.d.ts
 # sqlite
 *.db
 *.db-journal
+
+# local agent/IDE tooling
+/.agents/
+/.claude/
+/.trae/
+/skills-lock.json
+
+# supabase local
+/supabase/.temp/
