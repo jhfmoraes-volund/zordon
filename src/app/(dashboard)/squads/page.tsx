@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,30 @@ type Squad = {
 type Project = { id: string; name: string };
 type Member = { id: string; name: string; role: string };
 
+/** Map Supabase row shape (PascalCase join tables) to the Squad type used by the UI. */
+function mapSquadRow(row: Record<string, unknown>): Squad {
+  const projectSquads = (
+    (row.ProjectSquad as Array<Record<string, unknown>> | undefined) ?? []
+  ).map((ps) => ({
+    id: ps.id as string,
+    project: ps.project as { id: string; name: string },
+  }));
+
+  const members = (
+    (row.SquadMember as Array<Record<string, unknown>> | undefined) ?? []
+  ).map((sm) => ({
+    id: sm.id as string,
+    member: sm.member as { id: string; name: string; role: string },
+  }));
+
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    projectSquads,
+    members,
+  };
+}
+
 export default function SquadsPage() {
   const [squads, setSquads] = useState<Squad[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -32,10 +57,23 @@ export default function SquadsPage() {
     name: "", projectIds: [] as string[], memberIds: [] as string[],
   });
 
-  const load = () => {
-    fetch("/api/squads").then((r) => r.json()).then(setSquads);
-    fetch("/api/projects").then((r) => r.json()).then(setProjects);
-    fetch("/api/members").then((r) => r.json()).then(setAllMembers);
+  const load = async () => {
+    const supabase = createClient();
+
+    const [squadsRes, projectsRes, membersRes] = await Promise.all([
+      supabase
+        .from("Squad")
+        .select(
+          "*, SquadMember(*, member:Member(*)), ProjectSquad(*, project:Project(id, name))",
+        )
+        .order("name"),
+      supabase.from("Project").select("id, name").order("name"),
+      supabase.from("Member").select("id, name, role").order("name"),
+    ]);
+
+    if (squadsRes.data) setSquads(squadsRes.data.map(mapSquadRow));
+    if (projectsRes.data) setProjects(projectsRes.data as Project[]);
+    if (membersRes.data) setAllMembers(membersRes.data as Member[]);
   };
 
   useEffect(() => { load(); }, []);
@@ -75,31 +113,75 @@ export default function SquadsPage() {
   };
 
   const save = async () => {
-    const body = {
-      name: form.name,
-      projectIds: form.projectIds,
-      memberIds: form.memberIds,
-    };
+    const supabase = createClient();
+
     if (editing) {
-      await fetch(`/api/squads/${editing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      // Update squad name
+      await supabase
+        .from("Squad")
+        .update({ name: form.name })
+        .eq("id", editing.id);
+
+      // Remove existing relations then re-insert
+      await Promise.all([
+        supabase.from("SquadMember").delete().eq("squadId", editing.id),
+        supabase.from("ProjectSquad").delete().eq("squadId", editing.id),
+      ]);
+
+      const memberRows = form.memberIds.map((memberId) => ({
+        id: crypto.randomUUID(),
+        squadId: editing.id,
+        memberId,
+      }));
+      const projectRows = form.projectIds.map((projectId) => ({
+        id: crypto.randomUUID(),
+        projectId,
+        squadId: editing.id,
+      }));
+
+      await Promise.all([
+        memberRows.length > 0
+          ? supabase.from("SquadMember").insert(memberRows)
+          : Promise.resolve(),
+        projectRows.length > 0
+          ? supabase.from("ProjectSquad").insert(projectRows)
+          : Promise.resolve(),
+      ]);
     } else {
-      await fetch("/api/squads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      // Create new squad
+      const squadId = crypto.randomUUID();
+      await supabase
+        .from("Squad")
+        .insert({ id: squadId, name: form.name, updatedAt: new Date().toISOString() });
+
+      const memberRows = form.memberIds.map((memberId) => ({
+        id: crypto.randomUUID(),
+        squadId,
+        memberId,
+      }));
+      const projectRows = form.projectIds.map((projectId) => ({
+        id: crypto.randomUUID(),
+        projectId,
+        squadId,
+      }));
+
+      await Promise.all([
+        memberRows.length > 0
+          ? supabase.from("SquadMember").insert(memberRows)
+          : Promise.resolve(),
+        projectRows.length > 0
+          ? supabase.from("ProjectSquad").insert(projectRows)
+          : Promise.resolve(),
+      ]);
     }
+
     setOpen(false);
     load();
   };
 
   const remove = async (id: string) => {
     if (!confirm("Remover este squad?")) return;
-    await fetch(`/api/squads/${id}`, { method: "DELETE" });
+    await createClient().from("Squad").delete().eq("id", id);
     load();
   };
 

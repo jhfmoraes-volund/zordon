@@ -3,11 +3,6 @@ export const TASK_STATUSES = [
   "todo",
   "in_progress",
   "review",
-  "changes_requested",
-  "approved",
-  "staging",
-  "merge_conflict",
-  "staging_failed",
   "done",
 ] as const;
 
@@ -17,12 +12,7 @@ export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   backlog: ["todo"],
   todo: ["in_progress", "backlog"],
   in_progress: ["review", "todo"],
-  review: ["changes_requested", "approved"],
-  changes_requested: ["in_progress"],
-  approved: ["staging", "merge_conflict"],
-  staging: ["done", "staging_failed"],
-  merge_conflict: ["in_progress"],
-  staging_failed: ["in_progress"],
+  review: ["done", "in_progress"],
   done: [],
 };
 
@@ -37,10 +27,5 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: "To Do",
   in_progress: "In Progress",
   review: "Review",
-  changes_requested: "Changes Requested",
-  approved: "Approved",
-  staging: "Staging",
-  merge_conflict: "Merge Conflict",
-  staging_failed: "Staging Failed",
   done: "Done",
 };

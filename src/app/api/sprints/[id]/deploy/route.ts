@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deployOrchestrator } from "@/lib/deploy";
+import { getUser } from "@/lib/dal";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
   const { id } = await params;
   const { environment, triggeredBy } = await req.json();
 

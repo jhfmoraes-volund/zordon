@@ -7,24 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Sheet, SheetContent,
-} from "@/components/ui/sheet";
-import {
   ArrowLeft, ExternalLink, Users, KanbanSquare, Plus,
   Lightbulb, ListTodo, Zap, Play, Trash2,
-  CheckCircle2, Circle, Loader2, Eye, AlertCircle, BookOpen, CalendarRange,
-  Calendar, Link2, CheckSquare, Code, Briefcase, Ban, Layout, FileText, Pencil, Bot, AlertTriangle,
+  CheckCircle2, Circle, Loader2, Eye, AlertCircle, CalendarRange,
+  FileText, Pencil, AlertTriangle, Settings,
 } from "lucide-react";
-import { ProjectGuidelines } from "@/components/project-guidelines";
-import { ProjectWiki } from "@/components/project-wiki";
+import { ZordonChat } from "@/components/zordon-chat";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
+import { TaskSheet } from "@/components/task-sheet";
+import { TaskList } from "@/components/task-list";
+import { ProjectWiki } from "@/components/project-wiki";
+import { SprintDialog } from "@/components/sprint-dialog";
+import { roleLabel } from "@/lib/roles";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -32,31 +34,16 @@ type Member = { id: string; name: string; role: string };
 type SquadMember = { id: string; member: Member };
 type ProjectSquad = { id: string; squad: { id: string; name: string; members: SquadMember[] } };
 
-type TaskAssignment = { member: { name: string } | null; agent: { name: string } | null };
+type TaskAssignment = { member: { id: string; name: string } | null };
 type Task = {
   id: string; title: string; reference: string; status: string;
-  complexity: string; scope: string; sprintId: string | null;
+  complexity: string; scope: string; type: string; sprintId: string | null;
   sprint: { name: string } | null;
   assignments: TaskAssignment[];
   description?: string | null;
-  type?: string;
-  functionPoints?: number | null;
-  dueDate?: string | null;
-  executionMode?: string;
-  dependencies?: string | null;
-};
-
-type FullTask = Task & {
-  acceptanceCriteria: string | null;
-  technicalNotes: string | null;
-  businessContext: string | null;
-  outOfScope: string | null;
-  uiGuidance: string | null;
-  iterations: {
-    id: string; number: number; type: string; trigger: string;
-    resultSummary: string | null; success: boolean;
-    startedAt: string; completedAt: string | null;
-  }[];
+  functionPoints: number | null;
+  dueDate: string | null;
+  dependencies?: string[] | null;
 };
 
 type SprintStats = { total: number; done: number; percent: number };
@@ -100,12 +87,20 @@ type MemberCapacity = {
   isOverloaded: boolean;
 };
 
+type ProjectMemberRow = { member: { id: string; name: string; role: string } };
+
 type Project = {
   id: string; name: string; repoUrl: string | null;
-  startDate: string | null; endDate: string | null; contractUrl: string | null;
+  startDate: string | null; endDate: string | null;
   status: string;
+  clientId: string;
+  pmId: string | null;
+  githubRepoOwner: string | null;
+  githubRepoName: string | null;
+  githubDefaultBranch: string;
   client: { id: string; name: string };
   projectSquads: ProjectSquad[];
+  projectMembers: ProjectMemberRow[];
   sprints: Sprint[];
   tasks: Task[];
   designSessions: DesignSession[];
@@ -113,6 +108,9 @@ type Project = {
   health: ProjectHealth;
   memberCapacity: MemberCapacity[];
 };
+
+type ClientOption = { id: string; name: string };
+type MemberOption = { id: string; name: string; role: string };
 
 // ─── Constants ────────────────────────────────────────────
 
@@ -122,7 +120,6 @@ const tabs = [
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
   { key: "tasks", label: "Tasks", icon: ListTodo },
-  { key: "guidelines", label: "Guidelines", icon: BookOpen },
   { key: "wiki", label: "Wiki", icon: FileText },
 ] as const;
 
@@ -161,15 +158,6 @@ const typeColors: Record<string, string> = {
   management: "bg-pink-100 text-pink-700",
 };
 
-function fmtDate(d: string | null | undefined) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-}
-function isOverdue(d: string | null | undefined, status: string) {
-  if (!d || status === "done") return false;
-  return new Date(d) < new Date();
-}
-
 // ─── Main Page ────────────────────────────────────────────
 
 export default function ProjectDetailPage({
@@ -182,10 +170,85 @@ export default function ProjectDetailPage({
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const router = useRouter();
 
+  // ─── Edit modal state ──────────────────────────────────
+  const [editOpen, setEditOpen] = useState(false);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [allMembers, setAllMembers] = useState<MemberOption[]>([]);
+  const [editForm, setEditForm] = useState({
+    name: "", repoUrl: "", startDate: "", endDate: "",
+    status: "active", clientId: "", pmId: "",
+    githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
+    memberIds: [] as string[],
+  });
+
   const load = () =>
     fetch(`/api/projects/${id}`).then((r) => r.json()).then(setProject);
 
   useEffect(() => { load(); }, [id]);
+
+  const openSettings = async () => {
+    if (!project) return;
+    const supabase = createClient();
+    const [clientsRes, membersRes] = await Promise.all([
+      supabase.from("Client").select("id, name").order("name"),
+      supabase.from("Member").select("id, name, role").order("name"),
+    ]);
+    if (clientsRes.data) setClients(clientsRes.data);
+    if (membersRes.data) setAllMembers(membersRes.data);
+    setEditForm({
+      name: project.name,
+      repoUrl: project.repoUrl || "",
+      startDate: project.startDate ? project.startDate.slice(0, 10) : "",
+      endDate: project.endDate ? project.endDate.slice(0, 10) : "",
+      status: project.status,
+      clientId: project.clientId,
+      pmId: project.pmId || "",
+      githubRepoOwner: project.githubRepoOwner || "",
+      githubRepoName: project.githubRepoName || "",
+      githubDefaultBranch: project.githubDefaultBranch || "main",
+      memberIds: project.projectMembers.map((pm) => pm.member.id),
+    });
+    setEditOpen(true);
+  };
+
+  const saveSettings = async () => {
+    const supabase = createClient();
+    const projectData = {
+      name: editForm.name,
+      repoUrl: editForm.repoUrl || null,
+      startDate: editForm.startDate ? new Date(editForm.startDate).toISOString() : null,
+      endDate: editForm.endDate ? new Date(editForm.endDate).toISOString() : null,
+      status: editForm.status,
+      clientId: editForm.clientId,
+      pmId: editForm.pmId || null,
+      githubRepoOwner: editForm.githubRepoOwner || null,
+      githubRepoName: editForm.githubRepoName || null,
+      githubDefaultBranch: editForm.githubDefaultBranch || "main",
+      updatedAt: new Date().toISOString(),
+    };
+
+    await supabase.from("Project").update(projectData).eq("id", id);
+
+    // Sync project members
+    await supabase.from("ProjectMember").delete().eq("projectId", id);
+    if (editForm.memberIds.length > 0) {
+      await supabase.from("ProjectMember").insert(
+        editForm.memberIds.map((memberId) => ({ id: crypto.randomUUID(), projectId: id, memberId }))
+      );
+    }
+
+    setEditOpen(false);
+    load();
+  };
+
+  const toggleMember = (memberId: string) => {
+    setEditForm((f) => ({
+      ...f,
+      memberIds: f.memberIds.includes(memberId)
+        ? f.memberIds.filter((mid) => mid !== memberId)
+        : [...f.memberIds, memberId],
+    }));
+  };
 
   if (!project) {
     return <div className="p-6 text-muted-foreground">Carregando...</div>;
@@ -211,13 +274,18 @@ export default function ProjectDetailPage({
             <p className="text-sm text-muted-foreground">{project.client.name}</p>
           </div>
         </div>
-        {project.repoUrl && (
-          <a href={project.repoUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm">
-              <ExternalLink className="h-3.5 w-3.5 mr-1" /> Repo
-            </Button>
-          </a>
-        )}
+        <div className="flex items-center gap-2">
+          {project.repoUrl && (
+            <a href={project.repoUrl} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm">
+                <ExternalLink className="h-3.5 w-3.5 mr-1" /> Repo
+              </Button>
+            </a>
+          )}
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={openSettings}>
+            <Settings className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -258,13 +326,142 @@ export default function ProjectDetailPage({
         <SessionsTab project={project} onRefresh={load} />
       )}
       {activeTab === "tasks" && (
-        <TasksTab project={project} />
-      )}
-      {activeTab === "guidelines" && (
-        <ProjectGuidelines projectId={project.id} />
+        <TasksTab project={project} onRefresh={load} />
       )}
       {activeTab === "wiki" && (
         <ProjectWiki projectId={project.id} />
+      )}
+
+      {/* Edit Project Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Projeto</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+            <div className="grid gap-2">
+              <Label>Cliente</Label>
+              <Select value={editForm.clientId} onValueChange={(v) => v && setEditForm({ ...editForm, clientId: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione">
+                    {(value: string | null) => clients.find((c) => c.id === value)?.name ?? "Selecione"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>PM Responsável</Label>
+              <Select value={editForm.pmId} onValueChange={(v) => v && setEditForm({ ...editForm, pmId: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione (opcional)">
+                    {(value: string | null) => allMembers.find((m) => m.id === value)?.name ?? "Selecione (opcional)"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {allMembers
+                    .filter((m) => m.role === "pm")
+                    .map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                    ))}
+                  {allMembers.filter((m) => m.role === "pm").length === 0 && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      Nenhum membro com role &quot;pm&quot; cadastrado
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Membros Alocados</Label>
+              <p className="text-xs text-muted-foreground">Clique para alocar/desalocar membros do projeto</p>
+              <div className="flex flex-wrap gap-1.5 p-3 border rounded-md min-h-[40px]">
+                {allMembers
+                  .filter((m) => m.role !== "pm")
+                  .map((m) => {
+                    const isSelected = editForm.memberIds.includes(m.id);
+                    return (
+                      <Badge
+                        key={m.id}
+                        variant={isSelected ? "default" : "outline"}
+                        className={`cursor-pointer text-xs transition-colors ${
+                          isSelected ? "" : "opacity-50 hover:opacity-80"
+                        }`}
+                        onClick={() => toggleMember(m.id)}
+                      >
+                        {m.name}
+                        <span className="ml-1 text-[10px]">
+                          {roleLabel(m.role)}
+                        </span>
+                      </Badge>
+                    );
+                  })}
+                {allMembers.filter((m) => m.role !== "pm").length === 0 && (
+                  <span className="text-xs text-muted-foreground">Nenhum membro cadastrado</span>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Nome</Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Repo URL</Label>
+              <Input value={editForm.repoUrl} onChange={(e) => setEditForm({ ...editForm, repoUrl: e.target.value })} placeholder="https://github.com/..." />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label>GitHub Owner</Label>
+                <Input value={editForm.githubRepoOwner} onChange={(e) => setEditForm({ ...editForm, githubRepoOwner: e.target.value })} placeholder="org-name" />
+              </div>
+              <div className="grid gap-2">
+                <Label>GitHub Repo</Label>
+                <Input value={editForm.githubRepoName} onChange={(e) => setEditForm({ ...editForm, githubRepoName: e.target.value })} placeholder="repo-name" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Default Branch</Label>
+                <Input value={editForm.githubDefaultBranch} onChange={(e) => setEditForm({ ...editForm, githubDefaultBranch: e.target.value })} placeholder="main" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Data Início</Label>
+                <Input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Data Fim</Label>
+                <Input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <Select value={editForm.status} onValueChange={(v) => v && setEditForm({ ...editForm, status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button onClick={saveSettings} disabled={!editForm.name || !editForm.clientId}>Salvar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {project && (
+        <ZordonChat
+          contextLabel={project.name}
+          contextParams={{ projectId: id }}
+        />
       )}
     </div>
   );
@@ -286,11 +483,6 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
 
   const fmtD = (d: string | null) =>
     d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-
-  const roleLabels: Record<string, string> = {
-    pm: "PM", fullstack: "Fullstack",
-    "ui-ux-builder": "UI/UX", "backend-qa-builder": "Backend/QA",
-  };
 
   return (
     <div className="space-y-4">
@@ -430,7 +622,7 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
                         )}
                       </div>
                       <Badge variant="outline" className="text-[10px] shrink-0">
-                        {roleLabels[m.role] || m.role}
+                        {roleLabel(m.role)}
                       </Badge>
                       <div className="h-2 flex-1 rounded-full bg-secondary overflow-hidden">
                         <div
@@ -578,245 +770,98 @@ function SessionsTab({ project, onRefresh }: { project: Project; onRefresh: () =
 
 // ─── Tasks Tab ────────────────────────────────────────────
 
-function TasksTab({ project }: { project: Project }) {
+function TasksTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
   const [filter, setFilter] = useState<string>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<FullTask | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [sheetTaskId, setSheetTaskId] = useState<string | null>(null);
 
   const filtered = filter === "all"
     ? project.tasks
     : project.tasks.filter((t) => t.status === filter);
 
-  const openDetail = async (t: Task) => {
-    setSheetOpen(true);
-    setLoadingDetail(true);
-    setSelectedTask(null);
-    const res = await fetch(`/api/tasks/${t.id}`);
-    const full = await res.json();
-    setSelectedTask(full);
-    setLoadingDetail(false);
+  const members = project.projectMembers.map((pm) => ({
+    id: pm.member.id,
+    name: pm.member.name,
+    role: pm.member.role,
+  }));
+
+  const handleStatusChange = async (taskId: string, status: string) => {
+    await fetch(`/api/tasks/${taskId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    onRefresh();
+  };
+
+  const handleAssigneeChange = async (taskId: string, memberId: string | null) => {
+    const assigneeIds = memberId ? [{ memberId }] : [];
+    await fetch(`/api/tasks/${taskId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assigneeIds }),
+    });
+    onRefresh();
+  };
+
+  const handleDelete = async (taskId: string) => {
+    await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+    onRefresh();
   };
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex gap-1 flex-wrap">
-        {["all", "backlog", "todo", "in_progress", "review", "done"].map((s) => (
-          <Button
-            key={s}
-            variant={filter === s ? "default" : "outline"}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setFilter(s)}
-          >
-            {s === "all" ? "Todas" : s}
-            <Badge variant="secondary" className="ml-1 h-4 text-xs">
-              {s === "all" ? project.tasks.length : project.tasks.filter((t) => t.status === s).length}
-            </Badge>
-          </Button>
-        ))}
-      </div>
-
-      {/* Task list */}
-      <div className="space-y-1">
-        {filtered.map((t) => {
-          const overdue = isOverdue(t.dueDate, t.status);
-          return (
-            <div
-              key={t.id}
-              className="flex items-center gap-3 surface-inset p-3 hover:bg-muted/60 transition-colors cursor-pointer"
-              onClick={() => openDetail(t)}
+      {/* Header: filters + create */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex gap-1 flex-wrap">
+          {["all", "backlog", "todo", "in_progress", "review", "done"].map((s) => (
+            <Button
+              key={s}
+              variant={filter === s ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setFilter(s)}
             >
-              {taskStatusIcons[t.status]}
-              <span className="font-mono text-xs text-muted-foreground w-[72px] shrink-0">{t.reference}</span>
-              <span className="text-sm font-medium flex-1 truncate">{t.title}</span>
-              {t.type && (
-                <Badge className={`text-xs ${typeColors[t.type] || ""}`}>
-                  {typeLabels[t.type] || t.type}
-                </Badge>
-              )}
-              {t.functionPoints != null && (
-                <span className="text-xs font-medium tabular-nums text-muted-foreground">{t.functionPoints} FP</span>
-              )}
-              {t.dueDate && (
-                <span className={`text-xs tabular-nums ${overdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
-                  {fmtDate(t.dueDate)}
-                </span>
-              )}
-              <Badge variant="outline" className="text-xs">{t.scope}</Badge>
-              <div className="flex gap-1">
-                {t.assignments.map((a, i) => (
-                  <Badge key={i} variant="secondary" className="text-xs">
-                    {a.member?.name || a.agent?.name}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        {filtered.length === 0 && (
-          <p className="text-center text-muted-foreground py-8">Nenhuma task.</p>
-        )}
-      </div>
-
-      {/* Detail Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full !sm:max-w-[680px] overflow-y-auto p-0">
-          {loadingDetail || !selectedTask ? (
-            <div className="py-12 text-center text-muted-foreground">Carregando...</div>
-          ) : (
-            <TaskDetailSheet task={selectedTask} />
-          )}
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
-}
-
-// ─── Task Detail Sheet (shared) ──────────────────────────
-
-function TaskDetailSheet({ task }: { task: FullTask }) {
-  const deps: string[] = task.dependencies ? JSON.parse(task.dependencies) : [];
-  const overdue = isOverdue(task.dueDate, task.status);
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* ── Header ── */}
-      <div className="border-b px-6 py-5">
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{task.reference}</span>
-          {task.type && (
-            <Badge className={typeColors[task.type] || "bg-gray-100 text-gray-700"}>
-              {typeLabels[task.type] || task.type}
-            </Badge>
-          )}
-          <Badge className={statusColors[task.status]}>{task.status}</Badge>
-          {task.executionMode === "agent" && (
-            <Badge variant="outline" className="text-xs gap-1"><Bot className="h-3 w-3" /> Agent</Badge>
-          )}
+              {s === "all" ? "Todas" : s}
+              <Badge variant="secondary" className="ml-1 h-4 text-xs">
+                {s === "all" ? project.tasks.length : project.tasks.filter((t) => t.status === s).length}
+              </Badge>
+            </Button>
+          ))}
         </div>
-        <h2 className="text-lg font-semibold leading-snug">{task.title}</h2>
-        {task.description && (
-          <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{task.description}</p>
-        )}
+        <Button
+          size="sm"
+          className="h-7 text-xs shrink-0"
+          onClick={() => { setSheetTaskId(null); setSheetOpen(true); }}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Criar Task
+        </Button>
       </div>
 
-      {/* ── Body (scrollable) ── */}
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+      <TaskList
+        tasks={filtered}
+        members={members}
+        onOpenDetail={(id) => { setSheetTaskId(id); setSheetOpen(true); }}
+        onStatusChange={handleStatusChange}
+        onAssigneeChange={handleAssigneeChange}
+        onDelete={handleDelete}
+        showSprint
+      />
 
-        {/* Meta cards */}
-        <div className="grid grid-cols-3 gap-3">
-          <MetaItem label="Function Points" value={task.functionPoints != null ? `${task.functionPoints} FP` : "—"} icon={<Zap className="h-3.5 w-3.5" />} />
-          <MetaItem
-            label="Prazo"
-            value={fmtDate(task.dueDate)}
-            icon={<Calendar className="h-3.5 w-3.5" />}
-            className={overdue ? "border-red-200 bg-red-50 text-red-700" : ""}
-          />
-          <MetaItem label="Sprint" value={task.sprint?.name || "—"} icon={<Zap className="h-3.5 w-3.5" />} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <MetaItem label="Scope" value={task.scope} />
-          <MetaItem label="Complexity" value={task.complexity} />
-        </div>
-
-        {/* Dependencies */}
-        {deps.length > 0 && (
-          <div className="surface-inset p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Dependencias</span>
-            </div>
-            <div className="flex gap-1.5 flex-wrap">
-              {deps.map((ref) => (
-                <Badge key={ref} variant="outline" className="font-mono text-xs">{ref}</Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Spec Sections ── */}
-        {task.acceptanceCriteria && (
-          <SpecSection icon={<CheckSquare className="h-4 w-4" />} title="Acceptance Criteria">
-            <pre className="text-[13px] whitespace-pre-wrap font-sans leading-7">{task.acceptanceCriteria}</pre>
-          </SpecSection>
-        )}
-
-        {task.technicalNotes && (
-          <SpecSection icon={<Code className="h-4 w-4" />} title="Technical Notes">
-            <pre className="text-xs whitespace-pre-wrap font-mono leading-relaxed bg-muted/60 border p-4 rounded-lg overflow-x-auto">{task.technicalNotes}</pre>
-          </SpecSection>
-        )}
-
-        {task.businessContext && (
-          <SpecSection icon={<Briefcase className="h-4 w-4" />} title="Business Context">
-            <p className="text-sm leading-relaxed text-muted-foreground">{task.businessContext}</p>
-          </SpecSection>
-        )}
-
-        {task.outOfScope && (
-          <SpecSection icon={<Ban className="h-4 w-4" />} title="Out of Scope">
-            <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed text-muted-foreground">{task.outOfScope}</pre>
-          </SpecSection>
-        )}
-
-        {task.uiGuidance && (
-          <SpecSection icon={<Layout className="h-4 w-4" />} title="UI Guidance">
-            <p className="text-sm leading-relaxed text-muted-foreground">{task.uiGuidance}</p>
-          </SpecSection>
-        )}
-
-        {task.iterations && task.iterations.length > 0 && (
-          <SpecSection icon={<FileText className="h-4 w-4" />} title={`Historico (${task.iterations.length})`}>
-            <div className="space-y-2">
-              {task.iterations.map((it) => (
-                <div key={it.id} className="flex items-start gap-3 text-sm border rounded-lg p-3">
-                  <Badge variant={it.success ? "secondary" : "destructive"} className="text-xs mt-0.5">#{it.number}</Badge>
-                  <div>
-                    <p className="text-xs text-muted-foreground">{it.type} — {it.trigger}</p>
-                    {it.resultSummary && <p className="text-xs mt-1">{it.resultSummary}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SpecSection>
-        )}
-      </div>
-
-      {/* ── Footer ── */}
-      <div className="border-t px-6 py-4">
-        <Link href={`/tasks/${task.id}`}>
-          <Button size="sm">
-            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Abrir / Editar
-          </Button>
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function MetaItem({ label, value, icon, className }: { label: string; value: string; icon?: React.ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-lg border px-3 py-2 ${className || ""}`}>
-      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">{label}</p>
-      <div className="flex items-center gap-1.5">
-        {icon && <span className="text-muted-foreground">{icon}</span>}
-        <span className="text-sm font-medium">{value}</span>
-      </div>
-    </div>
-  );
-}
-
-function SpecSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  return (
-    <div className="surface-inset p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-muted-foreground">{icon}</span>
-        <h3 className="text-sm font-semibold">{title}</h3>
-      </div>
-      {children}
+      {/* Task Sheet (detail + create) */}
+      <TaskSheet
+        taskId={sheetTaskId}
+        open={sheetOpen}
+        onOpenChange={(open) => {
+          setSheetOpen(open);
+          if (!open) onRefresh();
+        }}
+        createDefaults={{
+          projectId: project.id,
+        }}
+        onChange={onRefresh}
+      />
     </div>
   );
 }
@@ -828,9 +873,6 @@ function SprintsTab({ project }: { project: Project }) {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
-  const [form, setForm] = useState({
-    name: "", startDate: "", endDate: "", status: "planning",
-  });
 
   const loadSprints = () => {
     setLoading(true);
@@ -844,31 +886,12 @@ function SprintsTab({ project }: { project: Project }) {
 
   useEffect(() => { loadSprints(); }, [project.id]);
 
-  const openNew = () => {
-    setEditing(null);
-    const today = new Date().toISOString().split("T")[0];
-    const twoWeeks = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
-    setForm({ name: "", startDate: today, endDate: twoWeeks, status: "planning" });
-    setOpen(true);
-  };
-
-  const openEdit = (s: any) => {
-    setEditing(s);
-    setForm({
-      name: s.name,
-      startDate: s.startDate.split("T")[0],
-      endDate: s.endDate.split("T")[0],
-      status: s.status,
-    });
-    setOpen(true);
-  };
-
-  const save = async () => {
+  const handleSave = async (data: { name: string; startDate: string; endDate: string; status: string }) => {
     const body = {
-      name: form.name,
-      startDate: new Date(form.startDate).toISOString(),
-      endDate: new Date(form.endDate).toISOString(),
-      status: form.status,
+      name: data.name,
+      startDate: new Date(data.startDate).toISOString(),
+      endDate: new Date(data.endDate).toISOString(),
+      status: data.status,
       projectId: project.id,
     };
     if (editing) {
@@ -908,7 +931,7 @@ function SprintsTab({ project }: { project: Project }) {
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <Button size="sm" onClick={openNew}>
+        <Button size="sm" onClick={() => { setEditing(null); setOpen(true); }}>
           <Plus className="h-3.5 w-3.5 mr-1" /> Novo Sprint
         </Button>
       </div>
@@ -942,7 +965,7 @@ function SprintsTab({ project }: { project: Project }) {
                   <KanbanSquare className="h-3.5 w-3.5 mr-1" /> Board
                 </Button>
               </Link>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(s)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(s); setOpen(true); }}>
                 <Pencil className="h-3 w-3" />
               </Button>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(s.id)}>
@@ -982,45 +1005,13 @@ function SprintsTab({ project }: { project: Project }) {
         </div>
       ))}
 
-      {/* Dialog de criar/editar sprint */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Sprint" : "Novo Sprint"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Nome</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Sprint 1" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Início</Label>
-                <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Fim</Label>
-                <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => v && setForm({ ...form, status: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="planning">Planning</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.name}>Salvar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SprintDialog
+        open={open}
+        onOpenChange={setOpen}
+        editing={editing}
+        existingSprints={sprintsData}
+        onSave={handleSave}
+      />
     </div>
   );
 }
@@ -1035,7 +1026,6 @@ type ScheduleTask = {
   type: string;
   functionPoints: number | null;
   dueDate: string | null;
-  executionMode: string;
   assignees: string[];
 };
 
@@ -1056,17 +1046,19 @@ function ScheduleTab({ projectId }: { projectId: string }) {
   const [schedule, setSchedule] = useState<ScheduleSprint[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<FullTask | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [sheetTaskId, setSheetTaskId] = useState<string | null>(null);
 
-  const openDetail = async (taskId: string) => {
+  const openDetail = (taskId: string) => {
+    setSheetTaskId(taskId);
     setSheetOpen(true);
-    setLoadingDetail(true);
-    setSelectedTask(null);
-    const res = await fetch(`/api/tasks/${taskId}`);
-    const full = await res.json();
-    setSelectedTask(full);
-    setLoadingDetail(false);
+  };
+
+  const reload = () => {
+    fetch(`/api/projects/${projectId}/schedule`)
+      .then((r) => r.json())
+      .then((data) => {
+        setSchedule(data.schedule || []);
+      });
   };
 
   useEffect(() => {
@@ -1112,8 +1104,6 @@ function ScheduleTab({ projectId }: { projectId: string }) {
     todo: <Circle className="h-3.5 w-3.5 text-blue-400" />,
     in_progress: <Loader2 className="h-3.5 w-3.5 text-yellow-400" />,
     review: <Eye className="h-3.5 w-3.5 text-purple-400" />,
-    changes_requested: <AlertCircle className="h-3.5 w-3.5 text-orange-400" />,
-    approved: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />,
     done: <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />,
   };
 
@@ -1229,16 +1219,16 @@ function ScheduleTab({ projectId }: { projectId: string }) {
         );
       })}
 
-      {/* Task Detail Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full !sm:max-w-[680px] overflow-y-auto p-0">
-          {loadingDetail || !selectedTask ? (
-            <div className="py-12 text-center text-muted-foreground">Carregando...</div>
-          ) : (
-            <TaskDetailSheet task={selectedTask} />
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* Task Sheet */}
+      <TaskSheet
+        taskId={sheetTaskId}
+        open={sheetOpen}
+        onOpenChange={(open) => {
+          setSheetOpen(open);
+          if (!open) reload();
+        }}
+        onChange={reload}
+      />
     </div>
   );
 }

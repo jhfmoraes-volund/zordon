@@ -15,6 +15,11 @@ export default function NewMeetingPage() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // NOTE: This POST intentionally stays as a fetch() call to the API route.
+  // The server-side handler performs multi-step logic: fetching active projects,
+  // creating the meeting with nested project reviews, and carrying over pending
+  // action items from previous meetings. Moving this to supabase-js would
+  // require replicating all that orchestration on the client.
   const create = async () => {
     setSaving(true);
     try {

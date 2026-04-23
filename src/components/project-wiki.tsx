@@ -1,17 +1,36 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  ExternalLink, Plus, Trash2, Check, X, Users, Link2,
-  Target, Crosshair, Box,
+  ExternalLink,
+  Plus,
+  Trash2,
+  Check,
+  X,
+  Users,
+  Link2,
+  Target,
+  Crosshair,
+  Box,
+  FileText,
+  Server,
+  KeyRound,
+  Pencil,
 } from "lucide-react";
+import { useWikiItems } from "@/hooks/use-wiki-items";
+import { TiptapEditor } from "@/components/tiptap-editor";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -20,7 +39,7 @@ type WikiSection = {
   projectId: string;
   sectionKey: string;
   title: string;
-  data: string;
+  data: unknown;
   order: number;
 };
 
@@ -30,28 +49,65 @@ type IndicatorItem = {
   indicator: string;
   target: string;
   current: string;
-  status: string; // on_track, attention, at_risk
+  status: string;
 };
 type ObjectiveItem = { objective: string; description: string };
-type ScopeItem = { item: string; included: boolean; notes: string };
+type EnvironmentItem = {
+  name: string;
+  url: string;
+  type: string;
+  notes: string;
+};
+type AccessItem = {
+  service: string;
+  url: string;
+  credentials_hint: string;
+  notes: string;
+};
 
 // ─── Constants ────────────────────────────────────────────
 
+const SECTION_ORDER = [
+  "description",
+  "links",
+  "sponsors",
+  "objectives",
+  "success_indicators",
+  "environments",
+  "access",
+];
+
+const SECTION_TITLES: Record<string, string> = {
+  description: "Descrição do Projeto",
+  links: "Links Rápidos",
+  sponsors: "Sponsors",
+  success_indicators: "KPIs / Métricas",
+  objectives: "Objetivos",
+  environments: "Ambientes",
+  access: "Acessos",
+};
+
 const sectionIcons: Record<string, typeof Users> = {
+  description: FileText,
   sponsors: Users,
   links: Link2,
   success_indicators: Target,
   objectives: Crosshair,
-  scope: Box,
+  environments: Server,
+  access: KeyRound,
 };
 
-const indicatorStatusConfig: Record<string, { label: string; color: string }> = {
+const indicatorStatusConfig: Record<
+  string,
+  { label: string; color: string }
+> = {
   on_track: { label: "No caminho", color: "bg-green-100 text-green-800" },
   attention: { label: "Atenção", color: "bg-yellow-100 text-yellow-800" },
   at_risk: { label: "Em risco", color: "bg-red-100 text-red-800" },
 };
 
 const linkCategories = ["geral", "design", "gestão", "técnico", "documentação"];
+const envTypes = ["development", "staging", "production", "sandbox"];
 
 // ─── Main Component ───────────────────────────────────────
 
@@ -65,45 +121,55 @@ export function ProjectWiki({ projectId }: { projectId: string }) {
       .then((data) => {
         setSections(data);
         setLoading(false);
+      })
+      .catch(() => {
+        toast.error("Erro ao carregar wiki");
+        setLoading(false);
       });
   }, [projectId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const updateSection = async (sectionKey: string, data: unknown[]) => {
-    await fetch(`/api/projects/${projectId}/wiki/${sectionKey}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data }),
-    });
-  };
+  const updateSection = useCallback(
+    async (sectionKey: string, data: unknown) => {
+      const res = await fetch(
+        `/api/projects/${projectId}/wiki/${sectionKey}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data }),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to save");
+    },
+    [projectId]
+  );
 
   if (loading) {
-    return <div className="p-6 text-muted-foreground">Carregando wiki...</div>;
+    return (
+      <div className="p-6 text-muted-foreground">Carregando wiki...</div>
+    );
   }
 
-  const linksSection = sections.find((s) => s.sectionKey === "links");
-  const otherSections = sections.filter((s) => s.sectionKey !== "links");
+  // Sort sections by SECTION_ORDER
+  const sorted = [...sections].sort((a, b) => {
+    const ai = SECTION_ORDER.indexOf(a.sectionKey);
+    const bi = SECTION_ORDER.indexOf(b.sectionKey);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
 
   return (
     <div className="space-y-6">
-      {/* Links Rápidos — always on top */}
-      {linksSection && (
-        <LinksSection
-          section={linksSection}
-          onUpdate={(data) => updateSection("links", data)}
-        />
-      )}
-
-      {/* Other sections */}
-      {otherSections.map((section) => {
-        const SectionComponent = sectionComponents[section.sectionKey];
-        if (!SectionComponent) return null;
+      {sorted.map((section) => {
+        const Component = sectionComponentMap[section.sectionKey];
+        if (!Component) return null;
         return (
-          <SectionComponent
+          <Component
             key={section.id}
             section={section}
-            onUpdate={(data: unknown[]) => updateSection(section.sectionKey, data)}
+            onUpdate={(data: unknown) => updateSection(section.sectionKey, data)}
           />
         );
       })}
@@ -122,110 +188,200 @@ function SectionWrapper({
   title: string;
   sectionKey: string;
   children: React.ReactNode;
-  onAdd: () => void;
+  onAdd?: () => void;
 }) {
   const Icon = sectionIcons[sectionKey] || Box;
+  const displayTitle = SECTION_TITLES[sectionKey] || title;
   return (
     <div className="surface p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold">{title}</h3>
+          <h3 className="text-sm font-semibold">{displayTitle}</h3>
         </div>
-        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onAdd}>
-          <Plus className="mr-1 h-3 w-3" />
-          Adicionar
-        </Button>
+        {onAdd && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onAdd}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Adicionar
+          </Button>
+        )}
       </div>
       {children}
     </div>
   );
 }
 
-// ─── Links Section (top bar) ──────────────────────────────
+// ─── Description Section (Tiptap) ────────────────────────
+
+function DescriptionSection({
+  section,
+  onUpdate,
+}: {
+  section: WikiSection;
+  onUpdate: (data: unknown) => Promise<void>;
+}) {
+  const data = section.data as { html?: string } | null;
+  const initialHtml = data?.html || "";
+
+  const handleUpdate = useCallback(
+    async (html: string) => {
+      try {
+        await onUpdate({ html });
+        toast.success("Salvo", { id: "wiki-save" });
+      } catch {
+        toast.error("Erro ao salvar", { id: "wiki-save" });
+      }
+    },
+    [onUpdate]
+  );
+
+  return (
+    <SectionWrapper title={section.title} sectionKey="description">
+      <TiptapEditor
+        content={initialHtml}
+        onUpdate={handleUpdate}
+        placeholder="Descreva o projeto — visão geral, contexto, motivação..."
+      />
+    </SectionWrapper>
+  );
+}
+
+// ─── Links Section ────────────────────────────────────────
 
 function LinksSection({
   section,
   onUpdate,
 }: {
   section: WikiSection;
-  onUpdate: (data: LinkItem[]) => void;
+  onUpdate: (data: unknown) => Promise<void>;
 }) {
-  const [items, setItems] = useState<LinkItem[]>(() => {
-    try { return JSON.parse(section.data); } catch { return []; }
-  });
-  const [adding, setAdding] = useState(false);
+  const { items, add, remove, replaceItem, adding, setAdding } =
+    useWikiItems<LinkItem>(section, onUpdate as (data: LinkItem[]) => Promise<void>);
   const [form, setForm] = useState({ label: "", url: "", category: "geral" });
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ label: "", url: "", category: "geral" });
 
-  const save = (updated: LinkItem[]) => {
-    setItems(updated);
-    onUpdate(updated);
-  };
-
-  const add = () => {
+  const handleAdd = () => {
     if (!form.label || !form.url) return;
-    save([...items, { ...form }]);
+    add({ ...form });
     setForm({ label: "", url: "", category: "geral" });
     setAdding(false);
   };
 
-  const remove = (index: number) => {
-    save(items.filter((_, i) => i !== index));
+  const startEdit = (i: number) => {
+    setEditForm({ ...items[i] });
+    setEditingIndex(i);
+  };
+
+  const confirmEdit = () => {
+    if (editingIndex === null || !editForm.label || !editForm.url) return;
+    replaceItem(editingIndex, { ...editForm });
+    setEditingIndex(null);
   };
 
   return (
-    <div className="surface p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Link2 className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold">Links Rápidos</h3>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={() => setAdding(!adding)}
-        >
-          <Plus className="mr-1 h-3 w-3" />
-          Adicionar
-        </Button>
-      </div>
-
-      {/* Link cards */}
+    <SectionWrapper
+      title={section.title}
+      sectionKey="links"
+      onAdd={() => setAdding(!adding)}
+    >
       <div className="flex flex-wrap gap-2">
-        {items.map((link, i) => (
-          <a
-            key={i}
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/60 transition-colors"
-          >
-            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="font-medium">{link.label}</span>
-            {link.category !== "geral" && (
-              <Badge variant="secondary" className="text-[10px] h-4">
-                {link.category}
-              </Badge>
-            )}
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                remove(i);
-              }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+        {items.map((link, i) =>
+          editingIndex === i ? (
+            <div key={i} className="flex items-end gap-2 w-full">
+              <Input
+                className="flex-1"
+                value={editForm.label}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, label: e.target.value })
+                }
+              />
+              <Input
+                className="flex-[2]"
+                value={editForm.url}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, url: e.target.value })
+                }
+              />
+              <Select
+                value={editForm.category}
+                onValueChange={(v) =>
+                  v && setEditForm({ ...editForm, category: v })
+                }
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {linkCategories.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="icon" className="h-9 w-9" onClick={confirmEdit}>
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9"
+                onClick={() => setEditingIndex(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <a
+              key={i}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/60 transition-colors"
             >
-              <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500" />
-            </button>
-          </a>
-        ))}
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="font-medium">{link.label}</span>
+              {link.category !== "geral" && (
+                <Badge variant="secondary" className="text-[10px] h-4">
+                  {link.category}
+                </Badge>
+              )}
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  startEdit(i);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  remove(i);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500" />
+              </button>
+            </a>
+          )
+        )}
         {items.length === 0 && !adding && (
-          <p className="text-sm text-muted-foreground">Nenhum link adicionado.</p>
+          <p className="text-sm text-muted-foreground">
+            Nenhum link adicionado.
+          </p>
         )}
       </div>
 
-      {/* Add form */}
       {adding && (
         <div className="flex items-end gap-2">
           <div className="grid gap-1 flex-1">
@@ -251,11 +407,13 @@ function LinksSection({
             </SelectTrigger>
             <SelectContent>
               {linkCategories.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button size="icon" className="h-9 w-9" onClick={add}>
+          <Button size="icon" className="h-9 w-9" onClick={handleAdd}>
             <Check className="h-4 w-4" />
           </Button>
           <Button
@@ -268,7 +426,7 @@ function LinksSection({
           </Button>
         </div>
       )}
-    </div>
+    </SectionWrapper>
   );
 }
 
@@ -279,61 +437,115 @@ function SponsorsSection({
   onUpdate,
 }: {
   section: WikiSection;
-  onUpdate: (data: SponsorItem[]) => void;
+  onUpdate: (data: unknown) => Promise<void>;
 }) {
-  const [items, setItems] = useState<SponsorItem[]>(() => {
-    try { return JSON.parse(section.data); } catch { return []; }
-  });
-  const [adding, setAdding] = useState(false);
+  const { items, add, remove, replaceItem, adding, setAdding } =
+    useWikiItems<SponsorItem>(section, onUpdate as (data: SponsorItem[]) => Promise<void>);
   const [form, setForm] = useState({ name: "", role: "", contact: "" });
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", role: "", contact: "" });
 
-  const save = (updated: SponsorItem[]) => {
-    setItems(updated);
-    onUpdate(updated);
-  };
-
-  const add = () => {
+  const handleAdd = () => {
     if (!form.name) return;
-    save([...items, { ...form }]);
+    add({ ...form });
     setForm({ name: "", role: "", contact: "" });
     setAdding(false);
   };
 
-  const remove = (index: number) => {
-    save(items.filter((_, i) => i !== index));
+  const startEdit = (i: number) => {
+    setEditForm({ ...items[i] });
+    setEditingIndex(i);
+  };
+
+  const confirmEdit = () => {
+    if (editingIndex === null || !editForm.name) return;
+    replaceItem(editingIndex, { ...editForm });
+    setEditingIndex(null);
   };
 
   return (
     <SectionWrapper
       title={section.title}
-      sectionKey={section.sectionKey}
+      sectionKey="sponsors"
       onAdd={() => setAdding(!adding)}
     >
       <div className="space-y-2">
-        {items.map((sponsor, i) => (
-          <div
-            key={i}
-            className="group flex items-center gap-3 surface-inset px-3 py-2"
-          >
-            <div className="flex-1">
-              <span className="text-sm font-medium">{sponsor.name}</span>
-              {sponsor.role && (
-                <span className="text-sm text-muted-foreground"> — {sponsor.role}</span>
-              )}
+        {items.map((sponsor, i) =>
+          editingIndex === i ? (
+            <div key={i} className="flex items-end gap-2">
+              <Input
+                className="flex-1"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+              />
+              <Input
+                className="flex-1"
+                placeholder="Papel"
+                value={editForm.role}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, role: e.target.value })
+                }
+              />
+              <Input
+                className="flex-1"
+                placeholder="Contato"
+                value={editForm.contact}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, contact: e.target.value })
+                }
+              />
+              <Button size="icon" className="h-9 w-9" onClick={confirmEdit}>
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9"
+                onClick={() => setEditingIndex(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-            {sponsor.contact && (
-              <span className="text-xs text-muted-foreground">{sponsor.contact}</span>
-            )}
-            <button
-              onClick={() => remove(i)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+          ) : (
+            <div
+              key={i}
+              className="group flex items-center gap-3 surface-inset px-3 py-2"
             >
-              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
-            </button>
-          </div>
-        ))}
+              <div className="flex-1">
+                <span className="text-sm font-medium">{sponsor.name}</span>
+                {sponsor.role && (
+                  <span className="text-sm text-muted-foreground">
+                    {" "}
+                    — {sponsor.role}
+                  </span>
+                )}
+              </div>
+              {sponsor.contact && (
+                <span className="text-xs text-muted-foreground">
+                  {sponsor.contact}
+                </span>
+              )}
+              <button
+                onClick={() => startEdit(i)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </button>
+              <button
+                onClick={() => remove(i)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+              </button>
+            </div>
+          )
+        )}
         {items.length === 0 && !adding && (
-          <p className="text-sm text-muted-foreground px-1">Nenhum sponsor cadastrado.</p>
+          <p className="text-sm text-muted-foreground px-1">
+            Nenhum sponsor cadastrado.
+          </p>
         )}
       </div>
 
@@ -360,10 +572,15 @@ function SponsorsSection({
               onChange={(e) => setForm({ ...form, contact: e.target.value })}
             />
           </div>
-          <Button size="icon" className="h-9 w-9" onClick={add}>
+          <Button size="icon" className="h-9 w-9" onClick={handleAdd}>
             <Check className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setAdding(false)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-9 w-9"
+            onClick={() => setAdding(false)}
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -379,49 +596,36 @@ function IndicatorsSection({
   onUpdate,
 }: {
   section: WikiSection;
-  onUpdate: (data: IndicatorItem[]) => void;
+  onUpdate: (data: unknown) => Promise<void>;
 }) {
-  const [items, setItems] = useState<IndicatorItem[]>(() => {
-    try { return JSON.parse(section.data); } catch { return []; }
-  });
-  const [adding, setAdding] = useState(false);
+  const { items, add, remove, updateItem, adding, setAdding } =
+    useWikiItems<IndicatorItem>(section, onUpdate as (data: IndicatorItem[]) => Promise<void>);
   const [form, setForm] = useState({
-    indicator: "", target: "", current: "", status: "on_track",
+    indicator: "",
+    target: "",
+    current: "",
+    status: "on_track",
   });
 
-  const save = (updated: IndicatorItem[]) => {
-    setItems(updated);
-    onUpdate(updated);
-  };
-
-  const add = () => {
+  const handleAdd = () => {
     if (!form.indicator) return;
-    save([...items, { ...form }]);
+    add({ ...form });
     setForm({ indicator: "", target: "", current: "", status: "on_track" });
     setAdding(false);
-  };
-
-  const remove = (index: number) => {
-    save(items.filter((_, i) => i !== index));
-  };
-
-  const updateItem = (index: number, field: string, value: string) => {
-    const updated = items.map((item, i) =>
-      i === index ? { ...item, [field]: value } : item
-    );
-    save(updated);
   };
 
   return (
     <SectionWrapper
       title={section.title}
-      sectionKey={section.sectionKey}
+      sectionKey="success_indicators"
       onAdd={() => setAdding(!adding)}
     >
       {items.length > 0 && (
         <div className="space-y-2">
           {items.map((ind, i) => {
-            const cfg = indicatorStatusConfig[ind.status] || indicatorStatusConfig.on_track;
+            const cfg =
+              indicatorStatusConfig[ind.status] ||
+              indicatorStatusConfig.on_track;
             return (
               <div
                 key={i}
@@ -432,35 +636,50 @@ function IndicatorsSection({
                 </div>
                 <div className="flex items-center gap-3 text-xs shrink-0">
                   <div className="text-muted-foreground">
-                    Meta: <span className="font-medium text-foreground">{ind.target}</span>
+                    Meta:{" "}
+                    <span className="font-medium text-foreground">
+                      {ind.target}
+                    </span>
                   </div>
                   <div className="text-muted-foreground">
                     Atual:{" "}
                     <input
                       className="font-medium text-foreground bg-transparent border-b border-dashed border-muted-foreground/30 w-16 text-center focus:outline-none focus:border-primary"
                       value={ind.current}
-                      onChange={(e) => updateItem(i, "current", e.target.value)}
+                      onChange={(e) =>
+                        updateItem(i, { current: e.target.value })
+                      }
                     />
                   </div>
                   <Select
                     value={ind.status}
-                    onValueChange={(v) => v && updateItem(i, "status", v)}
+                    onValueChange={(v) =>
+                      v && updateItem(i, { status: v })
+                    }
                   >
                     <SelectTrigger className="h-6 w-[110px] text-xs">
                       <SelectValue>
-                        <Badge variant="secondary" className={`text-[10px] ${cfg.color}`}>
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] ${cfg.color}`}
+                        >
                           {cfg.label}
                         </Badge>
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(indicatorStatusConfig).map(([key, c]) => (
-                        <SelectItem key={key} value={key}>
-                          <Badge variant="secondary" className={`text-[10px] ${c.color}`}>
-                            {c.label}
-                          </Badge>
-                        </SelectItem>
-                      ))}
+                      {Object.entries(indicatorStatusConfig).map(
+                        ([key, c]) => (
+                          <SelectItem key={key} value={key}>
+                            <Badge
+                              variant="secondary"
+                              className={`text-[10px] ${c.color}`}
+                            >
+                              {c.label}
+                            </Badge>
+                          </SelectItem>
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -476,7 +695,9 @@ function IndicatorsSection({
         </div>
       )}
       {items.length === 0 && !adding && (
-        <p className="text-sm text-muted-foreground px-1">Nenhum indicador cadastrado.</p>
+        <p className="text-sm text-muted-foreground px-1">
+          Nenhum indicador cadastrado.
+        </p>
       )}
 
       {adding && (
@@ -485,7 +706,9 @@ function IndicatorsSection({
             <Input
               placeholder="Indicador (ex: NPS > 80)"
               value={form.indicator}
-              onChange={(e) => setForm({ ...form, indicator: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, indicator: e.target.value })
+              }
             />
           </div>
           <div className="grid gap-1 flex-1">
@@ -499,7 +722,9 @@ function IndicatorsSection({
             <Input
               placeholder="Atual"
               value={form.current}
-              onChange={(e) => setForm({ ...form, current: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, current: e.target.value })
+              }
             />
           </div>
           <Select
@@ -511,14 +736,21 @@ function IndicatorsSection({
             </SelectTrigger>
             <SelectContent>
               {Object.entries(indicatorStatusConfig).map(([key, c]) => (
-                <SelectItem key={key} value={key}>{c.label}</SelectItem>
+                <SelectItem key={key} value={key}>
+                  {c.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button size="icon" className="h-9 w-9" onClick={add}>
+          <Button size="icon" className="h-9 w-9" onClick={handleAdd}>
             <Check className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setAdding(false)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-9 w-9"
+            onClick={() => setAdding(false)}
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -534,69 +766,106 @@ function ObjectivesSection({
   onUpdate,
 }: {
   section: WikiSection;
-  onUpdate: (data: ObjectiveItem[]) => void;
+  onUpdate: (data: unknown) => Promise<void>;
 }) {
-  const [items, setItems] = useState<ObjectiveItem[]>(() => {
-    try { return JSON.parse(section.data); } catch { return []; }
-  });
-  const [adding, setAdding] = useState(false);
+  const { items, add, remove, updateItem, replaceItem, adding, setAdding } =
+    useWikiItems<ObjectiveItem>(section, onUpdate as (data: ObjectiveItem[]) => Promise<void>);
   const [form, setForm] = useState({ objective: "", description: "" });
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ objective: "", description: "" });
 
-  const save = (updated: ObjectiveItem[]) => {
-    setItems(updated);
-    onUpdate(updated);
-  };
-
-  const add = () => {
+  const handleAdd = () => {
     if (!form.objective) return;
-    save([...items, { ...form }]);
+    add({ ...form });
     setForm({ objective: "", description: "" });
     setAdding(false);
   };
 
-  const remove = (index: number) => {
-    save(items.filter((_, i) => i !== index));
+  const startEdit = (i: number) => {
+    setEditForm({ ...items[i] });
+    setEditingIndex(i);
   };
 
-  const updateDescription = (index: number, description: string) => {
-    const updated = items.map((item, i) =>
-      i === index ? { ...item, description } : item
-    );
-    save(updated);
+  const confirmEdit = () => {
+    if (editingIndex === null || !editForm.objective) return;
+    replaceItem(editingIndex, { ...editForm });
+    setEditingIndex(null);
   };
 
   return (
     <SectionWrapper
       title={section.title}
-      sectionKey={section.sectionKey}
+      sectionKey="objectives"
       onAdd={() => setAdding(!adding)}
     >
       <div className="space-y-2">
-        {items.map((obj, i) => (
-          <div
-            key={i}
-            className="group surface-inset px-3 py-2 space-y-1"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium flex-1">{obj.objective}</span>
-              <button
-                onClick={() => remove(i)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
-              </button>
+        {items.map((obj, i) =>
+          editingIndex === i ? (
+            <div key={i} className="space-y-2 surface-inset px-3 py-2">
+              <div className="flex items-end gap-2">
+                <Input
+                  className="flex-1"
+                  value={editForm.objective}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, objective: e.target.value })
+                  }
+                />
+                <Button
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={confirmEdit}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9"
+                  onClick={() => setEditingIndex(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+                rows={2}
+                className="text-xs resize-none"
+              />
             </div>
-            <Textarea
-              value={obj.description}
-              onChange={(e) => updateDescription(i, e.target.value)}
-              rows={2}
-              placeholder="Detalhes do objetivo..."
-              className="text-xs resize-none"
-            />
-          </div>
-        ))}
+          ) : (
+            <div key={i} className="group surface-inset px-3 py-2 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium flex-1">
+                  {obj.objective}
+                </span>
+                <button
+                  onClick={() => startEdit(i)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                </button>
+                <button
+                  onClick={() => remove(i)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+                </button>
+              </div>
+              {obj.description && (
+                <p className="text-xs text-muted-foreground">
+                  {obj.description}
+                </p>
+              )}
+            </div>
+          )
+        )}
         {items.length === 0 && !adding && (
-          <p className="text-sm text-muted-foreground px-1">Nenhum objetivo cadastrado.</p>
+          <p className="text-sm text-muted-foreground px-1">
+            Nenhum objetivo cadastrado.
+          </p>
         )}
       </div>
 
@@ -607,20 +876,29 @@ function ObjectivesSection({
               <Input
                 placeholder="Objetivo (ex: Lançar MVP até Junho)"
                 value={form.objective}
-                onChange={(e) => setForm({ ...form, objective: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, objective: e.target.value })
+                }
               />
             </div>
-            <Button size="icon" className="h-9 w-9" onClick={add}>
+            <Button size="icon" className="h-9 w-9" onClick={handleAdd}>
               <Check className="h-4 w-4" />
             </Button>
-            <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setAdding(false)}>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9"
+              onClick={() => setAdding(false)}
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
           <Textarea
             placeholder="Descrição (opcional)"
             value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            onChange={(e) =>
+              setForm({ ...form, description: e.target.value })
+            }
             rows={2}
             className="text-xs resize-none"
           />
@@ -630,137 +908,219 @@ function ObjectivesSection({
   );
 }
 
-// ─── Scope Section ────────────────────────────────────────
+// ─── Environments Section ─────────────────────────────────
 
-function ScopeSection({
+function EnvironmentsSection({
   section,
   onUpdate,
 }: {
   section: WikiSection;
-  onUpdate: (data: ScopeItem[]) => void;
+  onUpdate: (data: unknown) => Promise<void>;
 }) {
-  const [items, setItems] = useState<ScopeItem[]>(() => {
-    try { return JSON.parse(section.data); } catch { return []; }
+  const { items, add, remove, replaceItem, adding, setAdding } =
+    useWikiItems<EnvironmentItem>(section, onUpdate as (data: EnvironmentItem[]) => Promise<void>);
+  const [form, setForm] = useState({
+    name: "",
+    url: "",
+    type: "development",
+    notes: "",
   });
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ item: "", included: true, notes: "" });
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    url: "",
+    type: "development",
+    notes: "",
+  });
 
-  const save = (updated: ScopeItem[]) => {
-    setItems(updated);
-    onUpdate(updated);
-  };
-
-  const add = () => {
-    if (!form.item) return;
-    save([...items, { ...form }]);
-    setForm({ item: "", included: true, notes: "" });
+  const handleAdd = () => {
+    if (!form.name) return;
+    add({ ...form });
+    setForm({ name: "", url: "", type: "development", notes: "" });
     setAdding(false);
   };
 
-  const remove = (index: number) => {
-    save(items.filter((_, i) => i !== index));
+  const startEdit = (i: number) => {
+    setEditForm({ ...items[i] });
+    setEditingIndex(i);
   };
 
-  const toggleIncluded = (index: number) => {
-    const updated = items.map((item, i) =>
-      i === index ? { ...item, included: !item.included } : item
-    );
-    save(updated);
+  const confirmEdit = () => {
+    if (editingIndex === null || !editForm.name) return;
+    replaceItem(editingIndex, { ...editForm });
+    setEditingIndex(null);
+  };
+
+  const typeColors: Record<string, string> = {
+    development: "bg-blue-100 text-blue-800",
+    staging: "bg-yellow-100 text-yellow-800",
+    production: "bg-green-100 text-green-800",
+    sandbox: "bg-purple-100 text-purple-800",
   };
 
   return (
     <SectionWrapper
       title={section.title}
-      sectionKey={section.sectionKey}
+      sectionKey="environments"
       onAdd={() => setAdding(!adding)}
     >
       <div className="space-y-2">
-        {items.map((scope, i) => (
-          <div
-            key={i}
-            className="group flex items-center gap-3 surface-inset px-3 py-2"
-          >
-            <button
-              onClick={() => toggleIncluded(i)}
-              className={`shrink-0 text-sm font-medium ${
-                scope.included ? "text-green-600" : "text-red-500"
-              }`}
-              title={scope.included ? "Incluído no escopo" : "Fora do escopo"}
+        {items.map((env, i) =>
+          editingIndex === i ? (
+            <div key={i} className="space-y-2 surface-inset px-3 py-2">
+              <div className="flex items-end gap-2">
+                <Input
+                  className="flex-1"
+                  value={editForm.name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, name: e.target.value })
+                  }
+                />
+                <Input
+                  className="flex-[2]"
+                  placeholder="URL"
+                  value={editForm.url}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, url: e.target.value })
+                  }
+                />
+                <Select
+                  value={editForm.type}
+                  onValueChange={(v) =>
+                    v && setEditForm({ ...editForm, type: v })
+                  }
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {envTypes.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={confirmEdit}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9"
+                  onClick={() => setEditingIndex(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <Input
+                placeholder="Notas"
+                value={editForm.notes}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, notes: e.target.value })
+                }
+              />
+            </div>
+          ) : (
+            <div
+              key={i}
+              className="group flex items-center gap-3 surface-inset px-3 py-2"
             >
-              {scope.included ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <X className="h-4 w-4" />
+              <span className="text-sm font-medium">{env.name}</span>
+              {env.url && (
+                <a
+                  href={env.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  {env.url}
+                </a>
               )}
-            </button>
-            <div className="flex-1 min-w-0">
-              <span
-                className={`text-sm font-medium ${
-                  !scope.included ? "text-muted-foreground line-through" : ""
-                }`}
+              <Badge
+                variant="secondary"
+                className={`text-[10px] ml-auto ${typeColors[env.type] || ""}`}
               >
-                {scope.item}
-              </span>
-              {scope.notes && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  — {scope.notes}
+                {env.type}
+              </Badge>
+              {env.notes && (
+                <span className="text-xs text-muted-foreground">
+                  {env.notes}
                 </span>
               )}
+              <button
+                onClick={() => startEdit(i)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </button>
+              <button
+                onClick={() => remove(i)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+              </button>
             </div>
-            <Badge
-              variant="secondary"
-              className={`text-[10px] ${
-                scope.included
-                  ? "bg-green-100 text-green-800"
-                  : "bg-red-100 text-red-800"
-              }`}
-            >
-              {scope.included ? "Incluso" : "Fora"}
-            </Badge>
-            <button
-              onClick={() => remove(i)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
-            </button>
-          </div>
-        ))}
+          )
+        )}
         {items.length === 0 && !adding && (
-          <p className="text-sm text-muted-foreground px-1">Nenhum item de escopo cadastrado.</p>
+          <p className="text-sm text-muted-foreground px-1">
+            Nenhum ambiente cadastrado.
+          </p>
         )}
       </div>
 
       {adding && (
         <div className="space-y-2">
           <div className="flex items-end gap-2">
+            <div className="grid gap-1 flex-1">
+              <Input
+                placeholder="Nome (ex: Produção)"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
             <div className="grid gap-1 flex-[2]">
               <Input
-                placeholder="Item de escopo (ex: Módulo de Pagamentos)"
-                value={form.item}
-                onChange={(e) => setForm({ ...form, item: e.target.value })}
+                placeholder="URL"
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
               />
             </div>
             <Select
-              value={form.included ? "in" : "out"}
-              onValueChange={(v) => v && setForm({ ...form, included: v === "in" })}
+              value={form.type}
+              onValueChange={(v) => v && setForm({ ...form, type: v })}
             >
-              <SelectTrigger className="w-[120px]">
+              <SelectTrigger className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="in">Incluso</SelectItem>
-                <SelectItem value="out">Fora</SelectItem>
+                {envTypes.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Button size="icon" className="h-9 w-9" onClick={add}>
+            <Button size="icon" className="h-9 w-9" onClick={handleAdd}>
               <Check className="h-4 w-4" />
             </Button>
-            <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setAdding(false)}>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9"
+              onClick={() => setAdding(false)}
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
           <Input
-            placeholder="Observações (opcional)"
+            placeholder="Notas (opcional)"
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
@@ -770,14 +1130,232 @@ function ScopeSection({
   );
 }
 
+// ─── Access Section ───────────────────────────────────────
+
+function AccessSection({
+  section,
+  onUpdate,
+}: {
+  section: WikiSection;
+  onUpdate: (data: unknown) => Promise<void>;
+}) {
+  const { items, add, remove, replaceItem, adding, setAdding } =
+    useWikiItems<AccessItem>(section, onUpdate as (data: AccessItem[]) => Promise<void>);
+  const [form, setForm] = useState({
+    service: "",
+    url: "",
+    credentials_hint: "",
+    notes: "",
+  });
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({
+    service: "",
+    url: "",
+    credentials_hint: "",
+    notes: "",
+  });
+
+  const handleAdd = () => {
+    if (!form.service) return;
+    add({ ...form });
+    setForm({ service: "", url: "", credentials_hint: "", notes: "" });
+    setAdding(false);
+  };
+
+  const startEdit = (i: number) => {
+    setEditForm({ ...items[i] });
+    setEditingIndex(i);
+  };
+
+  const confirmEdit = () => {
+    if (editingIndex === null || !editForm.service) return;
+    replaceItem(editingIndex, { ...editForm });
+    setEditingIndex(null);
+  };
+
+  return (
+    <SectionWrapper
+      title={section.title}
+      sectionKey="access"
+      onAdd={() => setAdding(!adding)}
+    >
+      <div className="space-y-2">
+        {items.map((acc, i) =>
+          editingIndex === i ? (
+            <div key={i} className="space-y-2 surface-inset px-3 py-2">
+              <div className="flex items-end gap-2">
+                <Input
+                  className="flex-1"
+                  value={editForm.service}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, service: e.target.value })
+                  }
+                />
+                <Input
+                  className="flex-1"
+                  placeholder="URL"
+                  value={editForm.url}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, url: e.target.value })
+                  }
+                />
+                <Button
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={confirmEdit}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9"
+                  onClick={() => setEditingIndex(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  className="flex-1"
+                  placeholder="Onde encontrar credenciais (ex: 1Password vault: Volund)"
+                  value={editForm.credentials_hint}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      credentials_hint: e.target.value,
+                    })
+                  }
+                />
+                <Input
+                  className="flex-1"
+                  placeholder="Notas"
+                  value={editForm.notes}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, notes: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+          ) : (
+            <div
+              key={i}
+              className="group flex items-center gap-3 surface-inset px-3 py-2"
+            >
+              <KeyRound className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-sm font-medium">{acc.service}</span>
+              {acc.url && (
+                <a
+                  href={acc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Link
+                </a>
+              )}
+              {acc.credentials_hint && (
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {acc.credentials_hint}
+                </span>
+              )}
+              {acc.notes && (
+                <span className="text-xs text-muted-foreground">
+                  — {acc.notes}
+                </span>
+              )}
+              <button
+                onClick={() => startEdit(i)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </button>
+              <button
+                onClick={() => remove(i)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+              </button>
+            </div>
+          )
+        )}
+        {items.length === 0 && !adding && (
+          <p className="text-sm text-muted-foreground px-1">
+            Nenhum acesso cadastrado.
+          </p>
+        )}
+      </div>
+
+      {adding && (
+        <div className="space-y-2">
+          <div className="flex items-end gap-2">
+            <div className="grid gap-1 flex-1">
+              <Input
+                placeholder="Serviço (ex: AWS, Figma, Jira)"
+                value={form.service}
+                onChange={(e) =>
+                  setForm({ ...form, service: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid gap-1 flex-1">
+              <Input
+                placeholder="URL (opcional)"
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
+              />
+            </div>
+            <Button size="icon" className="h-9 w-9" onClick={handleAdd}>
+              <Check className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9"
+              onClick={() => setAdding(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              className="flex-1"
+              placeholder="Onde encontrar credenciais (ex: 1Password vault: Volund)"
+              value={form.credentials_hint}
+              onChange={(e) =>
+                setForm({ ...form, credentials_hint: e.target.value })
+              }
+            />
+            <Input
+              className="flex-1"
+              placeholder="Notas (opcional)"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </div>
+        </div>
+      )}
+    </SectionWrapper>
+  );
+}
+
 // ─── Section Component Map ────────────────────────────────
 
-const sectionComponents: Record<
+type SectionProps = {
+  section: WikiSection;
+  onUpdate: (data: unknown) => Promise<void>;
+};
+
+const sectionComponentMap: Record<
   string,
-  React.ComponentType<{ section: WikiSection; onUpdate: (data: unknown[]) => void }>
+  React.ComponentType<SectionProps>
 > = {
-  sponsors: SponsorsSection as React.ComponentType<{ section: WikiSection; onUpdate: (data: unknown[]) => void }>,
-  success_indicators: IndicatorsSection as React.ComponentType<{ section: WikiSection; onUpdate: (data: unknown[]) => void }>,
-  objectives: ObjectivesSection as React.ComponentType<{ section: WikiSection; onUpdate: (data: unknown[]) => void }>,
-  scope: ScopeSection as React.ComponentType<{ section: WikiSection; onUpdate: (data: unknown[]) => void }>,
+  description: DescriptionSection,
+  links: LinksSection as React.ComponentType<SectionProps>,
+  sponsors: SponsorsSection as React.ComponentType<SectionProps>,
+  success_indicators: IndicatorsSection as React.ComponentType<SectionProps>,
+  objectives: ObjectivesSection as React.ComponentType<SectionProps>,
+  environments: EnvironmentsSection as React.ComponentType<SectionProps>,
+  access: AccessSection as React.ComponentType<SectionProps>,
 };

@@ -3,19 +3,21 @@
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { WizardLayout } from "@/components/design-session/wizard-layout";
-import { PostItBoard, PostItSection } from "@/components/design-session/post-it-board";
 import { PersonaJourneyBoard, Persona, JourneyStep } from "@/components/design-session/persona-journey-board";
 import { SolutionCardBoard, SolutionCard } from "@/components/design-session/solution-card-board";
+import { HypothesisBoard, Hypothesis } from "@/components/design-session/hypothesis-board";
 import { PriorityBoard, PrioritizedItem, PriorityBucket } from "@/components/design-session/priority-board";
-import { SequencingBoard, Phase } from "@/components/design-session/sequencing-board";
+import { PreWorkStep } from "@/components/design-session/pre-work-step";
+import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Sparkles, Loader2, CheckCircle2 } from "lucide-react";
-import { TaskPreview, type PreviewTask } from "@/components/design-session/task-preview";
+import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { getSteps, StepDef } from "@/lib/design-session-steps";
+import type { Note } from "@/components/design-session/sticky-note";
+import { DesignSessionProvider } from "@/contexts/design-session-context";
 
 type Session = {
   id: string;
@@ -37,6 +39,8 @@ export default function StepPage({
 
   const [session, setSession] = useState<Session | null>(null);
   const [stepData, setStepData] = useState<Record<string, unknown>>({});
+  const [stepDataLoaded, setStepDataLoaded] = useState(false);
+  const [notes, setNotes] = useState<Note[]>([]);
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -53,29 +57,82 @@ export default function StepPage({
   // Load step data
   useEffect(() => {
     if (!currentStepDef) return;
+    setStepDataLoaded(false);
     fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`)
       .then((r) => r.json())
-      .then((r) => setStepData(r.data || {}));
+      .then((r) => {
+        const { _notes, ...rest } = (r.data || {}) as Record<string, unknown>;
+        setStepData(rest);
+        setNotes(Array.isArray(_notes) ? (_notes as Note[]) : []);
+        setStepDataLoaded(true);
+      });
   }, [id, currentStepDef?.key]);
 
-  // Save step data with debounce
-  const saveStepData = useCallback(
-    (data: Record<string, unknown>) => {
+  // Persist step data + notes with debounce
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const stepDataRef = useRef(stepData);
+  stepDataRef.current = stepData;
+
+  const debouncedSave = useCallback(
+    () => {
       if (!currentStepDef) return;
-      setStepData(data);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
         setSaving(true);
         await fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stepIndex, data }),
+          body: JSON.stringify({ stepIndex, data: { ...stepDataRef.current, _notes: notesRef.current } }),
         });
         setSaving(false);
       }, 500);
     },
     [id, stepIndex, currentStepDef?.key]
   );
+
+  const saveStepData = useCallback(
+    (data: Record<string, unknown>) => {
+      setStepData(data);
+      stepDataRef.current = data;
+      debouncedSave();
+    },
+    [debouncedSave]
+  );
+
+  const genId = () => Math.random().toString(36).slice(2, 9);
+
+  const handleAddNote = useCallback(() => {
+    const updated = [...notesRef.current, { id: genId(), text: "" }];
+    setNotes(updated);
+    notesRef.current = updated;
+    debouncedSave();
+  }, [debouncedSave]);
+
+  const handleUpdateNote = useCallback((noteId: string, text: string) => {
+    const updated = notesRef.current.map((n) => (n.id === noteId ? { ...n, text } : n));
+    setNotes(updated);
+    notesRef.current = updated;
+    debouncedSave();
+  }, [debouncedSave]);
+
+  const handleDeleteNote = useCallback((noteId: string) => {
+    const updated = notesRef.current.filter((n) => n.id !== noteId);
+    setNotes(updated);
+    notesRef.current = updated;
+    debouncedSave();
+  }, [debouncedSave]);
+
+  const refreshStepData = useCallback(async () => {
+    if (!currentStepDef) return;
+    const r = await fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`);
+    const json = await r.json();
+    const { _notes, ...rest } = (json.data || {}) as Record<string, unknown>;
+    setStepData(rest);
+    stepDataRef.current = rest;
+    setNotes(Array.isArray(_notes) ? (_notes as Note[]) : []);
+    notesRef.current = Array.isArray(_notes) ? (_notes as Note[]) : [];
+  }, [id, currentStepDef?.key]);
 
   const navigate = (targetStep: number) => {
     fetch(`/api/design-sessions/${id}`, {
@@ -91,23 +148,43 @@ export default function StepPage({
   }
 
   return (
-    <WizardLayout
+    <DesignSessionProvider
+      sessionId={id}
       sessionTitle={session.title}
       sessionType={session.type}
-      steps={steps}
-      currentStep={stepIndex}
-      onNext={() => stepIndex < steps.length - 1 && navigate(stepIndex + 1)}
-      onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
-      onStepClick={navigate}
-      saving={saving}
+      currentStepKey={currentStepDef.key}
+      currentStepIndex={stepIndex}
+      stepData={stepData}
+      saveStepData={saveStepData}
+      refreshStepData={refreshStepData}
     >
-      <StepContent
-        stepKey={currentStepDef.key}
-        sessionId={id}
-        data={stepData}
-        onChange={saveStepData}
-      />
-    </WizardLayout>
+      <WizardLayout
+        sessionTitle={session.title}
+        sessionType={session.type}
+        steps={steps}
+        currentStep={stepIndex}
+        onNext={() => stepIndex < steps.length - 1 && navigate(stepIndex + 1)}
+        onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
+        onStepClick={navigate}
+        saving={saving}
+        notes={notes}
+        onAddNote={handleAddNote}
+        onUpdateNote={handleUpdateNote}
+        onDeleteNote={handleDeleteNote}
+        hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing"}
+      >
+        {stepDataLoaded ? (
+          <StepContent
+            stepKey={currentStepDef.key}
+            sessionId={id}
+            data={stepData}
+            onChange={saveStepData}
+          />
+        ) : (
+          <div className="p-6 text-muted-foreground">Carregando dados...</div>
+        )}
+      </WizardLayout>
+    </DesignSessionProvider>
   );
 }
 
@@ -125,6 +202,8 @@ function StepContent({
   onChange: (data: Record<string, unknown>) => void;
 }) {
   switch (stepKey) {
+    case "pre_work":
+      return <PreWorkStep sessionId={sessionId} data={data} onChange={onChange} />;
     case "product_vision":
       return <ProductVisionStep data={data} onChange={onChange} />;
     case "personas_journeys":
@@ -133,10 +212,10 @@ function StepContent({
       return <BrainstormStep data={data} onChange={onChange} sessionId={sessionId} />;
     case "prioritization":
       return <PrioritizationStep data={data} onChange={onChange} sessionId={sessionId} />;
-    case "sequencing":
-      return <SequencingStep data={data} onChange={onChange} sessionId={sessionId} />;
     case "technical_specs":
       return <TechnicalSpecsStep data={data} onChange={onChange} />;
+    case "hypotheses":
+      return <HypothesesStep data={data} onChange={onChange} />;
     case "briefing":
       return <BriefingStep sessionId={sessionId} />;
     // CI steps
@@ -191,10 +270,11 @@ function ProductVisionStep({
             </div>
             <div className="grid gap-2">
               <Label>Quem sofre com esse problema?</Label>
-              <Input
+              <Textarea
                 placeholder="Ex: Gestores de vendas em empresas B2B de medio porte"
                 value={get("whoSuffers")}
                 onChange={(e) => set("whoSuffers", e.target.value)}
+                rows={2}
               />
             </div>
             <div className="grid gap-2">
@@ -241,36 +321,6 @@ function ProductVisionStep({
         </CardContent>
       </Card>
 
-      {/* Preview */}
-      {(get("problem") || get("successVision")) && (
-        <Card className="bg-muted/30">
-          <CardHeader>
-            <CardTitle className="text-sm">Preview da Visao</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm space-y-2">
-            {get("problem") && (
-              <p>
-                <strong>Problema:</strong> {get("problem")}
-              </p>
-            )}
-            {get("whoSuffers") && (
-              <p>
-                <strong>Quem sofre:</strong> {get("whoSuffers")}
-              </p>
-            )}
-            {get("successVision") && (
-              <p>
-                <strong>Sucesso:</strong> {get("successVision")}
-              </p>
-            )}
-            {get("impactMetrics") && (
-              <p>
-                <strong>Metricas:</strong> {get("impactMetrics")}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
@@ -284,7 +334,13 @@ function PersonasJourneysStep({
   data: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
 }) {
-  const personas = (data.personas as Persona[]) || [];
+  const genId = () => Math.random().toString(36).slice(2, 9);
+  const personas = ((data.personas as Persona[]) || []).map((p) => ({
+    ...p,
+    id: p.id || genId(),
+    asIsSteps: (p.asIsSteps || []).map((s) => ({ ...s, id: s.id || genId() })),
+    toBeSteps: (p.toBeSteps || []).map((s) => ({ ...s, id: s.id || genId() })),
+  }));
 
   const updatePersonas = (updated: Persona[]) => {
     onChange({ ...data, personas: updated });
@@ -418,6 +474,10 @@ function PrioritizationStep({
             howItSolves: s.howItSolves,
             targetPersona: s.targetPersona,
             bucket: "mvp" as PriorityBucket,
+            keyScreens: s.keyScreens,
+            userFlows: s.userFlows,
+            painPointRef: s.painPointRef,
+            technicalNotes: s.technicalNotes,
           }));
           onChange({ ...data, items: seeded });
         }
@@ -448,92 +508,42 @@ function PrioritizationStep({
   );
 }
 
-// ─── Step 4: Sequenciamento ───────────────────────────────
+// ─── Step 4: Especificacoes Tecnicas ──────────────────────
 
-function SequencingStep({
+// ─── Step 5: Hipoteses & Metricas ────────────────────────
+
+function HypothesesStep({
   data,
   onChange,
-  sessionId,
 }: {
   data: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
-  sessionId: string;
 }) {
-  const phases = (data.phases as Phase[]) || [];
-  const [loaded, setLoaded] = useState(false);
-
-  // On first load, seed with MVP items from prioritization step in a single "Release 1" phase
-  useEffect(() => {
-    if (loaded || phases.length > 0) return;
-    fetch(`/api/design-sessions/${sessionId}/steps/prioritization`)
-      .then((r) => r.json())
-      .then((r) => {
-        const items = (r.data?.items as PrioritizedItem[]) || [];
-        const mvpItems = items.filter((i) => i.bucket === "mvp");
-        if (mvpItems.length > 0) {
-          const genId = () => Math.random().toString(36).slice(2, 9);
-          const seeded: Phase[] = [
-            {
-              id: genId(),
-              name: "Release 1",
-              items: mvpItems.map((i) => ({
-                id: i.id,
-                title: i.title,
-                targetPersona: i.targetPersona,
-              })),
-            },
-          ];
-          onChange({ ...data, phases: seeded });
-        }
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-  }, [sessionId, loaded, phases.length]);
+  const hypotheses = (data.hypotheses as Hypothesis[]) || [];
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Organize os items do MVP em fases/releases. Crie novas fases e mova items entre elas para definir a ordem de entrega.
+        Defina as hipoteses que precisam ser validadas com o MVP. Para cada uma, estabeleca o indicador, a meta e a evidencia necessaria.
       </p>
-      <SequencingBoard
-        phases={phases}
-        onAddPhase={(phase) => onChange({ ...data, phases: [...phases, phase] })}
-        onDeletePhase={(phaseId) =>
-          onChange({ ...data, phases: phases.filter((p) => p.id !== phaseId) })
-        }
-        onRenamePhase={(phaseId, name) =>
+      <HypothesisBoard
+        hypotheses={hypotheses}
+        onAdd={(h) => onChange({ ...data, hypotheses: [...hypotheses, h] })}
+        onUpdate={(id, updates) =>
           onChange({
             ...data,
-            phases: phases.map((p) => (p.id === phaseId ? { ...p, name } : p)),
+            hypotheses: hypotheses.map((h) => (h.id === id ? { ...h, ...updates } : h)),
           })
         }
-        onMoveItem={(itemId, fromPhaseId, toPhaseId) => {
-          const fromPhase = phases.find((p) => p.id === fromPhaseId);
-          const item = fromPhase?.items.find((i) => i.id === itemId);
-          if (!item) return;
-          onChange({
-            ...data,
-            phases: phases.map((p) => {
-              if (p.id === fromPhaseId) return { ...p, items: p.items.filter((i) => i.id !== itemId) };
-              if (p.id === toPhaseId) return { ...p, items: [...p.items, item] };
-              return p;
-            }),
-          });
-        }}
-        onRemoveItem={(phaseId, itemId) =>
-          onChange({
-            ...data,
-            phases: phases.map((p) =>
-              p.id === phaseId ? { ...p, items: p.items.filter((i) => i.id !== itemId) } : p
-            ),
-          })
+        onDelete={(id) =>
+          onChange({ ...data, hypotheses: hypotheses.filter((h) => h.id !== id) })
         }
       />
     </div>
   );
 }
 
-// ─── Step 5: Especificacoes Tecnicas ──────────────────────
+// ─── Step 6: Especificacoes Tecnicas ──────────────────────
 
 type TechSpecItem = { id: string; text: string };
 
@@ -707,24 +717,38 @@ function ItemList({
 function BriefingStep({ sessionId }: { sessionId: string }) {
   const [allData, setAllData] = useState<Record<string, Record<string, unknown>>>({});
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [previewTasks, setPreviewTasks] = useState<PreviewTask[]>([]);
-  const [confirming, setConfirming] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [taskCount, setTaskCount] = useState(0);
+  const [briefingOpen, setBriefingOpen] = useState<boolean | null>(null);
+
+  const loadTaskCount = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/design-sessions/${sessionId}/tasks`);
+      const j = await r.json();
+      setTaskCount(j.count ?? 0);
+    } catch {
+      // ignore
+    }
+  }, [sessionId]);
 
   useEffect(() => {
-    const stepKeys = ["product_vision", "personas_journeys", "brainstorm", "prioritization", "sequencing", "technical_specs"];
-    Promise.all(
-      stepKeys.map((key) =>
+    const stepKeys = ["product_vision", "personas_journeys", "brainstorm", "prioritization", "technical_specs", "hypotheses"];
+    Promise.all([
+      ...stepKeys.map((key) =>
         fetch(`/api/design-sessions/${sessionId}/steps/${key}`)
           .then((r) => r.json())
           .then((r) => ({ key, data: r.data || {} }))
-      )
-    ).then((results) => {
+      ),
+      fetch(`/api/design-sessions/${sessionId}/tasks`)
+        .then((r) => r.json())
+        .then((r) => r.count as number)
+        .catch(() => 0),
+    ]).then((results) => {
+      const count = results.pop() as number;
       const map: Record<string, Record<string, unknown>> = {};
-      for (const r of results) map[r.key] = r.data;
+      for (const r of results as { key: string; data: Record<string, unknown> }[]) map[r.key] = r.data;
       setAllData(map);
+      setTaskCount(count);
+      setBriefingOpen(false);
       setLoading(false);
     });
   }, [sessionId]);
@@ -733,12 +757,13 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
     return <div className="text-center text-muted-foreground py-12">Carregando briefing...</div>;
   }
 
+  const isOpen = briefingOpen ?? false;
   const vision = allData.product_vision || {};
   const v = (key: string) => (vision[key] as string) || "";
   const personas = (allData.personas_journeys?.personas as Persona[]) || [];
   const solutions = (allData.brainstorm?.solutions as SolutionCard[]) || [];
   const priorityItems = (allData.prioritization?.items as PrioritizedItem[]) || [];
-  const phases = (allData.sequencing?.phases as Phase[]) || [];
+  const hypotheses = (allData.hypotheses?.hypotheses as Hypothesis[]) || [];
   const techSpecs = allData.technical_specs || {};
   const ts = (key: string) => {
     const val = techSpecs[key];
@@ -756,12 +781,28 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Briefing Consolidado</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Resumo de toda a session. Use como referencia para geracao de tasks.
-          </p>
-        </CardHeader>
+        <button
+          type="button"
+          onClick={() => setBriefingOpen(!isOpen)}
+          className="w-full flex items-center justify-between p-6 text-left hover:bg-muted/30 transition-colors rounded-t-xl"
+        >
+          <div className="flex items-center gap-2">
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+            <div>
+              <CardTitle className="text-base">Briefing Consolidado</CardTitle>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {taskCount > 0
+                  ? `${taskCount} task${taskCount > 1 ? "s" : ""} gerada${taskCount > 1 ? "s" : ""} • clique para ${isOpen ? "recolher" : "expandir"}`
+                  : "Resumo de toda a session. Use como referencia para geracao de tasks."}
+              </p>
+            </div>
+          </div>
+        </button>
+        {isOpen && (
         <CardContent className="space-y-6 text-sm">
           {/* Vision */}
           <section>
@@ -775,7 +816,6 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
             </div>
           </section>
 
-          {/* Personas */}
           {personas.length > 0 && (
             <section>
               <h3 className="font-semibold mb-2">2. Personas & Jornadas</h3>
@@ -788,10 +828,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
                       <p className="text-xs font-medium text-red-600">AS-IS:</p>
                       <ul className="list-disc list-inside text-xs">
                         {p.asIsSteps.map((s) => (
-                          <li key={s.id}>
-                            {s.description}
-                            {s.painOrGain && <span className="text-red-500"> — Dor: {s.painOrGain}</span>}
-                          </li>
+                          <li key={s.id}>{s.description}{s.painOrGain && <span className="text-red-500"> — Dor: {s.painOrGain}</span>}</li>
                         ))}
                       </ul>
                     </div>
@@ -801,10 +838,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
                       <p className="text-xs font-medium text-green-600">TO-BE:</p>
                       <ul className="list-disc list-inside text-xs">
                         {p.toBeSteps.map((s) => (
-                          <li key={s.id}>
-                            {s.description}
-                            {s.painOrGain && <span className="text-green-600"> — Ganho: {s.painOrGain}</span>}
-                          </li>
+                          <li key={s.id}>{s.description}{s.painOrGain && <span className="text-green-600"> — Ganho: {s.painOrGain}</span>}</li>
                         ))}
                       </ul>
                     </div>
@@ -814,205 +848,65 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
             </section>
           )}
 
-          {/* Solutions */}
           {solutions.length > 0 && (
             <section>
               <h3 className="font-semibold mb-2">3. Solucoes Levantadas</h3>
               <ul className="list-disc list-inside pl-4">
                 {solutions.map((s) => (
-                  <li key={s.id}>
-                    <strong>{s.title}</strong>
-                    {s.howItSolves && ` — ${s.howItSolves}`}
-                    {s.targetPersona && <span className="text-muted-foreground"> (Persona: {s.targetPersona})</span>}
-                  </li>
+                  <li key={s.id}><strong>{s.title}</strong>{s.howItSolves && ` — ${s.howItSolves}`}{s.targetPersona && <span className="text-muted-foreground"> (Persona: {s.targetPersona})</span>}</li>
                 ))}
               </ul>
             </section>
           )}
 
-          {/* Prioritization */}
           {priorityItems.length > 0 && (
             <section>
               <h3 className="font-semibold mb-2">4. Priorizacao</h3>
               <div className="pl-4 space-y-2">
-                {mvpItems.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-green-700">MVP ({mvpItems.length})</p>
-                    <ul className="list-disc list-inside text-xs">
-                      {mvpItems.map((i) => <li key={i.id}>{i.title}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {nextItems.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-blue-700">Next ({nextItems.length})</p>
-                    <ul className="list-disc list-inside text-xs">
-                      {nextItems.map((i) => <li key={i.id}>{i.title}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {outItems.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Out ({outItems.length})</p>
-                    <ul className="list-disc list-inside text-xs">
-                      {outItems.map((i) => <li key={i.id}>{i.title}</li>)}
-                    </ul>
-                  </div>
-                )}
+                {mvpItems.length > 0 && (<div><p className="text-xs font-medium text-green-700">MVP ({mvpItems.length})</p><ul className="list-disc list-inside text-xs">{mvpItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
+                {nextItems.length > 0 && (<div><p className="text-xs font-medium text-blue-700">Next ({nextItems.length})</p><ul className="list-disc list-inside text-xs">{nextItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
+                {outItems.length > 0 && (<div><p className="text-xs font-medium text-muted-foreground">Out ({outItems.length})</p><ul className="list-disc list-inside text-xs">{outItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
               </div>
             </section>
           )}
 
-          {/* Sequencing */}
-          {phases.length > 0 && (
+          {hypotheses.length > 0 && (
             <section>
-              <h3 className="font-semibold mb-2">5. Sequenciamento</h3>
-              <div className="pl-4 space-y-2">
-                {phases.map((phase, i) => (
-                  <div key={phase.id}>
-                    <p className="text-xs font-medium">Fase {i + 1}: {phase.name} ({phase.items.length} items)</p>
-                    <ul className="list-disc list-inside text-xs">
-                      {phase.items.map((item) => <li key={item.id}>{item.title}</li>)}
-                    </ul>
+              <h3 className="font-semibold mb-2">5. Hipoteses & Metricas</h3>
+              <div className="pl-4 space-y-3">
+                {hypotheses.map((h, i) => (
+                  <div key={h.id}>
+                    <p className="text-xs font-medium">Hipotese {i + 1}: {h.hypothesis}</p>
+                    <div className="text-xs text-muted-foreground pl-2 space-y-0.5">
+                      {h.indicator && <p><strong>Indicador:</strong> {h.indicator}</p>}
+                      {h.target && <p><strong>Meta:</strong> {h.target}</p>}
+                      {h.expectedResult && <p><strong>Resultado esperado:</strong> {h.expectedResult}</p>}
+                      {h.evidence && <p><strong>Evidencia:</strong> {h.evidence}</p>}
+                    </div>
                   </div>
                 ))}
               </div>
             </section>
           )}
 
-          {/* Technical Specs */}
           {(ts("stack") || tsItems("integrations").length > 0 || tsItems("rules").length > 0 || ts("performance") || ts("notes")) && (
             <section>
-              <h3 className="font-semibold mb-2">6. Especificacoes Tecnicas</h3>
+              <h3 className="font-semibold mb-2">7. Especificacoes Tecnicas</h3>
               <div className="pl-4 space-y-2">
-                {ts("stack") && (
-                  <div>
-                    <p className="text-xs font-medium">Stack & Infra</p>
-                    <p className="text-xs text-muted-foreground">{ts("stack")}</p>
-                  </div>
-                )}
-                {tsItems("integrations").length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium">Integracoes</p>
-                    <ul className="list-disc list-inside text-xs">
-                      {tsItems("integrations").map((i) => <li key={i.id}>{i.text}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {tsItems("rules").length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium">Regras & Restricoes</p>
-                    <ul className="list-disc list-inside text-xs">
-                      {tsItems("rules").map((i) => <li key={i.id}>{i.text}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {ts("performance") && (
-                  <div>
-                    <p className="text-xs font-medium">Performance</p>
-                    <p className="text-xs text-muted-foreground">{ts("performance")}</p>
-                  </div>
-                )}
-                {ts("notes") && (
-                  <div>
-                    <p className="text-xs font-medium">Observacoes</p>
-                    <p className="text-xs text-muted-foreground">{ts("notes")}</p>
-                  </div>
-                )}
+                {ts("stack") && (<div><p className="text-xs font-medium">Stack & Infra</p><p className="text-xs text-muted-foreground">{ts("stack")}</p></div>)}
+                {tsItems("integrations").length > 0 && (<div><p className="text-xs font-medium">Integracoes</p><ul className="list-disc list-inside text-xs">{tsItems("integrations").map((i) => <li key={i.id}>{i.text}</li>)}</ul></div>)}
+                {tsItems("rules").length > 0 && (<div><p className="text-xs font-medium">Regras & Restricoes</p><ul className="list-disc list-inside text-xs">{tsItems("rules").map((i) => <li key={i.id}>{i.text}</li>)}</ul></div>)}
+                {ts("performance") && (<div><p className="text-xs font-medium">Performance</p><p className="text-xs text-muted-foreground">{ts("performance")}</p></div>)}
+                {ts("notes") && (<div><p className="text-xs font-medium">Observacoes</p><p className="text-xs text-muted-foreground">{ts("notes")}</p></div>)}
               </div>
             </section>
           )}
         </CardContent>
+        )}
       </Card>
 
-      {/* Task Generation */}
-      {confirmed ? (
-        <Card>
-          <CardContent className="py-8 text-center space-y-2">
-            <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto" />
-            <p className="text-sm font-medium">Tasks criadas com sucesso!</p>
-            <p className="text-sm text-muted-foreground">
-              As tasks foram adicionadas ao backlog do projeto.
-            </p>
-          </CardContent>
-        </Card>
-      ) : previewTasks.length > 0 ? (
-        <TaskPreview
-          tasks={previewTasks}
-          onChange={setPreviewTasks}
-          onConfirm={async () => {
-            setConfirming(true);
-            try {
-              const included = previewTasks.filter((t) => t.included);
-              const res = await fetch(`/api/design-sessions/${sessionId}/generate-tasks`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  confirm: true,
-                  tasks: included.map(({ id, included: _, ...rest }) => rest),
-                }),
-              });
-              if (!res.ok) throw new Error("Falha ao criar tasks");
-              setConfirmed(true);
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Erro ao criar tasks");
-            } finally {
-              setConfirming(false);
-            }
-          }}
-          confirming={confirming}
-        />
-      ) : (
-        <div className="text-center py-6 space-y-3">
-          {error && (
-            <p className="text-sm text-red-500">{error}</p>
-          )}
-          <Button
-            onClick={async () => {
-              setGenerating(true);
-              setError(null);
-              try {
-                const res = await fetch(`/api/design-sessions/${sessionId}/generate-tasks`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({}),
-                });
-                const data = await res.json();
-                if (data.error) throw new Error(data.error);
-                setPreviewTasks(
-                  data.tasks.map((t: Record<string, unknown>, i: number) => ({
-                    ...t,
-                    id: `gen-${i}`,
-                    included: true,
-                  }))
-                );
-              } catch (err) {
-                setError(err instanceof Error ? err.message : "Erro ao gerar tasks");
-              } finally {
-                setGenerating(false);
-              }
-            }}
-            disabled={generating}
-            size="lg"
-            className="gap-2"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Gerando tasks com IA...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                Gerar Tasks com IA
-              </>
-            )}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            A IA vai analisar todos os dados da session e gerar tasks detalhadas com acceptance criteria.
-          </p>
-        </div>
-      )}
+      {/* Chat com Vitor — sempre visível, persistente */}
+      <BriefingTaskChat sessionId={sessionId} onTasksChanged={loadTaskCount} />
     </div>
   );
 }

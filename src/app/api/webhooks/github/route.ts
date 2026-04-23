@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
@@ -19,25 +19,32 @@ export async function POST(req: NextRequest) {
   const body = await req.text();
   const signature = req.headers.get("x-hub-signature-256");
 
-  // Verify webhook signature
   if (process.env.GITHUB_WEBHOOK_SECRET && !verifySignature(body, signature)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
   const event = req.headers.get("x-github-event");
   const payload = JSON.parse(body);
+  const supabase = db();
 
-  // Find task by PR number + repo
   async function findTaskByPr(prNumber: number, repoOwner: string, repoName: string) {
-    return prisma.task.findFirst({
-      where: {
-        githubPrNumber: prNumber,
-        project: {
-          githubRepoOwner: repoOwner,
-          githubRepoName: repoName,
-        },
-      },
-    });
+    // First find the project by repo info
+    const { data: project } = await supabase
+      .from("Project")
+      .select("id")
+      .eq("githubRepoOwner", repoOwner)
+      .eq("githubRepoName", repoName)
+      .maybeSingle();
+    if (!project) return null;
+
+    const { data: task } = await supabase
+      .from("Task")
+      .select("*")
+      .eq("githubPrNumber", prNumber)
+      .eq("projectId", project.id)
+      .limit(1)
+      .maybeSingle();
+    return task;
   }
 
   if (event === "pull_request") {
@@ -48,12 +55,11 @@ export async function POST(req: NextRequest) {
     const task = await findTaskByPr(prNumber, repoOwner, repoName);
     if (!task) return NextResponse.json({ ok: true, skipped: true });
 
-    // PR merged → task done
     if (payload.action === "closed" && payload.pull_request.merged) {
-      await prisma.task.update({
-        where: { id: task.id },
-        data: { status: "done" },
-      });
+      await supabase
+        .from("Task")
+        .update({ status: "done" })
+        .eq("id", task.id);
     }
   }
 
@@ -69,17 +75,17 @@ export async function POST(req: NextRequest) {
       const reviewState = payload.review.state;
 
       if (reviewState === "changes_requested" && task.status === "review") {
-        await prisma.task.update({
-          where: { id: task.id },
-          data: { status: "changes_requested" },
-        });
+        await supabase
+          .from("Task")
+          .update({ status: "in_progress" })
+          .eq("id", task.id);
       }
 
       if (reviewState === "approved" && task.status === "review") {
-        await prisma.task.update({
-          where: { id: task.id },
-          data: { status: "approved" },
-        });
+        await supabase
+          .from("Task")
+          .update({ status: "done" })
+          .eq("id", task.id);
       }
     }
   }

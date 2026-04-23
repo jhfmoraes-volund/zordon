@@ -13,6 +13,10 @@ export type PrioritizedItem = {
   howItSolves: string;
   targetPersona: string;
   bucket: PriorityBucket;
+  keyScreens?: string;
+  userFlows?: string;
+  painPointRef?: string;
+  technicalNotes?: string;
 };
 
 type PriorityBoardProps = {

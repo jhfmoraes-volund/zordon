@@ -1,17 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { SprintDialog, type SprintFormData } from "@/components/sprint-dialog";
 import {
   Pencil, Trash2, KanbanSquare, ChevronDown, ChevronRight,
 } from "lucide-react";
@@ -60,20 +54,60 @@ export default function SprintsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Sprint | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
-  const [form, setForm] = useState({
-    name: "", startDate: "", endDate: "", status: "planning", projectId: "",
-  });
 
-  const load = () => {
-    fetch("/api/sprints").then((r) => r.json()).then((data: Sprint[]) => {
+  const load = async () => {
+    const supabase = createClient();
+
+    const [sprintsRes, projectsRes] = await Promise.all([
+      supabase
+        .from("Sprint")
+        .select("*, project:Project(id, name), tasks:Task(status, functionPoints, assignments:TaskAssignment(member:Member(id, name, fpCapacity)))")
+        .order("startDate", { ascending: false }),
+      supabase.from("Project").select("id, name").order("name"),
+    ]);
+
+    if (sprintsRes.data) {
+      const data: Sprint[] = sprintsRes.data.map((s: any) => {
+        const tasks: any[] = s.tasks ?? [];
+        const total = tasks.length;
+        const done = tasks.filter((t: any) => t.status === "done").length;
+        const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+        const totalFp = tasks.reduce((sum: number, t: any) => sum + (t.functionPoints || 0), 0);
+
+        const memberMap = new Map<string, SprintMember>();
+        for (const t of tasks) {
+          for (const a of t.assignments ?? []) {
+            const m = a.member;
+            if (!m) continue;
+            if (!memberMap.has(m.id)) {
+              memberMap.set(m.id, { id: m.id, name: m.name, fpCapacity: m.fpCapacity || 0, fpAllocated: 0 });
+            }
+            memberMap.get(m.id)!.fpAllocated += t.functionPoints || 0;
+          }
+        }
+
+        return {
+          id: s.id,
+          name: s.name,
+          startDate: s.startDate,
+          endDate: s.endDate,
+          status: s.status,
+          projectId: s.projectId,
+          project: s.project ?? { id: s.projectId, name: "" },
+          taskStats: { total, done, percent },
+          totalFp,
+          members: Array.from(memberMap.values()),
+        };
+      });
+
       setSprints(data);
-      // Auto-expand projects that have active sprints
       const active = new Set(
         data.filter((s) => s.status === "active").map((s) => s.projectId)
       );
       setExpandedProjects(active);
-    });
-    fetch("/api/projects").then((r) => r.json()).then(setProjects);
+    }
+
+    if (projectsRes.data) setProjects(projectsRes.data);
   };
 
   useEffect(() => { load(); }, []);
@@ -98,46 +132,25 @@ export default function SprintsPage() {
     });
   };
 
-  const openNew = () => {
-    setEditing(null);
-    const today = new Date().toISOString().split("T")[0];
-    const twoWeeks = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
-    setForm({ name: "", startDate: today, endDate: twoWeeks, status: "planning", projectId: "" });
-    setOpen(true);
-  };
-
-  const openEdit = (s: Sprint) => {
-    setEditing(s);
-    setForm({
-      name: s.name,
-      startDate: s.startDate.split("T")[0],
-      endDate: s.endDate.split("T")[0],
-      status: s.status,
-      projectId: s.projectId,
-    });
-    setOpen(true);
-  };
-
-  const save = async () => {
+  const handleSave = async (data: SprintFormData) => {
+    const supabase = createClient();
     const body = {
-      name: form.name,
-      startDate: new Date(form.startDate).toISOString(),
-      endDate: new Date(form.endDate).toISOString(),
-      status: form.status,
-      projectId: form.projectId,
+      name: data.name,
+      startDate: new Date(data.startDate).toISOString(),
+      endDate: new Date(data.endDate).toISOString(),
+      status: data.status,
+      projectId: editing ? editing.projectId : data.projectId!,
     };
-    if (editing) {
-      await fetch(`/api/sprints/${editing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } else {
-      await fetch("/api/sprints", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+    const { error } = editing
+      ? await supabase.from("Sprint").update(body).eq("id", editing.id)
+      : await supabase.from("Sprint").insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), ...body });
+    if (error) {
+      if (error.code === "23505") {
+        alert("Já existe um sprint com esse nome neste projeto.");
+      } else {
+        alert(`Erro ao salvar: ${error.message}`);
+      }
+      return;
     }
     setOpen(false);
     load();
@@ -145,7 +158,8 @@ export default function SprintsPage() {
 
   const remove = async (id: string) => {
     if (!confirm("Remover este sprint?")) return;
-    await fetch(`/api/sprints/${id}`, { method: "DELETE" });
+    const supabase = createClient();
+    await supabase.from("Sprint").delete().eq("id", id);
     load();
   };
 
@@ -157,7 +171,11 @@ export default function SprintsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Sprints" onAdd={openNew} addLabel="Novo Sprint" />
+      <PageHeader
+        title="Sprints"
+        onAdd={() => { setEditing(null); setOpen(true); }}
+        addLabel="Novo Sprint"
+      />
 
       {grouped.length === 0 && (
         <p className="text-muted-foreground text-center py-8">
@@ -172,7 +190,6 @@ export default function SprintsPage() {
 
           return (
             <div key={project.id} className="surface">
-              {/* Project header */}
               <button
                 onClick={() => toggleProject(project.id)}
                 className="flex w-full items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
@@ -192,29 +209,21 @@ export default function SprintsPage() {
                 )}
               </button>
 
-              {/* Sprint rows */}
               {isExpanded && (
                 <div className="border-t">
                   {projectSprints.map((s) => (
                     <div key={s.id} className="border-b last:border-b-0">
                       <div className="flex items-center gap-4 px-4 py-2.5 hover:bg-muted/30 transition-colors">
-                        {/* Name + status */}
                         <div className="flex items-center gap-2 min-w-[160px]">
                           <Badge variant="secondary" className={`${statusColors[s.status]} text-xs`}>
                             {s.status}
                           </Badge>
                           <span className="text-sm font-medium">{s.name}</span>
                         </div>
-
-                        {/* Date range */}
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
                           {fmtRange(s.startDate, s.endDate)}
                         </span>
-
-                        {/* FP */}
                         <span className="text-xs font-medium tabular-nums">{s.totalFp} FP</span>
-
-                        {/* Progress bar */}
                         <div className="flex items-center gap-2 flex-1 min-w-[120px]">
                           <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
                             <div
@@ -232,8 +241,6 @@ export default function SprintsPage() {
                             {s.taskStats.done}/{s.taskStats.total}
                           </span>
                         </div>
-
-                        {/* Actions */}
                         <div className="flex items-center gap-1 shrink-0">
                           <Link href={`/sprints/${s.id}/board`}>
                             <Button variant="outline" size="sm" className="h-7 text-xs">
@@ -241,7 +248,7 @@ export default function SprintsPage() {
                               Board
                             </Button>
                           </Link>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(s)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(s); setOpen(true); }}>
                             <Pencil className="h-3 w-3" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(s.id)}>
@@ -250,7 +257,6 @@ export default function SprintsPage() {
                         </div>
                       </div>
 
-                      {/* Capacity per member */}
                       {s.members.length > 0 && (
                         <div className="px-4 pb-3 pt-0">
                           <div className="rounded-lg bg-muted/20 p-3 space-y-2">
@@ -289,59 +295,15 @@ export default function SprintsPage() {
         })}
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Sprint" : "Novo Sprint"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Projeto</Label>
-              <Select value={form.projectId} onValueChange={(v) => v && setForm({ ...form, projectId: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione">
-                    {(value: string | null) => projects.find((p) => p.id === value)?.name ?? "Selecione"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Nome</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Sprint 1" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Inicio</Label>
-                <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Fim</Label>
-                <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => v && setForm({ ...form, status: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="planning">Planning</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.name || !form.projectId}>Salvar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SprintDialog
+        open={open}
+        onOpenChange={setOpen}
+        editing={editing}
+        existingSprints={sprints}
+        projects={projects}
+        allSprints={sprints}
+        onSave={handleSave}
+      />
     </div>
   );
 }

@@ -1,77 +1,41 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { getUser } from "@/lib/dal";
 
 const DEFAULT_SECTIONS = [
-  { sectionKey: "links", title: "Links Úteis", order: 0 },
-  { sectionKey: "sponsors", title: "Sponsors", order: 1 },
-  { sectionKey: "success_indicators", title: "Indicadores de Sucesso", order: 2 },
+  { sectionKey: "description", title: "Descrição do Projeto", order: 0 },
+  { sectionKey: "links", title: "Links Rápidos", order: 1 },
+  { sectionKey: "sponsors", title: "Sponsors", order: 2 },
   { sectionKey: "objectives", title: "Objetivos", order: 3 },
-  { sectionKey: "scope", title: "Escopo", order: 4 },
+  { sectionKey: "success_indicators", title: "KPIs / Métricas", order: 4 },
+  { sectionKey: "environments", title: "Ambientes", order: 5 },
+  { sectionKey: "access", title: "Acessos", order: 6 },
 ];
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
   const { id } = await params;
+  const supabase = db();
 
   // Check project exists
-  const project = await prisma.project.findUnique({ where: { id } });
+  const { data: project } = await supabase
+    .from("Project")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Auto-create sections if they don't exist
-  const existing = await prisma.projectWikiSection.findMany({
-    where: { projectId: id },
-    orderBy: { order: "asc" },
+  // Use RPC to atomically ensure all sections exist
+  const { data: sections, error } = await supabase.rpc("ensure_wiki_sections", {
+    p_project_id: id,
+    p_sections: DEFAULT_SECTIONS,
   });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (existing.length === 0) {
-    await prisma.$transaction(
-      DEFAULT_SECTIONS.map((section) =>
-        prisma.projectWikiSection.create({
-          data: {
-            projectId: id,
-            sectionKey: section.sectionKey,
-            title: section.title,
-            order: section.order,
-            data: "[]",
-          },
-        })
-      )
-    );
-
-    const created = await prisma.projectWikiSection.findMany({
-      where: { projectId: id },
-      orderBy: { order: "asc" },
-    });
-    return NextResponse.json(created);
-  }
-
-  // Create any missing sections
-  const existingKeys = new Set(existing.map((s) => s.sectionKey));
-  const missing = DEFAULT_SECTIONS.filter((s) => !existingKeys.has(s.sectionKey));
-
-  if (missing.length > 0) {
-    await prisma.$transaction(
-      missing.map((section) =>
-        prisma.projectWikiSection.create({
-          data: {
-            projectId: id,
-            sectionKey: section.sectionKey,
-            title: section.title,
-            order: section.order,
-            data: "[]",
-          },
-        })
-      )
-    );
-
-    const all = await prisma.projectWikiSection.findMany({
-      where: { projectId: id },
-      orderBy: { order: "asc" },
-    });
-    return NextResponse.json(all);
-  }
-
-  return NextResponse.json(existing);
+  return NextResponse.json(sections);
 }

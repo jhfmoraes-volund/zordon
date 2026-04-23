@@ -16,10 +16,7 @@ export type PreviewTask = {
   title: string;
   description: string;
   acceptanceCriteria: string[];
-  businessContext: string;
-  technicalNotes: string;
-  outOfScope: string[];
-  uiGuidance: string;
+  notes: string;
   complexity: string;
   scope: string;
   dependsOn: string[];
@@ -223,42 +220,11 @@ export function TaskPreview({
                   </div>
                 )}
 
-                {/* Business Context */}
-                {task.businessContext && (
+                {/* Notes */}
+                {task.notes && (
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Contexto de Negócio</p>
-                    <p className="text-sm">{task.businessContext}</p>
-                  </div>
-                )}
-
-                {/* Technical Notes */}
-                {task.technicalNotes && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Notas Técnicas</p>
-                    <p className="text-sm font-mono bg-muted/50 p-2 rounded">{task.technicalNotes}</p>
-                  </div>
-                )}
-
-                {/* UI Guidance */}
-                {task.uiGuidance && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">UI Guidance</p>
-                    <p className="text-sm">{task.uiGuidance}</p>
-                  </div>
-                )}
-
-                {/* Out of Scope */}
-                {task.outOfScope.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Fora do Escopo</p>
-                    <ul className="space-y-1">
-                      {task.outOfScope.map((s, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                          <X className="h-3.5 w-3.5 mt-0.5 text-red-400 shrink-0" />
-                          {s}
-                        </li>
-                      ))}
-                    </ul>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Notas</p>
+                    <p className="text-sm font-mono bg-muted/50 p-2 rounded">{task.notes}</p>
                   </div>
                 )}
 

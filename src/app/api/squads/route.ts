@@ -1,17 +1,21 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { getUser } from "@/lib/dal";
 
 export async function GET() {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
   try {
-    const squads = await prisma.squad.findMany({
-      include: {
-        projectSquads: {
-          include: { project: { select: { id: true, name: true } } },
-        },
-        members: { include: { member: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const { data: squads, error } = await db()
+      .from("Squad")
+      .select(`
+        *,
+        projectSquads:ProjectSquad(*, project:Project(id, name)),
+        members:SquadMember(*, member:Member(*))
+      `)
+      .order("createdAt", { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(squads);
   } catch (error) {
     console.error("[GET /api/squads]", error);
@@ -20,23 +24,44 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
   const { memberIds, projectIds, ...data } = await req.json();
-  const squad = await prisma.squad.create({
-    data: {
-      ...data,
-      projectSquads: projectIds?.length
-        ? { create: projectIds.map((projectId: string) => ({ projectId })) }
-        : undefined,
-      members: memberIds?.length
-        ? { create: memberIds.map((memberId: string) => ({ memberId })) }
-        : undefined,
-    },
-    include: {
-      projectSquads: {
-        include: { project: { select: { id: true, name: true } } },
-      },
-      members: { include: { member: true } },
-    },
-  });
-  return NextResponse.json(squad, { status: 201 });
+  const supabase = db();
+
+  // Create squad
+  const { data: squad, error } = await supabase
+    .from("Squad")
+    .insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), ...data })
+    .select()
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Create project associations
+  if (projectIds?.length) {
+    await supabase
+      .from("ProjectSquad")
+      .insert(projectIds.map((projectId: string) => ({ id: crypto.randomUUID(), squadId: squad.id, projectId })));
+  }
+
+  // Create member associations
+  if (memberIds?.length) {
+    await supabase
+      .from("SquadMember")
+      .insert(memberIds.map((memberId: string) => ({ id: crypto.randomUUID(), squadId: squad.id, memberId })));
+  }
+
+  // Re-fetch with relations
+  const { data: full } = await supabase
+    .from("Squad")
+    .select(`
+      *,
+      projectSquads:ProjectSquad(*, project:Project(id, name)),
+      members:SquadMember(*, member:Member(*))
+    `)
+    .eq("id", squad.id)
+    .single();
+
+  return NextResponse.json(full, { status: 201 });
 }

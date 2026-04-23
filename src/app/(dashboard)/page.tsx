@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { ACTIVE_STATUSES } from "@/lib/function-points";
 import { SprintOverviewWidget } from "@/components/sprint-overview-widget";
+import { requireMinLevel } from "@/lib/dal";
+import { MANAGER, ADMIN, roleLabel, getRoleLevel } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,7 @@ function usageLabel(pct: number) {
 // ─── Page ─────────────────────────────────────────────────
 
 export default async function OverviewPage() {
+  await requireMinLevel(MANAGER, { redirectTo: "/projects" });
   const now = new Date();
   const thisWeekStart = startOfWeek(now);
   const thisWeekEnd = endOfWeek(now);
@@ -59,108 +62,86 @@ export default async function OverviewPage() {
   const nextWeekEnd = new Date(thisWeekEnd);
   nextWeekEnd.setDate(nextWeekEnd.getDate() + 7);
 
+  const supabase = db();
+
   // ─── Fetch data ───────────────────────────────────────
 
   const [
-    clientCount,
-    projectCount,
-    activeSprints,
-    members,
-    overdueTasks,
-    unassignedTasks,
-    blockedTasks,
-    highLoadMembers,
+    clientsRes,
+    projectsRes,
+    activeSprintsRes,
+    membersRes,
+    overdueRes,
+    unassignedRes,
+    blockedRes,
   ] = await Promise.all([
-    prisma.client.count(),
-    prisma.project.count({ where: { status: "active" } }),
-    prisma.sprint.count({ where: { status: "active" } }),
+    supabase.from("Client").select("*", { count: "exact", head: true }),
+    supabase.from("Project").select("*", { count: "exact", head: true }).eq("status", "active"),
+    supabase.from("Sprint").select("*", { count: "exact", head: true }).eq("status", "active"),
 
-    // Members with their task assignments in active sprints
-    prisma.member.findMany({
-      include: {
-        taskAssignments: {
-          include: {
-            task: {
-              select: {
-                functionPoints: true,
-                status: true,
-                dueDate: true,
-                sprintId: true,
-                sprint: { select: { name: true, status: true } },
-              },
-            },
-          },
-        },
-        squadMemberships: {
-          include: { squad: { select: { name: true } } },
-        },
-      },
-      orderBy: { name: "asc" },
-    }),
+    // Members with their task assignments + squads
+    supabase.from("Member").select(`
+      *,
+      taskAssignments:TaskAssignment(
+        *,
+        task:Task(functionPoints, status, dueDate, sprintId,
+          sprint:Sprint(name, status)
+        )
+      ),
+      squadMemberships:SquadMember(
+        squad:Squad(name)
+      )
+    `).order("name"),
 
-    // Overdue tasks (dueDate past, not done)
-    prisma.task.findMany({
-      where: {
-        dueDate: { lt: now },
-        status: { notIn: ["done"] },
-      },
-      include: {
-        project: { select: { name: true } },
-        assignments: { include: { member: { select: { name: true } } } },
-      },
-      orderBy: { dueDate: "asc" },
-      take: 10,
-    }),
+    // Overdue tasks
+    supabase.from("Task")
+      .select("*, project:Project(name), assignments:TaskAssignment(*, member:Member(name))")
+      .lt("dueDate", now.toISOString())
+      .not("status", "eq", "done")
+      .order("dueDate")
+      .limit(10),
 
-    // Unassigned tasks in active sprints
-    prisma.task.count({
-      where: {
-        sprint: { status: "active" },
-        status: { in: [...ACTIVE_STATUSES] },
-        assignments: { none: {} },
-      },
-    }),
+    // Unassigned via RPC
+    supabase.rpc("unassigned_active_task_count"),
 
-    // Stuck tasks (in_progress for more than 3 days without update)
-    prisma.task.findMany({
-      where: {
-        status: "in_progress",
-        updatedAt: { lt: new Date(now.getTime() - 3 * 86400000) },
-      },
-      include: {
-        project: { select: { name: true } },
-        assignments: { include: { member: { select: { name: true } } } },
-      },
-      take: 5,
-    }),
-
-    // Members with > 85% allocation (will compute below)
-    Promise.resolve(null),
+    // Stuck tasks (in_progress > 3 days)
+    supabase.from("Task")
+      .select("*, project:Project(name), assignments:TaskAssignment(*, member:Member(name))")
+      .eq("status", "in_progress")
+      .lt("updatedAt", new Date(now.getTime() - 3 * 86400000).toISOString())
+      .limit(5),
   ]);
 
-  // ─── Fetch sprints with stats + member capacity ────────
-  const sprintsRaw = await prisma.sprint.findMany({
-    where: { status: { in: ["active", "planning"] } },
-    include: {
-      project: { select: { name: true } },
-      tasks: {
-        select: {
-          status: true,
-          functionPoints: true,
-          assignments: {
-            include: { member: { select: { id: true, name: true, fpCapacity: true } } },
-          },
-        },
-      },
-    },
-    orderBy: [{ status: "asc" }, { startDate: "asc" }],
-  });
+  const clientCount = clientsRes.count ?? 0;
+  const projectCount = projectsRes.count ?? 0;
+  const activeSprints = activeSprintsRes.count ?? 0;
+  const members = membersRes.data ?? [];
+  const overdueTasks = overdueRes.data ?? [];
+  const unassignedTasks = unassignedRes.data ?? 0;
+  const blockedTasks = blockedRes.data ?? [];
 
-  const sprintWidgets = sprintsRaw.map(({ tasks, ...s }) => {
+  // ─── Fetch sprints with stats + member capacity ────────
+  const { data: sprintsRaw } = await supabase
+    .from("Sprint")
+    .select(`
+      *,
+      project:Project(name),
+      tasks:Task(
+        status, functionPoints,
+        assignments:TaskAssignment(
+          member:Member(id, name, fpCapacity)
+        )
+      )
+    `)
+    .in("status", ["active", "planning"])
+    .order("status")
+    .order("startDate");
+
+  const sprintWidgets = (sprintsRaw ?? []).map(({ tasks, ...s }: any) => {
     const total = tasks.length;
-    const done = tasks.filter((t) => t.status === "done").length;
-    const totalFp = tasks.reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
-    const fpDone = tasks.filter((t) => t.status === "done").reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
+    const done = tasks.filter((t: any) => t.status === "done").length;
+    const totalFp = tasks.reduce((sum: number, t: any) => sum + (t.functionPoints ?? 0), 0);
+    const fpDone = tasks.filter((t: any) => t.status === "done").reduce((sum: number, t: any) => sum + (t.functionPoints ?? 0), 0);
 
     const memberMap = new Map<string, { id: string; name: string; fpCapacity: number; fpAllocated: number }>();
     for (const task of tasks) {
@@ -190,17 +171,16 @@ export default async function OverviewPage() {
   type WeekCapacity = {
     fpThisWeek: number;
     fpNextWeek: number;
-    dueThisWeek: number; // tasks due this week
+    dueThisWeek: number;
     dueNextWeek: number;
   };
 
-  const memberCapacity = members.map((m) => {
+  const memberCapacity = members.map((m: any) => {
     const weekCap: WeekCapacity = { fpThisWeek: 0, fpNextWeek: 0, dueThisWeek: 0, dueNextWeek: 0 };
 
-    // Sum FP of active tasks by due date week
     for (const a of m.taskAssignments) {
       const sp = a.task.functionPoints ?? 0;
-      const due = a.task.dueDate;
+      const due = a.task.dueDate ? new Date(a.task.dueDate) : null;
       const isActive = [...ACTIVE_STATUSES].includes(a.task.status as any);
 
       if (!isActive) continue;
@@ -212,17 +192,15 @@ export default async function OverviewPage() {
         weekCap.fpNextWeek += sp;
         weekCap.dueNextWeek++;
       } else if (!due) {
-        // Tasks without dueDate but active — count in "this week" as unplanned load
         weekCap.fpThisWeek += sp;
       }
     }
 
-    // Total active FP (all sprints)
     const totalActiveFp = m.taskAssignments
-      .filter((a) => [...ACTIVE_STATUSES].includes(a.task.status as any))
-      .reduce((s, a) => s + (a.task.functionPoints ?? 0), 0);
+      .filter((a: any) => [...ACTIVE_STATUSES].includes(a.task.status as any))
+      .reduce((s: number, a: any) => s + (a.task.functionPoints ?? 0), 0);
 
-    const squads = m.squadMemberships.map((sm) => sm.squad.name);
+    const squads = m.squadMemberships.map((sm: any) => sm.squad.name);
 
     return {
       id: m.id,
@@ -246,7 +224,6 @@ export default async function OverviewPage() {
 
   const attentionPoints: AttentionItem[] = [];
 
-  // Overdue tasks
   if (overdueTasks.length > 0) {
     attentionPoints.push({
       severity: "critical",
@@ -254,12 +231,11 @@ export default async function OverviewPage() {
       message: `${overdueTasks.length} task${overdueTasks.length > 1 ? "s" : ""} com prazo vencido`,
       detail: overdueTasks
         .slice(0, 3)
-        .map((t) => `${t.reference} — ${t.project.name} (${fmtDate(t.dueDate!)})`)
+        .map((t: any) => `${t.reference} — ${t.project.name} (${fmtDate(new Date(t.dueDate))})`)
         .join(", "),
     });
   }
 
-  // Unassigned tasks in active sprints
   if (unassignedTasks > 0) {
     attentionPoints.push({
       severity: "warning",
@@ -268,7 +244,6 @@ export default async function OverviewPage() {
     });
   }
 
-  // Stuck tasks
   if (blockedTasks.length > 0) {
     attentionPoints.push({
       severity: "warning",
@@ -276,7 +251,7 @@ export default async function OverviewPage() {
       message: `${blockedTasks.length} task${blockedTasks.length > 1 ? "s" : ""} parada${blockedTasks.length > 1 ? "s" : ""} ha +3 dias`,
       detail: blockedTasks
         .slice(0, 3)
-        .map((t) => {
+        .map((t: any) => {
           const assignee = t.assignments[0]?.member?.name || "sem responsavel";
           return `${t.reference} (${assignee})`;
         })
@@ -284,9 +259,8 @@ export default async function OverviewPage() {
     });
   }
 
-  // Overloaded members (> 85% in either week)
   const overloaded = memberCapacity.filter((m) => {
-    const weeklyCapacity = m.fpCapacity / 2; // split sprint capacity in 2 weeks
+    const weeklyCapacity = m.fpCapacity / 2;
     return weeklyCapacity > 0 && (m.fpThisWeek / weeklyCapacity > 0.85 || m.fpNextWeek / weeklyCapacity > 0.85);
   });
   if (overloaded.length > 0) {
@@ -298,7 +272,6 @@ export default async function OverviewPage() {
     });
   }
 
-  // Idle members (< 10% in both weeks)
   const idle = memberCapacity.filter((m) => {
     const weeklyCapacity = m.fpCapacity / 2;
     return weeklyCapacity > 0 && m.fpThisWeek / weeklyCapacity < 0.1 && m.fpNextWeek / weeklyCapacity < 0.1;
@@ -312,7 +285,6 @@ export default async function OverviewPage() {
     });
   }
 
-  // No attention points = everything is fine
   if (attentionPoints.length === 0) {
     attentionPoints.push({
       severity: "info",
@@ -321,21 +293,21 @@ export default async function OverviewPage() {
     });
   }
 
-  // Sort: critical first, then warning, then info
   const severityOrder = { critical: 0, warning: 1, info: 2 };
   attentionPoints.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
   // ─── Stats ────────────────────────────────────────────
 
-  const totalActiveTasksCount = await prisma.task.count({
-    where: { status: { in: [...ACTIVE_STATUSES] } },
-  });
-  const doneThisWeekCount = await prisma.task.count({
-    where: {
-      status: "done",
-      updatedAt: { gte: thisWeekStart, lte: thisWeekEnd },
-    },
-  });
+  const [activeTasksRes, doneThisWeekRes] = await Promise.all([
+    supabase.from("Task").select("*", { count: "exact", head: true }).in("status", [...ACTIVE_STATUSES]),
+    supabase.from("Task").select("*", { count: "exact", head: true })
+      .eq("status", "done")
+      .gte("updatedAt", thisWeekStart.toISOString())
+      .lte("updatedAt", thisWeekEnd.toISOString()),
+  ]);
+
+  const totalActiveTasksCount = activeTasksRes.count ?? 0;
+  const doneThisWeekCount = doneThisWeekRes.count ?? 0;
 
   const stats = [
     { label: "Projetos ativos", value: projectCount, icon: FolderKanban },
@@ -428,15 +400,14 @@ export default async function OverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {memberCapacity.map((m) => {
+              {memberCapacity
+                .filter((m) =>
+                  getRoleLevel(m.role) < ADMIN && m.role !== "principal-engineer",
+                )
+                .map((m) => {
                 const weeklyCapacity = Math.round(m.fpCapacity / 2);
                 const thisWeekPct = weeklyCapacity > 0 ? m.fpThisWeek / weeklyCapacity : 0;
                 const nextWeekPct = weeklyCapacity > 0 ? m.fpNextWeek / weeklyCapacity : 0;
-
-                const roleLabels: Record<string, string> = {
-                  pm: "PM", fullstack: "Fullstack",
-                  "ui-ux-builder": "UI/UX", "backend-qa-builder": "Backend/QA",
-                };
 
                 return (
                   <div key={m.id} className="surface-inset p-3">
@@ -445,9 +416,9 @@ export default async function OverviewPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{m.name}</span>
                         <Badge variant="outline" className="text-[10px]">
-                          {roleLabels[m.role] || m.role}
+                          {roleLabel(m.role)}
                         </Badge>
-                        {m.squads.map((s) => (
+                        {m.squads.map((s: string) => (
                           <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
                         ))}
                       </div>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -17,19 +18,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Pencil, Trash2, Users, ChevronDown, ChevronRight } from "lucide-react";
+import { roleLabel } from "@/lib/roles";
 
-type SquadMember = {
+type ProjectMemberAlloc = {
   id: string;
   member: { id: string; name: string; role: string };
-};
-
-type ProjectSquad = {
-  id: string;
-  squad: {
-    id: string;
-    name: string;
-    members: SquadMember[];
-  };
 };
 
 type Project = {
@@ -38,7 +31,6 @@ type Project = {
   repoUrl: string | null;
   startDate: string | null;
   endDate: string | null;
-  contractUrl: string | null;
   status: string;
   clientId: string;
   githubRepoOwner: string | null;
@@ -47,8 +39,8 @@ type Project = {
   pmId: string | null;
   client: { name: string };
   pm: { id: string; name: string } | null;
-  projectSquads: ProjectSquad[];
-  _count: { tasks: number };
+  projectMembers: ProjectMemberAlloc[];
+  taskCount: number;
 };
 
 type Client = { id: string; name: string };
@@ -61,12 +53,6 @@ const statusColors: Record<string, string> = {
   archived: "bg-gray-100 text-gray-800",
 };
 
-const roleLabels: Record<string, string> = {
-  "ui-ux-builder": "UI/UX",
-  "backend-qa-builder": "Backend/QA",
-  fullstack: "Fullstack",
-};
-
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -75,15 +61,48 @@ export default function ProjectsPage() {
   const [editing, setEditing] = useState<Project | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    name: "", repoUrl: "", startDate: "", endDate: "", contractUrl: "",
-    status: "active", clientId: "", pmId: "",
+    name: "", repoUrl: "", startDate: "", endDate: "",    status: "active", clientId: "", pmId: "",
     githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
+    memberIds: [] as string[],
   });
 
-  const load = () => {
-    fetch("/api/projects").then((r) => r.json()).then(setProjects);
-    fetch("/api/clients").then((r) => r.json()).then(setClients);
-    fetch("/api/members").then((r) => r.json()).then(setMembers);
+  const load = async () => {
+    const supabase = createClient();
+
+    const [projectsRes, clientsRes, membersRes] = await Promise.all([
+      supabase
+        .from("Project")
+        .select("*, client:Client(id, name), projectMembers:ProjectMember(id, member:Member(id, name, role)), pm:Member!pmId(id, name)")
+        .order("createdAt", { ascending: false }),
+      supabase.from("Client").select("id, name").order("name"),
+      supabase.from("Member").select("id, name, role").order("name"),
+    ]);
+
+    if (projectsRes.data) {
+      // Get task counts per project
+      const { data: taskCounts } = await supabase
+        .from("Task")
+        .select("projectId");
+
+      const countMap = new Map<string, number>();
+      if (taskCounts) {
+        for (const t of taskCounts) {
+          countMap.set(t.projectId, (countMap.get(t.projectId) || 0) + 1);
+        }
+      }
+
+      setProjects(
+        projectsRes.data.map((p: any) => ({
+          ...p,
+          client: p.client ?? { name: "" },
+          pm: p.pm ?? null,
+          projectMembers: p.projectMembers ?? [],
+          taskCount: countMap.get(p.id) || 0,
+        }))
+      );
+    }
+    if (clientsRes.data) setClients(clientsRes.data);
+    if (membersRes.data) setMembers(membersRes.data);
   };
 
   useEffect(() => { load(); }, []);
@@ -91,9 +110,9 @@ export default function ProjectsPage() {
   const openNew = () => {
     setEditing(null);
     setForm({
-      name: "", repoUrl: "", startDate: "", endDate: "", contractUrl: "",
-      status: "active", clientId: "", pmId: "",
+      name: "", repoUrl: "", startDate: "", endDate: "",      status: "active", clientId: "", pmId: "",
       githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
+      memberIds: [],
     });
     setOpen(true);
   };
@@ -105,24 +124,25 @@ export default function ProjectsPage() {
       repoUrl: p.repoUrl || "",
       startDate: p.startDate ? p.startDate.slice(0, 10) : "",
       endDate: p.endDate ? p.endDate.slice(0, 10) : "",
-      contractUrl: p.contractUrl || "",
+
       status: p.status,
       clientId: p.clientId,
       pmId: p.pmId || "",
       githubRepoOwner: p.githubRepoOwner || "",
       githubRepoName: p.githubRepoName || "",
       githubDefaultBranch: p.githubDefaultBranch || "main",
+      memberIds: p.projectMembers.map((pm) => pm.member.id),
     });
     setOpen(true);
   };
 
   const save = async () => {
-    const body = {
+    const supabase = createClient();
+    const projectData = {
       name: form.name,
       repoUrl: form.repoUrl || null,
       startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
       endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
-      contractUrl: form.contractUrl || null,
       status: form.status,
       clientId: form.clientId,
       pmId: form.pmId || null,
@@ -130,26 +150,34 @@ export default function ProjectsPage() {
       githubRepoName: form.githubRepoName || null,
       githubDefaultBranch: form.githubDefaultBranch || "main",
     };
+
+    let projectId: string;
+
     if (editing) {
-      await fetch(`/api/projects/${editing.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      await supabase.from("Project").update(projectData).eq("id", editing.id);
+      projectId = editing.id;
     } else {
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const { data } = await supabase.from("Project").insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), ...projectData }).select("id").single();
+      if (!data) return;
+      projectId = data.id;
     }
+
+    // Sync project members
+    await supabase.from("ProjectMember").delete().eq("projectId", projectId);
+    if (form.memberIds.length > 0) {
+      await supabase.from("ProjectMember").insert(
+        form.memberIds.map((memberId) => ({ id: crypto.randomUUID(), projectId, memberId }))
+      );
+    }
+
     setOpen(false);
     load();
   };
 
   const remove = async (id: string) => {
     if (!confirm("Remover este projeto?")) return;
-    await fetch(`/api/projects/${id}`, { method: "DELETE" });
+    const supabase = createClient();
+    await supabase.from("Project").delete().eq("id", id);
     load();
   };
 
@@ -157,19 +185,13 @@ export default function ProjectsPage() {
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  // Collect unique members across all squads for a project
-  const getProjectMembers = (p: Project) => {
-    const seen = new Set<string>();
-    const members: { id: string; name: string; role: string; squadName: string }[] = [];
-    for (const ps of p.projectSquads) {
-      for (const sm of ps.squad.members) {
-        if (!seen.has(sm.member.id)) {
-          seen.add(sm.member.id);
-          members.push({ ...sm.member, squadName: ps.squad.name });
-        }
-      }
-    }
-    return members;
+  const toggleMember = (memberId: string) => {
+    setForm((f) => ({
+      ...f,
+      memberIds: f.memberIds.includes(memberId)
+        ? f.memberIds.filter((id) => id !== memberId)
+        : [...f.memberIds, memberId],
+    }));
   };
 
   return (
@@ -185,7 +207,6 @@ export default function ProjectsPage() {
               <TableHead>Cliente</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Período</TableHead>
-              <TableHead>Squads</TableHead>
               <TableHead>Membros</TableHead>
               <TableHead>Tasks</TableHead>
               <TableHead className="w-[100px]" />
@@ -193,13 +214,12 @@ export default function ProjectsPage() {
           </TableHeader>
           <TableBody>
             {projects.map((p) => {
-              const members = getProjectMembers(p);
               const isExpanded = expandedId === p.id;
               return (
                 <React.Fragment key={p.id}>
                   <TableRow className="cursor-pointer" onClick={() => toggleExpand(p.id)}>
                     <TableCell>
-                      {p.projectSquads.length > 0 && (
+                      {p.projectMembers.length > 0 && (
                         isExpanded
                           ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           : <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -221,14 +241,13 @@ export default function ProjectsPage() {
                       {" → "}
                       {p.endDate ? new Date(p.endDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "–"}
                     </TableCell>
-                    <TableCell>{p.projectSquads.length}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                        {members.length}
+                        {p.projectMembers.length}
                       </div>
                     </TableCell>
-                    <TableCell>{p._count.tasks}</TableCell>
+                    <TableCell>{p.taskCount}</TableCell>
                     <TableCell>
                       <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
@@ -240,29 +259,21 @@ export default function ProjectsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                  {isExpanded && p.projectSquads.length > 0 && (
+                  {isExpanded && p.projectMembers.length > 0 && (
                     <TableRow key={`${p.id}-detail`}>
                       <TableCell />
-                      <TableCell colSpan={8}>
-                        <div className="py-2 space-y-3">
-                          {p.projectSquads.map((ps) => (
-                            <div key={ps.id} className="space-y-1">
-                              <p className="text-sm font-medium">{ps.squad.name}</p>
-                              <div className="flex flex-wrap gap-1.5 pl-2">
-                                {ps.squad.members.map((sm) => (
-                                  <Badge key={sm.id} variant="outline" className="text-xs">
-                                    {sm.member.name}
-                                    <span className="ml-1 text-muted-foreground">
-                                      {roleLabels[sm.member.role] || sm.member.role}
-                                    </span>
-                                  </Badge>
-                                ))}
-                                {ps.squad.members.length === 0 && (
-                                  <span className="text-xs text-muted-foreground">Sem membros</span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                      <TableCell colSpan={7}>
+                        <div className="py-2">
+                          <div className="flex flex-wrap gap-1.5">
+                            {p.projectMembers.map((pm) => (
+                              <Badge key={pm.id} variant="outline" className="text-xs">
+                                {pm.member.name}
+                                <span className="ml-1 text-muted-foreground">
+                                  {roleLabel(pm.member.role)}
+                                </span>
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -272,7 +283,7 @@ export default function ProjectsPage() {
             })}
             {projects.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   Nenhum projeto cadastrado.
                 </TableCell>
               </TableRow>
@@ -325,6 +336,35 @@ export default function ProjectsPage() {
               </Select>
             </div>
             <div className="grid gap-2">
+              <Label>Membros Alocados</Label>
+              <p className="text-xs text-muted-foreground">Clique para alocar/desalocar membros do projeto</p>
+              <div className="flex flex-wrap gap-1.5 p-3 border rounded-md min-h-[40px]">
+                {members
+                  .filter((m) => m.role !== "pm")
+                  .map((m) => {
+                    const isSelected = form.memberIds.includes(m.id);
+                    return (
+                      <Badge
+                        key={m.id}
+                        variant={isSelected ? "default" : "outline"}
+                        className={`cursor-pointer text-xs transition-colors ${
+                          isSelected ? "" : "opacity-50 hover:opacity-80"
+                        }`}
+                        onClick={() => toggleMember(m.id)}
+                      >
+                        {m.name}
+                        <span className="ml-1 text-[10px]">
+                          {roleLabel(m.role)}
+                        </span>
+                      </Badge>
+                    );
+                  })}
+                {members.filter((m) => m.role !== "pm").length === 0 && (
+                  <span className="text-xs text-muted-foreground">Nenhum membro cadastrado</span>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
               <Label>Nome</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
@@ -356,11 +396,7 @@ export default function ProjectsPage() {
                 <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
               </div>
             </div>
-            <div className="grid gap-2">
-              <Label>Link do Contrato</Label>
-              <Input value={form.contractUrl} onChange={(e) => setForm({ ...form, contractUrl: e.target.value })} placeholder="https://..." />
-            </div>
-            <div className="grid gap-2">
+<div className="grid gap-2">
               <Label>Status</Label>
               <Select value={form.status} onValueChange={(v) => v && setForm({ ...form, status: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>

@@ -1,16 +1,29 @@
-import { prisma } from "@/lib/prisma";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { requireMinLevelApi } from "@/lib/dal";
+import { ADMIN } from "@/lib/roles";
 
+/**
+ * GET /api/agents — lista agentes ativos (Admin only).
+ */
 export async function GET() {
-  const agents = await prisma.agent.findMany({
-    include: { _count: { select: { taskAssignments: true } } },
-    orderBy: { name: "asc" },
-  });
-  return NextResponse.json(agents);
-}
+  try {
+    const denied = await requireMinLevelApi(ADMIN);
+    if (denied) return denied;
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const agent = await prisma.agent.create({ data: body });
-  return NextResponse.json(agent, { status: 201 });
+    const { data, error } = await db()
+      .from("Agent")
+      .select("id, slug, name, description, modelId, isActive, updatedAt")
+      .eq("isActive", true)
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error("[/api/agents] supabase error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ agents: data || [] });
+  } catch (e) {
+    console.error("[/api/agents] throw:", e);
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
 }

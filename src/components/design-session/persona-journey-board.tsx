@@ -7,22 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, User, ArrowRight } from "lucide-react";
+import { Plus, Trash2, User, ChevronDown, ChevronRight } from "lucide-react";
+import type { Persona, JourneyStep } from "@/lib/agent/schemas";
 
-export type JourneyStep = {
-  id: string;
-  description: string;
-  painOrGain: string;
-};
-
-export type Persona = {
-  id: string;
-  name: string;
-  role: string;
-  context: string;
-  asIsSteps: JourneyStep[];
-  toBeSteps: JourneyStep[];
-};
+export type { Persona, JourneyStep };
 
 type PersonaJourneyBoardProps = {
   personas: Persona[];
@@ -122,62 +110,77 @@ function PersonaCard({
   onUpdateJourneyStep: (type: "asIs" | "toBe", stepId: string, step: Partial<JourneyStep>) => void;
   onDeleteJourneyStep: (type: "asIs" | "toBe", stepId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const totalSteps = persona.asIsSteps.length + persona.toBeSteps.length;
+
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+          <button
+            type="button"
+            className="flex items-center gap-3 text-left cursor-pointer"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
               <User className="h-5 w-5 text-primary" />
             </div>
-            <div>
-              <CardTitle className="text-base">{persona.name}</CardTitle>
-              <p className="text-sm text-muted-foreground">{persona.role}</p>
+            <div className="flex items-center gap-2">
+              <div>
+                <CardTitle className="text-base">{persona.name}</CardTitle>
+                <p className="text-sm text-muted-foreground">{persona.role}</p>
+              </div>
+              {!expanded && totalSteps > 0 && (
+                <Badge variant="secondary" className="text-xs ml-2">
+                  {persona.asIsSteps.length} dor · {persona.toBeSteps.length} ganho
+                </Badge>
+              )}
             </div>
-          </div>
+            {expanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+          </button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-2">
-          <Label className="text-sm">Contexto — quem e essa pessoa?</Label>
-          <Textarea
-            placeholder="Ex: Gerencia uma equipe de 8 vendedores, precisa acompanhar pipeline diariamente..."
-            value={persona.context}
-            onChange={(e) => onUpdate({ context: e.target.value })}
-            rows={2}
-          />
-        </div>
+      {expanded && (
+        <CardContent className="space-y-4">
+          <div className="grid gap-2">
+            <Label className="text-sm">Contexto — quem e essa pessoa?</Label>
+            <Textarea
+              placeholder="Ex: Gerencia uma equipe de 8 vendedores, precisa acompanhar pipeline diariamente..."
+              value={persona.context}
+              onChange={(e) => onUpdate({ context: e.target.value })}
+              rows={2}
+            />
+          </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <JourneyColumn
-            title="Jornada Atual (AS-IS)"
-            subtitle="Como vive o problema hoje?"
-            badge="Dor"
-            badgeColor="bg-red-100 text-red-700"
-            placeholder="Onde perde tempo? Onde erra? Onde desiste?"
-            painLabel="Qual a dor/frustracao neste passo?"
-            steps={persona.asIsSteps}
-            onAdd={(step) => onAddJourneyStep("asIs", step)}
-            onUpdate={(stepId, step) => onUpdateJourneyStep("asIs", stepId, step)}
-            onDelete={(stepId) => onDeleteJourneyStep("asIs", stepId)}
-          />
-          <JourneyColumn
-            title="Jornada Futura (TO-BE)"
-            subtitle="Como sera com a solucao?"
-            badge="Ganho"
-            badgeColor="bg-green-100 text-green-700"
-            placeholder="O que muda? O que some? O que fica automatico?"
-            painLabel="Qual o ganho neste passo?"
-            steps={persona.toBeSteps}
-            onAdd={(step) => onAddJourneyStep("toBe", step)}
-            onUpdate={(stepId, step) => onUpdateJourneyStep("toBe", stepId, step)}
-            onDelete={(stepId) => onDeleteJourneyStep("toBe", stepId)}
-          />
-        </div>
-      </CardContent>
+          <div className="grid md:grid-cols-2 gap-4">
+            <JourneyColumn
+              title="Jornada Atual (AS-IS)"
+              subtitle="Como vive o problema hoje?"
+              placeholder="Onde perde tempo? Onde erra? Onde desiste?"
+              steps={persona.asIsSteps}
+              onAdd={(step) => onAddJourneyStep("asIs", step)}
+              onUpdate={(stepId, step) => onUpdateJourneyStep("asIs", stepId, step)}
+              onDelete={(stepId) => onDeleteJourneyStep("asIs", stepId)}
+            />
+            <JourneyColumn
+              title="Jornada Futura (TO-BE)"
+              subtitle="Como sera com a solucao?"
+              placeholder="O que muda? O que some? O que fica automatico?"
+              steps={persona.toBeSteps}
+              onAdd={(step) => onAddJourneyStep("toBe", step)}
+              onUpdate={(stepId, step) => onUpdateJourneyStep("toBe", stepId, step)}
+              onDelete={(stepId) => onDeleteJourneyStep("toBe", stepId)}
+            />
+          </div>
+        </CardContent>
+      )}
     </Card>
   );
 }
@@ -185,10 +188,7 @@ function PersonaCard({
 function JourneyColumn({
   title,
   subtitle,
-  badge,
-  badgeColor,
   placeholder,
-  painLabel,
   steps,
   onAdd,
   onUpdate,
@@ -196,10 +196,7 @@ function JourneyColumn({
 }: {
   title: string;
   subtitle: string;
-  badge: string;
-  badgeColor: string;
   placeholder: string;
-  painLabel: string;
   steps: JourneyStep[];
   onAdd: (step: JourneyStep) => void;
   onUpdate: (stepId: string, step: Partial<JourneyStep>) => void;
@@ -225,23 +222,13 @@ function JourneyColumn({
           <div key={step.id} className="rounded-md border p-3 space-y-2">
             <div className="flex items-start gap-2">
               <span className="text-xs font-mono text-muted-foreground mt-1">{i + 1}.</span>
-              <div className="flex-1 space-y-2">
-                <Input
-                  value={step.description}
-                  onChange={(e) => onUpdate(step.id, { description: e.target.value })}
-                  className="h-8 text-sm"
-                  placeholder="Descreva o passo..."
-                />
-                <div className="flex items-center gap-2">
-                  <Badge className={badgeColor + " text-xs"}>{badge}</Badge>
-                  <Input
-                    value={step.painOrGain}
-                    onChange={(e) => onUpdate(step.id, { painOrGain: e.target.value })}
-                    className="h-7 text-xs flex-1"
-                    placeholder={painLabel}
-                  />
-                </div>
-              </div>
+              <Textarea
+                value={step.description}
+                onChange={(e) => onUpdate(step.id, { description: e.target.value })}
+                className="text-sm"
+                placeholder="Descreva o passo..."
+                rows={2}
+              />
               <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => onDelete(step.id)}>
                 <Trash2 className="h-3 w-3" />
               </Button>

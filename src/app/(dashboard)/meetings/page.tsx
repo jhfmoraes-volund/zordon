@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -45,15 +46,21 @@ export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const router = useRouter();
 
-  const load = () => {
-    fetch("/api/meetings").then((r) => r.json()).then(setMeetings);
+  const load = async () => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("WeeklyMeeting")
+      .select("*, projectReviews:MeetingProjectReview(*, project:Project(name), member:Member(name)), actionItems:MeetingActionItem(*, assignee:Member(name))")
+      .order("date", { ascending: false });
+    if (data) setMeetings(data as Meeting[]);
   };
 
   useEffect(() => { load(); }, []);
 
   const remove = async (id: string) => {
     if (!confirm("Remover esta reunião?")) return;
-    await fetch(`/api/meetings/${id}`, { method: "DELETE" });
+    const supabase = createClient();
+    await supabase.from("WeeklyMeeting").delete().eq("id", id);
     load();
   };
 

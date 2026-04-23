@@ -161,7 +161,6 @@ export const workflowSections: WorkflowSection[] = [
           { label: "todo" },
           { label: "in_progress" },
           { label: "review" },
-          { label: "approved" },
           { label: "done" },
         ],
       },
