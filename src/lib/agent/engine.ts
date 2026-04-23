@@ -51,7 +51,7 @@ export async function runAgent(req: AgentRunRequest): Promise<AgentRunResult> {
 
   // Ensure persistence even if the client disconnects and onFinish doesn't fire.
   // consumeStream drains the provider stream server-side, guaranteeing onFinish triggers.
-  result.consumeStream().catch(() => {});
+  Promise.resolve(result.consumeStream()).catch(() => {});
 
   return { streamText: result };
 }

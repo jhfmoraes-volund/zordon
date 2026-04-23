@@ -25,6 +25,14 @@ import {
   SPECIALTIES, SPECIALTY_LABELS, specialtyLabel,
   type Role, type Specialty,
 } from "@/lib/roles";
+import { MemberBattery, type BatterySegment } from "@/components/member-battery";
+
+type CommitmentData = {
+  capacity: number;
+  committed: number;
+  remaining: number;
+  projects: Array<{ projectId: string; projectName: string; fpAllocation: number }>;
+};
 
 function generatePassword(length = 14): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -261,6 +269,8 @@ export default function MembersPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [capacityData, setCapacityData] = useState<CapacityData | null>(null);
   const [loadingCapacity, setLoadingCapacity] = useState(false);
+  const [commitmentData, setCommitmentData] = useState<CommitmentData | null>(null);
+  const [savingAllocation, setSavingAllocation] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "", email: "", role: "product-builder", specialty: "fullstack",
     githubUsername: "", fpCapacity: "50", password: "", isExternal: false,
@@ -315,10 +325,30 @@ export default function MembersPage() {
     if (expandedId === id) {
       setExpandedId(null);
       setCapacityData(null);
+      setCommitmentData(null);
       return;
     }
     setExpandedId(id);
     setLoadingCapacity(true);
+    setCommitmentData(null);
+
+    // Fetch bateria (commitments) em paralelo — endpoint /api/members/commitments
+    fetch("/api/members/commitments")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const found = data.members.find((m: { memberId: string }) => m.memberId === id);
+        if (found) {
+          setCommitmentData({
+            capacity: found.capacity,
+            committed: found.committed,
+            remaining: found.remaining,
+            projects: found.projects,
+          });
+        }
+      })
+      .catch(() => {});
+
     try {
       const supabase = createClient();
 
@@ -400,6 +430,38 @@ export default function MembersPage() {
       });
     } finally {
       setLoadingCapacity(false);
+    }
+  };
+
+  const saveAllocation = async (
+    projectId: string,
+    memberId: string,
+    fpAllocation: number,
+  ) => {
+    setSavingAllocation(projectId);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/members/${memberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fpAllocation }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      // Reapply commitments for the expanded member
+      const fresh = await fetch("/api/members/commitments").then((r) => r.json());
+      const found = fresh.members.find((m: { memberId: string }) => m.memberId === memberId);
+      if (found) {
+        setCommitmentData({
+          capacity: found.capacity,
+          committed: found.committed,
+          remaining: found.remaining,
+          projects: found.projects,
+        });
+      }
+    } catch (err) {
+      console.error("[saveAllocation]", err);
+    } finally {
+      setSavingAllocation(null);
     }
   };
 
@@ -558,6 +620,53 @@ export default function MembersPage() {
                     <TableRow>
                       <TableCell />
                       <TableCell colSpan={9}>
+                        {/* Bateria (comprometimento em projetos) */}
+                        {commitmentData && (
+                          <div className="py-3 space-y-3 border-b">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Bateria — Comprometimento em Projetos
+                            </p>
+                            <MemberBattery
+                              capacity={commitmentData.capacity}
+                              committed={commitmentData.committed}
+                              breakdown={commitmentData.projects.map<BatterySegment>((p) => ({
+                                label: p.projectName,
+                                value: p.fpAllocation,
+                              }))}
+                              size="md"
+                            />
+                            {commitmentData.projects.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {commitmentData.projects.map((p) => (
+                                  <div key={p.projectId} className="flex items-center gap-2 text-sm">
+                                    <span className="flex-1 truncate">{p.projectName}</span>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={500}
+                                      defaultValue={p.fpAllocation}
+                                      disabled={savingAllocation === p.projectId}
+                                      onBlur={(e) => {
+                                        const next = Number(e.target.value);
+                                        if (!Number.isNaN(next) && next !== p.fpAllocation) {
+                                          saveAllocation(p.projectId, m.id, next);
+                                        }
+                                      }}
+                                      className="w-20 h-7 text-right"
+                                    />
+                                    <span className="text-xs text-muted-foreground w-8">FP</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                Sem alocações em projetos ainda.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Alocação real por sprint (já existia) */}
                         {loadingCapacity ? (
                           <p className="text-sm text-muted-foreground py-4">Carregando capacity...</p>
                         ) : capacityData && capacityData.sprints.length > 0 ? (

@@ -50,22 +50,72 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
     },
   });
 
-  tools.get_member_allocation = tool({
+  tools.get_member_commitments = tool({
     description:
-      "Retorna a alocacao de FP de cada membro: capacidade total, alocado, restante. Use para saber quem esta disponivel.",
+      "Retorna a bateria de cada membro: capacidade total, committed (soma das alocações em projetos), e restante. Use pra saber quem tem espaço para novos projetos.",
     inputSchema: z.object({}),
     execute: async () => {
       const { data } = await supabase
-        .from("member_capacity_overview")
-        .select("*");
+        .from("member_commitment_overview")
+        .select("*")
+        .order("name");
       return {
         members: (data || []).map((m) => ({
           name: m.name,
           role: m.role,
-          fpCapacity: m.fp_capacity,
-          fpAllocated: m.fp_allocated,
-          fpRemaining: (Number(m.fp_capacity) || 0) - (Number(m.fp_allocated) || 0),
-          activeTaskCount: m.active_task_count,
+          capacity: m.capacity,
+          committed: m.committed,
+          remaining: m.remaining,
+          projectCount: m.project_count,
+          overcommit: (Number(m.committed) || 0) > (Number(m.capacity) || 0),
+        })),
+      };
+    },
+  });
+
+  tools.get_sprint_capacity = tool({
+    description:
+      "Retorna a capacidade real de um sprint (soma das alocações dos membros no projeto, respeitando overrides) e quanto já foi alocado em tasks ativas. Se sprintId for omitido, usa o ativo.",
+    inputSchema: z.object({
+      sprintId: z.string().optional().describe("UUID do sprint (opcional — default: ativo)"),
+    }),
+    execute: async ({ sprintId }) => {
+      let targetId = sprintId;
+      if (!targetId) {
+        const { data: active } = await supabase
+          .from("Sprint")
+          .select("id")
+          .neq("status", "done")
+          .order("startDate", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!active) return { error: "Nenhum sprint ativo." };
+        targetId = active.id;
+      }
+
+      const [{ data: cap }, { data: members }] = await Promise.all([
+        supabase
+          .from("sprint_capacity_overview")
+          .select("*")
+          .eq("sprintId", targetId)
+          .maybeSingle(),
+        supabase
+          .from("sprint_member_capacity")
+          .select("*")
+          .eq("sprintId", targetId)
+          .order("member_name"),
+      ]);
+
+      return {
+        sprintId: targetId,
+        capacity: cap?.capacity ?? 0,
+        allocated: cap?.allocated ?? 0,
+        remaining: cap?.remaining ?? 0,
+        members: (members || []).map((m) => ({
+          name: m.member_name,
+          allocation: m.fp_allocation,
+          used: m.fp_used,
+          hasOverride: m.has_sprint_override,
         })),
       };
     },
@@ -531,6 +581,173 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
           task: { reference: taskReference, title: task.title },
           from: { scope: task.scope, complexity: task.complexity, fp: task.functionPoints },
           to: { scope, complexity, fp: newFP },
+        };
+      },
+    });
+
+    tools.set_project_allocation = tool({
+      description:
+        "Define o teto padrão de FP por sprint que um membro dedica a um projeto (ProjectMember.fpAllocation). Cria o ProjectMember se não existir.",
+      inputSchema: z.object({
+        projectName: z.string().describe("Nome parcial do projeto"),
+        memberName: z.string().describe("Nome parcial do membro"),
+        fpAllocation: z.number().int().min(0).max(500).describe("FP por sprint dedicados a esse projeto"),
+      }),
+      execute: async ({ projectName, memberName, fpAllocation }) => {
+        const { data: project } = await supabase
+          .from("Project")
+          .select("id, name")
+          .ilike("name", `%${projectName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!project) return { error: `Projeto "${projectName}" não encontrado.` };
+
+        const { data: member } = await supabase
+          .from("Member")
+          .select("id, name, fpCapacity")
+          .ilike("name", `%${memberName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!member) return { error: `Membro "${memberName}" não encontrado.` };
+
+        const { data: existing } = await supabase
+          .from("ProjectMember")
+          .select("id")
+          .eq("projectId", project.id)
+          .eq("memberId", member.id)
+          .maybeSingle();
+
+        if (existing) {
+          const { error } = await supabase
+            .from("ProjectMember")
+            .update({ fpAllocation })
+            .eq("id", existing.id);
+          if (error) return { error: error.message };
+        } else {
+          const { error } = await supabase.from("ProjectMember").insert({
+            id: crypto.randomUUID(),
+            projectId: project.id,
+            memberId: member.id,
+            fpAllocation,
+          });
+          if (error) return { error: error.message };
+        }
+
+        // Check bateria for overcommit after change
+        const { data: commit } = await supabase
+          .from("member_commitment_overview")
+          .select("committed, capacity")
+          .eq("id", member.id)
+          .maybeSingle();
+
+        const overcommit = commit
+          ? Number(commit.committed) > Number(commit.capacity)
+          : false;
+
+        return {
+          updated: true,
+          project: project.name,
+          member: member.name,
+          fpAllocation,
+          ...(overcommit && {
+            warning: `${member.name} ficou em overcommit (${commit?.committed}/${commit?.capacity} FP).`,
+          }),
+        };
+      },
+    });
+
+    tools.set_sprint_allocation = tool({
+      description:
+        "Sobrescreve a alocação de FP de um membro para um sprint específico (SprintMember). Use para férias, crunch, redistribuição pontual. Se omitir, cai na ProjectMember.fpAllocation padrão.",
+      inputSchema: z.object({
+        sprintName: z.string().describe("Nome parcial do sprint"),
+        memberName: z.string().describe("Nome parcial do membro"),
+        fpAllocation: z.number().int().min(0).max(500).describe("FP nesse sprint (override)"),
+      }),
+      execute: async ({ sprintName, memberName, fpAllocation }) => {
+        const { data: sprint } = await supabase
+          .from("Sprint")
+          .select("id, name, projectId")
+          .ilike("name", `%${sprintName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!sprint) return { error: `Sprint "${sprintName}" não encontrado.` };
+
+        const { data: member } = await supabase
+          .from("Member")
+          .select("id, name")
+          .ilike("name", `%${memberName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!member) return { error: `Membro "${memberName}" não encontrado.` };
+
+        // Validate member is in the project
+        const { data: pm } = await supabase
+          .from("ProjectMember")
+          .select("id")
+          .eq("projectId", sprint.projectId)
+          .eq("memberId", member.id)
+          .maybeSingle();
+        if (!pm) {
+          return { error: `${member.name} não está alocado ao projeto desse sprint — use set_project_allocation primeiro.` };
+        }
+
+        const { error } = await supabase.from("SprintMember").upsert(
+          {
+            sprintId: sprint.id,
+            memberId: member.id,
+            fpAllocation,
+            updatedAt: new Date().toISOString(),
+          },
+          { onConflict: "sprintId,memberId" },
+        );
+        if (error) return { error: error.message };
+
+        return {
+          updated: true,
+          sprint: sprint.name,
+          member: member.name,
+          fpAllocation,
+          note: "Override ativo só para este sprint — outros sprints continuam com ProjectMember.fpAllocation.",
+        };
+      },
+    });
+
+    tools.clear_sprint_allocation = tool({
+      description:
+        "Remove o override de SprintMember, voltando o membro à alocação padrão do ProjectMember naquele sprint.",
+      inputSchema: z.object({
+        sprintName: z.string().describe("Nome parcial do sprint"),
+        memberName: z.string().describe("Nome parcial do membro"),
+      }),
+      execute: async ({ sprintName, memberName }) => {
+        const { data: sprint } = await supabase
+          .from("Sprint")
+          .select("id, name")
+          .ilike("name", `%${sprintName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!sprint) return { error: `Sprint "${sprintName}" não encontrado.` };
+
+        const { data: member } = await supabase
+          .from("Member")
+          .select("id, name")
+          .ilike("name", `%${memberName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!member) return { error: `Membro "${memberName}" não encontrado.` };
+
+        const { error } = await supabase
+          .from("SprintMember")
+          .delete()
+          .eq("sprintId", sprint.id)
+          .eq("memberId", member.id);
+        if (error) return { error: error.message };
+
+        return {
+          cleared: true,
+          sprint: sprint.name,
+          member: member.name,
         };
       },
     });
