@@ -72,10 +72,6 @@ export function createTaskTool(sessionId: string, projectId: string) {
         ? `${metaParts.join(" | ")}${notes ? ` — ${notes}` : ""}`
         : notes || null;
 
-      // Get next reference
-      const { data: reference } = await supabase.rpc("next_task_reference");
-
-      // Create DesignSessionItem
       await supabase.from("DesignSessionItem").insert({
         id: crypto.randomUUID(),
         sessionId,
@@ -87,15 +83,16 @@ export function createTaskTool(sessionId: string, projectId: string) {
         aiGenerated: true,
       });
 
-      // Create Task
+      // Session-scoped drafts: no reference, status='draft'. Both are populated
+      // when the session is exported via POST /api/design-sessions/[id]/export.
       const { data: task, error } = await supabase
         .from("Task")
         .insert({
           id: crypto.randomUUID(),
           title,
           description,
-          reference: reference!,
-          status: "backlog",
+          reference: null,
+          status: "draft",
           complexity,
           scope,
           functionPoints,
@@ -108,7 +105,7 @@ export function createTaskTool(sessionId: string, projectId: string) {
             : null,
           updatedAt: new Date().toISOString(),
         })
-        .select("id, reference, title, functionPoints")
+        .select("id, title, functionPoints")
         .single();
 
       if (error) {
@@ -117,7 +114,6 @@ export function createTaskTool(sessionId: string, projectId: string) {
 
       return {
         success: true,
-        reference: task!.reference,
         title: task!.title,
         functionPoints: task!.functionPoints,
       };

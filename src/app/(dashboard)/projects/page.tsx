@@ -82,7 +82,8 @@ export default function ProjectsPage() {
       // Get task counts per project
       const { data: taskCounts } = await supabase
         .from("Task")
-        .select("projectId");
+        .select("projectId")
+        .neq("status", "draft");
 
       const countMap = new Map<string, number>();
       if (taskCounts) {

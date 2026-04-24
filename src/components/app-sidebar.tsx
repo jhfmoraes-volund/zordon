@@ -103,8 +103,8 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border px-5 py-4">
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="border-b border-sidebar-border px-5 py-4 group-data-[collapsible=icon]:hidden">
         <Link href="/" className="flex items-center gap-3">
           <VolundLogo className="h-4 w-auto" color="currentColor" />
         </Link>
@@ -119,6 +119,7 @@ export function AppSidebar() {
               <SidebarMenuButton
                 isActive={pathname === "/profile"}
                 render={<Link href="/profile" />}
+                tooltip="Meu Perfil"
               >
                 <User className="h-4 w-4" />
                 <span>Meu Perfil</span>
@@ -129,6 +130,7 @@ export function AppSidebar() {
               <SidebarMenuButton
                 isActive={pathname === "/settings"}
                 render={<Link href="/settings" />}
+                tooltip="Configuracoes"
               >
                 <Settings className="h-4 w-4" />
                 <span>Configuracoes</span>
@@ -150,6 +152,7 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     isActive={isActive}
                     render={<Link href={item.href} />}
+                    tooltip={item.title}
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
@@ -180,6 +183,7 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     isActive={isActive}
                     render={<Link href={item.href} />}
+                    tooltip={item.title}
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
@@ -191,10 +195,10 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border p-3">
+      <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-2">
         <div className="space-y-2">
-          {/* Current user info */}
-          <div className="px-2 py-1">
+          {/* Current user info — hidden when sidebar is collapsed to icon rail */}
+          <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
             <p className="text-xs font-medium truncate">
               {member?.name ?? "Sem membro vinculado"}
             </p>
@@ -206,42 +210,45 @@ export function AppSidebar() {
             </p>
           </div>
 
-          {/* Admin-only impersonation dropdown */}
+          {/* Admin-only impersonation dropdown — needs width, hidden when collapsed */}
           {canImpersonate && members.length > 0 && (
-            <Select
-              value={isImpersonating ? member?.id ?? "" : "__self__"}
-              onValueChange={handleImpersonationChange}
-              disabled={pending}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue>
-                  {(value: string | null) => {
-                    if (!value || value === "__self__") return "Ver como eu";
-                    const m = members.find((m) => m.id === value);
-                    return m
-                      ? `Ver como ${m.name}`
-                      : "Ver como…";
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__self__">Ver como eu</SelectItem>
-                {members.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                    <span className="text-muted-foreground ml-1 text-xs">
-                      ({roleLabel(m.role)})
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="group-data-[collapsible=icon]:hidden">
+              <Select
+                value={isImpersonating ? member?.id ?? "" : "__self__"}
+                onValueChange={handleImpersonationChange}
+                disabled={pending}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue>
+                    {(value: string | null) => {
+                      if (!value || value === "__self__") return "Ver como eu";
+                      const m = members.find((m) => m.id === value);
+                      return m
+                        ? `Ver como ${m.name}`
+                        : "Ver como…";
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__self__">Ver como eu</SelectItem>
+                  {members.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
+                      <span className="text-muted-foreground ml-1 text-xs">
+                        ({roleLabel(m.role)})
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
           <form action="/auth/signout" method="post">
             <SidebarMenuButton
               type="submit"
               className="w-full text-muted-foreground hover:text-foreground"
+              tooltip="Sair"
             >
               <LogOut className="h-4 w-4" />
               <span>Sair</span>

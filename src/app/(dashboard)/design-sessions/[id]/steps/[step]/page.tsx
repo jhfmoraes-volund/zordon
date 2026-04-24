@@ -163,7 +163,13 @@ export default function StepPage({
         sessionType={session.type}
         steps={steps}
         currentStep={stepIndex}
-        onNext={() => stepIndex < steps.length - 1 && navigate(stepIndex + 1)}
+        onNext={() => {
+          if (stepIndex < steps.length - 1) {
+            navigate(stepIndex + 1);
+          } else {
+            router.push(`/design-sessions/${id}/review`);
+          }
+        }}
         onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
         onStepClick={navigate}
         saving={saving}
@@ -466,7 +472,9 @@ function PrioritizationStep({
     fetch(`/api/design-sessions/${sessionId}/steps/brainstorm`)
       .then((r) => r.json())
       .then((r) => {
-        const solutions = (r.data?.solutions as SolutionCard[]) || [];
+        const solutions = ((r.data?.solutions as SolutionCard[]) || []).filter(
+          (s) => !s.archived,
+        );
         if (solutions.length > 0) {
           const seeded: PrioritizedItem[] = solutions.map((s) => ({
             id: s.id,
@@ -722,7 +730,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
 
   const loadTaskCount = useCallback(async () => {
     try {
-      const r = await fetch(`/api/design-sessions/${sessionId}/tasks`);
+      const r = await fetch(`/api/design-sessions/${sessionId}/tasks?countOnly=1`);
       const j = await r.json();
       setTaskCount(j.count ?? 0);
     } catch {
@@ -738,7 +746,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
           .then((r) => r.json())
           .then((r) => ({ key, data: r.data || {} }))
       ),
-      fetch(`/api/design-sessions/${sessionId}/tasks`)
+      fetch(`/api/design-sessions/${sessionId}/tasks?countOnly=1`)
         .then((r) => r.json())
         .then((r) => r.count as number)
         .catch(() => 0),
@@ -761,7 +769,9 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   const vision = allData.product_vision || {};
   const v = (key: string) => (vision[key] as string) || "";
   const personas = (allData.personas_journeys?.personas as Persona[]) || [];
-  const solutions = (allData.brainstorm?.solutions as SolutionCard[]) || [];
+  const solutions = ((allData.brainstorm?.solutions as SolutionCard[]) || []).filter(
+    (s) => !s.archived,
+  );
   const priorityItems = (allData.prioritization?.items as PrioritizedItem[]) || [];
   const hypotheses = (allData.hypotheses?.hypotheses as Hypothesis[]) || [];
   const techSpecs = allData.technical_specs || {};

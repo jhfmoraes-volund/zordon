@@ -22,7 +22,8 @@ export function canTransition(from: string, to: string): boolean {
   return allowed.includes(to as TaskStatus);
 }
 
-export const STATUS_LABELS: Record<TaskStatus, string> = {
+export const STATUS_LABELS: Record<string, string> = {
+  draft: "Rascunho",
   backlog: "Backlog",
   todo: "To Do",
   in_progress: "In Progress",

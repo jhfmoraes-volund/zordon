@@ -1406,7 +1406,7 @@ export type Database = {
           notes: string | null
           priority: number
           projectId: string
-          reference: string
+          reference: string | null
           scope: string
           sprintId: string | null
           status: string
@@ -1434,7 +1434,7 @@ export type Database = {
           notes?: string | null
           priority?: number
           projectId: string
-          reference: string
+          reference?: string | null
           scope?: string
           sprintId?: string | null
           status?: string
@@ -1462,7 +1462,7 @@ export type Database = {
           notes?: string | null
           priority?: number
           projectId?: string
-          reference?: string
+          reference?: string | null
           scope?: string
           sprintId?: string | null
           status?: string

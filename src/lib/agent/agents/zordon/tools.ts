@@ -40,6 +40,7 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
         .from("Task")
         .select("reference, title, status, type, functionPoints, dueDate, assignments:TaskAssignment(member:Member(id, name))")
         .eq("sprintId", sprint.id)
+        .neq("status", "draft")
         .order("priority", { ascending: false });
 
       const { data: members } = await supabase
@@ -132,6 +133,7 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
       let query = supabase
         .from("Task")
         .select("reference, title, status, type, functionPoints, dueDate, assignments:TaskAssignment(member:Member(id, name))")
+        .neq("status", "draft")
         .order("priority", { ascending: false })
         .limit(50);
 
@@ -188,7 +190,8 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
         const { data: tasks } = await supabase
           .from("Task")
           .select("reference, title, status, functionPoints, dueDate, assignments:TaskAssignment(memberId)")
-          .eq("sprintId", sprint.id);
+          .eq("sprintId", sprint.id)
+          .neq("status", "draft");
 
         const taskList = tasks || [];
         const activeTasks = taskList.filter((t) =>
@@ -243,11 +246,13 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
           const { count } = await supabase
             .from("Task")
             .select("*", { count: "exact", head: true })
-            .eq("sprintId", s.id);
+            .eq("sprintId", s.id)
+            .neq("status", "draft");
           const { data: fpRows } = await supabase
             .from("Task")
             .select("functionPoints")
-            .eq("sprintId", s.id);
+            .eq("sprintId", s.id)
+            .neq("status", "draft");
           const totalFp = (fpRows || []).reduce((sum, r) => sum + (r.functionPoints || 0), 0);
           return {
             id: s.id,
@@ -278,6 +283,7 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
         .from("Task")
         .select("reference, title, type, scope, complexity, functionPoints, priority, dueDate, project:Project(id, name)")
         .is("sprintId", null)
+        .neq("status", "draft")
         .order("priority", { ascending: false })
         .order("createdAt", { ascending: false })
         .limit(limit);

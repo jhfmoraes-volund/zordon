@@ -71,7 +71,7 @@ export function BriefingTaskChat({
 
   const refreshTaskCount = async () => {
     try {
-      const r = await fetch(`/api/design-sessions/${sessionId}/tasks`);
+      const r = await fetch(`/api/design-sessions/${sessionId}/tasks?countOnly=1`);
       const j = await r.json();
       setExistingTaskCount(j.count ?? 0);
       onTasksChanged?.();

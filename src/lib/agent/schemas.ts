@@ -26,6 +26,7 @@ export const solutionSchema = z.object({
   userFlows: z.string().optional(),
   painPointRef: z.string().optional(),
   technicalNotes: z.string().optional(),
+  archived: z.boolean().optional(),
 });
 
 export const hypothesisSchema = z.object({

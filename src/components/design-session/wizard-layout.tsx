@@ -118,8 +118,8 @@ export function WizardLayout({
               Anterior
             </Button>
             <Button size="sm" onClick={onNext}>
-              {isLast ? "Finalizar" : "Proximo"}
-              {!isLast && <ChevronRight className="h-4 w-4 ml-1" />}
+              {isLast ? "Revisar tasks" : "Proximo"}
+              <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
         </div>

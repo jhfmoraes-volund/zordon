@@ -25,6 +25,7 @@ export default function TasksPage() {
       supabase
         .from("Task")
         .select("*, project:Project(name), sprint:Sprint(name), designSession:DesignSession(id, title), assignments:TaskAssignment(*, member:Member(id, name))")
+        .neq("status", "draft")
         .order("priority", { ascending: false })
         .order("createdAt", { ascending: false }),
       supabase.from("Member").select("id, name, role").order("name"),

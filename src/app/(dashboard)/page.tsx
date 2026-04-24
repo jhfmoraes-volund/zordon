@@ -98,6 +98,7 @@ export default async function OverviewPage() {
       .select("*, project:Project(name), assignments:TaskAssignment(*, member:Member(name))")
       .lt("dueDate", now.toISOString())
       .not("status", "eq", "done")
+      .neq("status", "draft")
       .order("dueDate")
       .limit(10),
 

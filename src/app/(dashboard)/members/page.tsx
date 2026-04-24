@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -17,7 +17,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Wand2, Copy } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Wand2, Copy, Gauge } from "lucide-react";
+import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import {
   hasMinLevel, ADMIN,
@@ -25,14 +26,6 @@ import {
   SPECIALTIES, SPECIALTY_LABELS, specialtyLabel,
   type Role, type Specialty,
 } from "@/lib/roles";
-import { MemberBattery, type BatterySegment } from "@/components/member-battery";
-
-type CommitmentData = {
-  capacity: number;
-  committed: number;
-  remaining: number;
-  projects: Array<{ projectId: string; projectName: string; fpAllocation: number }>;
-};
 
 function generatePassword(length = 14): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -64,43 +57,6 @@ type CapacityOverviewRow = {
   fp_capacity: number;
   fp_allocated: number;
   active_task_count: number;
-};
-
-type CapacitySprint = {
-  sprintId: string;
-  sprintName: string;
-  startDate: string;
-  endDate: string;
-  sprintStatus: string;
-  totalFp: number;
-  usage: number;
-  projects: { projectId: string; projectName: string; sp: number }[];
-};
-
-type CapacityData = {
-  member: { id: string; name: string; fpCapacity: number };
-  sprints: CapacitySprint[];
-};
-
-/** Shape returned by the TaskAssignment query with nested task/sprint/project */
-type TaskAssignmentRow = {
-  id: string;
-  taskId: string;
-  memberId: string | null;
-  task: {
-    functionPoints: number | null;
-    status: string;
-    sprintId: string | null;
-    sprint: {
-      id: string;
-      name: string;
-      startDate: string;
-      endDate: string;
-      status: string;
-      projectId: string;
-      project: { name: string };
-    } | null;
-  };
 };
 
 const roleDetails: Record<string, {
@@ -266,11 +222,6 @@ export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [capacityData, setCapacityData] = useState<CapacityData | null>(null);
-  const [loadingCapacity, setLoadingCapacity] = useState(false);
-  const [commitmentData, setCommitmentData] = useState<CommitmentData | null>(null);
-  const [savingAllocation, setSavingAllocation] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "", email: "", role: "product-builder", specialty: "fullstack",
     githubUsername: "", fpCapacity: "50", password: "", isExternal: false,
@@ -320,150 +271,6 @@ export default function MembersPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  const toggleExpand = async (id: string) => {
-    if (expandedId === id) {
-      setExpandedId(null);
-      setCapacityData(null);
-      setCommitmentData(null);
-      return;
-    }
-    setExpandedId(id);
-    setLoadingCapacity(true);
-    setCommitmentData(null);
-
-    // Fetch bateria (commitments) em paralelo — endpoint /api/members/commitments
-    fetch("/api/members/commitments")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!data) return;
-        const found = data.members.find((m: { memberId: string }) => m.memberId === id);
-        if (found) {
-          setCommitmentData({
-            capacity: found.capacity,
-            committed: found.committed,
-            remaining: found.remaining,
-            projects: found.projects,
-          });
-        }
-      })
-      .catch(() => {});
-
-    try {
-      const supabase = createClient();
-
-      const { data: memberRow } = await supabase
-        .from("Member")
-        .select("id, name, fpCapacity")
-        .eq("id", id)
-        .single();
-
-      if (!memberRow) return;
-
-      const { data: assignments } = await supabase
-        .from("TaskAssignment")
-        .select("*, task:Task(functionPoints, status, sprintId, sprint:Sprint(id, name, startDate, endDate, status, projectId, project:Project(name)))")
-        .eq("memberId", id)
-        .not("task.sprintId", "is", null);
-
-      const rows = (assignments ?? []) as unknown as TaskAssignmentRow[];
-
-      const sprintMap = new Map<
-        string,
-        {
-          sprintId: string;
-          sprintName: string;
-          startDate: string;
-          endDate: string;
-          sprintStatus: string;
-          projects: Map<string, { projectId: string; projectName: string; fp: number }>;
-          totalFp: number;
-        }
-      >();
-
-      for (const a of rows) {
-        const sprint = a.task?.sprint;
-        if (!sprint) continue;
-        const fp = a.task.functionPoints ?? 0;
-
-        if (!sprintMap.has(sprint.id)) {
-          sprintMap.set(sprint.id, {
-            sprintId: sprint.id,
-            sprintName: sprint.name,
-            startDate: sprint.startDate,
-            endDate: sprint.endDate,
-            sprintStatus: sprint.status,
-            projects: new Map(),
-            totalFp: 0,
-          });
-        }
-
-        const entry = sprintMap.get(sprint.id)!;
-        entry.totalFp += fp;
-
-        if (!entry.projects.has(sprint.projectId)) {
-          entry.projects.set(sprint.projectId, {
-            projectId: sprint.projectId,
-            projectName: sprint.project.name,
-            fp: 0,
-          });
-        }
-        entry.projects.get(sprint.projectId)!.fp += fp;
-      }
-
-      const fpCapacity = memberRow.fpCapacity ?? 0;
-      const sprints = Array.from(sprintMap.values())
-        .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-        .map(({ projects, ...rest }) => ({
-          ...rest,
-          projects: Array.from(projects.values()).map((p) => ({
-            projectId: p.projectId,
-            projectName: p.projectName,
-            sp: p.fp,
-          })),
-          usage: fpCapacity > 0 ? rest.totalFp / fpCapacity : 0,
-        }));
-
-      setCapacityData({
-        member: { id: memberRow.id, name: memberRow.name, fpCapacity },
-        sprints,
-      });
-    } finally {
-      setLoadingCapacity(false);
-    }
-  };
-
-  const saveAllocation = async (
-    projectId: string,
-    memberId: string,
-    fpAllocation: number,
-  ) => {
-    setSavingAllocation(projectId);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/members/${memberId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fpAllocation }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-
-      // Reapply commitments for the expanded member
-      const fresh = await fetch("/api/members/commitments").then((r) => r.json());
-      const found = fresh.members.find((m: { memberId: string }) => m.memberId === memberId);
-      if (found) {
-        setCommitmentData({
-          capacity: found.capacity,
-          committed: found.committed,
-          remaining: found.remaining,
-          projects: found.projects,
-        });
-      }
-    } catch (err) {
-      console.error("[saveAllocation]", err);
-    } finally {
-      setSavingAllocation(null);
-    }
-  };
 
   const openNew = () => {
     setEditing(null);
@@ -546,7 +353,6 @@ export default function MembersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[30px]" />
               <TableHead>Nome</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Especialidade</TableHead>
@@ -560,187 +366,67 @@ export default function MembersPage() {
           <TableBody>
             {members.map((m) => {
               const usage = m.fpCapacity > 0 ? m.fpAllocated / m.fpCapacity : 0;
-              const isExpanded = expandedId === m.id;
               return (
-                <React.Fragment key={m.id}>
-                  <TableRow className="cursor-pointer" onClick={() => toggleExpand(m.id)}>
-                    <TableCell>
-                      {isExpanded
-                        ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {m.name}
-                      {m.isExternal && (
-                        <Badge variant="outline" className="ml-2 text-[10px] border-orange-400 text-orange-500">
-                          Externo
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{roleLabel(m.role)}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {m.specialty && (
-                        <Badge variant="secondary" className="text-xs">
-                          {specialtyLabel(m.specialty)}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>{m.fpCapacity} FP</TableCell>
-                    <TableCell>{m.fpAllocated} FP</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-20 rounded-full bg-secondary overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${usageColor(usage)}`}
-                            style={{ width: `${Math.min(usage * 100, 100)}%` }}
-                          />
-                        </div>
-                        <Badge variant={usageBadgeVariant(usage)} className="text-xs">
-                          {Math.round(usage * 100)}%
-                        </Badge>
+                <TableRow key={m.id}>
+                  <TableCell className="font-medium">
+                    {m.name}
+                    {m.isExternal && (
+                      <Badge variant="outline" className="ml-2 text-[10px] border-orange-400 text-orange-500">
+                        Externo
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{roleLabel(m.role)}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {m.specialty && (
+                      <Badge variant="secondary" className="text-xs">
+                        {specialtyLabel(m.specialty)}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>{m.fpCapacity} FP</TableCell>
+                  <TableCell>{m.fpAllocated} FP</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-20 rounded-full bg-secondary overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${usageColor(usage)}`}
+                          style={{ width: `${Math.min(usage * 100, 100)}%` }}
+                        />
                       </div>
-                    </TableCell>
-                    <TableCell>{m._count.squadMemberships}</TableCell>
-                    <TableCell>
+                      <Badge variant={usageBadgeVariant(usage)} className="text-xs">
+                        {Math.round(usage * 100)}%
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>{m._count.squadMemberships}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Link href={`/members/${m.id}`}>
+                        <Button variant="ghost" size="icon" title="Ver capacity detalhada">
+                          <Gauge className="h-4 w-4" />
+                        </Button>
+                      </Link>
                       {isAdmin && (
-                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                        <>
                           <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => remove(m.id)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </div>
+                        </>
                       )}
-                    </TableCell>
-                  </TableRow>
-                  {isExpanded && (
-                    <TableRow>
-                      <TableCell />
-                      <TableCell colSpan={9}>
-                        {/* Bateria (comprometimento em projetos) */}
-                        {commitmentData && (
-                          <div className="py-3 space-y-3 border-b">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Bateria — Comprometimento em Projetos
-                            </p>
-                            <MemberBattery
-                              capacity={commitmentData.capacity}
-                              committed={commitmentData.committed}
-                              breakdown={commitmentData.projects.map<BatterySegment>((p) => ({
-                                label: p.projectName,
-                                value: p.fpAllocation,
-                              }))}
-                              size="md"
-                            />
-                            {commitmentData.projects.length > 0 ? (
-                              <div className="space-y-1.5">
-                                {commitmentData.projects.map((p) => (
-                                  <div key={p.projectId} className="flex items-center gap-2 text-sm">
-                                    <span className="flex-1 truncate">{p.projectName}</span>
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      max={500}
-                                      defaultValue={p.fpAllocation}
-                                      disabled={savingAllocation === p.projectId}
-                                      onBlur={(e) => {
-                                        const next = Number(e.target.value);
-                                        if (!Number.isNaN(next) && next !== p.fpAllocation) {
-                                          saveAllocation(p.projectId, m.id, next);
-                                        }
-                                      }}
-                                      className="w-20 h-7 text-right"
-                                    />
-                                    <span className="text-xs text-muted-foreground w-8">FP</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground">
-                                Sem alocações em projetos ainda.
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Alocação real por sprint (já existia) */}
-                        {loadingCapacity ? (
-                          <p className="text-sm text-muted-foreground py-4">Carregando capacity...</p>
-                        ) : capacityData && capacityData.sprints.length > 0 ? (
-                          <div className="py-3 space-y-3">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Alocacao por Sprint
-                            </p>
-                            <div className="space-y-2">
-                              {capacityData.sprints.map((s) => {
-                                const fmt = (d: string) =>
-                                  new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-                                return (
-                                  <div key={s.sprintId} className="flex items-center gap-3">
-                                    <div className="w-40 text-sm truncate" title={s.sprintName}>
-                                      {s.sprintName}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground w-28">
-                                      {fmt(s.startDate)} — {fmt(s.endDate)}
-                                    </div>
-                                    <div className="flex-1">
-                                      <div className="h-4 w-full rounded bg-secondary overflow-hidden flex">
-                                        {s.projects.map((p) => {
-                                          const pct = capacityData.member.fpCapacity > 0
-                                            ? (p.sp / capacityData.member.fpCapacity) * 100
-                                            : 0;
-                                          return (
-                                            <div
-                                              key={p.projectId}
-                                              className={`h-full ${usageColor(s.usage)} opacity-80 first:rounded-l last:rounded-r`}
-                                              style={{ width: `${Math.min(pct, 100)}%` }}
-                                              title={`${p.projectName}: ${p.sp} FP`}
-                                            />
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                    <div className="text-sm font-medium w-20 text-right">
-                                      {s.totalFp}/{capacityData.member.fpCapacity} FP
-                                    </div>
-                                    <Badge variant={usageBadgeVariant(s.usage)} className="text-xs w-14 justify-center">
-                                      {Math.round(s.usage * 100)}%
-                                    </Badge>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="flex flex-wrap gap-3 pt-2 border-t">
-                              {Array.from(
-                                new Map(
-                                  capacityData.sprints.flatMap((s) =>
-                                    s.projects.map((p) => [p.projectId, p.projectName])
-                                  )
-                                )
-                              ).map(([id, name]) => (
-                                <span key={id} className="text-xs text-muted-foreground">
-                                  {name}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground py-4">
-                            Nenhuma alocacao em sprints.
-                          </p>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </React.Fragment>
+                    </div>
+                  </TableCell>
+                </TableRow>
               );
             })}
             {members.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   Nenhum membro cadastrado.
                 </TableCell>
               </TableRow>

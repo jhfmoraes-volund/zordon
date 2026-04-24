@@ -8,6 +8,7 @@ export const TASK_STATUSES = [
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const STATUS_LABELS: Record<string, string> = {
+  draft: "Rascunho",
   backlog: "Backlog",
   todo: "To Do",
   in_progress: "In Progress",
@@ -16,6 +17,7 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export const STATUS_COLORS: Record<string, string> = {
+  draft: "bg-amber-50 text-amber-700 border border-amber-200",
   backlog: "bg-gray-100 text-gray-700",
   todo: "bg-blue-100 text-blue-700",
   in_progress: "bg-yellow-100 text-yellow-700",
@@ -25,6 +27,7 @@ export const STATUS_COLORS: Record<string, string> = {
 
 // Dark-theme variants used in board cards
 export const STATUS_COLORS_DARK: Record<string, string> = {
+  draft: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
   backlog: "bg-muted text-muted-foreground",
   todo: "bg-blue-500/20 text-blue-400",
   in_progress: "bg-yellow-500/20 text-yellow-400",

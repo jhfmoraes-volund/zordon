@@ -50,7 +50,8 @@ export function listProjectTasksTool(sessionId: string, projectId: string) {
           "reference, title, status, designSessionId, designSession:DesignSession(title)"
         )
         .eq("projectId", projectId)
-        .neq("designSessionId", sessionId);
+        .neq("designSessionId", sessionId)
+        .neq("status", "draft");
 
       if (error) return { success: false, error: error.message };
       const tasks = (data ?? []).map((t) => {

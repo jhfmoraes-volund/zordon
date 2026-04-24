@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
       sprint:Sprint(name),
       assignments:TaskAssignment(*, member:Member(id, name))
     `)
+    .neq("status", "draft")
     .order("priority", { ascending: false })
     .order("createdAt", { ascending: false });
 

@@ -37,7 +37,7 @@ type Task = {
   id: string;
   title: string;
   description: string | null;
-  reference: string;
+  reference: string | null;
   status: string;
   complexity: string;
   scope: string;
@@ -390,7 +390,7 @@ function TaskSheetEditor({
         {/* Ref */}
         <div>
           <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-            {task.reference}
+            {task.reference ?? "Rascunho"}
           </span>
         </div>
 
@@ -405,13 +405,19 @@ function TaskSheetEditor({
 
         {/* Status + Type */}
         <div className="flex items-center gap-1.5">
-          <BadgeSelect
-            value={task.status}
-            options={[...TASK_STATUSES]}
-            labels={STATUS_LABELS}
-            colors={STATUS_COLORS}
-            onChange={(v) => onSave({ status: v })}
-          />
+          {task.status === "draft" ? (
+            <Badge className={`text-xs ${STATUS_COLORS.draft}`}>
+              {STATUS_LABELS.draft}
+            </Badge>
+          ) : (
+            <BadgeSelect
+              value={task.status}
+              options={[...TASK_STATUSES]}
+              labels={STATUS_LABELS}
+              colors={STATUS_COLORS}
+              onChange={(v) => onSave({ status: v })}
+            />
+          )}
           <BadgeSelect
             value={task.type}
             options={[...TASK_TYPES]}

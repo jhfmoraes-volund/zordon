@@ -26,7 +26,8 @@ export async function GET() {
     const { data: tasks } = await supabase
       .from("Task")
       .select("projectId")
-      .in("projectId", projectIds);
+      .in("projectId", projectIds)
+      .neq("status", "draft");
     if (tasks) {
       for (const t of tasks) {
         taskCounts[t.projectId] = (taskCounts[t.projectId] ?? 0) + 1;

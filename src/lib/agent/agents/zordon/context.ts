@@ -101,6 +101,7 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
           .from("Task")
           .select("id, reference, title, status, type, functionPoints, complexity, scope, dueDate, priority, assignments:TaskAssignment(member:Member(id, name))")
           .eq("sprintId", sprintId)
+          .neq("status", "draft")
           .order("priority", { ascending: false })
           .order("createdAt", { ascending: false })
       : Promise.resolve({ data: [] }),
@@ -108,6 +109,7 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
       .from("Task")
       .select("reference, title, type, scope, complexity, functionPoints, priority")
       .is("sprintId", null)
+      .neq("status", "draft")
       .order("priority", { ascending: false })
       .order("createdAt", { ascending: false })
       .limit(30),
