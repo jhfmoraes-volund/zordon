@@ -134,6 +134,43 @@
   }
 }
 
+/* Custom scrollbar — vermelho escuro com blend sutil (brand-aligned).
+   Fora de @layer pra não perder da preflight. Aplicado em * porque o
+   scroll real roda em containers internos (<main overflow-auto>), não no html. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.35 0.08 22 / 60%) transparent;
+}
+.dark * {
+  scrollbar-color: oklch(0.5 0.12 22 / 55%) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: oklch(0.35 0.08 22 / 55%);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.4 0.13 22 / 85%);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background-color: oklch(0.5 0.12 22 / 55%);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: oklch(0.6 0.16 22 / 85%);
+}
+
 @layer components {
   /* Nivel 1: containers primarios (cards, panels, tables, dialogs) */
   .surface {

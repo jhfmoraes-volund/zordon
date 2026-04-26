@@ -67,15 +67,18 @@ export default async function DashboardLayout({
 
   return (
     <AuthProvider value={auth}>
-      {/* defaultOpen=false + hoverExpand: sidebar inicia colapsada (icon mode);
-          ao passar mouse, expande visualmente sobre o main; click no
-          SidebarTrigger fixa aberta (persiste como "open" state). */}
-      {/* className="flex-col" muda o wrapper do SidebarProvider de flex-row
-          pra flex-col — assim o ShellHeader vira faixa única top-to-end e o
-          sidebar+main viram a flex-row de baixo. Border-line do header não
-          quebra mais no canto, marca Supabase. */}
+      {/* App-shell bounded ao viewport (padrão Linear/Cursor/Notion):
+          - flex-col: ShellHeader full-width no topo, row sidebar+main+alpha
+            embaixo. Borda do header não quebra no canto (estilo Supabase).
+          - h-svh: trava o wrapper na viewport. Sem isso, <main overflow-auto>
+            não tem teto e o body inteiro scrolla — header e alpha-panel
+            "passeiam" junto. Com h-svh, só o <main> scrolla; header e alpha
+            são flex-items naturais que ficam fixos por construção.
+          - defaultOpen=false + hoverExpand: sidebar inicia colapsada (icon
+            mode); hover expande visualmente sobre o main; click no
+            SidebarTrigger fixa aberta (persiste como "open" state). */}
       <SidebarProvider
-        className="flex-col"
+        className="flex-col h-svh"
         defaultOpen={false}
         hoverExpand
       >
@@ -84,7 +87,16 @@ export default async function DashboardLayout({
             <ShellHeader
               left={
                 <>
-                  <Link href="/" aria-label="Volund" className="flex items-center">
+                  {/* Célula da logo encostada no canto esquerdo, mesma largura
+                      do sidebar collapsed (--sidebar-width-icon = 3rem) — assim
+                      a borda direita da célula alinha com a borda direita do
+                      sidebar de baixo. -ml-3/-ml-4 cancela o px do header pra
+                      colar na ponta. */}
+                  <Link
+                    href="/"
+                    aria-label="Volund"
+                    className="-ml-3 flex h-12 w-(--sidebar-width-icon) items-center justify-center border-r border-border md:-ml-4 md:h-14"
+                  >
                     <Image
                       src="/volund-logo-V.png"
                       alt=""

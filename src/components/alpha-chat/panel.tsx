@@ -211,15 +211,16 @@ export function AlphaChatPanel() {
     );
   }
 
-  // Desktop: right column with width transition (push reflow Notion-style).
-  // sticky+self-start+h-svh trava o painel ao viewport, independente do scroll
-  // do <main>. Composer sempre acessível no bottom da tela, mensagens scrollam
-  // dentro do próprio container. Padrão Lovable / Cursor / Claude.
+  // Desktop: right column com reflow estilo Notion (transition w-0 → w-96).
+  // O <aside> é flex-item da row bounded pelo wrapper h-svh do layout, então
+  // nem h-svh nem sticky são necessários — flex-stretch já dá altura full.
+  // Composer fica fixo embaixo via flex-col interno; mensagens scrollam dentro
+  // do próprio container. Padrão Lovable / Cursor / Claude.
   return (
     <aside
       aria-hidden={!isOpen}
       className={cn(
-        "sticky top-0 z-20 h-svh shrink-0 self-start overflow-hidden border-l border-border/50 bg-background transition-[width] duration-300 ease-in-out",
+        "z-20 shrink-0 overflow-hidden border-l border-border/50 bg-background transition-[width] duration-300 ease-in-out",
         isOpen ? "w-96" : "w-0",
       )}
     >
