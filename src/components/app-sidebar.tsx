@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -24,7 +23,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -110,23 +108,10 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="h-14 flex-row items-center justify-start border-b border-sidebar-border !p-0">
-        <Link
-          href="/"
-          aria-label="Volund"
-          className="flex h-full w-12 shrink-0 items-center justify-center"
-        >
-          <Image
-            src="/volund-logo-V.png"
-            alt=""
-            width={24}
-            height={24}
-            className="size-6"
-            priority
-          />
-        </Link>
-      </SidebarHeader>
+    <Sidebar
+      collapsible="icon"
+      className="md:!top-14 md:!h-[calc(100svh-3.5rem)]"
+    >
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>

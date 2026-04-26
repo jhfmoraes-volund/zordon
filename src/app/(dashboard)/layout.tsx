@@ -1,3 +1,5 @@
+import Image from "next/image";
+import Link from "next/link";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
@@ -68,31 +70,47 @@ export default async function DashboardLayout({
       {/* defaultOpen=false + hoverExpand: sidebar inicia colapsada (icon mode);
           ao passar mouse, expande visualmente sobre o main; click no
           SidebarTrigger fixa aberta (persiste como "open" state). */}
-      <SidebarProvider defaultOpen={false} hoverExpand>
-        <AppSidebar />
+      {/* className="flex-col" muda o wrapper do SidebarProvider de flex-row
+          pra flex-col — assim o ShellHeader vira faixa única top-to-end e o
+          sidebar+main viram a flex-row de baixo. Border-line do header não
+          quebra mais no canto, marca Supabase. */}
+      <SidebarProvider
+        className="flex-col"
+        defaultOpen={false}
+        hoverExpand
+      >
         <AlphaChatProvider>
           <PageTitleProvider>
-            {/* Flex container pro reflow do Alpha panel: <main> + <AlphaChatPanel>
-                como flex siblings. AlphaChatPanel anima w-0 → w-96 no desktop;
-                no mobile renderiza Sheet (ignora a flex column).
-                h-svh trava altura ao viewport — main vira scroll container real
-                (overflow-auto so funciona com altura explicita), header sticky
-                gruda no topo de verdade. */}
-            <div className="flex flex-1 h-svh min-w-0">
+            <ShellHeader
+              left={
+                <>
+                  <Link href="/" aria-label="Volund" className="flex items-center">
+                    <Image
+                      src="/volund-logo-V.png"
+                      alt=""
+                      width={24}
+                      height={24}
+                      className="size-6"
+                      priority
+                    />
+                  </Link>
+                  <SidebarTrigger className="size-9" />
+                </>
+              }
+              right={
+                <ShellHeaderTriggerGroup>
+                  {auth.isImpersonating && (
+                    <span className="text-xs font-medium uppercase tracking-wider text-amber-500">
+                      Impersonando · {auth.member?.name}
+                    </span>
+                  )}
+                  <AlphaChatTrigger />
+                </ShellHeaderTriggerGroup>
+              }
+            />
+            <div className="flex flex-1 min-h-0 w-full">
+              <AppSidebar />
               <main className="flex-1 min-w-0 overflow-auto">
-                <ShellHeader
-                  left={<SidebarTrigger className="size-9" />}
-                  right={
-                    <ShellHeaderTriggerGroup>
-                      {auth.isImpersonating && (
-                        <span className="text-xs font-medium uppercase tracking-wider text-amber-500">
-                          Impersonando · {auth.member?.name}
-                        </span>
-                      )}
-                      <AlphaChatTrigger />
-                    </ShellHeaderTriggerGroup>
-                  }
-                />
                 <div className="px-3 py-4 sm:px-4 lg:p-6">{children}</div>
               </main>
               <AlphaChatPanel />
