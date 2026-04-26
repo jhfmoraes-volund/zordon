@@ -3,6 +3,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireMinLevelApi } from "@/lib/dal";
 import { MANAGER } from "@/lib/roles";
 
+const MEETING_SELECT = `
+  *,
+  projectReviews:MeetingProjectReview(
+    *,
+    project:Project(id, name, status),
+    member:Member(id, name),
+    actionItems:MeetingActionItem(
+      *, assignee:Member!MeetingActionItem_assigneeId_fkey(id, name)
+    )
+  ),
+  actionItems:MeetingActionItem(
+    *,
+    assignee:Member!MeetingActionItem_assigneeId_fkey(id, name),
+    sourceReview:MeetingProjectReview(project:Project(name))
+  ),
+  attendees:MeetingAttendee(
+    *, member:Member(id, name)
+  ),
+  projectLinks:MeetingProjectLink(
+    *, project:Project(id, name, status)
+  )
+`;
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -13,59 +36,73 @@ export async function GET(
   const { id } = await params;
   const supabase = db();
 
-  // Sync: add reviews for active projects with PM that are missing
-  const [{ data: activeProjects }, { data: existingReviews }] = await Promise.all([
-    supabase.from("Project").select("id, pmId").eq("status", "active").not("pmId", "is", null),
-    supabase.from("MeetingProjectReview").select("projectId").eq("meetingId", id),
-  ]);
+  // For pm_review meetings, sync any missing project reviews for active projects
+  // whose PM is among the meeting's selected PMs (derived from existing reviews).
+  // We don't auto-add PMs that weren't selected at meeting creation time.
+  const { data: meetingMeta } = await supabase
+    .from("Meeting")
+    .select("id, type")
+    .eq("id", id)
+    .maybeSingle();
 
-  const existingProjectIds = new Set((existingReviews ?? []).map((r) => r.projectId));
-  const missing = (activeProjects ?? []).filter((p) => !existingProjectIds.has(p.id));
-
-  if (missing.length > 0) {
-    const maxOrder = (existingReviews ?? []).length;
-    await supabase
+  if (meetingMeta?.type === "pm_review") {
+    const { data: existingReviews } = await supabase
       .from("MeetingProjectReview")
-      .insert(missing.map((p, i) => ({
-        id: crypto.randomUUID(),
-        meetingId: id,
-        projectId: p.id,
-        memberId: p.pmId!,
-        order: maxOrder + i,
-        updatedAt: new Date().toISOString(),
-      })));
+      .select("projectId, memberId")
+      .eq("meetingId", id);
+
+    const pmIds = Array.from(
+      new Set((existingReviews ?? []).map((r) => r.memberId))
+    );
+
+    if (pmIds.length > 0) {
+      const { data: activeProjects } = await supabase
+        .from("Project")
+        .select("id, pmId")
+        .eq("status", "active")
+        .in("pmId", pmIds);
+
+      const existingProjectIds = new Set(
+        (existingReviews ?? []).map((r) => r.projectId)
+      );
+      const missing = (activeProjects ?? []).filter(
+        (p) => p.pmId && !existingProjectIds.has(p.id)
+      );
+
+      if (missing.length > 0) {
+        const maxOrder = (existingReviews ?? []).length;
+        await supabase
+          .from("MeetingProjectReview")
+          .insert(
+            missing.map((p, i) => ({
+              id: crypto.randomUUID(),
+              meetingId: id,
+              projectId: p.id,
+              memberId: p.pmId!,
+              order: maxOrder + i,
+              updatedAt: new Date().toISOString(),
+            }))
+          );
+      }
+    }
   }
 
   const { data: meeting } = await supabase
-    .from("WeeklyMeeting")
-    .select(`
-      *,
-      projectReviews:MeetingProjectReview(
-        *,
-        project:Project(id, name, status),
-        member:Member(id, name),
-        actionItems:MeetingActionItem(
-          *, assignee:Member!MeetingActionItem_assigneeId_fkey(id, name)
-        )
-      ),
-      actionItems:MeetingActionItem(
-        *,
-        assignee:Member!MeetingActionItem_assigneeId_fkey(id, name),
-        sourceReview:MeetingProjectReview(project:Project(name))
-      )
-    `)
+    .from("Meeting")
+    .select(MEETING_SELECT)
     .eq("id", id)
     .maybeSingle();
 
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Sort reviews by order, actions by createdAt
-  if ((meeting as any).projectReviews) {
-    (meeting as any).projectReviews.sort((a: any, b: any) => a.order - b.order);
+  if ((meeting as { projectReviews?: { order: number }[] }).projectReviews) {
+    (meeting as { projectReviews: { order: number }[] }).projectReviews.sort(
+      (a, b) => a.order - b.order
+    );
   }
-  if ((meeting as any).actionItems) {
-    (meeting as any).actionItems.sort((a: any, b: any) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  if ((meeting as { actionItems?: { createdAt: string }[] }).actionItems) {
+    (meeting as { actionItems: { createdAt: string }[] }).actionItems.sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
   }
 
@@ -82,9 +119,14 @@ export async function PUT(
   const { id } = await params;
   const body = await req.json();
 
+  const patch: { status?: string; notes?: string | null; title?: string | null } = {};
+  if (body.status !== undefined) patch.status = body.status;
+  if (body.notes !== undefined) patch.notes = body.notes;
+  if (body.title !== undefined) patch.title = body.title;
+
   const { data: meeting, error } = await db()
-    .from("WeeklyMeeting")
-    .update({ status: body.status, notes: body.notes })
+    .from("Meeting")
+    .update(patch)
     .eq("id", id)
     .select()
     .single();
@@ -101,7 +143,7 @@ export async function DELETE(
   if (denied) return denied;
 
   const { id } = await params;
-  const { error } = await db().from("WeeklyMeeting").delete().eq("id", id);
+  const { error } = await db().from("Meeting").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

@@ -165,6 +165,93 @@ export type Database = {
           },
         ]
       }
+      AgentUsage: {
+        Row: {
+          agentName: string
+          cachedPromptTokens: number | null
+          completionTokens: number
+          costUsd: number
+          createdAt: string
+          generationId: string | null
+          id: string
+          memberId: string | null
+          modelId: string
+          promptTokens: number
+          rawUsage: Json | null
+          reasoningTokens: number | null
+          threadId: string | null
+          totalTokens: number
+        }
+        Insert: {
+          agentName: string
+          cachedPromptTokens?: number | null
+          completionTokens?: number
+          costUsd?: number
+          createdAt?: string
+          generationId?: string | null
+          id?: string
+          memberId?: string | null
+          modelId: string
+          promptTokens?: number
+          rawUsage?: Json | null
+          reasoningTokens?: number | null
+          threadId?: string | null
+          totalTokens?: number
+        }
+        Update: {
+          agentName?: string
+          cachedPromptTokens?: number | null
+          completionTokens?: number
+          costUsd?: number
+          createdAt?: string
+          generationId?: string | null
+          id?: string
+          memberId?: string | null
+          modelId?: string
+          promptTokens?: number
+          rawUsage?: Json | null
+          reasoningTokens?: number | null
+          threadId?: string | null
+          totalTokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "AgentUsage_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_threadId_fkey"
+            columns: ["threadId"]
+            isOneToOne: false
+            referencedRelation: "ChatThread"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       AgentVersion: {
         Row: {
           agentId: string
@@ -219,6 +306,7 @@ export type Database = {
           createdAt: string
           feedback: number | null
           id: string
+          parts: Json | null
           role: string
           threadId: string
           toolCalls: Json | null
@@ -230,6 +318,7 @@ export type Database = {
           createdAt?: string
           feedback?: number | null
           id?: string
+          parts?: Json | null
           role: string
           threadId: string
           toolCalls?: Json | null
@@ -241,6 +330,7 @@ export type Database = {
           createdAt?: string
           feedback?: number | null
           id?: string
+          parts?: Json | null
           role?: string
           threadId?: string
           toolCalls?: Json | null
@@ -635,6 +725,39 @@ export type Database = {
           },
         ]
       }
+      Meeting: {
+        Row: {
+          createdAt: string
+          date: string
+          id: string
+          notes: string | null
+          status: string
+          title: string | null
+          type: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          date: string
+          id: string
+          notes?: string | null
+          status?: string
+          title?: string | null
+          type?: string
+          updatedAt: string
+        }
+        Update: {
+          createdAt?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          title?: string | null
+          type?: string
+          updatedAt?: string
+        }
+        Relationships: []
+      }
       MeetingActionItem: {
         Row: {
           assigneeId: string
@@ -705,7 +828,7 @@ export type Database = {
             foreignKeyName: "MeetingActionItem_meetingId_fkey"
             columns: ["meetingId"]
             isOneToOne: false
-            referencedRelation: "WeeklyMeeting"
+            referencedRelation: "Meeting"
             referencedColumns: ["id"]
           },
           {
@@ -713,6 +836,108 @@ export type Database = {
             columns: ["sourceReviewId"]
             isOneToOne: false
             referencedRelation: "MeetingProjectReview"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      MeetingAttendee: {
+        Row: {
+          createdAt: string
+          externalEmail: string | null
+          externalName: string | null
+          externalRole: string | null
+          id: string
+          meetingId: string
+          memberId: string | null
+          role: string | null
+        }
+        Insert: {
+          createdAt?: string
+          externalEmail?: string | null
+          externalName?: string | null
+          externalRole?: string | null
+          id?: string
+          meetingId: string
+          memberId?: string | null
+          role?: string | null
+        }
+        Update: {
+          createdAt?: string
+          externalEmail?: string | null
+          externalName?: string | null
+          externalRole?: string | null
+          id?: string
+          meetingId?: string
+          memberId?: string | null
+          role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MeetingAttendee_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingAttendee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingAttendee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingAttendee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingAttendee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      MeetingProjectLink: {
+        Row: {
+          createdAt: string
+          meetingId: string
+          projectId: string
+        }
+        Insert: {
+          createdAt?: string
+          meetingId: string
+          projectId: string
+        }
+        Update: {
+          createdAt?: string
+          meetingId?: string
+          projectId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MeetingProjectLink_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingProjectLink_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
             referencedColumns: ["id"]
           },
         ]
@@ -762,7 +987,7 @@ export type Database = {
             foreignKeyName: "MeetingProjectReview_meetingId_fkey"
             columns: ["meetingId"]
             isOneToOne: false
-            referencedRelation: "WeeklyMeeting"
+            referencedRelation: "Meeting"
             referencedColumns: ["id"]
           },
           {
@@ -805,6 +1030,7 @@ export type Database = {
       Member: {
         Row: {
           createdAt: string
+          dedicationPercent: number
           email: string | null
           fpCapacity: number
           githubUsername: string | null
@@ -812,12 +1038,14 @@ export type Database = {
           isExternal: boolean
           name: string
           role: string
+          seniority: string | null
           specialty: string | null
           updatedAt: string
           userId: string | null
         }
         Insert: {
           createdAt?: string
+          dedicationPercent?: number
           email?: string | null
           fpCapacity?: number
           githubUsername?: string | null
@@ -825,12 +1053,14 @@ export type Database = {
           isExternal?: boolean
           name: string
           role?: string
+          seniority?: string | null
           specialty?: string | null
           updatedAt: string
           userId?: string | null
         }
         Update: {
           createdAt?: string
+          dedicationPercent?: number
           email?: string | null
           fpCapacity?: number
           githubUsername?: string | null
@@ -838,11 +1068,71 @@ export type Database = {
           isExternal?: boolean
           name?: string
           role?: string
+          seniority?: string | null
           specialty?: string | null
           updatedAt?: string
           userId?: string | null
         }
         Relationships: []
+      }
+      MemberAssessment: {
+        Row: {
+          completedAt: string | null
+          goals: string | null
+          lastStepIndex: number
+          memberId: string
+          startedAt: string
+          status: string
+          updatedAt: string
+        }
+        Insert: {
+          completedAt?: string | null
+          goals?: string | null
+          lastStepIndex?: number
+          memberId: string
+          startedAt?: string
+          status?: string
+          updatedAt?: string
+        }
+        Update: {
+          completedAt?: string | null
+          goals?: string | null
+          lastStepIndex?: number
+          memberId?: string
+          startedAt?: string
+          status?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MemberAssessment_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: true
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberAssessment_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: true
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberAssessment_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: true
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberAssessment_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: true
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       MemberIntegration: {
         Row: {
@@ -896,6 +1186,183 @@ export type Database = {
             columns: ["memberId"]
             isOneToOne: false
             referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      MemberPDI: {
+        Row: {
+          createdAt: string
+          cycleEndDate: string
+          cycleStartDate: string
+          id: string
+          memberId: string
+          status: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          cycleEndDate: string
+          cycleStartDate: string
+          id?: string
+          memberId: string
+          status?: string
+          updatedAt?: string
+        }
+        Update: {
+          createdAt?: string
+          cycleEndDate?: string
+          cycleStartDate?: string
+          id?: string
+          memberId?: string
+          status?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MemberPDI_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberPDI_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberPDI_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberPDI_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      MemberSkill: {
+        Row: {
+          cases: string | null
+          createdAt: string
+          id: string
+          memberId: string
+          score: number | null
+          subskills: Json
+          towerKey: string
+          updatedAt: string
+        }
+        Insert: {
+          cases?: string | null
+          createdAt?: string
+          id?: string
+          memberId: string
+          score?: number | null
+          subskills?: Json
+          towerKey: string
+          updatedAt?: string
+        }
+        Update: {
+          cases?: string | null
+          createdAt?: string
+          id?: string
+          memberId?: string
+          score?: number | null
+          subskills?: Json
+          towerKey?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MemberSkill_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberSkill_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberSkill_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberSkill_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      PDIAction: {
+        Row: {
+          completedAt: string | null
+          createdAt: string
+          criterion: string
+          dueAt: string | null
+          how: string | null
+          id: string
+          orderIdx: number
+          pdiId: string
+          status: string
+          title: string
+          towerKey: string | null
+          updatedAt: string
+          why: string | null
+        }
+        Insert: {
+          completedAt?: string | null
+          createdAt?: string
+          criterion: string
+          dueAt?: string | null
+          how?: string | null
+          id?: string
+          orderIdx?: number
+          pdiId: string
+          status?: string
+          title: string
+          towerKey?: string | null
+          updatedAt?: string
+          why?: string | null
+        }
+        Update: {
+          completedAt?: string | null
+          createdAt?: string
+          criterion?: string
+          dueAt?: string | null
+          how?: string | null
+          id?: string
+          orderIdx?: number
+          pdiId?: string
+          status?: string
+          title?: string
+          towerKey?: string | null
+          updatedAt?: string
+          why?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PDIAction_pdiId_fkey"
+            columns: ["pdiId"]
+            isOneToOne: false
+            referencedRelation: "MemberPDI"
             referencedColumns: ["id"]
           },
         ]
@@ -1627,33 +2094,6 @@ export type Database = {
           },
         ]
       }
-      WeeklyMeeting: {
-        Row: {
-          createdAt: string
-          date: string
-          id: string
-          notes: string | null
-          status: string
-          updatedAt: string
-        }
-        Insert: {
-          createdAt?: string
-          date: string
-          id: string
-          notes?: string | null
-          status?: string
-          updatedAt: string
-        }
-        Update: {
-          createdAt?: string
-          date?: string
-          id?: string
-          notes?: string | null
-          status?: string
-          updatedAt?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       client_summary: {
@@ -1870,10 +2310,24 @@ export type Database = {
     }
     Functions: {
       can_access_session: { Args: { p_session_id: string }; Returns: boolean }
-      create_meeting_with_reviews: {
-        Args: { p_carry_actions?: Json; p_date: string; p_reviews: Json }
-        Returns: string
-      }
+      create_meeting_with_reviews:
+        | {
+            Args: {
+              p_attendees?: Json
+              p_carry_actions?: Json
+              p_date: string
+              p_notes?: string
+              p_project_ids?: Json
+              p_reviews?: Json
+              p_title?: string
+              p_type?: string
+            }
+            Returns: string
+          }
+        | {
+            Args: { p_carry_actions?: Json; p_date: string; p_reviews: Json }
+            Returns: string
+          }
       delete_member_integration: {
         Args: { p_member_id: string; p_provider: string }
         Returns: undefined

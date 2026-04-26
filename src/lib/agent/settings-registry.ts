@@ -1,4 +1,4 @@
-import { ZORDON_SETTINGS } from "./agents/zordon/settings";
+import { ALPHA_SETTINGS } from "./agents/alpha/settings";
 import type { SettingsSchema } from "./settings-schema";
 
 /**
@@ -9,7 +9,7 @@ import type { SettingsSchema } from "./settings-schema";
  * Settings tab displays "no tunable parameters".
  */
 export const AGENT_SETTINGS_REGISTRY: Record<string, SettingsSchema> = {
-  ops: ZORDON_SETTINGS,
+  ops: ALPHA_SETTINGS,
   // "design-session": VITOR_SETTINGS,  (adicionar quando o Vitor for tunável)
 };
 

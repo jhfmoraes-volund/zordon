@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { buildSessionContext } from "@/lib/task-generator";
-import type { ModelMessage } from "ai";
+import type { ModelMessage, UIMessage } from "ai";
 import type { Json } from "@/lib/supabase/database.types";
 
 type SupabaseJson = Json;
@@ -92,19 +92,37 @@ export async function persistUserMessage(
 }
 
 /**
- * Persists an assistant message (with optional tool actions) to the ChatMessage table.
+ * Persists an assistant message to the ChatMessage table.
+ * `parts` stores the full UIMessage parts array (text + tool calls + reasoning),
+ * letting the client rebuild visual chips (tools running, results, etc.) on reload.
+ * `content` keeps the plain text for back-compat and prompt-history reconstruction.
  */
 export async function persistAssistantMessage(
   threadId: string,
   content: string,
-  actions?: unknown
+  parts?: unknown
 ): Promise<void> {
   await db().from("ChatMessage").insert({
     threadId,
     role: "assistant",
     content,
-    actions: (actions as SupabaseJson) || null,
+    parts: (parts as SupabaseJson) ?? null,
   });
+}
+
+/**
+ * onFinish callback factory for `result.toUIMessageStreamResponse`.
+ * Persists the full UIMessage (text + tool parts) once the assistant stream
+ * completes, so chat history can be rebuilt with chips intact on reload.
+ */
+export function persistResponseMessage(threadId: string) {
+  return async ({ responseMessage }: { responseMessage: UIMessage }) => {
+    const text = responseMessage.parts
+      .filter((p): p is Extract<UIMessage["parts"][number], { type: "text" }> => p.type === "text")
+      .map((p) => p.text)
+      .join("\n");
+    await persistAssistantMessage(threadId, text, responseMessage.parts);
+  };
 }
 
 /**
@@ -146,19 +164,21 @@ export async function ensureThread(
 }
 
 /**
- * Ensures a thread exists for a standalone agent (no DesignSession).
- * Uses agentName + channel as the unique key.
+ * Ensures a thread exists for a standalone agent (no DesignSession),
+ * scoped to a specific member so each user keeps a private history.
+ * Uses agentName + channel + createdBy as the unique key.
  */
 export async function ensureAgentThread(
   agentName: string,
   channel: "web" | "telegram" | "trigger",
-  createdBy?: string
+  createdBy: string
 ): Promise<string> {
   const { data: existing } = await db()
     .from("ChatThread")
     .select("id")
     .eq("agentName", agentName)
     .eq("channel", channel)
+    .eq("createdBy", createdBy)
     .order("createdAt", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -170,7 +190,7 @@ export async function ensureAgentThread(
     .insert({
       agentName,
       channel,
-      createdBy: createdBy || null,
+      createdBy,
     })
     .select("id")
     .single();

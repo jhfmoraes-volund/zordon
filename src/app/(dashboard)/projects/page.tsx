@@ -12,12 +12,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Trash2, Users, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Pencil, Trash2, Users, ChevronDown, ChevronRight, MoreVertical, ListChecks } from "lucide-react";
 import { roleLabel } from "@/lib/roles";
 
 type ProjectMemberAlloc = {
@@ -52,6 +63,81 @@ const statusColors: Record<string, string> = {
   completed: "bg-blue-100 text-blue-800",
   archived: "bg-gray-100 text-gray-800",
 };
+
+function ProjectCardMobile({
+  p,
+  onEdit,
+  onDelete,
+}: {
+  p: Project;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const fmtDate = (d: string | null) =>
+    d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "–";
+
+  return (
+    <Link
+      href={`/projects/${p.id}`}
+      className="surface block p-4 space-y-3 relative active:bg-accent/40 transition-colors"
+    >
+      {/* Menu 3-dots — absolute, stops propagation */}
+      <div
+        className="absolute top-2 right-2"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon" className="h-9 w-9" />}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onEdit}>
+              <Pencil className="h-3.5 w-3.5 mr-2" />
+              Editar
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+              <Trash2 className="h-3.5 w-3.5 mr-2" />
+              Excluir
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Header: name + client */}
+      <div className="pr-10 space-y-0.5">
+        <h3 className="font-medium text-base leading-tight truncate">{p.name}</h3>
+        <p className="text-xs text-muted-foreground truncate">{p.client.name}</p>
+      </div>
+
+      {/* Badges row: status + período */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="secondary" className={statusColors[p.status]}>
+          {p.status}
+        </Badge>
+        <span className="text-muted-foreground tabular-nums">
+          {fmtDate(p.startDate)} → {fmtDate(p.endDate)}
+        </span>
+      </div>
+
+      {/* Stats row */}
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <Users className="h-3.5 w-3.5" />
+          {p.projectMembers.length} {p.projectMembers.length === 1 ? "membro" : "membros"}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <ListChecks className="h-3.5 w-3.5" />
+          {p.taskCount} {p.taskCount === 1 ? "task" : "tasks"}
+        </span>
+      </div>
+    </Link>
+  );
+}
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -199,7 +285,25 @@ export default function ProjectsPage() {
     <div className="space-y-6">
       <PageHeader title="Projetos" onAdd={openNew} addLabel="Novo Projeto" />
 
-      <div className="surface">
+      {/* Mobile: cards */}
+      <div className="md:hidden space-y-3">
+        {projects.map((p) => (
+          <ProjectCardMobile
+            key={p.id}
+            p={p}
+            onEdit={() => openEdit(p)}
+            onDelete={() => remove(p.id)}
+          />
+        ))}
+        {projects.length === 0 && (
+          <div className="surface p-8 text-center text-muted-foreground text-sm">
+            Nenhum projeto cadastrado.
+          </div>
+        )}
+      </div>
+
+      {/* Desktop: tabela */}
+      <div className="surface hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -293,12 +397,12 @@ export default function ProjectsPage() {
         </Table>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Projeto" : "Novo Projeto"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
+      <ResponsiveDialog open={open} onOpenChange={setOpen}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>{editing ? "Editar Projeto" : "Novo Projeto"}</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Cliente</Label>
               <Select value={form.clientId} onValueChange={(v) => v && setForm({ ...form, clientId: v })}>
@@ -373,7 +477,7 @@ export default function ProjectsPage() {
               <Label>Repo URL</Label>
               <Input value={form.repoUrl} onChange={(e) => setForm({ ...form, repoUrl: e.target.value })} placeholder="https://github.com/..." />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label>GitHub Owner</Label>
                 <Input value={form.githubRepoOwner} onChange={(e) => setForm({ ...form, githubRepoOwner: e.target.value })} placeholder="org-name" />
@@ -387,7 +491,7 @@ export default function ProjectsPage() {
                 <Input value={form.githubDefaultBranch} onChange={(e) => setForm({ ...form, githubDefaultBranch: e.target.value })} placeholder="main" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Data Início</Label>
                 <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
@@ -409,13 +513,13 @@ export default function ProjectsPage() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button onClick={save} disabled={!form.name || !form.clientId}>Salvar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }

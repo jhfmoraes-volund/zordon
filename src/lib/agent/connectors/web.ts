@@ -1,7 +1,11 @@
 import { getUser } from "@/lib/dal";
 import { db } from "@/lib/db";
 import { runAgent } from "../engine";
-import { ensureThread, persistUserMessage } from "../context";
+import {
+  ensureThread,
+  persistResponseMessage,
+  persistUserMessage,
+} from "../context";
 import { getCurrentMember } from "@/lib/dal";
 import { vitorAgent } from "../agents/vitor";
 import type { Capabilities } from "../types";
@@ -98,11 +102,14 @@ export const webConnector = {
       thread: { id: threadId },
       capabilities,
       userMessage: message,
+      memberId: member?.id ?? null,
       params: { sessionId, currentStepKey },
     });
 
     // Transport: UI message stream for DefaultChatTransport (AI SDK v6)
-    const response = result.streamText.toUIMessageStreamResponse();
+    const response = result.streamText.toUIMessageStreamResponse({
+      onFinish: persistResponseMessage(threadId),
+    });
 
     // Attach thread ID header so the client knows which thread was used
     const headers = new Headers(response.headers);

@@ -185,7 +185,7 @@ export const workflowSections: WorkflowSection[] = [
         rows: [
           ["Duracao", "15 dias fixos (2 semanas uteis)"],
           ["Pertence a", "1 projeto"],
-          ["Nomenclatura", "\"Sprint N — Tema\" (ex: Sprint 1 — Fundacao)"],
+          ["Nomenclatura", "\"Sprint N\" (ex: Sprint 1, Sprint 2). Sem tema/sufixo."],
           ["Distribuicao", "Por dependencias → capacity → prioridade → due date"],
           ["Board", "Kanban com 8 colunas e drag-and-drop"],
           ["Meta", "FP planejados vs entregues (velocity)"],

@@ -5,8 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -163,12 +168,12 @@ export function SprintDialog({
   const canSave = !saving && (editing ? !!form.name : (hasProjectSelector ? !!form.projectId : true));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editing ? "Editar Sprint" : "Novo Sprint"}</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>{editing ? "Editar Sprint" : "Novo Sprint"}</ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody className="grid gap-4 py-4">
           {hasProjectSelector && (
             <div className="grid gap-2">
               <Label>Projeto</Label>
@@ -216,12 +221,12 @@ export function SprintDialog({
               </SelectContent>
             </Select>
           </div>
-        </div>
-        <div className="flex justify-end gap-2">
+        </ResponsiveDialogBody>
+        <ResponsiveDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleSave} disabled={!canSave}>{saving ? "Salvando..." : "Salvar"}</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

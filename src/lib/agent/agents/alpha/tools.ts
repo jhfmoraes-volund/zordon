@@ -5,17 +5,21 @@ import { suggestFunctionPoints, ACTIVE_STATUSES } from "@/lib/function-points";
 import { TASK_STATUSES, TASK_TYPES, SCOPES, COMPLEXITIES } from "@/lib/task-constants";
 import { RoamClient, cuesToText } from "@/lib/roam";
 import { loadAgentHeuristic, loadFpMatrix } from "../../config";
-import { ZORDON_AGENT_ID } from "./context";
+import { ALPHA_AGENT_ID } from "./context";
 import type { Capabilities } from "../../types";
 
 /**
- * Assembles Zordon's native tools.
+ * Assembles Alpha's native tools.
  * Composio tools are merged separately by the agent definition.
  */
-export function assembleZordonTools(capabilities: Capabilities): ToolSet {
+export function assembleAlphaTools(
+  capabilities: Capabilities,
+  opts: { activeMeetingId?: string } = {},
+): ToolSet {
   const supabase = db();
   const tools: ToolSet = {};
   const roamToken = capabilities.roamToken;
+  const activeMeetingId = opts.activeMeetingId;
   const NO_ROAM_TOKEN =
     "Roam nao conectado. Peca ao PM para conectar em Configuracoes > Integracoes.";
 
@@ -322,7 +326,7 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
       name: z.string().describe("Nome/slug da heurística (ex: 'sprint-composicao')"),
     }),
     execute: async ({ name }) => {
-      const heuristic = await loadAgentHeuristic(ZORDON_AGENT_ID, name);
+      const heuristic = await loadAgentHeuristic(ALPHA_AGENT_ID, name);
       if (!heuristic) {
         return { error: `Heurística "${name}" não encontrada ou inativa.` };
       }
@@ -337,7 +341,7 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
       description:
         "Cria um novo sprint vinculado a um projeto. Retorna o sprint criado com estatisticas zeradas.",
       inputSchema: z.object({
-        name: z.string().min(1).describe("Nome do sprint (ex: Sprint 4 — Consolidação)"),
+        name: z.string().min(1).describe("Nome do sprint no formato 'Sprint N' onde N é o número sequencial (ex: 'Sprint 4'). Não adicionar tema/sufixo a menos que o usuário peça explicitamente."),
         projectName: z.string().describe("Nome do projeto (busca por nome parcial)"),
         startDate: z.string().describe("Data de inicio no formato YYYY-MM-DD"),
         endDate: z.string().describe("Data de fim no formato YYYY-MM-DD"),
@@ -392,7 +396,7 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
         assigneeName: z.string().optional().describe("Nome do membro para atribuir"),
       }),
       execute: async ({ title, description, type, scope, complexity, projectId, sprintId, assigneeName }) => {
-        const matrix = await loadFpMatrix(ZORDON_AGENT_ID);
+        const matrix = await loadFpMatrix(ALPHA_AGENT_ID);
         const fp = suggestFunctionPoints(scope, complexity, matrix);
 
         // Resolve sprint/project
@@ -572,7 +576,7 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
 
         if (!task) return { error: `Task "${taskReference}" nao encontrada.` };
 
-        const matrix = await loadFpMatrix(ZORDON_AGENT_ID);
+        const matrix = await loadFpMatrix(ALPHA_AGENT_ID);
         const newFP = suggestFunctionPoints(scope, complexity, matrix);
 
         const { error } = await supabase
@@ -869,25 +873,35 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
 
   tools.get_recent_meetings = tool({
     description:
-      "Lista reunioes recentes — combina dados internos (WeeklyMeeting com reviews e acoes) e transcricoes do Roam. Use para contexto de reunioes passadas, acoes pendentes, ou preparar pauta.",
+      "Lista reuniões candidatas — combina dados internos (Meeting, type=pm_review|general) e transcrições do Roam. Use SEMPRE como primeira fase pra apresentar candidatas ao usuário; só busque transcrição completa depois que o usuário confirmar QUAL reunião quer.",
     inputSchema: z.object({
-      days: z.number().int().min(1).max(90).default(14).describe("Quantos dias para tras buscar (padrao: 14)"),
+      days: z.number().int().min(1).max(90).default(14).describe("Janela em dias contados pra trás a partir de hoje (ignorado se 'date' for passado)"),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Filtra por uma data específica YYYY-MM-DD (sobrepõe 'days')"),
+      participant: z.string().optional().describe("Filtra Roam por nome parcial de participante (case-insensitive)"),
     }),
-    execute: async ({ days }) => {
-      const since = new Date();
-      since.setDate(since.getDate() - days);
+    execute: async ({ days, date, participant }) => {
+      let since: Date;
+      let until: Date | null = null;
+      if (date) {
+        since = new Date(`${date}T00:00:00`);
+        until = new Date(`${date}T23:59:59.999`);
+      } else {
+        since = new Date();
+        since.setDate(since.getDate() - days);
+      }
       const sinceISO = since.toISOString().split("T")[0];
+      const untilISO = until ? until.toISOString().split("T")[0] : null;
 
       // Internal meetings
-      const { data: meetings } = await supabase
-        .from("WeeklyMeeting")
+      let intQuery = supabase
+        .from("Meeting")
         .select("id, date, status, notes")
         .gte("date", sinceISO)
         .order("date", { ascending: false });
+      if (untilISO) intQuery = intQuery.lte("date", untilISO);
+      const { data: meetings } = await intQuery;
 
       const meetingList = meetings || [];
-
-      // Load reviews and actions for each meeting
       const enriched = await Promise.all(
         meetingList.map(async (m) => {
           const [{ data: reviews }, { data: actions }] = await Promise.all([
@@ -904,29 +918,51 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
         })
       );
 
-      // Roam transcripts (if the PM has connected their account)
-      let roamTranscripts: Array<{ id: string; date: string; title: string; participants: string[]; hasSummary: boolean }> = [];
+      // Roam transcripts (paginated DESC; stops when items fall below `since`)
+      let roamTranscripts: Array<{
+        id: string;
+        date: string;
+        title: string;
+        participants: string[];
+      }> = [];
+      let roamError: string | null = null;
       if (roamToken) {
         try {
           const roam = new RoamClient(roamToken);
-          const { transcripts } = await roam.listTranscripts({ after: sinceISO, limit: 20 });
+          const transcripts = await roam.listTranscriptsInRange({
+            since: since.toISOString(),
+            until: until ? until.toISOString() : undefined,
+            max: 50,
+          });
           roamTranscripts = transcripts.map((t) => ({
             id: t.id,
             date: t.start,
-            title: t.eventName || "Sem titulo",
+            title: t.eventName || "Sem título",
             participants: t.participants.map((p) => p.name),
-            hasSummary: true,
           }));
-        } catch {
-          // Token call failed — continue without Roam data
+          if (participant) {
+            const needle = participant.toLowerCase();
+            roamTranscripts = roamTranscripts.filter((t) =>
+              t.participants.some((p) => p.toLowerCase().includes(needle))
+            );
+          }
+        } catch (err) {
+          roamError = (err as Error).message;
         }
       }
 
       return {
+        filter: {
+          date: date ?? null,
+          days: date ? null : days,
+          participant: participant ?? null,
+        },
         internalMeetings: enriched,
         roamTranscripts,
         totalInternal: enriched.length,
         totalRoam: roamTranscripts.length,
+        ...(roamError ? { roamError } : {}),
+        ...(roamToken ? {} : { roamNotConnected: true }),
       };
     },
   });
@@ -986,6 +1022,181 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
     },
   });
 
+  tools.get_meeting_reviews = tool({
+    description:
+      "Lista as revisões de projeto de uma reunião (MeetingProjectReview) agrupadas por PM. Retorna os campos atuais (nextSteps, sprintHealth, attentionPoints, additionalNotes) pra que você saiba o que ainda falta preencher. Se meetingId for omitido, usa a reunião do contexto.",
+    inputSchema: z.object({
+      meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
+    }),
+    execute: async ({ meetingId }) => {
+      const targetId = meetingId || activeMeetingId;
+      if (!targetId) return { error: "Nenhuma reunião no contexto. Informe meetingId." };
+
+      const { data: meeting } = await supabase
+        .from("Meeting")
+        .select("id, date, status")
+        .eq("id", targetId)
+        .maybeSingle();
+      if (!meeting) return { error: `Reunião "${targetId}" não encontrada.` };
+
+      const { data: reviews } = await supabase
+        .from("MeetingProjectReview")
+        .select("id, nextSteps, sprintHealth, attentionPoints, additionalNotes, order, project:Project(id, name, status), member:Member(id, name)")
+        .eq("meetingId", targetId)
+        .order("order", { ascending: true });
+
+      const reviewList = reviews || [];
+      const byPm: Record<string, { pmId: string; pmName: string; projects: Array<Record<string, unknown>> }> = {};
+
+      for (const r of reviewList) {
+        const pm = r.member as { id: string; name: string } | null;
+        if (!pm) continue;
+        const proj = r.project as { id: string; name: string; status: string } | null;
+        if (!byPm[pm.id]) byPm[pm.id] = { pmId: pm.id, pmName: pm.name, projects: [] };
+        byPm[pm.id].projects.push({
+          reviewId: r.id,
+          projectName: proj?.name || "?",
+          projectStatus: proj?.status || "?",
+          sprintHealth: r.sprintHealth,
+          nextSteps: r.nextSteps,
+          attentionPoints: r.attentionPoints,
+          additionalNotes: r.additionalNotes,
+        });
+      }
+
+      return {
+        meeting: { id: meeting.id, date: meeting.date, status: meeting.status },
+        pmCount: Object.keys(byPm).length,
+        reviewCount: reviewList.length,
+        byPm: Object.values(byPm),
+      };
+    },
+  });
+
+  if (capabilities.writeTools) {
+    tools.update_meeting_review = tool({
+      description:
+        "Atualiza (parcialmente) os campos de uma revisão de projeto numa reunião. Busca a revisão pelo nome do projeto dentro da reunião. Só passe os campos que quiser mudar — os omitidos são preservados.",
+      inputSchema: z.object({
+        meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
+        projectName: z.string().describe("Nome parcial do projeto (case-insensitive)"),
+        sprintHealth: z.enum(["healthy", "attention", "critical"]).optional().describe("Saúde do sprint"),
+        nextSteps: z.string().optional().describe("Próximos passos do projeto"),
+        attentionPoints: z.string().optional().describe("Riscos, bloqueios, preocupações"),
+        additionalNotes: z.string().optional().describe("OBS — observações adicionais"),
+      }),
+      execute: async ({ meetingId, projectName, sprintHealth, nextSteps, attentionPoints, additionalNotes }) => {
+        const targetId = meetingId || activeMeetingId;
+        if (!targetId) return { error: "Nenhuma reunião no contexto. Informe meetingId." };
+
+        const { data: matches } = await supabase
+          .from("MeetingProjectReview")
+          .select("id, project:Project!inner(id, name), member:Member(name)")
+          .eq("meetingId", targetId)
+          .ilike("project.name", `%${projectName}%`)
+          .limit(2);
+
+        const list = matches || [];
+        if (list.length === 0) {
+          return { error: `Nenhuma revisão encontrada para projeto "${projectName}" na reunião.` };
+        }
+        if (list.length > 1) {
+          return {
+            error: `Mais de um projeto bate com "${projectName}": ${list.map((r) => (r.project as { name: string } | null)?.name).join(", ")}. Seja mais específico.`,
+          };
+        }
+
+        const review = list[0];
+        const patch: {
+          sprintHealth?: string;
+          nextSteps?: string | null;
+          attentionPoints?: string | null;
+          additionalNotes?: string | null;
+        } = {};
+        if (sprintHealth !== undefined) patch.sprintHealth = sprintHealth;
+        if (nextSteps !== undefined) patch.nextSteps = nextSteps;
+        if (attentionPoints !== undefined) patch.attentionPoints = attentionPoints;
+        if (additionalNotes !== undefined) patch.additionalNotes = additionalNotes;
+
+        if (Object.keys(patch).length === 0) {
+          return { error: "Nada para atualizar — passe pelo menos um campo." };
+        }
+
+        const { error } = await supabase
+          .from("MeetingProjectReview")
+          .update(patch)
+          .eq("id", review.id);
+        if (error) return { error: `Erro ao atualizar revisão: ${error.message}` };
+
+        return {
+          updated: true,
+          project: (review.project as { name: string } | null)?.name,
+          pm: (review.member as { name: string } | null)?.name,
+          fields: Object.keys(patch),
+        };
+      },
+    });
+
+    tools.create_meeting_action = tool({
+      description:
+        "Cria uma ação (MeetingActionItem) numa reunião, opcionalmente vinculada a uma revisão de projeto. Use para registrar tarefas acordadas durante a revisão por PM.",
+      inputSchema: z.object({
+        meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
+        description: z.string().min(1).describe("O que precisa ser feito"),
+        assigneeName: z.string().describe("Nome parcial do responsável"),
+        dueDate: z.string().optional().describe("Prazo em YYYY-MM-DD (opcional)"),
+        projectName: z.string().optional().describe("Nome parcial do projeto pra vincular à revisão correspondente (opcional)"),
+      }),
+      execute: async ({ meetingId, description, assigneeName, dueDate, projectName }) => {
+        const targetId = meetingId || activeMeetingId;
+        if (!targetId) return { error: "Nenhuma reunião no contexto. Informe meetingId." };
+
+        const { data: member } = await supabase
+          .from("Member")
+          .select("id, name")
+          .ilike("name", `%${assigneeName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!member) return { error: `Membro "${assigneeName}" não encontrado.` };
+
+        let sourceReviewId: string | null = null;
+        if (projectName) {
+          const { data: review } = await supabase
+            .from("MeetingProjectReview")
+            .select("id, project:Project!inner(name)")
+            .eq("meetingId", targetId)
+            .ilike("project.name", `%${projectName}%`)
+            .limit(1)
+            .maybeSingle();
+          if (review) sourceReviewId = review.id;
+        }
+
+        const { data: action, error } = await supabase
+          .from("MeetingActionItem")
+          .insert({
+            id: crypto.randomUUID(),
+            meetingId: targetId,
+            description,
+            assigneeId: member.id,
+            dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+            status: "todo",
+            sourceReviewId,
+            updatedAt: new Date().toISOString(),
+          })
+          .select("id, description, status, dueDate")
+          .single();
+        if (error) return { error: `Erro ao criar ação: ${error.message}` };
+
+        return {
+          created: true,
+          action,
+          assignee: member.name,
+          linkedToProject: projectName && sourceReviewId ? projectName : null,
+        };
+      },
+    });
+  }
+
   tools.get_pending_actions = tool({
     description:
       "Lista acoes de reunioes que ainda nao foram resolvidas. Cruza MeetingActionItem com status pendente. Use para cobrar acoes ou preparar pauta da proxima reuniao.",
@@ -993,7 +1204,7 @@ export function assembleZordonTools(capabilities: Capabilities): ToolSet {
     execute: async () => {
       const { data: actions } = await supabase
         .from("MeetingActionItem")
-        .select("description, status, dueDate, assignee:Member(name), meeting:WeeklyMeeting(date)")
+        .select("description, status, dueDate, assignee:Member(name), meeting:Meeting(date)")
         .neq("status", "resolved")
         .order("dueDate", { ascending: true });
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PixelBar } from "@/components/ui/pixel-bar";
 import { Zap, KanbanSquare, ChevronDown, ChevronRight } from "lucide-react";
 
 type SprintMember = {
@@ -28,13 +29,6 @@ type SprintData = {
   fpDone: number;
   members: SprintMember[];
 };
-
-function usageColor(pct: number) {
-  if (pct <= 0.5) return "bg-green-500";
-  if (pct <= 0.7) return "bg-blue-500";
-  if (pct <= 0.85) return "bg-yellow-500";
-  return "bg-red-500";
-}
 
 const fmt = (d: string | Date) =>
   new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
@@ -64,7 +58,7 @@ export function SprintOverviewWidget({ sprints }: { sprints: SprintData[] }) {
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
               {projectName}
             </p>
-            <div className="space-y-1.5">
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 snap-x snap-mandatory scrollbar-none md:block md:space-y-1.5 md:overflow-visible md:m-0 md:p-0">
               {projectSprints.map((s) => (
                 <SprintRow key={s.id} sprint={s} />
               ))}
@@ -80,7 +74,7 @@ function SprintRow({ sprint: s }: { sprint: SprintData }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="surface-inset overflow-hidden">
+    <div className="surface-inset overflow-hidden min-w-[420px] shrink-0 snap-start md:min-w-0">
       {/* Header row */}
       <div className="flex items-center gap-3 p-3">
         {/* Expand toggle */}
@@ -110,13 +104,10 @@ function SprintRow({ sprint: s }: { sprint: SprintData }) {
 
         {/* Progress */}
         <div className="flex items-center gap-2 w-32 shrink-0">
-          <div className="h-1.5 flex-1 rounded-full bg-secondary overflow-hidden">
-            <div
-              className={`h-full rounded-full ${s.percent === 100 ? "bg-green-500" : "bg-primary"}`}
-              style={{ width: `${s.percent}%` }}
-            />
+          <div className="flex-1">
+            <PixelBar score={s.percent} cells={16} height={8} variant="skill" />
           </div>
-          <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
+          <span className="font-mono text-[10px] tabular-nums text-muted-foreground leading-none">
             {s.done}/{s.total}
           </span>
         </div>
@@ -126,9 +117,9 @@ function SprintRow({ sprint: s }: { sprint: SprintData }) {
           <p className="text-[10px] text-muted-foreground">FP</p>
         </div>
 
-        <Link href={`/sprints/${s.id}/board`}>
-          <Button variant="outline" size="sm" className="h-7 text-xs shrink-0">
-            <KanbanSquare className="h-3.5 w-3.5 mr-1" /> Board
+        <Link href={`/sprints/${s.id}/board`} aria-label="Abrir board">
+          <Button variant="outline" size="sm" className="h-7 w-7 p-0 shrink-0">
+            <KanbanSquare className="h-3.5 w-3.5" />
           </Button>
         </Link>
       </div>
@@ -137,21 +128,18 @@ function SprintRow({ sprint: s }: { sprint: SprintData }) {
       {expanded && s.members.length > 0 && (
         <div className="border-t border-foreground/5 px-4 py-2.5 space-y-1.5">
           {s.members.map((m) => {
-            const pct = m.fpCapacity > 0 ? m.fpAllocated / m.fpCapacity : 0;
+            const pct = m.fpCapacity > 0 ? (m.fpAllocated / m.fpCapacity) * 100 : 0;
             return (
               <div key={m.id} className="flex items-center gap-2">
                 <span className="text-xs w-28 truncate">{m.name}</span>
-                <div className="h-1.5 flex-1 rounded-full bg-secondary overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${usageColor(pct)}`}
-                    style={{ width: `${Math.min(pct * 100, 100)}%` }}
-                  />
+                <div className="flex-1">
+                  <PixelBar score={Math.min(pct, 100)} cells={14} height={8} variant="load" />
                 </div>
-                <span className="text-[10px] tabular-nums text-muted-foreground w-14 text-right">
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground w-14 text-right leading-none">
                   {m.fpAllocated}/{m.fpCapacity}
                 </span>
-                <span className="text-[10px] tabular-nums font-medium w-8 text-right">
-                  {Math.round(pct * 100)}%
+                <span className="font-mono text-[10px] tabular-nums font-medium w-8 text-right leading-none">
+                  {Math.round(pct)}%
                 </span>
               </div>
             );

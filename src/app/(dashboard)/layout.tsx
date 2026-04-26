@@ -59,14 +59,14 @@ export default async function DashboardLayout({
         <AppSidebar />
         <main className="flex-1 overflow-auto">
           <div className="flex items-center gap-2 border-b border-border/50 px-6 py-3">
-            <SidebarTrigger />
+            <SidebarTrigger className="h-10 w-10" />
             {auth.isImpersonating && (
               <span className="text-xs text-amber-500 font-medium uppercase tracking-wider">
                 Impersonando · {auth.member?.name}
               </span>
             )}
           </div>
-          <div className="p-6">{children}</div>
+          <div className="px-3 py-4 sm:px-4 lg:p-6">{children}</div>
         </main>
       </SidebarProvider>
     </AuthProvider>

@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-heading: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -169,4 +169,37 @@
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* Safe-area utilities (iOS notch / home indicator) */
+@layer utilities {
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pl-safe { padding-left: env(safe-area-inset-left); }
+  .pr-safe { padding-right: env(safe-area-inset-right); }
+  .mt-safe { margin-top: env(safe-area-inset-top); }
+  .mb-safe { margin-bottom: env(safe-area-inset-bottom); }
+  .h-screen-safe { height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+
+  /* Scroll-strip pattern: horizontal swipe of homogeneous cards on mobile */
+  .scroll-strip {
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-inline: -0.75rem;
+    padding-inline: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+  .scroll-strip::-webkit-scrollbar { display: none; }
+  .scroll-strip-item {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+
+  /* Hide scrollbar but allow scroll (for tab strips, etc) */
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 }

@@ -28,6 +28,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
 
   const tabs = [
     { href: `/agents/${slug}/settings`, label: "Parâmetros" },
+    { href: `/agents/${slug}/usage`, label: "Custos" },
     { href: `/agents/${slug}/heuristics`, label: "Playbooks", disabled: true },
     { href: `/agents/${slug}/versions`, label: "Versões", disabled: true },
   ];
@@ -61,15 +62,15 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
 
       {/* Tabs */}
       <nav className="border-b border-border">
-        <ul className="flex gap-1">
+        <ul className="flex gap-1 overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
           {tabs.map((t) => {
             const isActive = pathname === t.href;
-            const base = "inline-block px-4 py-2 text-sm border-b-2 transition-colors";
+            const base = "inline-block px-4 py-2 text-sm border-b-2 transition-colors whitespace-nowrap shrink-0";
             const active = "border-primary text-foreground font-medium";
             const inactive = "border-transparent text-muted-foreground hover:text-foreground";
             const disabled = "border-transparent text-muted-foreground/40 cursor-not-allowed";
             return (
-              <li key={t.href}>
+              <li key={t.href} className="shrink-0">
                 {t.disabled ? (
                   <span className={`${base} ${disabled}`} title="Em breve">
                     {t.label}

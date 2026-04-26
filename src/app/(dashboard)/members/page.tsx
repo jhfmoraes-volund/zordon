@@ -11,13 +11,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Wand2, Copy, Gauge } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Wand2, Copy, Gauge, Sparkles, MoreVertical } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -26,6 +37,8 @@ import {
   SPECIALTIES, SPECIALTY_LABELS, specialtyLabel,
   type Role, type Specialty,
 } from "@/lib/roles";
+import { SkillProfileSheet } from "@/components/skill-assessment/skill-profile-sheet";
+import { PixelBar, pixelTone } from "@/components/ui/pixel-bar";
 
 function generatePassword(length = 14): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -45,18 +58,8 @@ type Member = {
   githubUsername: string | null;
   isExternal: boolean;
   fpCapacity: number;
-  fpAllocated: number;
-  _count: { squadMemberships: number; taskAssignments: number };
-};
-
-/** Row from the member_capacity_overview Postgres view */
-type CapacityOverviewRow = {
-  id: string;
-  name: string;
-  role: string;
-  fp_capacity: number;
-  fp_allocated: number;
-  active_task_count: number;
+  /** Soma de FP em uso nas sprints que rodam na semana atual. */
+  fpUsedWeek: number;
 };
 
 const roleDetails: Record<string, {
@@ -204,16 +207,104 @@ const specialtyDetails: Record<string, {
   },
 };
 
-function usageColor(usage: number) {
-  if (usage <= 0.7) return "bg-green-500";
-  if (usage <= 0.9) return "bg-yellow-500";
-  return "bg-red-500";
-}
+function MemberCardMobile({
+  m,
+  isAdmin,
+  onOpenSkills,
+  onEdit,
+  onDelete,
+}: {
+  m: Member;
+  isAdmin: boolean;
+  onOpenSkills: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const usage = m.fpCapacity > 0 ? m.fpUsedWeek / m.fpCapacity : 0;
+  const pct = Math.min(usage * 100, 999);
+  const tone = pixelTone(pct, "load");
 
-function usageBadgeVariant(usage: number): "default" | "secondary" | "destructive" {
-  if (usage <= 0.7) return "secondary";
-  if (usage <= 0.9) return "default";
-  return "destructive";
+  return (
+    <Link
+      href={`/members/${m.id}`}
+      className="surface block p-4 space-y-3 relative active:bg-accent/40 transition-colors"
+    >
+      {/* Menu 3-dots — absolute, stops propagation */}
+      <div
+        className="absolute top-2 right-2"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon" className="h-9 w-9" />}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onOpenSkills}>
+              <Sparkles className="h-3.5 w-3.5 mr-2" />
+              Perfil de skills
+            </DropdownMenuItem>
+            {isAdmin && (
+              <>
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil className="h-3.5 w-3.5 mr-2" />
+                  Editar
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />
+                  Excluir
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Header: nome + badges */}
+      <div className="pr-10 space-y-1.5">
+        <h3 className="font-medium text-base leading-tight truncate">{m.name}</h3>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px]">{roleLabel(m.role)}</Badge>
+          {m.specialty && (
+            <Badge variant="secondary" className="text-[10px]">
+              {specialtyLabel(m.specialty)}
+            </Badge>
+          )}
+          {m.isExternal && (
+            <Badge variant="outline" className="text-[10px] border-orange-400 text-orange-500">
+              Externo
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Bateria de capacidade full-width */}
+      <div className="space-y-1">
+        <PixelBar score={pct} cells={10} height={10} variant="load" />
+        <div className="flex items-center justify-between leading-none">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+            Carga da semana
+          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className="font-mono text-sm tabular-nums leading-none"
+              style={{ color: tone.fg }}
+            >
+              {Math.round(pct)}%
+            </span>
+            <span className="font-mono text-xs tabular-nums leading-none text-muted-foreground/70">
+              {m.fpUsedWeek}/{m.fpCapacity}
+              <span className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase ml-1">FP</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export default function MembersPage() {
@@ -228,44 +319,50 @@ export default function MembersPage() {
   });
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [skillSheetMemberId, setSkillSheetMemberId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createClient();
+    const today = new Date().toISOString().slice(0, 10);
 
-    const [membersRes, capacityRes, squadsRes] = await Promise.all([
+    // Sprints rodando hoje → membros que participam delas → soma de fp_used.
+    const [membersRes, activeSprintsRes] = await Promise.all([
       supabase.from("Member").select("*").order("name"),
-      supabase.from("member_capacity_overview").select("*"),
-      supabase.from("SquadMember").select("memberId"),
+      supabase
+        .from("Sprint")
+        .select("id")
+        .lte("startDate", today)
+        .gte("endDate", today),
     ]);
 
-    const memberRows = membersRes.data ?? [];
-    const capacityRows = (capacityRes.data ?? []) as unknown as CapacityOverviewRow[];
-    const squadRows = squadsRes.data ?? [];
+    const activeSprintIds = (activeSprintsRes.data ?? []).map((s) => s.id);
 
-    const capMap = new Map(capacityRows.map((c) => [c.id, c]));
-    const squadCountMap = new Map<string, number>();
-    for (const s of squadRows) {
-      squadCountMap.set(s.memberId, (squadCountMap.get(s.memberId) ?? 0) + 1);
+    type WeekLoadRow = { memberId: string; fp_used: number };
+    let weekRows: WeekLoadRow[] = [];
+    if (activeSprintIds.length > 0) {
+      const { data } = await supabase
+        .from("sprint_member_capacity")
+        .select("memberId, fp_used")
+        .in("sprintId", activeSprintIds);
+      weekRows = (data ?? []) as unknown as WeekLoadRow[];
     }
 
-    const merged: Member[] = memberRows.map((m: Record<string, unknown>) => {
-      const cap = capMap.get(m.id as string);
-      return {
-        id: m.id as string,
-        name: m.name as string,
-        email: (m.email as string) ?? null,
-        role: m.role as string,
-        specialty: (m.specialty as string) ?? null,
-        githubUsername: (m.githubUsername as string) ?? null,
-        isExternal: (m.isExternal as boolean) ?? false,
-        fpCapacity: (m.fpCapacity as number) ?? 0,
-        fpAllocated: cap?.fp_allocated ?? 0,
-        _count: {
-          squadMemberships: squadCountMap.get(m.id as string) ?? 0,
-          taskAssignments: cap?.active_task_count ?? 0,
-        },
-      };
-    });
+    const weekLoadMap = new Map<string, number>();
+    for (const r of weekRows) {
+      weekLoadMap.set(r.memberId, (weekLoadMap.get(r.memberId) ?? 0) + (r.fp_used ?? 0));
+    }
+
+    const merged: Member[] = (membersRes.data ?? []).map((m: Record<string, unknown>) => ({
+      id: m.id as string,
+      name: m.name as string,
+      email: (m.email as string) ?? null,
+      role: m.role as string,
+      specialty: (m.specialty as string) ?? null,
+      githubUsername: (m.githubUsername as string) ?? null,
+      isExternal: (m.isExternal as boolean) ?? false,
+      fpCapacity: (m.fpCapacity as number) ?? 0,
+      fpUsedWeek: weekLoadMap.get(m.id as string) ?? 0,
+    }));
 
     setMembers(merged);
   }, []);
@@ -349,23 +446,40 @@ export default function MembersPage() {
         addLabel="Convidar membro"
       />
 
-      <div className="surface">
+      {/* Mobile: cards */}
+      <div className="md:hidden space-y-3">
+        {members.map((m) => (
+          <MemberCardMobile
+            key={m.id}
+            m={m}
+            isAdmin={isAdmin}
+            onOpenSkills={() => setSkillSheetMemberId(m.id)}
+            onEdit={() => openEdit(m)}
+            onDelete={() => remove(m.id)}
+          />
+        ))}
+        {members.length === 0 && (
+          <div className="surface p-8 text-center text-muted-foreground text-sm">
+            Nenhum membro cadastrado.
+          </div>
+        )}
+      </div>
+
+      {/* Desktop: tabela */}
+      <div className="surface hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Especialidade</TableHead>
-              <TableHead>FP Capacity</TableHead>
-              <TableHead>FP Alocados</TableHead>
-              <TableHead>Carga</TableHead>
-              <TableHead>Squads</TableHead>
+              <TableHead className="w-[180px]">Carga da semana</TableHead>
               <TableHead className="w-[100px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {members.map((m) => {
-              const usage = m.fpCapacity > 0 ? m.fpAllocated / m.fpCapacity : 0;
+              const usage = m.fpCapacity > 0 ? m.fpUsedWeek / m.fpCapacity : 0;
               return (
                 <TableRow key={m.id}>
                   <TableCell className="font-medium">
@@ -386,24 +500,39 @@ export default function MembersPage() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell>{m.fpCapacity} FP</TableCell>
-                  <TableCell>{m.fpAllocated} FP</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-20 rounded-full bg-secondary overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${usageColor(usage)}`}
-                          style={{ width: `${Math.min(usage * 100, 100)}%` }}
-                        />
-                      </div>
-                      <Badge variant={usageBadgeVariant(usage)} className="text-xs">
-                        {Math.round(usage * 100)}%
-                      </Badge>
-                    </div>
+                    {(() => {
+                      const pct = Math.min(usage * 100, 999);
+                      const tone = pixelTone(pct, "load");
+                      return (
+                        <div className="space-y-1">
+                          <PixelBar score={pct} cells={10} height={10} variant="load" />
+                          <div className="flex items-center justify-between leading-none">
+                            <span
+                              className="font-mono text-sm tabular-nums leading-none"
+                              style={{ color: tone.fg }}
+                            >
+                              {Math.round(pct)}%
+                            </span>
+                            <span className="font-mono text-sm tabular-nums leading-none text-muted-foreground/70">
+                              {m.fpUsedWeek}/{m.fpCapacity}
+                              <span className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase ml-1">FP</span>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
-                  <TableCell>{m._count.squadMemberships}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Ver perfil de skills"
+                        onClick={() => setSkillSheetMemberId(m.id)}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                      </Button>
                       <Link href={`/members/${m.id}`}>
                         <Button variant="ghost" size="icon" title="Ver capacity detalhada">
                           <Gauge className="h-4 w-4" />
@@ -426,7 +555,7 @@ export default function MembersPage() {
             })}
             {members.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                   Nenhum membro cadastrado.
                 </TableCell>
               </TableRow>
@@ -465,17 +594,23 @@ export default function MembersPage() {
         </div>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar membro" : "Adicionar membro"}</DialogTitle>
+      <SkillProfileSheet
+        memberId={skillSheetMemberId}
+        open={!!skillSheetMemberId}
+        onOpenChange={(o) => { if (!o) setSkillSheetMemberId(null); }}
+      />
+
+      <ResponsiveDialog open={open} onOpenChange={setOpen}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>{editing ? "Editar membro" : "Adicionar membro"}</ResponsiveDialogTitle>
             {!editing && (
               <p className="text-xs text-muted-foreground">
                 A senha sera definida agora. Compartilhe com o membro fora do sistema (Slack, etc).
               </p>
             )}
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Nome</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -588,8 +723,8 @@ export default function MembersPage() {
             {saveError && (
               <p className="text-xs text-destructive">{saveError}</p>
             )}
-          </div>
-          <div className="flex justify-end gap-2">
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancelar</Button>
             <Button
               onClick={save}
@@ -602,9 +737,9 @@ export default function MembersPage() {
             >
               {saving ? "Salvando..." : editing ? "Salvar" : "Criar membro"}
             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }

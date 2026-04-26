@@ -2,7 +2,6 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,13 +11,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import {
   ArrowLeft, Plus, Trash2, CheckCircle2, Circle, Clock,
   ChevronDown, ChevronRight, ChevronsUpDown,
 } from "lucide-react";
-import { ZordonChat } from "@/components/zordon-chat";
+import { AlphaChat } from "@/components/alpha-chat";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -50,13 +54,32 @@ type ProjectReview = {
   actionItems: ActionItem[];
 };
 
+type Attendee = {
+  id: string;
+  role: string | null;
+  member: Member | null;
+  externalName: string | null;
+  externalEmail: string | null;
+  externalRole: string | null;
+};
+
+type ProjectLink = {
+  meetingId: string;
+  projectId: string;
+  project: { id: string; name: string; status: string } | null;
+};
+
 type Meeting = {
   id: string;
   date: string;
   status: string;
   notes: string | null;
+  type: "pm_review" | "general";
+  title: string | null;
   projectReviews: ProjectReview[];
   actionItems: ActionItem[];
+  attendees: Attendee[];
+  projectLinks: ProjectLink[];
 };
 
 // ─── Constants ────────────────────────────────────────────
@@ -71,6 +94,16 @@ const statusLabels: Record<string, string> = {
   scheduled: "Agendada",
   in_progress: "Em andamento",
   done: "Concluída",
+};
+
+const typeLabels: Record<string, string> = {
+  pm_review: "Reunião com PMs",
+  general: "Reunião geral",
+};
+
+const typeColors: Record<string, string> = {
+  pm_review: "bg-purple-100 text-purple-800",
+  general: "bg-slate-100 text-slate-800",
 };
 
 const healthConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -99,7 +132,6 @@ export default function MeetingDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const router = useRouter();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [notes, setNotes] = useState("");
@@ -198,7 +230,6 @@ export default function MeetingDetailPage({
     load();
   };
 
-  // Group reviews by PM
   const reviewsByPm = meeting.projectReviews.reduce<Record<string, ProjectReview[]>>(
     (acc, review) => {
       const pmId = review.memberId;
@@ -241,39 +272,48 @@ export default function MeetingDetailPage({
 
   const isOverdue = (d: string | null) => {
     if (!d) return false;
-    return new Date(d) < new Date() ;
+    return new Date(d) < new Date();
   };
+
+  const headerTitle =
+    meeting.type === "general"
+      ? meeting.title || "Reunião geral"
+      : `Reunião com PMs — ${fmtDate(meeting.date)}`;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
           <Link href="/meetings">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">
-                Weekly PM — {fmtDate(meeting.date)}
-              </h1>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold truncate">{headerTitle}</h1>
+              <Badge variant="secondary" className={typeColors[meeting.type]}>
+                {typeLabels[meeting.type]}
+              </Badge>
               <Badge className={statusColors[meeting.status]}>
                 {statusLabels[meeting.status]}
               </Badge>
             </div>
+            {meeting.type === "general" && (
+              <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
+            )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {meeting.status === "scheduled" && (
             <Button size="sm" onClick={() => updateStatus("in_progress")}>
-              Iniciar Reunião
+              Iniciar reunião
             </Button>
           )}
           {meeting.status === "in_progress" && (
             <Button size="sm" onClick={() => updateStatus("done")}>
-              Concluir Reunião
+              Concluir reunião
             </Button>
           )}
           {meeting.status === "done" && (
@@ -288,75 +328,125 @@ export default function MeetingDetailPage({
         </div>
       </div>
 
-      {/* Project Reviews */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Revisão por Projeto</h2>
-          {allPmIds.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={toggleAll} className="text-xs text-muted-foreground">
-              <ChevronsUpDown className="mr-1 h-3.5 w-3.5" />
-              {allCollapsed ? "Expandir todos" : "Colapsar todos"}
-            </Button>
+      {/* Attendees + project links (general meetings show this prominently) */}
+      {meeting.type === "general" && (
+        <div className="surface p-4 space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Participantes
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {meeting.attendees.length === 0 && (
+                <span className="text-sm text-muted-foreground">Nenhum participante.</span>
+              )}
+              {meeting.attendees.map((a) => (
+                <Badge key={a.id} variant="outline" className="text-xs">
+                  {a.member?.name ?? a.externalName}
+                  {a.externalRole && (
+                    <span className="ml-1 text-muted-foreground">({a.externalRole})</span>
+                  )}
+                  {!a.member && (
+                    <span className="ml-1 text-xs text-muted-foreground">externo</span>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          {meeting.projectLinks.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Projetos vinculados
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {meeting.projectLinks.map((l) =>
+                  l.project ? (
+                    <Link
+                      key={l.projectId}
+                      href={`/projects/${l.project.id}`}
+                      className="px-2 py-0.5 rounded-md bg-muted hover:bg-accent text-xs"
+                    >
+                      {l.project.name}
+                    </Link>
+                  ) : null
+                )}
+              </div>
+            </div>
           )}
         </div>
+      )}
 
-        {Object.entries(reviewsByPm).map(([pmId, reviews]) => {
-          const pmName = reviews[0].member.name;
-          const pmCollapsed = collapsedPms.has(pmId);
-          return (
-            <div key={pmId} className="surface p-4 space-y-4">
-              <button
-                onClick={() => togglePm(pmId)}
-                className="flex items-center gap-2 w-full text-left group"
-              >
-                {pmCollapsed ? (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                )}
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
-                  {pmName} (PM)
-                </h3>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {reviews.length} {reviews.length === 1 ? "projeto" : "projetos"}
-                </span>
-              </button>
-
-              {!pmCollapsed && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {reviews.map((review) => (
-                    <ReviewCard
-                      key={review.id}
-                      review={review}
-                      collapsed={collapsedProjects.has(review.id)}
-                      onToggle={() => toggleProject(review.id)}
-                      onUpdate={(data) => updateReview(review.id, data)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {meeting.projectReviews.length === 0 && (
-          <div className="surface p-8 text-center text-muted-foreground">
-            Nenhum projeto vinculado. Certifique-se de que os PMs têm projetos ativos atribuídos.
+      {/* Project Reviews — only for pm_review */}
+      {meeting.type === "pm_review" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Revisão por projeto</h2>
+            {allPmIds.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={toggleAll} className="text-xs text-muted-foreground">
+                <ChevronsUpDown className="mr-1 h-3.5 w-3.5" />
+                {allCollapsed ? "Expandir todos" : "Colapsar todos"}
+              </Button>
+            )}
           </div>
-        )}
-      </div>
+
+          {Object.entries(reviewsByPm).map(([pmId, reviews]) => {
+            const pmName = reviews[0].member.name;
+            const pmCollapsed = collapsedPms.has(pmId);
+            return (
+              <div key={pmId} className="surface p-4 space-y-4">
+                <button
+                  onClick={() => togglePm(pmId)}
+                  className="flex items-center gap-2 w-full text-left group py-2 sm:py-0"
+                >
+                  {pmCollapsed ? (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
+                    {pmName} (PM)
+                  </h3>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {reviews.length} {reviews.length === 1 ? "projeto" : "projetos"}
+                  </span>
+                </button>
+
+                {!pmCollapsed && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {reviews.map((review) => (
+                      <ReviewCard
+                        key={review.id}
+                        review={review}
+                        collapsed={collapsedProjects.has(review.id)}
+                        onToggle={() => toggleProject(review.id)}
+                        onUpdate={(data) => updateReview(review.id, data)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {meeting.projectReviews.length === 0 && (
+            <div className="surface p-8 text-center text-muted-foreground">
+              Nenhum projeto vinculado. Verifique se os PMs selecionados têm projetos ativos.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Action Items */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Ações</h2>
+          <h2 className="text-lg font-semibold">Pontos de ação</h2>
           <Button
             size="sm"
             variant="outline"
             onClick={() => setActionDialogOpen(true)}
           >
             <Plus className="mr-1 h-4 w-4" />
-            Nova Ação
+            Nova ação
           </Button>
         </div>
 
@@ -373,62 +463,74 @@ export default function MeetingDetailPage({
             return (
               <div
                 key={action.id}
-                className="flex items-center gap-3 px-4 py-3"
+                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3"
               >
-                <button
-                  onClick={() => cycleActionStatus(action)}
-                  className={`shrink-0 ${cfg.color} hover:opacity-70 transition-opacity`}
-                  title={`Clique para mudar: ${cfg.label}`}
-                >
-                  <Icon className="h-5 w-5" />
-                </button>
-
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm ${action.status === "done" ? "line-through text-muted-foreground" : ""}`}>
-                    {action.description}
-                  </p>
-                  {action.sourceReview?.project && (
-                    <span className="text-xs text-muted-foreground">
-                      Projeto: {action.sourceReview.project.name}
-                    </span>
-                  )}
+                {/* Linha 1 mobile / bloco principal desktop */}
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <button
+                    onClick={() => cycleActionStatus(action)}
+                    className={`shrink-0 mt-0.5 ${cfg.color} hover:opacity-70 transition-opacity`}
+                    title={`Clique para mudar: ${cfg.label}`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={`text-sm ${
+                        action.status === "done"
+                          ? "line-through text-muted-foreground"
+                          : ""
+                      }`}
+                    >
+                      {action.description}
+                    </p>
+                    {action.sourceReview?.project && (
+                      <span className="text-xs text-muted-foreground">
+                        Projeto: {action.sourceReview.project.name}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <Badge variant="outline" className="text-xs shrink-0">
-                  {action.assignee.name}
-                </Badge>
-
-                {action.dueDate && (
-                  <span
-                    className={`text-xs shrink-0 ${overdue ? "text-red-500 font-medium" : "text-muted-foreground"}`}
+                {/* Linha 2 mobile / bloco direito desktop */}
+                <div className="flex items-center gap-2 flex-wrap pl-8 sm:pl-0 sm:shrink-0">
+                  <Badge variant="outline" className="text-xs">
+                    {action.assignee.name}
+                  </Badge>
+                  {action.dueDate && (
+                    <span
+                      className={`text-xs ${
+                        overdue
+                          ? "text-red-500 font-medium"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {overdue && "⚠ "}
+                      {fmtShortDate(action.dueDate)}
+                    </span>
+                  )}
+                  <Badge
+                    variant="secondary"
+                    className={`text-xs cursor-pointer ${
+                      action.status === "todo"
+                        ? "bg-red-100 text-red-700"
+                        : action.status === "doing"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-green-100 text-green-700"
+                    }`}
+                    onClick={() => cycleActionStatus(action)}
                   >
-                    {overdue && "⚠ "}
-                    {fmtShortDate(action.dueDate)}
-                  </span>
-                )}
-
-                <Badge
-                  variant="secondary"
-                  className={`text-xs shrink-0 cursor-pointer ${
-                    action.status === "todo"
-                      ? "bg-red-100 text-red-700"
-                      : action.status === "doing"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-green-100 text-green-700"
-                  }`}
-                  onClick={() => cycleActionStatus(action)}
-                >
-                  {cfg.label}
-                </Badge>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={() => deleteAction(action.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                    {cfg.label}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => deleteAction(action.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -437,7 +539,7 @@ export default function MeetingDetailPage({
 
       {/* General Notes */}
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Notas Gerais</h2>
+        <h2 className="text-lg font-semibold">Notas gerais</h2>
         <Textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -448,12 +550,12 @@ export default function MeetingDetailPage({
       </div>
 
       {/* New Action Dialog */}
-      <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nova Ação</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
+      <ResponsiveDialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Nova ação</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Descrição</Label>
               <Input
@@ -494,28 +596,30 @@ export default function MeetingDetailPage({
                 }
               />
             </div>
-            <div className="grid gap-2">
-              <Label>Vinculado ao projeto (opcional)</Label>
-              <Select
-                value={actionForm.sourceReviewId}
-                onValueChange={(v) =>
-                  v && setActionForm({ ...actionForm, sourceReviewId: v })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Nenhum" />
-                </SelectTrigger>
-                <SelectContent>
-                  {meeting.projectReviews.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.project.name} ({r.member.name})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
+            {meeting.type === "pm_review" && (
+              <div className="grid gap-2">
+                <Label>Vinculado ao projeto (opcional)</Label>
+                <Select
+                  value={actionForm.sourceReviewId}
+                  onValueChange={(v) =>
+                    v && setActionForm({ ...actionForm, sourceReviewId: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nenhum" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {meeting.projectReviews.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.project.name} ({r.member.name})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setActionDialogOpen(false)}>
               Cancelar
             </Button>
@@ -525,12 +629,12 @@ export default function MeetingDetailPage({
             >
               Criar
             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {meeting && (
-        <ZordonChat
+        <AlphaChat
           contextLabel={`Reunião ${meeting.date}`}
           contextParams={{ meetingId: id }}
         />
@@ -614,7 +718,7 @@ function ReviewCard({
       {!collapsed && (
         <div className="grid gap-3">
           <div className="grid gap-1">
-            <Label className="text-xs text-muted-foreground">Próximos Passos</Label>
+            <Label className="text-xs text-muted-foreground">Próximos passos</Label>
             <Textarea
               value={nextSteps}
               onChange={(e) => setNextSteps(e.target.value)}
@@ -625,7 +729,7 @@ function ReviewCard({
           </div>
 
           <div className="grid gap-1">
-            <Label className="text-xs text-muted-foreground">Pontos de Atenção</Label>
+            <Label className="text-xs text-muted-foreground">Pontos de atenção</Label>
             <Textarea
               value={attentionPoints}
               onChange={(e) => setAttentionPoints(e.target.value)}

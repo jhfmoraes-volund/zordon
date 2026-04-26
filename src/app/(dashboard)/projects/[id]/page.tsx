@@ -12,12 +12,17 @@ import {
   CheckCircle2, Circle, Loader2, Eye, AlertCircle, CalendarRange,
   FileText, Pencil, AlertTriangle, Settings,
 } from "lucide-react";
-import { ZordonChat } from "@/components/zordon-chat";
+import { AlphaChat } from "@/components/alpha-chat";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -287,9 +292,9 @@ export default function ProjectDetailPage({
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">{project.name}</h1>
+              <h1 className="text-2xl font-bold truncate">{project.name}</h1>
               <Badge className={statusColors[project.status]}>{project.status}</Badge>
             </div>
             <p className="text-sm text-muted-foreground">{project.client.name}</p>
@@ -310,12 +315,12 @@ export default function ProjectDetailPage({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 border-b overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
               activeTab === tab.key
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -354,12 +359,12 @@ export default function ProjectDetailPage({
       )}
 
       {/* Edit Project Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar Projeto</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+      <ResponsiveDialog open={editOpen} onOpenChange={setEditOpen}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Editar Projeto</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="grid gap-4 py-4 md:max-h-[70vh] md:overflow-y-auto md:pr-2">
             <div className="grid gap-2">
               <Label>Cliente</Label>
               <Select value={editForm.clientId} onValueChange={(v) => v && setEditForm({ ...editForm, clientId: v })}>
@@ -470,16 +475,16 @@ export default function ProjectDetailPage({
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
             <Button onClick={saveSettings} disabled={!editForm.name || !editForm.clientId}>Salvar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {project && (
-        <ZordonChat
+        <AlphaChat
           contextLabel={project.name}
           contextParams={{ projectId: id }}
         />
@@ -516,7 +521,7 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Key metrics */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Inicio</p>
                 <p className="text-sm font-medium">{fmtD(health.startDate)}</p>
@@ -575,9 +580,9 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">{activeSprint.name}</span>
-                  <Link href={`/sprints/${activeSprint.id}/board`}>
-                    <Button variant="outline" size="sm" className="h-7 text-xs">
-                      <KanbanSquare className="h-3.5 w-3.5 mr-1" /> Board
+                  <Link href={`/sprints/${activeSprint.id}/board`} aria-label="Abrir board">
+                    <Button variant="outline" size="sm" className="h-7 w-7 p-0">
+                      <KanbanSquare className="h-3.5 w-3.5" />
                     </Button>
                   </Link>
                 </div>
@@ -961,8 +966,9 @@ function SprintsTab({ project }: { project: Project }) {
         <p className="text-center text-muted-foreground py-8">Nenhum sprint cadastrado.</p>
       )}
 
+      <div className="flex gap-3 overflow-x-auto pb-3 -mx-3 px-3 snap-x snap-mandatory scrollbar-none md:block md:space-y-3 md:overflow-visible md:m-0 md:p-0">
       {sprintsData.map((s) => (
-        <div key={s.id} className="surface-inset overflow-hidden">
+        <div key={s.id} className="surface-inset overflow-hidden min-w-[420px] shrink-0 snap-start md:min-w-0">
           {/* Sprint header */}
           <div className="flex items-center gap-4 p-4">
             <Badge className={statusColors[s.status]}>{s.status}</Badge>
@@ -981,9 +987,9 @@ function SprintsTab({ project }: { project: Project }) {
               <span className="text-xs font-medium tabular-nums">{s.taskStats.done}/{s.taskStats.total}</span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <Link href={`/sprints/${s.id}/board`}>
-                <Button variant="outline" size="sm" className="h-7 text-xs">
-                  <KanbanSquare className="h-3.5 w-3.5 mr-1" /> Board
+              <Link href={`/sprints/${s.id}/board`} aria-label="Abrir board">
+                <Button variant="outline" size="sm" className="h-7 w-7 p-0">
+                  <KanbanSquare className="h-3.5 w-3.5" />
                 </Button>
               </Link>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(s); setOpen(true); }}>
@@ -1025,6 +1031,7 @@ function SprintsTab({ project }: { project: Project }) {
           )}
         </div>
       ))}
+      </div>
 
       <SprintDialog
         open={open}
@@ -1166,9 +1173,9 @@ function ScheduleTab({ projectId }: { projectId: string }) {
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground">{fmt(s.startDate)} — {fmt(s.endDate)}</span>
                   <span className="text-sm font-bold">{s.fpDone}/{s.totalFp} FP</span>
-                  <Link href={`/sprints/${s.id}/board`}>
-                    <Button variant="outline" size="sm" className="h-7 text-xs">
-                      <KanbanSquare className="h-3.5 w-3.5 mr-1" /> Board
+                  <Link href={`/sprints/${s.id}/board`} aria-label="Abrir board">
+                    <Button variant="outline" size="sm" className="h-7 w-7 p-0">
+                      <KanbanSquare className="h-3.5 w-3.5" />
                     </Button>
                   </Link>
                 </div>

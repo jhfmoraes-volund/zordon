@@ -9,8 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import { Pencil, Trash2, UserPlus, FolderOpen } from "lucide-react";
 
 type Squad = {
@@ -237,12 +242,12 @@ export default function SquadsPage() {
         )}
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Squad" : "Novo Squad"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
+      <ResponsiveDialog open={open} onOpenChange={setOpen}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>{editing ? "Editar Squad" : "Novo Squad"}</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Nome</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -279,13 +284,13 @@ export default function SquadsPage() {
                 ))}
               </div>
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button onClick={save} disabled={!form.name}>Salvar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }

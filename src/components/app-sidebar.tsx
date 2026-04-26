@@ -10,7 +10,6 @@ import {
   UserCog,
   LayoutDashboard,
   Lightbulb,
-  ListTodo,
   BookOpen,
   CalendarCheck,
   User,
@@ -38,6 +37,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { setImpersonation } from "@/app/(dashboard)/_actions/impersonation";
 import { hasMinLevel, MANAGER, ADMIN, roleLabel } from "@/lib/roles";
 import { NavItemPending } from "@/components/nav-item-pending";
+import { InstallAppButton } from "@/components/install-app-button";
 
 type NavItem = {
   title: string;
@@ -56,7 +56,6 @@ const projectNav: NavItem[] = [
 // actually mutate (projetos alocados apenas).
 const sharedNav: NavItem[] = [
   { title: "Design Sessions", href: "/design-sessions", icon: Lightbulb },
-  { title: "Tasks", href: "/tasks", icon: ListTodo },
   { title: "Squads", href: "/squads", icon: Shield },
   { title: "Membros", href: "/members", icon: UserCog },
 ];
@@ -64,7 +63,7 @@ const sharedNav: NavItem[] = [
 // Manager+ only (PM, head-ops, CEO).
 const managerOnlyNav: NavItem[] = [
   { title: "Overview", href: "/", icon: LayoutDashboard },
-  { title: "Zordon", href: "/ops", icon: Bot },
+  { title: "Alpha", href: "/ops", icon: Bot },
   { title: "Reuniões", href: "/meetings", icon: CalendarCheck },
 ];
 
@@ -197,6 +196,11 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-2">
         <div className="space-y-2">
+          {/* Install PWA button — hidden when already installed or unsupported */}
+          <div className="group-data-[collapsible=icon]:hidden">
+            <InstallAppButton />
+          </div>
+
           {/* Current user info — hidden when sidebar is collapsed to icon rail */}
           <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
             <p className="text-xs font-medium truncate">

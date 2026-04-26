@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Trash2 } from "lucide-react";
 
 type Meeting = {
@@ -17,16 +20,27 @@ type Meeting = {
   date: string;
   status: string;
   notes: string | null;
+  type: "pm_review" | "general";
+  title: string | null;
   projectReviews: {
     id: string;
     sprintHealth: string;
     project: { name: string };
-    member: { name: string };
+    member: { id: string; name: string };
   }[];
   actionItems: {
     id: string;
     status: string;
     assignee: { name: string };
+  }[];
+  attendees: {
+    id: string;
+    role: string | null;
+    member: { id: string; name: string } | null;
+    externalName: string | null;
+  }[];
+  projectLinks: {
+    project: { id: string; name: string } | null;
   }[];
 };
 
@@ -42,17 +56,94 @@ const statusLabels: Record<string, string> = {
   done: "Concluída",
 };
 
+const typeLabels: Record<string, string> = {
+  pm_review: "PMs",
+  general: "Geral",
+};
+
+const typeColors: Record<string, string> = {
+  pm_review: "bg-purple-100 text-purple-800",
+  general: "bg-slate-100 text-slate-800",
+};
+
+function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
+  const pendingActions = meeting.actionItems.filter((a) => a.status !== "done").length;
+  const projectCount =
+    meeting.type === "pm_review"
+      ? meeting.projectReviews.length
+      : meeting.projectLinks.length;
+  const totalActions = meeting.actionItems.length;
+
+  const titleText =
+    meeting.type === "pm_review"
+      ? meeting.attendees
+          .filter((a) => a.role === "pm" && a.member)
+          .map((a) => a.member!.name)
+          .join(", ") || null
+      : meeting.title;
+
+  const shortDate = new Date(meeting.date).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+
+  return (
+    <Link
+      href={`/meetings/${meeting.id}`}
+      className="surface p-4 block hover:bg-muted/30 transition-colors"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">{shortDate}</span>
+        <Badge variant="secondary" className={`${typeColors[meeting.type]} text-xs`}>
+          {typeLabels[meeting.type]}
+        </Badge>
+      </div>
+
+      <p
+        className={`mt-2 text-base font-medium line-clamp-2 ${
+          titleText ? "" : "text-muted-foreground"
+        }`}
+      >
+        {titleText || "Sem título"}
+      </p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge variant="secondary" className={`${statusColors[meeting.status]} text-xs`}>
+          {statusLabels[meeting.status] || meeting.status}
+        </Badge>
+        <span>
+          {projectCount} {projectCount === 1 ? "projeto" : "projetos"} · {totalActions}{" "}
+          {totalActions === 1 ? "ação" : "ações"}
+        </span>
+        {pendingActions > 0 && (
+          <span className="font-medium text-yellow-700 dark:text-yellow-500">
+            ⚠ {pendingActions} pendente{pendingActions > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+    </Link>
+  );
+}
+
 export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [typeFilter, setTypeFilter] = useState<"all" | "pm_review" | "general">("all");
+  const [pmFilter, setPmFilter] = useState<string>("all");
   const router = useRouter();
 
   const load = async () => {
     const supabase = createClient();
     const { data } = await supabase
-      .from("WeeklyMeeting")
-      .select("*, projectReviews:MeetingProjectReview(*, project:Project(name), member:Member(name)), actionItems:MeetingActionItem(*, assignee:Member(name))")
+      .from("Meeting")
+      .select(`
+        *,
+        projectReviews:MeetingProjectReview(*, project:Project(name), member:Member(id, name)),
+        actionItems:MeetingActionItem(*, assignee:Member(name)),
+        attendees:MeetingAttendee(id, role, externalName, member:Member(id, name)),
+        projectLinks:MeetingProjectLink(project:Project(id, name))
+      `)
       .order("date", { ascending: false });
-    if (data) setMeetings(data as Meeting[]);
+    if (data) setMeetings(data as unknown as Meeting[]);
   };
 
   useEffect(() => { load(); }, []);
@@ -60,7 +151,7 @@ export default function MeetingsPage() {
   const remove = async (id: string) => {
     if (!confirm("Remover esta reunião?")) return;
     const supabase = createClient();
-    await supabase.from("WeeklyMeeting").delete().eq("id", id);
+    await supabase.from("Meeting").delete().eq("id", id);
     load();
   };
 
@@ -72,32 +163,114 @@ export default function MeetingsPage() {
       year: "numeric",
     });
 
+  // Collect all PMs that appear in any meeting (via reviews or attendees)
+  const pmOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of meetings) {
+      for (const r of m.projectReviews) {
+        map.set(r.member.id, r.member.name);
+      }
+      for (const a of m.attendees) {
+        if (a.role === "pm" && a.member) {
+          map.set(a.member.id, a.member.name);
+        }
+      }
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [meetings]);
+
+  const filtered = meetings.filter((m) => {
+    if (typeFilter !== "all" && m.type !== typeFilter) return false;
+    if (pmFilter !== "all") {
+      const hasPm =
+        m.projectReviews.some((r) => r.member.id === pmFilter) ||
+        m.attendees.some((a) => a.role === "pm" && a.member?.id === pmFilter);
+      if (!hasPm) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Reuniões Semanais"
-        description="Alinhamento semanal com PMs"
+        title="Reuniões"
+        description="Reuniões com PMs e reuniões gerais"
         onAdd={() => router.push("/meetings/new")}
-        addLabel="Nova Reunião"
+        addLabel="Nova reunião"
       />
 
-      <div className="surface">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3 sm:items-center">
+        <div className="flex flex-col gap-1 sm:flex-row sm:gap-2 sm:items-center">
+          <span className="text-sm text-muted-foreground">Tipo</span>
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
+            <SelectTrigger className="w-full h-9 sm:w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="pm_review">Reunião com PMs</SelectItem>
+              <SelectItem value="general">Reunião geral</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1 sm:flex-row sm:gap-2 sm:items-center">
+          <span className="text-sm text-muted-foreground">PM</span>
+          <Select value={pmFilter} onValueChange={(v) => v && setPmFilter(v)}>
+            <SelectTrigger className="w-full h-9 sm:w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {pmOptions.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Mobile: card list */}
+      <div className="md:hidden space-y-3">
+        {filtered.length === 0 && (
+          <div className="surface p-6 text-center text-sm text-muted-foreground">
+            Nenhuma reunião registrada.
+          </div>
+        )}
+        {filtered.map((m) => (
+          <MeetingCardMobile key={m.id} meeting={m} />
+        ))}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="surface hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Data</TableHead>
+              <TableHead>Tipo</TableHead>
+              <TableHead>Título</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Projetos</TableHead>
               <TableHead>Ações</TableHead>
-              <TableHead>Ações Pendentes</TableHead>
+              <TableHead>Pendentes</TableHead>
               <TableHead className="w-[60px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {meetings.map((m) => {
-              const pendingActions = m.actionItems.filter(
-                (a) => a.status !== "done"
-              ).length;
+            {filtered.map((m) => {
+              const pendingActions = m.actionItems.filter((a) => a.status !== "done").length;
+              const projectCount =
+                m.type === "pm_review" ? m.projectReviews.length : m.projectLinks.length;
+              const titleCell =
+                m.type === "pm_review"
+                  ? m.attendees
+                      .filter((a) => a.role === "pm" && a.member)
+                      .map((a) => a.member!.name)
+                      .join(", ") || "—"
+                  : m.title || "—";
               return (
                 <TableRow key={m.id} className="cursor-pointer">
                   <TableCell>
@@ -109,11 +282,19 @@ export default function MeetingsPage() {
                     </Link>
                   </TableCell>
                   <TableCell>
+                    <Badge variant="secondary" className={typeColors[m.type]}>
+                      {typeLabels[m.type]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="max-w-[260px] truncate text-sm text-muted-foreground">
+                    {titleCell}
+                  </TableCell>
+                  <TableCell>
                     <Badge variant="secondary" className={statusColors[m.status]}>
                       {statusLabels[m.status] || m.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{m.projectReviews.length}</TableCell>
+                  <TableCell>{projectCount}</TableCell>
                   <TableCell>{m.actionItems.length}</TableCell>
                   <TableCell>
                     {pendingActions > 0 ? (
@@ -139,10 +320,10 @@ export default function MeetingsPage() {
                 </TableRow>
               );
             })}
-            {meetings.length === 0 && (
+            {filtered.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={8}
                   className="text-center text-muted-foreground py-8"
                 >
                   Nenhuma reunião registrada.

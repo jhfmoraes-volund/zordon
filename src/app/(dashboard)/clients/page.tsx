@@ -16,11 +16,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import { Pencil, Trash2 } from "lucide-react";
 
 type Client = {
@@ -145,14 +147,14 @@ export default function ClientsPage() {
         </Table>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
+      <ResponsiveDialog open={open} onOpenChange={setOpen}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>
               {editing ? "Editar Cliente" : "Novo Cliente"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
+            </ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="name">Nome</Label>
               <Input
@@ -186,17 +188,17 @@ export default function ClientsPage() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
             <Button onClick={save} disabled={!form.name}>
               Salvar
             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }

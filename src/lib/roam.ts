@@ -117,6 +117,40 @@ export class RoamClient {
   }
 
   /**
+   * Fetch transcripts in a date window, newest-first.
+   *
+   * Pages with `cursor` to avoid the gotcha in `transcript.list`: when `after`
+   * is supplied, the API anchors there and returns ASC, truncating the most
+   * recent window when results exceed `limit` (and silently sets `nextCursor`).
+   * This helper iterates DESC pages without `after` and stops when items
+   * fall below `since`.
+   */
+  async listTranscriptsInRange(opts: {
+    since?: string;
+    until?: string;
+    max?: number;
+  } = {}): Promise<RoamTranscriptListItem[]> {
+    const max = opts.max ?? 50;
+    const sinceTime = opts.since ? new Date(opts.since).getTime() : -Infinity;
+    const untilTime = opts.until ? new Date(opts.until).getTime() : Infinity;
+    const out: RoamTranscriptListItem[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const res = await this.listTranscripts({ limit: 50, cursor });
+      for (const t of res.transcripts) {
+        const ts = new Date(t.start).getTime();
+        if (ts < sinceTime) return out;
+        if (ts > untilTime) continue;
+        out.push(t);
+        if (out.length >= max) return out;
+      }
+      if (!res.nextCursor) break;
+      cursor = res.nextCursor;
+    }
+    return out;
+  }
+
+  /**
    * Get full transcript detail: cues (speaker + text + timestamps),
    * AI-generated summary, and action items.
    */

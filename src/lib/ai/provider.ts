@@ -5,7 +5,9 @@ const openrouter = createOpenRouter({
 });
 
 export function getModel(modelId: string) {
-  return openrouter(modelId);
+  // `usage: { include: true }` makes OpenRouter return token + cost info in
+  // providerMetadata.openrouter.usage so the engine can persist it.
+  return openrouter(modelId, { usage: { include: true } });
 }
 
 export const DEFAULT_MODEL = "anthropic/claude-sonnet-4.6";

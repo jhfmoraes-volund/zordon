@@ -45,23 +45,31 @@ BEGIN
 END;
 $$;
 
--- 3. Meeting creation atômica (substitui nested create + carryover)
+-- 3. Meeting creation atômica (PM review ou reunião geral).
+-- Veja migrations/20260425_meetings_rename_and_types.sql para a
+-- versão definitiva. Mantida aqui como referência de setup.
 CREATE OR REPLACE FUNCTION public.create_meeting_with_reviews(
   p_date timestamptz,
-  p_reviews jsonb,
-  p_carry_actions jsonb DEFAULT '[]'::jsonb
+  p_reviews jsonb DEFAULT '[]'::jsonb,
+  p_carry_actions jsonb DEFAULT '[]'::jsonb,
+  p_type text DEFAULT 'pm_review',
+  p_title text DEFAULT NULL,
+  p_attendees jsonb DEFAULT '[]'::jsonb,
+  p_project_ids jsonb DEFAULT '[]'::jsonb,
+  p_notes text DEFAULT NULL
 ) RETURNS text LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_meeting_id text;
 BEGIN
   v_meeting_id := gen_random_uuid()::text;
 
-  -- Create meeting
-  INSERT INTO public."WeeklyMeeting" (id, date, status, "createdAt", "updatedAt")
-  VALUES (v_meeting_id, p_date, 'scheduled', now(), now());
+  INSERT INTO public."Meeting"
+    (id, date, status, "type", title, notes, "createdAt", "updatedAt")
+  VALUES
+    (v_meeting_id, p_date, 'scheduled', p_type, p_title, p_notes, now(), now());
 
-  -- Create project reviews
-  INSERT INTO public."MeetingProjectReview" (id, "meetingId", "projectId", "memberId", "order", "createdAt", "updatedAt")
+  INSERT INTO public."MeetingProjectReview"
+    (id, "meetingId", "projectId", "memberId", "order", "createdAt", "updatedAt")
   SELECT
     gen_random_uuid()::text,
     v_meeting_id,
@@ -72,14 +80,33 @@ BEGIN
     now()
   FROM jsonb_array_elements(p_reviews) r;
 
-  -- Carry over pending actions from previous meeting
-  INSERT INTO public."MeetingActionItem" (id, "meetingId", description, "assigneeId", "dueDate", status, "createdAt", "updatedAt")
+  INSERT INTO public."MeetingAttendee"
+    (id, "meetingId", "memberId", "externalName", "externalEmail", "externalRole", "role", "createdAt")
+  SELECT
+    gen_random_uuid()::text,
+    v_meeting_id,
+    NULLIF(a->>'memberId', ''),
+    NULLIF(a->>'externalName', ''),
+    NULLIF(a->>'externalEmail', ''),
+    NULLIF(a->>'externalRole', ''),
+    NULLIF(a->>'role', ''),
+    now()
+  FROM jsonb_array_elements(p_attendees) a
+  WHERE COALESCE(a->>'memberId', a->>'externalName') IS NOT NULL;
+
+  INSERT INTO public."MeetingProjectLink" ("meetingId", "projectId", "createdAt")
+  SELECT v_meeting_id, value::text, now()
+  FROM jsonb_array_elements_text(p_project_ids)
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO public."MeetingActionItem"
+    (id, "meetingId", description, "assigneeId", "dueDate", status, "createdAt", "updatedAt")
   SELECT
     gen_random_uuid()::text,
     v_meeting_id,
     a->>'description',
     a->>'assigneeId',
-    (a->>'dueDate')::timestamptz,
+    NULLIF(a->>'dueDate', '')::timestamptz,
     'todo',
     now(),
     now()

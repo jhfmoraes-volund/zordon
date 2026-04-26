@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  User, Zap, FolderKanban, ListTodo, ArrowRight,
+  User, Zap, FolderKanban, ListTodo, ArrowRight, Sparkles, ArrowUpRight, Star, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { TaskSheet } from "@/components/task-sheet";
@@ -19,6 +20,18 @@ import {
   fmtDate, isOverdue,
 } from "@/lib/task-constants";
 import { roleLabel, specialtyLabel } from "@/lib/roles";
+import {
+  TOWERS,
+  derivePrimaryTowers,
+  isFullstack,
+  assessmentProgress,
+  towerLabel,
+  type MemberSkillRow,
+} from "@/lib/memberSkills";
+import { PixelBar, pixelBarLabel, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
+import { MemberBattery, type BatterySegment } from "@/components/member-battery";
+import { PdiWidget } from "@/components/pdi-widget";
+import { bucketSprintsByWeek, type SprintInput } from "@/lib/weekBuckets";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -61,12 +74,29 @@ type MeData = {
 
 // ─── Page ─────────────────────────────────────────────────
 
+type SkillsSummary = {
+  skills: MemberSkillRow[];
+  status: "in_progress" | "completed" | null;
+};
+
+type CapacitySummary = {
+  fpCapacity: number;
+  committed: number;
+  remaining: number;
+  projects: { projectId: string; projectName: string; fpAllocation: number }[];
+  /** FP em uso na semana corrente, somado de todas as sprints rateadas */
+  weekUsed: number;
+  weekActiveSprints: number;
+};
+
 export default function ProfilePage() {
   const { member } = useAuth();
   const [data, setData] = useState<MeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetTaskId, setSheetTaskId] = useState<string | null>(null);
+  const [skillsSummary, setSkillsSummary] = useState<SkillsSummary | null>(null);
+  const [capacity, setCapacity] = useState<CapacitySummary | null>(null);
 
   const ACTIVE_STATUSES = ["todo", "in_progress", "review"];
   const FETCH_STATUSES = [...ACTIVE_STATUSES, "backlog"];
@@ -137,6 +167,36 @@ export default function ProfilePage() {
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    fetch("/api/profile/skills")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setSkillsSummary({
+          skills: (d.skills ?? []) as MemberSkillRow[],
+          status: d.assessment?.status ?? null,
+        });
+      })
+      .catch(() => {});
+
+    fetch("/api/profile/capacity")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        const sprints: SprintInput[] = d.sprints ?? [];
+        // Pega só a semana corrente
+        const buckets = bucketSprintsByWeek(sprints, { weeks: 1, includePast: false });
+        const current = buckets[0];
+        setCapacity({
+          fpCapacity: d.member.fpCapacity,
+          committed: d.commitment.committed,
+          remaining: d.commitment.remaining,
+          projects: d.projects ?? [],
+          weekUsed: current?.totalUsed ?? 0,
+          weekActiveSprints: current?.sprints.length ?? 0,
+        });
+      })
+      .catch(() => {});
   }, [member?.id]);
 
   if (!member) {
@@ -150,11 +210,6 @@ export default function ProfilePage() {
   if (loading || !data) {
     return <div className="py-12 text-center text-muted-foreground">Carregando...</div>;
   }
-
-  const capacityPct = data.member.fpCapacity > 0
-    ? Math.round((data.fpAllocated / data.member.fpCapacity) * 100)
-    : 0;
-  const isOverloaded = capacityPct > 85;
 
   // Sort tasks: in_progress first, then review, todo, backlog
   const statusOrder: Record<string, number> = {
@@ -179,36 +234,21 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Capacity card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Skills + PDI lado a lado */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SkillsWidget summary={skillsSummary} />
+        <PdiWidget />
+      </div>
+
+      {/* Capacity widget — bateria + esta semana */}
+      <CapacityCard summary={capacity} />
+
+      {/* Tasks ativas + Projetos */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <Zap className="h-3.5 w-3.5" /> Capacity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className={`text-2xl font-bold ${isOverloaded ? "text-red-500" : ""}`}>
-                {data.fpAllocated}
-              </span>
-              <span className="text-sm text-muted-foreground">/ {data.member.fpCapacity} FP</span>
-            </div>
-            <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  isOverloaded ? "bg-red-500" : capacityPct > 60 ? "bg-yellow-500" : "bg-green-500"
-                }`}
-                style={{ width: `${Math.min(capacityPct, 100)}%` }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">{capacityPct}% alocado</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <ListTodo className="h-3.5 w-3.5" /> Tasks Ativas
+              <ListTodo className="h-3.5 w-3.5" /> Tasks ativas
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -359,3 +399,318 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+// ─── Capacity card (battery + this-week) ─────────────────
+
+function CapacityCard({ summary }: { summary: CapacitySummary | null }) {
+  if (summary === null) {
+    return (
+      <Card>
+        <CardContent className="py-5 text-sm text-muted-foreground">
+          Carregando capacity...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { fpCapacity, committed, projects, weekUsed, weekActiveSprints } = summary;
+  const weekPct = fpCapacity > 0 ? (weekUsed / fpCapacity) * 100 : 0;
+  const tone = pixelTone(weekPct, "load");
+  const overcommit = weekUsed > fpCapacity;
+  const idle = weekPct < 30 && weekUsed > 0;
+
+  const batterySegments: BatterySegment[] = projects.map((p) => ({
+    label: p.projectName,
+    value: p.fpAllocation,
+  }));
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Zap className="h-4 w-4 text-primary" />
+            Capacity
+          </CardTitle>
+          <Link href="/profile/capacity">
+            <Button variant="outline" size="sm" className="h-7 text-xs">
+              Ver detalhes
+              <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </Link>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Bateria */}
+          <div className="space-y-2">
+            <PixelHud size="xs" tone="muted">
+              bateria por projeto
+            </PixelHud>
+            <MemberBattery
+              capacity={fpCapacity}
+              committed={committed}
+              breakdown={batterySegments}
+              size="md"
+            />
+          </div>
+
+          {/* Esta semana */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <PixelHud size="xs" tone="muted">
+                esta semana
+              </PixelHud>
+              {overcommit ? (
+                <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
+                  sobrecarga
+                </PixelHud>
+              ) : idle ? (
+                <PixelHud size="xs" style={{ color: "oklch(0.82 0.18 145)" }}>
+                  ocioso
+                </PixelHud>
+              ) : weekActiveSprints === 0 ? (
+                <PixelHud size="xs" tone="muted">
+                  sem alocação
+                </PixelHud>
+              ) : null}
+            </div>
+            <PixelBar
+              score={Math.min(weekPct, 100)}
+              cells={20}
+              height={12}
+              variant="load"
+            />
+            <div className="flex items-center justify-between leading-none">
+              <span className="font-mono tabular-nums text-sm">
+                <span className="font-medium" style={{ color: tone.fg }}>
+                  {weekUsed}
+                </span>
+                <span className="text-muted-foreground"> / {fpCapacity} FP</span>
+              </span>
+              <span
+                className="font-mono tabular-nums text-sm font-semibold"
+                style={{ color: tone.fg }}
+              >
+                {Math.round(weekPct)}%
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {weekActiveSprints > 0
+                ? `${weekActiveSprints} sprint${weekActiveSprints === 1 ? "" : "s"} ativ${weekActiveSprints === 1 ? "a" : "as"}`
+                : "Nada agendado pra essa semana"}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Skills widget ────────────────────────────────────────
+
+function SkillsWidget({ summary }: { summary: SkillsSummary | null }) {
+  const [expandedSkills, setExpandedSkills] = useState(false);
+
+  if (summary === null) {
+    return (
+      <Card>
+        <CardContent className="py-5 text-sm text-muted-foreground">
+          Carregando avaliação de skills...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { skills, status } = summary;
+  const { answered, total } = assessmentProgress(skills);
+  const isComplete = status === "completed";
+  const hasStarted = answered > 0;
+  const { primary, secondary } = derivePrimaryTowers(skills);
+  const fullstack = isFullstack(skills);
+
+  if (!hasStarted) {
+    return (
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="py-5 flex items-center gap-4 flex-wrap">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary shrink-0">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-[12rem]">
+            <p className="text-sm font-semibold">Mapeie suas forças</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Auto-avaliação rápida em {total} torres. Vira um card visível pro time.
+            </p>
+          </div>
+          <Link href="/profile/skills">
+            <Button size="sm">
+              Começar
+              <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // All 10 towers sorted by score desc; tower order tie-breaks via TOWERS index.
+  const towerOrder = new Map<string, number>(TOWERS.map((t, i) => [t.key, i]));
+  const allRows = TOWERS.map((t) => skills.find((s) => s.towerKey === t.key) ?? {
+    towerKey: t.key,
+    score: null as number | null,
+    subskills: {},
+  } as MemberSkillRow);
+  const sorted = [...allRows].sort((a, b) => {
+    const diff = (b.score ?? 0) - (a.score ?? 0);
+    if (diff !== 0) return diff;
+    return (towerOrder.get(a.towerKey) ?? 0) - (towerOrder.get(b.towerKey) ?? 0);
+  });
+  const visibleRows = expandedSkills ? sorted : sorted.slice(0, 4);
+
+  return (
+    <Card className="relative overflow-hidden">
+      {/* Scanlines overlay */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 mix-blend-overlay"
+        style={{
+          background:
+            "repeating-linear-gradient(to bottom, oklch(1 0 0 / 0.018) 0 1px, transparent 1px 3px)",
+        }}
+      />
+
+      <CardContent className="relative py-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <StarMark />
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-semibold leading-none">Avaliação de Skills</p>
+                {isComplete ? (
+                  <Badge variant="secondary" className="text-[10px]">Publicada</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px]">Rascunho</Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 leading-none">
+                <span
+                  className="font-mono text-base tabular-nums leading-none"
+                  style={{ color: "oklch(0.82 0.2 22)" }}
+                >
+                  {String(answered).padStart(2, "0")}/{String(total).padStart(2, "0")}
+                </span>
+                <PixelHud size="xs" tone="muted">torres avaliadas</PixelHud>
+              </div>
+            </div>
+          </div>
+          <Link href="/profile/skills">
+            <Button size="sm" variant={isComplete ? "outline" : "default"}>
+              {isComplete ? "Atualizar" : "Continuar"}
+              <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </Link>
+        </div>
+
+        {/* Area strip — torre primária + secundária + selos */}
+        <div
+          className="flex items-center gap-2 flex-wrap rounded-lg px-3.5 py-2.5"
+          style={{
+            background: "oklch(0.19 0 0 / 0.5)",
+            boxShadow: "inset 0 0 0 1px oklch(1 0 0 / 0.05)",
+          }}
+        >
+          <PixelHud size="xs" tone="muted">Torre primária</PixelHud>
+          {primary ? (
+            <Badge className="text-xs">{towerLabel(primary)}</Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">—</span>
+          )}
+          {secondary && (
+            <Badge variant="secondary" className="text-xs">{towerLabel(secondary)}</Badge>
+          )}
+          {fullstack && (
+            <Badge className="text-xs bg-amber-500/15 text-amber-600 border-amber-500/30 border hover:bg-amber-500/15">
+              <Star className="h-3 w-3 mr-1 fill-current" />
+              Fullstack
+            </Badge>
+          )}
+        </div>
+
+        {/* Pixel skill bars — show 4, rest collapsible */}
+        <div className="space-y-2">
+          {visibleRows.map((s) => {
+            const score = s.score;
+            const { label, fg } = pixelBarLabel(score);
+            return (
+              <div
+                key={s.towerKey}
+                className="grid items-center gap-3"
+                style={{ gridTemplateColumns: "9.5rem 1fr 3rem 2.5rem" }}
+              >
+                <span className="text-xs font-medium truncate">{towerLabel(s.towerKey)}</span>
+                <PixelBar score={score} cells={20} height={12} />
+                <span
+                  className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase text-right leading-none"
+                  style={{ color: fg }}
+                >
+                  {label}
+                </span>
+                <span className="font-mono text-base tabular-nums text-right leading-none">
+                  {score === null ? "—" : score}
+                  {score !== null && (
+                    <span className="text-xs text-muted-foreground/70">/100</span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+
+          {sorted.length > 4 && (
+            <button
+              type="button"
+              onClick={() => setExpandedSkills((v) => !v)}
+              className="w-full flex items-center justify-center gap-1.5 pt-1 font-sans font-semibold text-[10px] tracking-[0.12em] uppercase text-muted-foreground hover:text-foreground transition-colors leading-none"
+            >
+              {expandedSkills ? (
+                <>
+                  <ChevronUp className="h-3 w-3" />
+                  Mostrar menos
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3 w-3" />
+                  Ver todas ({sorted.length - 4} restantes)
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Star mark with brand glow (arcade-style achievement glyph) ─
+
+function StarMark() {
+  return (
+    <div
+      className="grid place-items-center shrink-0 rounded-[10px]"
+      style={{
+        width: 36,
+        height: 36,
+        background: "oklch(0.637 0.237 22 / 0.12)",
+        boxShadow:
+          "inset 0 0 0 1px oklch(0.637 0.237 22 / 0.35), 0 0 24px oklch(0.637 0.237 22 / 0.15)",
+        color: "oklch(0.82 0.2 22)",
+      }}
+    >
+      <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2.5 14.6 8.6 21 9.4l-4.6 4.3 1.3 6.4L12 16.9 6.3 20.1l1.3-6.4L3 9.4 9.4 8.6 12 2.5z" />
+      </svg>
+    </div>
+  );
+}
+

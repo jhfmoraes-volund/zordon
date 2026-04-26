@@ -11,8 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -198,12 +203,12 @@ export default function DesignSessionsPage() {
         )}
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Session" : "Nova Design Session"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
+      <ResponsiveDialog open={open} onOpenChange={setOpen}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>{editing ? "Editar Session" : "Nova Design Session"}</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>Projeto</Label>
               <Select value={form.projectId} onValueChange={(v) => v && setForm({ ...form, projectId: v })}>
@@ -258,15 +263,15 @@ export default function DesignSessionsPage() {
                 />
               </div>
             )}
-          </div>
-          <div className="flex justify-end gap-2">
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button onClick={save} disabled={!form.projectId || (!!editing && !form.title)}>
               {editing ? "Salvar" : "Iniciar Session"}
             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }

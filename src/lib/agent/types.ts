@@ -43,7 +43,7 @@ export interface PromptContext {
 
 /**
  * Agent definition — prompt builder + tool assembler + context loader.
- * Each agent (Vitor, Zordon, ...) implements this interface.
+ * Each agent (Vitor, Alpha, ...) implements this interface.
  */
 export interface AgentDefinition {
   name: string;
@@ -60,6 +60,8 @@ export interface AgentRunRequest {
   thread: { id: string };
   capabilities: Capabilities;
   userMessage: string;
+  /** Member that triggered the run — used for cost attribution. */
+  memberId?: string | null;
   /** Extra params agents may need (sessionId, sprintId, etc.) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params: Record<string, any>;

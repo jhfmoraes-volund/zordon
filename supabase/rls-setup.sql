@@ -36,9 +36,11 @@ ALTER TABLE public."DesignSessionParticipant" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."DesignSessionStepData" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."DesignSessionItem" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."ProjectGuideline" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public."WeeklyMeeting" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."Meeting" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."MeetingProjectReview" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."MeetingActionItem" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."MeetingAttendee" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."MeetingProjectLink" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."ProjectWikiSection" ENABLE ROW LEVEL SECURITY;
 
 -- ─── Member: everyone reads, only admins write ─────────────
@@ -69,8 +71,9 @@ BEGIN
       'TaskAssignment', 'TaskIteration', 'SprintDeploy',
       'DesignSession', 'DesignSessionParticipant',
       'DesignSessionStepData', 'DesignSessionItem',
-      'ProjectGuideline', 'WeeklyMeeting',
+      'ProjectGuideline', 'Meeting',
       'MeetingProjectReview', 'MeetingActionItem',
+      'MeetingAttendee', 'MeetingProjectLink',
       'ProjectWikiSection'
     ])
   LOOP
@@ -106,8 +109,9 @@ BEGIN
       'TaskAssignment', 'TaskIteration', 'SprintDeploy',
       'DesignSession', 'DesignSessionParticipant',
       'DesignSessionStepData', 'DesignSessionItem',
-      'ProjectGuideline', 'WeeklyMeeting',
+      'ProjectGuideline', 'Meeting',
       'MeetingProjectReview', 'MeetingActionItem',
+      'MeetingAttendee', 'MeetingProjectLink',
       'ProjectWikiSection'
     ])
   LOOP

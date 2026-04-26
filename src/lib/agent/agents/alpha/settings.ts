@@ -3,9 +3,9 @@ import type { SettingsSchema } from "../../settings-schema";
 
 /**
  * Tools that can be toggled under "require_approval_for".
- * Keep in sync with assembleZordonTools in ./tools.ts.
+ * Keep in sync with assembleAlphaTools in ./tools.ts.
  */
-export const ZORDON_TOOL_NAMES = [
+export const ALPHA_TOOL_NAMES = [
   "create_task",
   "assign_task",
   "update_task_status",
@@ -18,7 +18,7 @@ export const ZORDON_TOOL_NAMES = [
   "split_task",
 ] as const;
 
-export const ZORDON_SETTINGS: SettingsSchema = {
+export const ALPHA_SETTINGS: SettingsSchema = {
   sprint_length_days: {
     type: "number",
     label: "Duração padrão do sprint",
@@ -50,7 +50,7 @@ export const ZORDON_SETTINGS: SettingsSchema = {
   auto_assign_priority: {
     type: "enum",
     label: "Critério de atribuição automática",
-    description: "Como Zordon prioriza ao sugerir atribuições.",
+    description: "Como Alpha prioriza ao sugerir atribuições.",
     category: "Comportamento",
     options: [
       { value: "urgency", label: "Urgência (prazo + prioridade)" },
@@ -61,9 +61,9 @@ export const ZORDON_SETTINGS: SettingsSchema = {
   require_approval_for: {
     type: "string_array",
     label: "Ferramentas que exigem confirmação",
-    description: "Zordon perguntará antes de executar cada ferramenta nesta lista.",
+    description: "Alpha perguntará antes de executar cada ferramenta nesta lista.",
     category: "Segurança",
-    options: [...ZORDON_TOOL_NAMES],
+    options: [...ALPHA_TOOL_NAMES],
   },
   fp_matrix: {
     type: "matrix",

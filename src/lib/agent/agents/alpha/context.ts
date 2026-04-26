@@ -6,9 +6,9 @@ import {
   type HeuristicIndexEntry,
 } from "../../config";
 
-export const ZORDON_AGENT_ID = "agent-zordon";
+export const ALPHA_AGENT_ID = "agent-alpha";
 
-export interface ZordonConfig {
+export interface AlphaConfig {
   fp_matrix: FpMatrix;
   sprint_length_days: number;
   fp_overflow_threshold: number;
@@ -17,7 +17,7 @@ export interface ZordonConfig {
   require_approval_for: string[];
 }
 
-const CONFIG_DEFAULTS: ZordonConfig = {
+const CONFIG_DEFAULTS: AlphaConfig = {
   fp_matrix: FP_MATRIX_DEFAULT,
   sprint_length_days: 7,
   fp_overflow_threshold: 1.1,
@@ -26,7 +26,7 @@ const CONFIG_DEFAULTS: ZordonConfig = {
   require_approval_for: ["delete_task", "bulk_move_tasks", "split_task"],
 };
 
-function resolveConfig(raw: Record<string, unknown>): ZordonConfig {
+function resolveConfig(raw: Record<string, unknown>): AlphaConfig {
   return {
     fp_matrix: (raw.fp_matrix as FpMatrix) ?? CONFIG_DEFAULTS.fp_matrix,
     sprint_length_days:
@@ -52,13 +52,17 @@ function resolveConfig(raw: Record<string, unknown>): ZordonConfig {
 }
 
 /**
- * Builds operational context for Zordon's prompt.
+ * Builds operational context for Alpha's prompt.
  * Loads active sprint, sprint list, backlog, member commitments (bateria),
  * real sprint capacity (respecting sprint/project allocations), tuning config
- * and heuristic index.
+ * and heuristic index. If `meetingId` is supplied, also loads the meeting
+ * with reviews grouped by PM so Alpha can fill them in.
  */
-export async function buildOpsContext(): Promise<Record<string, unknown>> {
+export async function buildOpsContext(
+  opts: { meetingId?: string } = {},
+): Promise<Record<string, unknown>> {
   const supabase = db();
+  const { meetingId } = opts;
 
   const [
     { data: activeSprint },
@@ -81,8 +85,8 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
       .order("startDate", { ascending: true })
       .limit(20),
     supabase.from("member_commitment_overview").select("*"),
-    loadAgentConfig(ZORDON_AGENT_ID),
-    loadAgentHeuristicsIndex(ZORDON_AGENT_ID),
+    loadAgentConfig(ALPHA_AGENT_ID),
+    loadAgentHeuristicsIndex(ALPHA_AGENT_ID),
   ]);
 
   const config = resolveConfig(rawConfig);
@@ -272,6 +276,8 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
     ? ["## Alertas", ...alerts].join("\n")
     : "## Alertas\nNenhum alerta.";
 
+  const meetingBlock = await buildMeetingBlock(meetingId);
+
   const sprintContext = [
     paramsBlock,
     "",
@@ -290,17 +296,77 @@ export async function buildOpsContext(): Promise<Record<string, unknown>> {
     backlogBlock,
     "",
     alertsBlock,
+    ...(meetingBlock ? ["", meetingBlock] : []),
   ].join("\n");
 
   return {
     sprintContext,
     sprintId: activeSprint?.id,
     projectId: activeSprint?.projectId,
+    meetingId: meetingId ?? null,
     commitments: commitList,
     tasks: taskList,
     alerts,
     config,
   };
+}
+
+async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
+  if (!meetingId) return null;
+  const supabase = db();
+
+  const { data: meeting } = await supabase
+    .from("Meeting")
+    .select("id, date, status")
+    .eq("id", meetingId)
+    .maybeSingle();
+  if (!meeting) return null;
+
+  const { data: reviews } = await supabase
+    .from("MeetingProjectReview")
+    .select("id, nextSteps, sprintHealth, attentionPoints, additionalNotes, order, project:Project(id, name), member:Member(id, name)")
+    .eq("meetingId", meetingId)
+    .order("order", { ascending: true });
+
+  const reviewList = reviews || [];
+
+  // Group reviews by PM
+  const byPm = new Map<string, { pmName: string; items: typeof reviewList }>();
+  for (const r of reviewList) {
+    const pm = (r.member as { id: string; name: string } | null);
+    if (!pm) continue;
+    const bucket = byPm.get(pm.id) || { pmName: pm.name, items: [] };
+    bucket.items.push(r);
+    byPm.set(pm.id, bucket);
+  }
+
+  const lines: string[] = [
+    `## Reunião ativa: ${meeting.date} (${meeting.status})`,
+    `- **ID:** ${meeting.id}`,
+    `- Use \`get_meeting_reviews\` para detalhes e \`update_meeting_review\` para preencher os campos de cada projeto.`,
+    "",
+    `### Revisões por PM (${reviewList.length} projeto(s))`,
+  ];
+
+  if (byPm.size === 0) {
+    lines.push("Nenhuma revisão cadastrada (nenhum projeto ativo com PM).");
+    return lines.join("\n");
+  }
+
+  for (const { pmName, items } of byPm.values()) {
+    lines.push(`**${pmName}** — ${items.length} projeto(s):`);
+    for (const r of items) {
+      const proj = (r.project as { name: string } | null)?.name || "?";
+      const filled: string[] = [];
+      if (r.nextSteps) filled.push("nextSteps");
+      if (r.attentionPoints) filled.push("attentionPoints");
+      if (r.additionalNotes) filled.push("additionalNotes");
+      const status = filled.length === 0 ? "vazio" : filled.join(", ");
+      lines.push(`  - ${proj} | health: ${r.sprintHealth} | preenchido: ${status}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function renderFpMatrix(matrix: FpMatrix): string {

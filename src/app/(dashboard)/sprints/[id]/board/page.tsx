@@ -26,7 +26,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { TaskSheet } from "@/components/task-sheet";
 import { TaskList } from "@/components/task-list";
-import { ZordonChat } from "@/components/zordon-chat";
+import { AlphaChat } from "@/components/alpha-chat";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -121,10 +122,20 @@ export default function SprintBoardPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const isMobile = useIsMobile();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [sprint, setSprint] = useState<{ name: string; projectId: string; project: { name: string } } | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
+  const didDefaultToMobile = React.useRef(false);
+
+  // No primeiro render em mobile, default para list (evita scroll horizontal de board em telefone)
+  useEffect(() => {
+    if (isMobile && !didDefaultToMobile.current) {
+      didDefaultToMobile.current = true;
+      setViewMode("list");
+    }
+  }, [isMobile]);
 
   // Single sheet handles detail + create (taskId=null → create draft)
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -376,8 +387,8 @@ export default function SprintBoardPage({
         />
       )}
 
-      {/* Zordon Chat */}
-      <ZordonChat
+      {/* Alpha Chat */}
+      <AlphaChat
         contextLabel={sprint?.name}
         contextParams={{ sprintId: id }}
       />
