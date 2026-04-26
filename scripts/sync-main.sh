@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 #
-# scripts/sync-main.sh — sincroniza local → origin/main (tratando local como SSOT).
+# scripts/sync-main.sh — sincroniza local → remote(s)/main (local como SSOT).
 #
 # Fluxo:
 #   1. valida branch + repo
 #   2. checa arquivos sensíveis ANTES de stagear
 #   3. stagea tudo (inclui untracked) e commita
-#   4. fetch origin
-#   5. rebase em cima de origin/main se divergiu (linear history)
-#   6. push regular (sem --force)
+#   4. detecta remotes; se >1, pergunta qual (staging, prod, ambos)
+#   5. fetch + rebase em cima do remote primário (linear history)
+#   6. push regular (sem --force) pra cada target escolhido
 #
 # Uso:
-#   scripts/sync-main.sh                          # abre $EDITOR pra mensagem
-#   scripts/sync-main.sh -m "feat: minha mudança" # mensagem inline
+#   scripts/sync-main.sh                          # abre $EDITOR pra mensagem; pergunta target se >1 remote
+#   scripts/sync-main.sh -m "feat: msg"           # mensagem inline
+#   scripts/sync-main.sh --to staging             # pula prompt, push só pra staging
+#   scripts/sync-main.sh --to all                 # push pra todos os remotes
 #   scripts/sync-main.sh --dry-run                # mostra o que faria
 #   scripts/sync-main.sh --force-branch           # permite rodar fora da main
+#
+# Adicionar segundo remote (uma vez):
+#   git remote add staging <url>
 #
 # Salvaguardas:
 #   - Bloqueia se .env, *.pem, *.key, credentials.*, id_rsa* aparecerem
@@ -25,10 +30,10 @@
 set -euo pipefail
 
 MAIN_BRANCH="${MAIN_BRANCH:-main}"
-REMOTE="${REMOTE:-origin}"
 DRY_RUN=0
 COMMIT_MSG=""
 FORCE_BRANCH=0
+TO_ARG=""
 
 red()    { printf '\033[31m%s\033[0m\n' "$*"; }
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -36,12 +41,13 @@ yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 dim()    { printf '\033[2m%s\033[0m\n' "$*"; }
 
 usage() {
-  sed -n '3,28p' "$0" | sed 's/^# \?//'
+  awk 'NR>=3 && /^#/ { sub(/^# ?/, ""); print; next } NR>=3 { exit }' "$0"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -m|--message)   COMMIT_MSG="${2:-}"; shift 2 ;;
+    --to)           TO_ARG="${2:-}"; shift 2 ;;
     --dry-run)      DRY_RUN=1; shift ;;
     --force-branch) FORCE_BRANCH=1; shift ;;
     -h|--help)      usage; exit 0 ;;
@@ -101,60 +107,119 @@ else
   dim "▸ sem mudanças locais pendentes."
 fi
 
-# ── 4. fetch ─────────────────────────────────────────────
-yellow "▸ fetch $REMOTE/$MAIN_BRANCH"
-[[ $DRY_RUN -eq 0 ]] && git fetch "$REMOTE" "$MAIN_BRANCH"
+# ── 4. pick target remote(s) ─────────────────────────────
+REMOTES=()
+while IFS= read -r line; do REMOTES+=("$line"); done < <(git remote)
+if [[ ${#REMOTES[@]} -eq 0 ]]; then
+  red "✗ nenhum remote configurado. adicione com: git remote add origin <url>"
+  exit 1
+fi
 
-# ── 5. rebase if diverged ────────────────────────────────
-if git rev-parse --verify "$REMOTE/$MAIN_BRANCH" >/dev/null 2>&1; then
+declare -a TARGETS
+if [[ -n "$TO_ARG" ]]; then
+  if [[ "$TO_ARG" == "all" ]]; then
+    TARGETS=("${REMOTES[@]}")
+  else
+    # validate the named remote exists
+    found=0
+    for r in "${REMOTES[@]}"; do [[ "$r" == "$TO_ARG" ]] && found=1; done
+    if [[ $found -eq 0 ]]; then
+      red "✗ remote '$TO_ARG' não existe. configurados: ${REMOTES[*]}"
+      exit 1
+    fi
+    TARGETS=("$TO_ARG")
+  fi
+elif [[ ${#REMOTES[@]} -eq 1 ]]; then
+  TARGETS=("${REMOTES[0]}")
+else
+  echo ""
+  yellow "▸ múltiplos remotes — escolha o destino:"
+  for i in "${!REMOTES[@]}"; do
+    url="$(git remote get-url "${REMOTES[$i]}" 2>/dev/null || echo '?')"
+    printf "    %d) %-12s %s\n" $((i+1)) "${REMOTES[$i]}" "$url"
+  done
+  printf "    a) todos\n"
+  printf "    q) abortar\n"
+  printf "escolha [1-%d/a/q]: " "${#REMOTES[@]}"
+  read -r choice
+  case "$choice" in
+    [aA]) TARGETS=("${REMOTES[@]}") ;;
+    [qQ]|"") red "✗ abortado."; exit 1 ;;
+    *)
+      if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#REMOTES[@]} )); then
+        TARGETS=("${REMOTES[$((choice-1))]}")
+      else
+        red "✗ escolha inválida: '$choice'"
+        exit 1
+      fi
+      ;;
+  esac
+fi
+
+dim "▸ targets: ${TARGETS[*]}"
+PRIMARY="${TARGETS[0]}"
+
+# ── 5. fetch + rebase em cima do primário ────────────────
+yellow "▸ fetch $PRIMARY/$MAIN_BRANCH"
+[[ $DRY_RUN -eq 0 ]] && git fetch "$PRIMARY" "$MAIN_BRANCH"
+
+if git rev-parse --verify "$PRIMARY/$MAIN_BRANCH" >/dev/null 2>&1; then
   local_sha="$(git rev-parse HEAD)"
-  remote_sha="$(git rev-parse "$REMOTE/$MAIN_BRANCH")"
-  base_sha="$(git merge-base HEAD "$REMOTE/$MAIN_BRANCH" 2>/dev/null || echo '')"
+  remote_sha="$(git rev-parse "$PRIMARY/$MAIN_BRANCH")"
+  base_sha="$(git merge-base HEAD "$PRIMARY/$MAIN_BRANCH" 2>/dev/null || echo '')"
 
   if [[ "$local_sha" == "$remote_sha" ]]; then
-    dim "▸ HEAD == $REMOTE/$MAIN_BRANCH (nada a pushar)"
-    green "✓ done."
-    exit 0
+    dim "▸ HEAD == $PRIMARY/$MAIN_BRANCH"
   elif [[ "$base_sha" == "$remote_sha" ]]; then
-    dim "▸ local ahead de $REMOTE/$MAIN_BRANCH — fast-forward."
+    dim "▸ local ahead de $PRIMARY/$MAIN_BRANCH — fast-forward."
   else
-    yellow "▸ divergiu de $REMOTE/$MAIN_BRANCH — rebase..."
-    if ! git_run rebase "$REMOTE/$MAIN_BRANCH"; then
+    yellow "▸ divergiu de $PRIMARY/$MAIN_BRANCH — rebase..."
+    if ! git_run rebase "$PRIMARY/$MAIN_BRANCH"; then
       red ""
       red "✗ rebase em conflito."
       cat <<EOF
   resolva os conflitos, depois rode:
     git add <arquivos resolvidos>
     git rebase --continue
-    git push $REMOTE $MAIN_BRANCH
+    git push $PRIMARY $MAIN_BRANCH
 
-  pra abortar tudo (volta ao estado pré-rebase):
+  pra abortar (volta ao estado pré-rebase):
     git rebase --abort
 EOF
       exit 1
     fi
   fi
 else
-  yellow "▸ $REMOTE/$MAIN_BRANCH ainda não existe — push criará a branch."
+  yellow "▸ $PRIMARY/$MAIN_BRANCH ainda não existe — push criará a branch."
 fi
 
-# ── 6. push (regular, sem --force) ───────────────────────
-yellow "▸ push $REMOTE $MAIN_BRANCH"
-if [[ $DRY_RUN -eq 0 ]]; then
-  if ! git push "$REMOTE" "$MAIN_BRANCH"; then
-    red ""
-    red "✗ push falhou."
-    cat <<EOF
-  causa provável: alguém pushou em $REMOTE/$MAIN_BRANCH entre o fetch e o push.
-  rode o script de novo — ele vai re-fazer fetch+rebase do estado atual.
-
-  se persistir, investigue manualmente com:
-    git fetch $REMOTE $MAIN_BRANCH
-    git log --oneline HEAD..$REMOTE/$MAIN_BRANCH
-EOF
-    exit 1
+# ── 6. push pra cada target ──────────────────────────────
+declare -a FAILED
+for t in "${TARGETS[@]}"; do
+  yellow "▸ push $t $MAIN_BRANCH"
+  if [[ $DRY_RUN -eq 0 ]]; then
+    if ! git push "$t" "$MAIN_BRANCH"; then
+      red "✗ push pra '$t' falhou"
+      FAILED+=("$t")
+    fi
   fi
+done
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+  red ""
+  red "✗ falhou em: ${FAILED[*]}"
+  cat <<EOF
+  causa provável: o remote tem commits que o local não tem, ou histórico diferente.
+  inspecione com:
+    git fetch <remote> $MAIN_BRANCH
+    git log --oneline HEAD..<remote>/$MAIN_BRANCH
+
+  rode o script de novo se for só "remote moveu durante o push".
+EOF
+  exit 1
 fi
 
 green "✓ sync done."
-[[ $DRY_RUN -eq 0 ]] && git log -1 --oneline | sed 's/^/  /'
+if [[ $DRY_RUN -eq 0 ]]; then
+  git log -1 --oneline | sed 's/^/  /'
+fi
