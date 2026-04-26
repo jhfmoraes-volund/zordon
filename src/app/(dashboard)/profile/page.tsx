@@ -234,12 +234,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Skills + PDI lado a lado */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <SkillsWidget summary={skillsSummary} />
-        <PdiWidget />
-      </div>
-
       {/* Capacity widget — bateria + esta semana */}
       <CapacityCard summary={capacity} />
 
@@ -386,6 +380,12 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+
+      {/* Skills + PDI lado a lado — last row */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SkillsWidget summary={skillsSummary} />
+        <PdiWidget />
+      </div>
 
       <TaskSheet
         taskId={sheetTaskId}

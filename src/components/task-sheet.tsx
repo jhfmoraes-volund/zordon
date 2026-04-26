@@ -518,8 +518,10 @@ function TaskSheetEditor({
           </FieldBlock>
         </div>
 
-        {/* FP / due date / billable */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* FP / due date / billable — em telas estreitas (mobile) o date input
+            do Prazo precisa de largura mínima, entao stack 2x2 (FP+Prazo, Billable
+            sozinho). sm:grid-cols-3 mantém os 3 lado a lado em telas maiores. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <FieldBlock label="Function Points" icon={<Zap className="h-3.5 w-3.5" />}>
             <Input
               type="number"
@@ -539,19 +541,21 @@ function TaskSheetEditor({
             />
           </FieldBlock>
 
-          <FieldBlock label="Billable">
-            <button
-              type="button"
-              onClick={() => onSave({ billable: !task.billable })}
-              className={`h-8 rounded-md border px-3 text-sm text-left transition-colors ${
-                task.billable
-                  ? "bg-green-500/10 border-green-500/30 text-green-600"
-                  : "bg-muted border-border text-muted-foreground"
-              }`}
-            >
-              {task.billable ? "Sim" : "Nao"}
-            </button>
-          </FieldBlock>
+          <div className="col-span-2 sm:col-span-1">
+            <FieldBlock label="Billable">
+              <button
+                type="button"
+                onClick={() => onSave({ billable: !task.billable })}
+                className={`h-8 w-full rounded-md border px-3 text-sm text-left transition-colors ${
+                  task.billable
+                    ? "bg-green-500/10 border-green-500/30 text-green-600"
+                    : "bg-muted border-border text-muted-foreground"
+                }`}
+              >
+                {task.billable ? "Sim" : "Nao"}
+              </button>
+            </FieldBlock>
+          </div>
         </div>
 
         {/* Scope / complexity */}

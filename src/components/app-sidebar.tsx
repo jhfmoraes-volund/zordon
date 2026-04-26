@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -27,12 +28,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { VolundLogo } from "@/components/volund-logo";
 import { useAuth } from "@/contexts/auth-context";
 import { setImpersonation } from "@/app/(dashboard)/_actions/impersonation";
 import { hasMinLevel, MANAGER, ADMIN, roleLabel } from "@/lib/roles";
@@ -110,13 +111,21 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border px-5 py-4 group-data-[collapsible=icon]:hidden">
-        <Link href="/" className="flex items-center gap-3">
-          <VolundLogo className="h-4 w-auto" color="currentColor" />
+      <SidebarHeader className="h-14 flex-row items-center justify-start border-b border-sidebar-border !p-0">
+        <Link
+          href="/"
+          aria-label="Volund"
+          className="flex h-full w-12 shrink-0 items-center justify-center"
+        >
+          <Image
+            src="/volund-logo-V.png"
+            alt=""
+            width={24}
+            height={24}
+            className="size-6"
+            priority
+          />
         </Link>
-        <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground mt-1">
-          Zordon
-        </p>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -148,8 +157,10 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarGroup>
 
+        <SidebarSeparator className="my-1" />
+
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 px-5">
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 px-5 group-data-[collapsible=icon]:!mt-0">
             Projetos
           </SidebarGroupLabel>
           <SidebarMenu>
@@ -173,8 +184,10 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarGroup>
 
+        <SidebarSeparator className="my-1" />
+
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 px-5">
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 px-5 group-data-[collapsible=icon]:!mt-0">
             Gestão
           </SidebarGroupLabel>
           <SidebarMenu>
