@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { Bot, History, Loader2, Send, Wrench, X } from "lucide-react";
 import type { UIMessage } from "ai";
 import { Button } from "@/components/ui/button";
@@ -30,8 +29,15 @@ import { useAlphaKeyboard } from "./use-alpha-keyboard";
  * Keyboard shortcut: ⌘⇧A / Ctrl+Shift+A toggles open (registered here).
  */
 export function AlphaChatPanel() {
-  const { enabled, isOpen, setOpen, messages, isLoading, sendMessage } =
-    useAlphaChat();
+  const {
+    enabled,
+    isOpen,
+    setOpen,
+    messages,
+    isLoading,
+    sendMessage,
+    setHistoryOpen,
+  } = useAlphaChat();
   const isMobile = useIsMobile();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -77,14 +83,16 @@ export function AlphaChatPanel() {
         <span className="text-sm font-semibold">Alpha</span>
       </div>
       <div className="flex items-center gap-1">
-        <Link
-          href="/ops"
-          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          title="Histórico de conversas"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          onClick={() => setHistoryOpen(true)}
           aria-label="Histórico de conversas"
+          title="Histórico de conversas"
         >
           <History className="size-3.5" />
-        </Link>
+        </Button>
         <Button
           variant="ghost"
           size="icon"

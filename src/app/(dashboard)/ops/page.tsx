@@ -233,77 +233,86 @@ export default function OpsPage() {
       </div>
 
       <div className="flex flex-1 min-h-0">
-        {/* Chat */}
+        {/* Chat — centered max-width column, Claude-like.
+            Conteúdo (mensagens + composer) é bounded por max-w-3xl mx-auto, em
+            vez de stickar nas bordas do shell. O scroll fica no contêiner
+            externo pra mensagens longas terem respiro lateral. */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-            {chat.messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2">
-                <Bot className="h-10 w-10" />
-                <p className="text-sm">Ola! Sou o Alpha, seu assistente de operacoes.</p>
-                <p className="text-xs">Pergunte sobre o sprint, alocacao da equipe, ou peca para criar tasks.</p>
+          <div ref={scrollRef} className="flex-1 overflow-y-auto">
+            {chat.messages.length === 0 ? (
+              <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-4 text-center text-muted-foreground">
+                <Bot className="mb-4 h-12 w-12 opacity-30" />
+                <p className="text-base font-medium text-foreground">Olá! Sou o Alpha</p>
+                <p className="mt-1 max-w-md text-sm">
+                  Pergunte sobre o sprint, alocação da equipe, ou peça para criar tasks.
+                </p>
               </div>
-            )}
+            ) : (
+              <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-8">
+                {chat.messages.map((msg: UIMessage) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[85%] min-w-0 rounded-2xl text-sm overflow-hidden break-words ${
+                        msg.role === "user"
+                          ? "px-4 py-2.5 bg-primary text-primary-foreground rounded-tr-sm"
+                          : "px-4 py-3 bg-muted rounded-tl-sm"
+                      }`}
+                    >
+                      {msg.parts?.map((part, i) => {
+                        if (part.type === "text") {
+                          return <Markdown key={i}>{part.text}</Markdown>;
+                        }
+                        if (part.type.startsWith("tool-")) {
+                          const toolPart = part as { type: string; toolCallId: string; state: string; title?: string };
+                          return (
+                            <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground py-1">
+                              <Wrench className="h-3 w-3" />
+                              <span>{toolPart.title || toolPart.toolCallId}</span>
+                              {toolPart.state === "result" && <span className="text-green-600">✓</span>}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  </div>
+                ))}
 
-            {chat.messages.map((msg: UIMessage) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] min-w-0 rounded-2xl text-sm overflow-hidden break-words ${
-                    msg.role === "user"
-                      ? "px-4 py-2.5 bg-primary text-primary-foreground rounded-tr-sm"
-                      : "px-4 py-3 bg-muted rounded-tl-sm"
-                  }`}
-                >
-                  {msg.parts?.map((part, i) => {
-                    if (part.type === "text") {
-                      return <Markdown key={i}>{part.text}</Markdown>;
-                    }
-                    if (part.type.startsWith("tool-")) {
-                      const toolPart = part as { type: string; toolCallId: string; state: string; title?: string };
-                      return (
-                        <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground py-1">
-                          <Wrench className="h-3 w-3" />
-                          <span>{toolPart.title || toolPart.toolCallId}</span>
-                          {toolPart.state === "result" && <span className="text-green-600">✓</span>}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
-                </div>
-              </div>
-            ))}
-
-            {isLoading && chat.messages[chat.messages.length - 1]?.role === "user" && (
-              <div className="flex justify-start">
-                <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Pensando...
-                </div>
+                {isLoading && chat.messages[chat.messages.length - 1]?.role === "user" && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Pensando...
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          <div className="border-t p-4 shrink-0 pb-safe">
-            <div className="flex gap-2">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="Pergunte sobre o sprint, alocação ou crie tasks..."
-                rows={1}
-                className="flex-1 min-h-[40px] max-h-[120px] resize-none"
-              />
-              <Button
-                size="icon"
-                disabled={!input.trim() || isLoading}
-                onClick={() => sendMessage(input)}
-                className="shrink-0 h-10 w-10"
-              >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
+          <div className="shrink-0 pb-safe">
+            <div className="mx-auto w-full max-w-3xl px-4 pb-4">
+              <div className="flex items-end gap-2 rounded-2xl border bg-background p-2 shadow-sm focus-within:ring-1 focus-within:ring-ring/40">
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder="Pergunte sobre o sprint, alocação ou crie tasks..."
+                  rows={1}
+                  className="min-h-[40px] max-h-[160px] flex-1 resize-none border-0 bg-transparent px-2 shadow-none focus-visible:ring-0"
+                />
+                <Button
+                  size="icon"
+                  disabled={!input.trim() || isLoading}
+                  onClick={() => sendMessage(input)}
+                  className="h-9 w-9 shrink-0 rounded-lg"
+                >
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

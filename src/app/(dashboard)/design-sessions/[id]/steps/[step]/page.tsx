@@ -25,6 +25,7 @@ type Session = {
   type: string;
   status: string;
   currentStep: number;
+  projectId: string;
   project: { name: string };
 };
 
@@ -178,6 +179,7 @@ export default function StepPage({
         onUpdateNote={handleUpdateNote}
         onDeleteNote={handleDeleteNote}
         hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing"}
+        backHref={`/projects/${session.projectId}`}
       >
         {stepDataLoaded ? (
           <StepContent

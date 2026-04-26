@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Menu, Check, Circle, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Menu, Check, Circle, Loader2 } from "lucide-react";
 import type { StepDef } from "@/lib/design-session-steps";
 import { StickyNoteBoard, type Note } from "./sticky-note";
 import { AIChat } from "./ai-chat";
@@ -22,6 +23,7 @@ export function WizardLayout({
   onUpdateNote,
   onDeleteNote,
   hideSidePanels,
+  backHref,
   children,
 }: {
   sessionTitle: string;
@@ -37,6 +39,7 @@ export function WizardLayout({
   onUpdateNote: (id: string, text: string) => void;
   onDeleteNote: (id: string) => void;
   hideSidePanels?: boolean;
+  backHref?: string;
   children: React.ReactNode;
 }) {
   const step = steps[currentStep];
@@ -50,11 +53,22 @@ export function WizardLayout({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="border-b bg-background px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <div className="border-b bg-background px-3 sm:px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1 sm:gap-3 min-w-0 flex-1">
+            {backHref && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                nativeButton={false}
+                render={<Link href={backHref} aria-label="Voltar para o projeto" />}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
             <Sheet>
-              <SheetTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8" />}>
+              <SheetTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" />}>
                 <Menu className="h-4 w-4" />
               </SheetTrigger>
               <SheetContent side="left" className="w-80 p-0">
@@ -92,20 +106,20 @@ export function WizardLayout({
               </SheetContent>
             </Sheet>
 
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold">{step?.title}</h1>
-                <Badge variant="secondary" className="text-xs">
+                <h1 className="text-sm sm:text-lg font-semibold truncate">{step?.title}</h1>
+                <Badge variant="secondary" className="text-xs shrink-0">
                   {currentStep + 1}/{steps.length}
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground">{step?.description}</p>
+              <p className="text-xs text-muted-foreground truncate hidden sm:block">{step?.description}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {saving !== undefined && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <span className="text-xs text-muted-foreground hidden sm:flex items-center gap-1">
                 {saving ? (
                   <><Loader2 className="h-3 w-3 animate-spin" /> Salvando...</>
                 ) : (
@@ -113,13 +127,25 @@ export function WizardLayout({
                 )}
               </span>
             )}
-            <Button variant="outline" size="sm" onClick={onPrevious} disabled={isFirst}>
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Anterior
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onPrevious}
+              disabled={isFirst}
+              aria-label="Anterior"
+              className="px-2 sm:px-2.5"
+            >
+              <ChevronLeft className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Anterior</span>
             </Button>
-            <Button size="sm" onClick={onNext}>
-              {isLast ? "Revisar tasks" : "Proximo"}
-              <ChevronRight className="h-4 w-4 ml-1" />
+            <Button
+              size="sm"
+              onClick={onNext}
+              aria-label={isLast ? "Revisar tasks" : "Proximo"}
+              className="px-2 sm:px-2.5"
+            >
+              <span className="hidden sm:inline">{isLast ? "Revisar tasks" : "Proximo"}</span>
+              <ChevronRight className="h-4 w-4 sm:ml-1" />
             </Button>
           </div>
         </div>

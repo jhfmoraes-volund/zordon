@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Loader2, Bot, User, Wrench } from "lucide-react";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Send, Loader2, Bot, Wrench, X } from "lucide-react";
 import type { UIMessage } from "ai";
 import { Markdown } from "@/components/ui/markdown";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function AIChatPanel({
   isOpen,
@@ -16,6 +18,7 @@ export function AIChatPanel({
   currentStepTitle,
   onInputChange,
   onSubmit,
+  onOpenChange,
 }: {
   isOpen: boolean;
   messages: UIMessage[];
@@ -24,96 +27,132 @@ export function AIChatPanel({
   currentStepTitle: string;
   onInputChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
+  onOpenChange?: (open: boolean) => void;
 }) {
+  const isMobile = useIsMobile();
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading]);
 
-  // Focus textarea when panel opens
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => textareaRef.current?.focus(), 100);
+      setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 100);
     }
   }, [isOpen]);
+
+  const Header = (
+    <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-muted/30 px-4">
+      <div className="flex items-center gap-2">
+        <Bot className="size-4 text-primary" />
+        <span className="text-sm font-semibold">Assistente de Design</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant="secondary" className="text-xs">
+          {currentStepTitle}
+        </Badge>
+        {isMobile && onOpenChange && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={() => onOpenChange(false)}
+            aria-label="Fechar assistente"
+          >
+            <X className="size-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+
+  const Messages = (
+    <div ref={scrollRef} className="flex-1 space-y-5 overflow-y-auto overscroll-contain p-4">
+      {messages.length === 0 && !isLoading && (
+        <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+          <Bot className="mb-3 h-10 w-10 opacity-30" />
+          <p className="text-sm font-medium">Como posso ajudar?</p>
+          <p className="mt-1 max-w-[250px] text-xs">
+            Posso preencher campos, criar cards, sugerir melhorias e analisar a sessao.
+          </p>
+        </div>
+      )}
+
+      {messages.map((msg, idx) => (
+        <MessageBubble key={`${msg.id}-${idx}`} message={msg} />
+      ))}
+
+      {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-xs">Pensando...</span>
+        </div>
+      )}
+    </div>
+  );
+
+  const Composer = (
+    <form onSubmit={onSubmit} className="shrink-0 border-t border-border/50 p-3 pb-safe">
+      <div className="flex gap-2">
+        <Textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => onInputChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (input.trim() && !isLoading) {
+                onSubmit(e);
+              }
+            }
+          }}
+          placeholder="Pergunte ou peça algo..."
+          rows={1}
+          className="max-h-[100px] min-h-[40px] flex-1 resize-none text-sm"
+        />
+        <Button
+          type="submit"
+          size="icon"
+          className="h-10 w-10 shrink-0"
+          disabled={!input.trim() || isLoading}
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={isOpen} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          className="flex w-full max-w-full flex-col gap-0 rounded-t-xl p-0 data-[side=bottom]:h-[90dvh] sm:max-w-full"
+        >
+          {Header}
+          {Messages}
+          {Composer}
+        </SheetContent>
+      </Sheet>
+    );
+  }
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed bottom-24 right-6 z-50 w-[420px] h-[550px] flex flex-col rounded-2xl border bg-background shadow-2xl overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-        <div className="flex items-center gap-2">
-          <Bot className="h-5 w-5 text-primary" />
-          <span className="text-sm font-semibold">Assistente de Design</span>
-        </div>
-        <Badge variant="secondary" className="text-xs">
-          {currentStepTitle}
-        </Badge>
-      </div>
-
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-5">
-        {messages.length === 0 && !isLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-            <Bot className="h-10 w-10 mb-3 opacity-30" />
-            <p className="text-sm font-medium">Como posso ajudar?</p>
-            <p className="text-xs mt-1 max-w-[250px]">
-              Posso preencher campos, criar cards, sugerir melhorias e analisar a sessao.
-            </p>
-          </div>
-        )}
-
-        {messages.map((msg, idx) => (
-          <MessageBubble key={`${msg.id}-${idx}`} message={msg} />
-        ))}
-
-        {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-xs">Pensando...</span>
-          </div>
-        )}
-      </div>
-
-      {/* Input */}
-      <form onSubmit={onSubmit} className="border-t p-3">
-        <div className="flex gap-2">
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (input.trim() && !isLoading) {
-                  onSubmit(e);
-                }
-              }
-            }}
-            placeholder="Pergunte ou peça algo..."
-            rows={1}
-            className="resize-none text-sm min-h-[40px] max-h-[100px]"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            disabled={!input.trim() || isLoading}
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </form>
+    <div className="fixed bottom-24 right-6 z-50 flex h-[550px] w-[420px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+      {Header}
+      {Messages}
+      {Composer}
     </div>
   );
 }

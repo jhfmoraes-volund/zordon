@@ -16,6 +16,7 @@ import {
   AlphaChatProvider,
   AlphaChatTrigger,
   AlphaChatPanel,
+  AlphaHistorySheet,
 } from "@/components/alpha-chat";
 import {
   verifySession,
@@ -127,6 +128,10 @@ export default async function DashboardLayout({
               </main>
               <AlphaChatPanel />
             </div>
+            {/* History sheet renderizado fora da arvore do AlphaChatPanel
+                pra evitar conflito de focus-trap entre dois Base UI Dialogs
+                irmaos. State e ações vivem no AlphaChatProvider. */}
+            <AlphaHistorySheet />
           </PageTitleProvider>
         </AlphaChatProvider>
       </SidebarProvider>

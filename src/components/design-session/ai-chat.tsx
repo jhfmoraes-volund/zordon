@@ -36,6 +36,9 @@ export function AIChat() {
           e.preventDefault();
           chat.sendMessage(chat.input);
         }}
+        onOpenChange={(open) => {
+          if (open !== chat.isOpen) chat.toggle();
+        }}
       />
     </>
   );

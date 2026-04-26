@@ -31,6 +31,15 @@ type AlphaChatValue = {
   messages: UIMessage[];
   isLoading: boolean;
   sendMessage: (text: string) => void;
+  /** Current thread ID. null = fresh conversation (next send creates a new one). */
+  threadId: string | null;
+  /** Load an existing thread's messages into the current chat. */
+  loadThread: (id: string) => Promise<void>;
+  /** Reset to an empty conversation (clears messages, drops threadId). */
+  newConversation: () => void;
+  /** Visibility of the history sheet (separate dialog from the chat panel). */
+  historyOpen: boolean;
+  setHistoryOpen: (next: boolean) => void;
 };
 
 const STUB: AlphaChatValue = {
@@ -41,7 +50,33 @@ const STUB: AlphaChatValue = {
   messages: [],
   isLoading: false,
   sendMessage: () => {},
+  threadId: null,
+  loadThread: async () => {},
+  newConversation: () => {},
+  historyOpen: false,
+  setHistoryOpen: () => {},
 };
+
+/** Convert raw DB messages into UIMessages the AI SDK chat expects. */
+function toUIMessages(
+  messages: Array<{ id: string; role: string; content: string; parts: unknown }>,
+): UIMessage[] {
+  return messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => {
+      const storedParts = Array.isArray(m.parts)
+        ? (m.parts as UIMessage["parts"])
+        : null;
+      return {
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        parts:
+          storedParts && storedParts.length > 0
+            ? storedParts
+            : [{ type: "text" as const, text: m.content }],
+      };
+    });
+}
 
 const AlphaChatContext = createContext<AlphaChatValue>(STUB);
 
@@ -59,6 +94,7 @@ export function AlphaChatProvider({ children }: { children: ReactNode }) {
 function AlphaChatProviderInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const lastOpenedAtRef = useRef<number | null>(null);
 
@@ -129,6 +165,24 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     [chat, isLoading, pathname, threadId],
   );
 
+  const loadThread = useCallback(
+    async (id: string) => {
+      const res = await fetch(`/api/agents/alpha/chat?threadId=${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setThreadId(id);
+      chat.setMessages(toUIMessages(data.messages || []));
+      lastOpenedAtRef.current = Date.now();
+    },
+    [chat],
+  );
+
+  const newConversation = useCallback(() => {
+    setThreadId(null);
+    chat.setMessages([]);
+    lastOpenedAtRef.current = Date.now();
+  }, [chat]);
+
   const value: AlphaChatValue = {
     enabled: true,
     isOpen,
@@ -137,6 +191,11 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     messages: chat.messages,
     isLoading,
     sendMessage,
+    threadId,
+    loadThread,
+    newConversation,
+    historyOpen,
+    setHistoryOpen,
   };
 
   return <AlphaChatContext.Provider value={value}>{children}</AlphaChatContext.Provider>;
