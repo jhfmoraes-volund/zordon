@@ -183,9 +183,8 @@ export function CapacityWidget({
 
       {/* Breakdown */}
       <div
-        className="rounded-md px-3 py-2 text-[11px] font-mono tabular-nums leading-relaxed"
+        className="rounded-md px-3 py-2 text-[11px] font-mono tabular-nums leading-relaxed bg-muted/50"
         style={{
-          background: "oklch(0.19 0 0 / 0.5)",
           boxShadow: "inset 0 0 0 1px oklch(1 0 0 / 0.05)",
         }}
       >

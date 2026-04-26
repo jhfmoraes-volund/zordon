@@ -614,9 +614,8 @@ function SkillsWidget({ summary }: { summary: SkillsSummary | null }) {
 
         {/* Area strip — torre primária + secundária + selos */}
         <div
-          className="flex items-center gap-2 flex-wrap rounded-lg px-3.5 py-2.5"
+          className="flex items-center gap-2 flex-wrap rounded-lg px-3.5 py-2.5 bg-muted/50"
           style={{
-            background: "oklch(0.19 0 0 / 0.5)",
             boxShadow: "inset 0 0 0 1px oklch(1 0 0 / 0.05)",
           }}
         >

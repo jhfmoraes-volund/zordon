@@ -1,6 +1,7 @@
 "use client";
 
 import { Bot, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -10,13 +11,14 @@ import {
 import { useAlphaChat } from "./store";
 
 /**
- * Botão Bot que vive no header (mobile + desktop). Toggle do panel/sheet.
- * Estado ativo (isOpen) usa primary color; loading mostra dot pulsando.
+ * Botão Bot que vive no header. Toggle do panel/sheet.
+ * Visual: ícone vermelho vivo (`--primary`) com glow leve estático ao redor.
+ * Sem animação — o glow é constante. Estado `isOpen` adiciona bg + ring.
  *
- * Atalho: ⌘⇧A / Ctrl+Shift+A (registrado em useAlphaKeyboard).
+ * Atalho: ⌘⇧A (registrado em useAlphaKeyboard).
  */
 export function AlphaChatTrigger() {
-  const { enabled, isOpen, toggle, isLoading } = useAlphaChat();
+  const { enabled, isOpen, toggle } = useAlphaChat();
   if (!enabled) return null;
 
   return (
@@ -29,12 +31,14 @@ export function AlphaChatTrigger() {
             variant="ghost"
             data-active={isOpen}
             aria-label={isOpen ? "Fechar Alpha" : "Abrir Alpha"}
-            className="relative size-9 shrink-0 data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:ring-1 data-[active=true]:ring-primary/30"
+            className={cn(
+              "relative size-9 shrink-0 text-primary",
+              "shadow-[0_0_8px_-1px] shadow-primary/40",
+              "hover:text-primary hover:bg-primary/10",
+              "data-[active=true]:bg-primary/10 data-[active=true]:ring-1 data-[active=true]:ring-primary/40",
+            )}
           >
             {isOpen ? <X className="size-4" /> : <Bot className="size-4" />}
-            {isLoading && !isOpen && (
-              <span className="absolute right-1.5 top-1.5 size-2 animate-pulse rounded-full bg-yellow-400" />
-            )}
           </Button>
         }
       />
