@@ -197,9 +197,9 @@ export function AlphaChatPanel() {
     return (
       <Sheet open={isOpen} onOpenChange={setOpen}>
         <SheetContent
-          side="right"
+          side="bottom"
           showCloseButton={false}
-          className="flex h-[100dvh] w-full max-w-full flex-col gap-0 rounded-none p-0 sm:max-w-full"
+          className="flex h-[90dvh] w-full max-w-full flex-col gap-0 rounded-t-xl p-0 sm:max-w-full"
         >
           {Header}
           {Messages}
