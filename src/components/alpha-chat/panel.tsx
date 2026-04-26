@@ -48,7 +48,11 @@ export function AlphaChatPanel() {
   }, [messages]);
 
   useEffect(() => {
-    if (isOpen) setTimeout(() => textareaRef.current?.focus(), 100);
+    // preventScroll: true evita que o browser puxe a página inteira pra trazer
+    // o textarea pra view (panel já tá visível, não precisa scroll do main).
+    if (isOpen) {
+      setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 100);
+    }
   }, [isOpen]);
 
   if (!enabled) return null;
@@ -95,7 +99,7 @@ export function AlphaChatPanel() {
   );
 
   const Messages = (
-    <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
+    <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
       {messages.length === 0 && (
         <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
           <Bot className="mb-3 h-10 w-10 opacity-30" />
