@@ -58,7 +58,7 @@ export default async function DashboardLayout({
       <SidebarProvider>
         <AppSidebar />
         <main className="flex-1 overflow-auto">
-          <div className="flex items-center gap-2 border-b border-border/50 px-6 py-3">
+          <div className="flex items-center gap-2 border-b border-border/50 px-6 py-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
             <SidebarTrigger className="h-10 w-10" />
             {auth.isImpersonating && (
               <span className="text-xs text-amber-500 font-medium uppercase tracking-wider">

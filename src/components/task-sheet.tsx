@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database.types";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -77,9 +78,23 @@ type TaskSheetProps = {
 export function TaskSheet({
   taskId, open, onOpenChange, createDefaults, onChange,
 }: TaskSheetProps) {
+  const isMobile = useIsMobile();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full !sm:max-w-[720px] overflow-y-auto p-0">
+      <SheetContent
+        side={isMobile ? "bottom" : "right"}
+        className={
+          isMobile
+            ? "h-[92dvh] max-h-[92dvh] rounded-t-xl p-0"
+            : "w-full !sm:max-w-[720px] overflow-y-auto p-0"
+        }
+      >
+        {isMobile && (
+          <div
+            aria-hidden="true"
+            className="absolute top-2 left-1/2 -translate-x-1/2 h-1.5 w-12 rounded-full bg-muted z-10"
+          />
+        )}
         {open && (
           <TaskSheetBody
             // Remount on each open cycle so internal state always starts fresh
