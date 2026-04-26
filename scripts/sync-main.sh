@@ -11,12 +11,17 @@
 #   6. push regular (sem --force) pra cada target escolhido
 #
 # Uso:
-#   scripts/sync-main.sh                          # abre $EDITOR pra mensagem; pergunta target se >1 remote
-#   scripts/sync-main.sh -m "feat: msg"           # mensagem inline
-#   scripts/sync-main.sh --to staging             # pula prompt, push só pra staging
-#   scripts/sync-main.sh --to all                 # push pra todos os remotes
+#   scripts/sync-main.sh                          # abre $EDITOR pra mensagem; push pra TODOS os remotes (default)
+#   scripts/sync-main.sh -m "feat: msg"           # mensagem inline; push pra todos
+#   scripts/sync-main.sh --to staging             # push só pra staging
+#   scripts/sync-main.sh --to origin              # push só pra origin (prod)
+#   scripts/sync-main.sh --to all                 # explícito (mesmo que default)
 #   scripts/sync-main.sh --dry-run                # mostra o que faria
 #   scripts/sync-main.sh --force-branch           # permite rodar fora da main
+#
+# Default behavior: when no --to flag is given AND multiple remotes exist,
+# push pra TODOS. Otimiza pra LLMs / CI / scripts encadeados — sem prompt
+# interativo. Pra escolher um único target, use --to <nome>.
 #
 # Adicionar segundo remote (uma vez):
 #   git remote add staging <url>
@@ -157,23 +162,9 @@ if [[ -n "$TO_ARG" ]]; then
 elif [[ ${#REMOTES[@]} -eq 1 ]]; then
   TARGETS=("${REMOTES[0]}")
 else
-  echo ""
-  for i in "${!REMOTES[@]}"; do
-    printf "  %d) %s\n" $((i+1)) "${REMOTES[$i]}"
-  done
-  all_n=$((${#REMOTES[@]} + 1))
-  printf "  %d) todos\n" "$all_n"
-  printf "> "
-  read -rn 1 choice
-  echo ""
-  if [[ "$choice" == "$all_n" ]]; then
-    TARGETS=("${REMOTES[@]}")
-  elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#REMOTES[@]} )); then
-    TARGETS=("${REMOTES[$((choice-1))]}")
-  else
-    red "✗ inválido: '$choice'"
-    exit 1
-  fi
+  # Default: push pra todos os remotes. Sem prompt — é o que LLMs / CI
+  # esperam. Pra single target, use --to <nome>.
+  TARGETS=("${REMOTES[@]}")
 fi
 
 dim "▸ targets: ${TARGETS[*]}"

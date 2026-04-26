@@ -24,3 +24,22 @@ The `DIRECT_URL` env var (in `.env`) points to the Supabase Postgres connection 
 - After running the migration, update `src/lib/supabase/database.types.ts` to reflect schema changes.
 - Never use `prisma migrate` — Prisma is not the migration tool for this project.
 <!-- END:supabase-agent-rules -->
+
+<!-- BEGIN:git-agent-rules -->
+# Git — commit + push via sync-main.sh
+
+Pra commit + push em main, use sempre o script:
+
+```bash
+bash scripts/sync-main.sh -m "tag: area — short message"
+```
+
+O script:
+- Stagea tudo (untracked + modified), bloqueia arquivos sensíveis (.env, *.pem, *.key, credentials.*, id_rsa)
+- Auto-tagueia o commit se `-m` não for passado (formato `ZRD-JM-NN`)
+- Rebase em cima do remote primário (linear history, nunca merge)
+- **Push pra TODOS os remotes por default** (origin = prod, staging = staging) — não pergunta interativamente
+- Pra single target: `--to staging` ou `--to origin`
+
+LLMs podem rodar `bash scripts/sync-main.sh -m "..."` direto sem se preocupar com prompts. O default já faz o certo.
+<!-- END:git-agent-rules -->
