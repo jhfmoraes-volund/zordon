@@ -26,7 +26,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { TaskSheet } from "@/components/task-sheet";
 import { TaskList } from "@/components/task-list";
-import { AlphaChat } from "@/components/alpha-chat";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 // ─── Types ─────────────────────────────────────────────────
@@ -386,12 +385,6 @@ export default function SprintBoardPage({
           emptyMessage="Nenhuma task neste sprint."
         />
       )}
-
-      {/* Alpha Chat */}
-      <AlphaChat
-        contextLabel={sprint?.name}
-        contextParams={{ sprintId: id }}
-      />
 
       {/* Task Sheet (detail + create) */}
       <TaskSheet

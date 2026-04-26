@@ -12,7 +12,6 @@ import {
   CheckCircle2, Circle, Loader2, Eye, AlertCircle, CalendarRange,
   FileText, Pencil, AlertTriangle, Settings,
 } from "lucide-react";
-import { AlphaChat } from "@/components/alpha-chat";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -483,12 +482,6 @@ export default function ProjectDetailPage({
         </ResponsiveDialogContent>
       </ResponsiveDialog>
 
-      {project && (
-        <AlphaChat
-          contextLabel={project.name}
-          contextParams={{ projectId: id }}
-        />
-      )}
     </div>
   );
 }

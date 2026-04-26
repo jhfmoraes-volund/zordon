@@ -22,7 +22,6 @@ import {
   ArrowLeft, Plus, Trash2, CheckCircle2, Circle, Clock,
   ChevronDown, ChevronRight, ChevronsUpDown,
 } from "lucide-react";
-import { AlphaChat } from "@/components/alpha-chat";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -633,12 +632,6 @@ export default function MeetingDetailPage({
         </ResponsiveDialogContent>
       </ResponsiveDialog>
 
-      {meeting && (
-        <AlphaChat
-          contextLabel={`Reunião ${meeting.date}`}
-          contextParams={{ meetingId: id }}
-        />
-      )}
     </div>
   );
 }

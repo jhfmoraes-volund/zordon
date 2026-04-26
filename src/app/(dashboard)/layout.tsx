@@ -6,6 +6,11 @@ import {
   type SessionMember,
 } from "@/contexts/auth-context";
 import {
+  AlphaChatProvider,
+  AlphaChatTrigger,
+  AlphaChatPanel,
+} from "@/components/alpha-chat";
+import {
   verifySession,
   getRealRole,
   getEffectiveRole,
@@ -57,17 +62,26 @@ export default async function DashboardLayout({
     <AuthProvider value={auth}>
       <SidebarProvider>
         <AppSidebar />
-        <main className="flex-1 overflow-auto">
-          <div className="flex items-center gap-2 border-b border-border/50 px-6 py-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
-            <SidebarTrigger className="h-10 w-10" />
-            {auth.isImpersonating && (
-              <span className="text-xs text-amber-500 font-medium uppercase tracking-wider">
-                Impersonando · {auth.member?.name}
-              </span>
-            )}
+        <AlphaChatProvider>
+          <main className="flex-1 overflow-auto">
+            <div className="sticky top-0 z-40 flex items-center gap-2 border-b border-border/50 bg-background/80 px-6 py-3 pt-[max(env(safe-area-inset-top),0.75rem)] backdrop-blur md:static md:bg-transparent md:backdrop-blur-none">
+              <SidebarTrigger className="h-10 w-10" />
+              {auth.isImpersonating && (
+                <span className="text-xs text-amber-500 font-medium uppercase tracking-wider">
+                  Impersonando · {auth.member?.name}
+                </span>
+              )}
+              <div className="ml-auto md:hidden">
+                <AlphaChatTrigger variant="header" />
+              </div>
+            </div>
+            <div className="px-3 py-4 sm:px-4 lg:p-6">{children}</div>
+          </main>
+          <div className="hidden md:block">
+            <AlphaChatTrigger variant="floating" />
           </div>
-          <div className="px-3 py-4 sm:px-4 lg:p-6">{children}</div>
-        </main>
+          <AlphaChatPanel />
+        </AlphaChatProvider>
       </SidebarProvider>
     </AuthProvider>
   );

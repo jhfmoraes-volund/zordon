@@ -1,6 +1,7 @@
 import { buildAlphaPrompt } from "./prompt";
 import { assembleAlphaTools } from "./tools";
 import { buildOpsContext } from "./context";
+import { parseRoute, routeProjectId, routeSprintId, type RouteContext } from "./route-context";
 import { getComposioTools } from "@/lib/composio/client";
 import type { AgentDefinition, AgentRunRequest } from "../../types";
 
@@ -13,7 +14,14 @@ export const alphaAgent: AgentDefinition = {
 
   async loadContext(req: AgentRunRequest) {
     const meetingId = (req.params?.meetingId as string | undefined) || undefined;
-    return await buildOpsContext({ meetingId });
+    const route: RouteContext = (req.params?.route as RouteContext | undefined) ?? parseRoute(undefined);
+    const ctx = await buildOpsContext({ meetingId, route });
+    return {
+      ...ctx,
+      route,
+      routeProjectId: routeProjectId(route),
+      routeSprintId: routeSprintId(route),
+    };
   },
 
   buildPrompt(ctx) {
@@ -22,7 +30,13 @@ export const alphaAgent: AgentDefinition = {
 
   async buildTools({ capabilities, agentContext }) {
     const activeMeetingId = (agentContext.meetingId as string | null) ?? undefined;
-    const nativeTools = assembleAlphaTools(capabilities, { activeMeetingId });
+    const routeProjectIdValue = (agentContext.routeProjectId as string | undefined) ?? undefined;
+    const routeSprintIdValue = (agentContext.routeSprintId as string | undefined) ?? undefined;
+    const nativeTools = assembleAlphaTools(capabilities, {
+      activeMeetingId,
+      routeProjectId: routeProjectIdValue,
+      routeSprintId: routeSprintIdValue,
+    });
 
     // Merge Composio tools if configured
     if (capabilities.composio) {

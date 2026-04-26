@@ -11,15 +11,26 @@ import type { Capabilities } from "../../types";
 /**
  * Assembles Alpha's native tools.
  * Composio tools are merged separately by the agent definition.
+ *
+ * Route scoping: when `routeProjectId` / `routeSprintId` are present (parsed
+ * from `currentPath`), read tools without explicit IDs filter by the route's
+ * scope. The agent can escape the scope by passing `projectName` (or another
+ * explicit identifier) to query cross-project.
  */
 export function assembleAlphaTools(
   capabilities: Capabilities,
-  opts: { activeMeetingId?: string } = {},
+  opts: {
+    activeMeetingId?: string;
+    routeProjectId?: string;
+    routeSprintId?: string;
+  } = {},
 ): ToolSet {
   const supabase = db();
   const tools: ToolSet = {};
   const roamToken = capabilities.roamToken;
   const activeMeetingId = opts.activeMeetingId;
+  const routeProjectId = opts.routeProjectId;
+  const routeSprintId = opts.routeSprintId;
   const NO_ROAM_TOKEN =
     "Roam nao conectado. Peca ao PM para conectar em Configuracoes > Integracoes.";
 
@@ -27,18 +38,34 @@ export function assembleAlphaTools(
 
   tools.get_sprint_overview = tool({
     description:
-      "Retorna o estado completo do sprint ativo: tasks, membros com capacidade, e alertas. Use para ter uma visao atualizada da operacao.",
+      "Retorna o estado completo do sprint ativo: tasks, membros com capacidade, e alertas. Use para ter uma visao atualizada da operacao. Quando o usuário está numa página de projeto/sprint, retorna o sprint daquele escopo automaticamente.",
     inputSchema: z.object({}),
     execute: async () => {
-      const { data: sprint } = await supabase
+      let sprintQuery = supabase
         .from("Sprint")
         .select("id, name, startDate, endDate, status, project:Project(name)")
-        .neq("status", "done")
+        .neq("status", "done");
+      if (routeSprintId) {
+        sprintQuery = supabase
+          .from("Sprint")
+          .select("id, name, startDate, endDate, status, project:Project(name)")
+          .eq("id", routeSprintId);
+      } else if (routeProjectId) {
+        sprintQuery = sprintQuery.eq("projectId", routeProjectId);
+      }
+      const { data: sprint } = await sprintQuery
         .order("startDate", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (!sprint) return { error: "Nenhum sprint ativo encontrado." };
+      if (!sprint) {
+        const scope = routeSprintId
+          ? `sprint ${routeSprintId}`
+          : routeProjectId
+            ? `projeto ${routeProjectId}`
+            : "global";
+        return { error: `Nenhum sprint ativo encontrado (escopo: ${scope}).` };
+      }
 
       const { data: tasks } = await supabase
         .from("Task")
@@ -161,17 +188,23 @@ export function assembleAlphaTools(
 
   tools.get_alerts = tool({
     description:
-      "Retorna alertas operacionais: membros sobrecarregados, tasks sem atribuicao, prazos vencidos, sprint acima da capacidade.",
+      "Retorna alertas operacionais: membros sobrecarregados, tasks sem atribuicao, prazos vencidos, sprint acima da capacidade. Quando o usuário está numa página de projeto/sprint, filtra pelo escopo da rota.",
     inputSchema: z.object({}),
     execute: async () => {
       const { data: members } = await supabase
         .from("member_capacity_overview")
         .select("*");
 
-      const { data: sprint } = await supabase
+      let sprintQuery = supabase
         .from("Sprint")
         .select("id")
-        .neq("status", "done")
+        .neq("status", "done");
+      if (routeSprintId) {
+        sprintQuery = supabase.from("Sprint").select("id").eq("id", routeSprintId);
+      } else if (routeProjectId) {
+        sprintQuery = sprintQuery.eq("projectId", routeProjectId);
+      }
+      const { data: sprint } = await sprintQuery
         .order("startDate", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -224,16 +257,21 @@ export function assembleAlphaTools(
 
   tools.list_sprints = tool({
     description:
-      "Lista todos os sprints não-concluídos (planning, active) do projeto. Use ao replanejar, redistribuir tasks ou quando precisar ver o pipeline.",
+      "Lista todos os sprints não-concluídos (planning, active) do projeto. Use ao replanejar, redistribuir tasks ou quando precisar ver o pipeline. Sem `projectName` e em página de projeto, filtra pelo projeto da rota.",
     inputSchema: z.object({
-      projectName: z.string().optional().describe("Filtrar por nome parcial do projeto (case-insensitive)"),
+      projectName: z.string().optional().describe("Filtrar por nome parcial do projeto (case-insensitive). Passe explicitamente quando quiser cross-project."),
     }),
     execute: async ({ projectName }) => {
-      const query = supabase
+      let query = supabase
         .from("Sprint")
         .select("id, name, status, startDate, endDate, project:Project(id, name)")
         .neq("status", "done")
         .order("startDate", { ascending: true });
+
+      // Implicit scope: filter by route project when no explicit projectName.
+      if (!projectName && routeProjectId) {
+        query = query.eq("projectId", routeProjectId);
+      }
 
       const { data } = await query;
       let sprints = data || [];
@@ -277,13 +315,13 @@ export function assembleAlphaTools(
 
   tools.get_backlog = tool({
     description:
-      "Lista tasks no backlog (sem sprint atribuído). Use ao replanejar — quais tasks podem entrar em sprints.",
+      "Lista tasks no backlog (sem sprint atribuído). Use ao replanejar — quais tasks podem entrar em sprints. Sem `projectName` e em página de projeto, filtra pelo projeto da rota.",
     inputSchema: z.object({
-      projectName: z.string().optional().describe("Filtrar por nome parcial do projeto"),
+      projectName: z.string().optional().describe("Filtrar por nome parcial do projeto. Passe explicitamente quando quiser cross-project."),
       limit: z.number().int().min(1).max(200).default(100).describe("Máximo de tasks (default 100)"),
     }),
     execute: async ({ projectName, limit }) => {
-      const query = supabase
+      let query = supabase
         .from("Task")
         .select("reference, title, type, scope, complexity, functionPoints, priority, dueDate, project:Project(id, name)")
         .is("sprintId", null)
@@ -291,6 +329,11 @@ export function assembleAlphaTools(
         .order("priority", { ascending: false })
         .order("createdAt", { ascending: false })
         .limit(limit);
+
+      // Implicit scope: filter by route project when no explicit projectName.
+      if (!projectName && routeProjectId) {
+        query = query.eq("projectId", routeProjectId);
+      }
 
       const { data } = await query;
       let tasks = data || [];

@@ -95,14 +95,39 @@ if [[ -n "$pending_files" ]]; then
   yellow "▸ mudanças pendentes:"
   git status --short | sed 's/^/    /'
 
-  # ── 3. stage + commit ────────────────────────────────
+  # ── 3. stage + auto-tag + commit ─────────────────────
   git_run add -A
 
-  if [[ -n "$COMMIT_MSG" ]]; then
-    git_run commit -m "$COMMIT_MSG"
-  else
-    git_run commit
+  if [[ -z "$COMMIT_MSG" ]]; then
+    # próximo número ZRD-JM-NN (procura em git log; tolerante a "nenhum match")
+    last_n="$({ git log --all --pretty=%s 2>/dev/null || true; } \
+      | { grep -oE '^ZRD-JM-[0-9]+' || true; } \
+      | { grep -oE '[0-9]+$' || true; } \
+      | sort -n | tail -1)"
+    next_n=$(( ${last_n:-0} + 1 ))
+    tag="$(printf 'ZRD-JM-%02d' "$next_n")"
+
+    # diff source: --cached em modo real, HEAD em dry-run (nada foi staged)
+    if [[ $DRY_RUN -eq 1 ]]; then diff_src=("HEAD"); else diff_src=("--cached"); fi
+
+    stat="$({ git diff "${diff_src[@]}" --shortstat 2>/dev/null || true; } | sed 's/^ *//')"
+    areas="$({ git diff "${diff_src[@]}" --name-only 2>/dev/null || true; } | awk -F/ '
+      $1=="src" && $2=="lib"        { print "lib/"$3; next }
+      $1=="src" && $2=="components" { print "components"; next }
+      $1=="src" && $2=="app"        { print "app"; next }
+      $1=="src" && $2=="hooks"      { print "hooks"; next }
+      $1=="src" && $2=="contexts"   { print "contexts"; next }
+      $1=="supabase"                { print "supabase"; next }
+      $1=="scripts"                 { print "scripts"; next }
+      $1=="docs"                    { print "docs"; next }
+                                    { print $1 }
+    ' | sort -u | head -4 | paste -sd, - | sed 's/,/, /g')"
+
+    COMMIT_MSG="$tag: ${areas:-misc} — ${stat:-changes}"
+    dim "▸ tag auto: $COMMIT_MSG"
   fi
+
+  git_run commit -m "$COMMIT_MSG"
 else
   dim "▸ sem mudanças locais pendentes."
 fi
@@ -133,27 +158,22 @@ elif [[ ${#REMOTES[@]} -eq 1 ]]; then
   TARGETS=("${REMOTES[0]}")
 else
   echo ""
-  yellow "▸ múltiplos remotes — escolha o destino:"
   for i in "${!REMOTES[@]}"; do
-    url="$(git remote get-url "${REMOTES[$i]}" 2>/dev/null || echo '?')"
-    printf "    %d) %-12s %s\n" $((i+1)) "${REMOTES[$i]}" "$url"
+    printf "  %d) %s\n" $((i+1)) "${REMOTES[$i]}"
   done
-  printf "    a) todos\n"
-  printf "    q) abortar\n"
-  printf "escolha [1-%d/a/q]: " "${#REMOTES[@]}"
-  read -r choice
-  case "$choice" in
-    [aA]) TARGETS=("${REMOTES[@]}") ;;
-    [qQ]|"") red "✗ abortado."; exit 1 ;;
-    *)
-      if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#REMOTES[@]} )); then
-        TARGETS=("${REMOTES[$((choice-1))]}")
-      else
-        red "✗ escolha inválida: '$choice'"
-        exit 1
-      fi
-      ;;
-  esac
+  all_n=$((${#REMOTES[@]} + 1))
+  printf "  %d) todos\n" "$all_n"
+  printf "> "
+  read -rn 1 choice
+  echo ""
+  if [[ "$choice" == "$all_n" ]]; then
+    TARGETS=("${REMOTES[@]}")
+  elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#REMOTES[@]} )); then
+    TARGETS=("${REMOTES[$((choice-1))]}")
+  else
+    red "✗ inválido: '$choice'"
+    exit 1
+  fi
 fi
 
 dim "▸ targets: ${TARGETS[*]}"

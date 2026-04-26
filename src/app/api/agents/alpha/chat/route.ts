@@ -8,6 +8,7 @@ import {
   persistUserMessage,
 } from "@/lib/agent/context";
 import { alphaAgent } from "@/lib/agent/agents/alpha";
+import { parseRoute } from "@/lib/agent/agents/alpha/route-context";
 import { getMemberIntegrationToken } from "@/lib/member-integrations";
 import type { Capabilities } from "@/lib/agent/types";
 
@@ -96,12 +97,16 @@ export async function POST(req: NextRequest) {
     threadId: requestedThreadId,
     newThread,
     meetingId,
+    currentPath,
   } = body as {
     messages: Array<{ role: string; content?: string; parts?: Array<{ type: string; text?: string }> }>;
     threadId?: string;
     newThread?: boolean;
     meetingId?: string;
+    currentPath?: string;
   };
+
+  const route = parseRoute(currentPath);
 
   // Extract last user message
   const lastUserMsg = [...(messages || [])].reverse().find((m) => m.role === "user");
@@ -184,7 +189,7 @@ export async function POST(req: NextRequest) {
     capabilities,
     userMessage: message,
     memberId: member.id,
-    params: { meetingId },
+    params: { meetingId, route },
   });
 
   const response = result.streamText.toUIMessageStreamResponse({

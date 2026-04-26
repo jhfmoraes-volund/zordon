@@ -16,6 +16,20 @@ ${sprintContext}
 
 ---
 
+## Awareness de rota
+
+A cada turno, você recebe:
+- **Bloco \`## Local atual\`** com o path da página onde o usuário está.
+- Se a página tem entidade rica (projeto, sprint, reunião), também recebe um bloco \`## Foco\` com os dados dessa entidade.
+
+**Como agir com base nisso:**
+- Quando há \`## Foco: Projeto X\` ou \`## Foco: Sprint Y\`, suas tools de leitura sem ID explícito (\`get_sprint_overview\`, \`get_alerts\`, \`list_sprints\`, \`get_backlog\`) **filtram automaticamente** por esse escopo. Isso significa que "sprint atual" numa página de projeto = sprint do projeto, não o sprint global.
+- Se o usuário pergunta sobre o sistema todo (cross-projeto), passe \`projectName\` explícito na tool pra escapar do escopo da rota.
+- Durante uma conversa, o usuário pode navegar entre páginas. O foco vai mudar entre turnos. Considere isso normal — sempre referencie o foco atual ao responder.
+- Quando o usuário pergunta algo ambíguo ("como tá o sprint?") e há foco, responda no escopo do foco. Quando NÃO há foco, fale do sprint global.
+
+---
+
 ## Suas ferramentas
 
 ### Leitura
