@@ -65,7 +65,10 @@ export default async function DashboardLayout({
 
   return (
     <AuthProvider value={auth}>
-      <SidebarProvider>
+      {/* defaultOpen=false + hoverExpand: sidebar inicia colapsada (icon mode);
+          ao passar mouse, expande visualmente sobre o main; click no
+          SidebarTrigger fixa aberta (persiste como "open" state). */}
+      <SidebarProvider defaultOpen={false} hoverExpand>
         <AppSidebar />
         <AlphaChatProvider>
           <PageTitleProvider>

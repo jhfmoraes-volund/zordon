@@ -40,6 +40,11 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  /** When true, sidebar visually expands on hover without changing persisted open state. */
+  hoverExpand: boolean
+  /** Internal hover flag — set by Sidebar's mouseenter/leave when hoverExpand=true. */
+  isHovered: boolean
+  setHovered: (next: boolean) => void
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -57,6 +62,7 @@ function SidebarProvider({
   defaultOpen = true,
   open: openProp,
   onOpenChange: setOpenProp,
+  hoverExpand = false,
   className,
   style,
   children,
@@ -65,9 +71,17 @@ function SidebarProvider({
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /**
+   * When true, sidebar visually expands on hover (without changing the
+   * persisted open state). User can still click the trigger to lock it open.
+   * Combine with `defaultOpen={false}` for the "collapsed by default,
+   * peek on hover" pattern.
+   */
+  hoverExpand?: boolean
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const [isHovered, setHovered] = React.useState(false)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -111,7 +125,10 @@ function SidebarProvider({
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
-  const state = open ? "expanded" : "collapsed"
+  // When hoverExpand is on, hovering temporarily flips the visual state to
+  // "expanded" without touching the persisted `open`.
+  const state =
+    open || (hoverExpand && isHovered && !isMobile) ? "expanded" : "collapsed"
 
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
@@ -122,8 +139,21 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      hoverExpand,
+      isHovered,
+      setHovered,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [
+      state,
+      open,
+      setOpen,
+      isMobile,
+      openMobile,
+      setOpenMobile,
+      toggleSidebar,
+      hoverExpand,
+      isHovered,
+    ]
   )
 
   return (
@@ -162,7 +192,15 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const {
+    isMobile,
+    state,
+    open,
+    openMobile,
+    setOpenMobile,
+    hoverExpand,
+    setHovered,
+  } = useSidebar()
 
   if (collapsible === "none") {
     return (
@@ -205,6 +243,24 @@ function Sidebar({
     )
   }
 
+  // hoverExpand mode: when persisted state is collapsed (open=false), hovering
+  // expands the container visually but the gap div stays at icon width — so
+  // the sidebar overlays the main content instead of pushing it. When the
+  // user clicks the trigger to lock open (open=true), gap follows normally.
+  const gapHoverPin =
+    hoverExpand && !open
+      ? variant === "floating" || variant === "inset"
+        ? "!w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
+        : "!w-(--sidebar-width-icon)"
+      : ""
+
+  // When hoverExpand is on and hover-expanded, container floats above main —
+  // give it a shadow so it visually separates from content underneath.
+  const containerHoverShadow =
+    hoverExpand && !open && state === "expanded"
+      ? "shadow-2xl shadow-black/40"
+      : ""
+
   return (
     <div
       className="group peer hidden text-sidebar-foreground md:block"
@@ -223,7 +279,8 @@ function Sidebar({
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
             ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
-            : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
+            : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
+          gapHoverPin
         )}
       />
       <div
@@ -235,8 +292,11 @@ function Sidebar({
           variant === "floating" || variant === "inset"
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
+          containerHoverShadow,
           className
         )}
+        onMouseEnter={hoverExpand ? () => setHovered(true) : undefined}
+        onMouseLeave={hoverExpand ? () => setHovered(false) : undefined}
         {...props}
       >
         <div
