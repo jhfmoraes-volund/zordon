@@ -199,7 +199,9 @@ export function AlphaChatPanel() {
         <SheetContent
           side="bottom"
           showCloseButton={false}
-          className="flex h-[90dvh] w-full max-w-full flex-col gap-0 rounded-t-xl p-0 sm:max-w-full"
+          // data-[side=bottom]:h-[90dvh] overrides o h-auto default do Sheet
+          // (mesma especificidade pra tailwind-merge resolver corretamente).
+          className="flex w-full max-w-full flex-col gap-0 rounded-t-xl p-0 data-[side=bottom]:h-[90dvh] sm:max-w-full"
         >
           {Header}
           {Messages}

@@ -27,6 +27,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -77,6 +78,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const { isMobile, setOpenMobile } = useSidebar();
   const {
     realRole,
     effectiveRole,
@@ -85,6 +87,10 @@ export function AppSidebar() {
     isImpersonating,
     userEmail,
   } = useAuth();
+
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false);
+  };
 
   // Real admin: can impersonate (dropdown) and tune agents.
   // Manager (incl. admins and PMs; via effective role): can see the Gestão menu.
@@ -120,6 +126,7 @@ export function AppSidebar() {
                 isActive={pathname === "/profile"}
                 render={<Link href="/profile" />}
                 tooltip="Meu Perfil"
+                onClick={closeOnMobile}
               >
                 <User className="h-4 w-4" />
                 <span>Meu Perfil</span>
@@ -131,6 +138,7 @@ export function AppSidebar() {
                 isActive={pathname === "/settings"}
                 render={<Link href="/settings" />}
                 tooltip="Configuracoes"
+                onClick={closeOnMobile}
               >
                 <Settings className="h-4 w-4" />
                 <span>Configuracoes</span>
@@ -153,6 +161,7 @@ export function AppSidebar() {
                     isActive={isActive}
                     render={<Link href={item.href} />}
                     tooltip={item.title}
+                    onClick={closeOnMobile}
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
@@ -184,6 +193,7 @@ export function AppSidebar() {
                     isActive={isActive}
                     render={<Link href={item.href} />}
                     tooltip={item.title}
+                    onClick={closeOnMobile}
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>

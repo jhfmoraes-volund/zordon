@@ -85,8 +85,8 @@ export function TaskSheet({
         side={isMobile ? "bottom" : "right"}
         className={
           isMobile
-            ? "h-[92dvh] max-h-[92dvh] rounded-t-xl p-0"
-            : "w-full !sm:max-w-[720px] overflow-y-auto p-0"
+            ? "h-[92dvh] max-h-[92dvh] gap-0 rounded-t-xl p-0"
+            : "w-full !sm:max-w-[720px] gap-0 p-0"
         }
       >
         {isMobile && (
@@ -310,7 +310,7 @@ function TaskSheetBody({
 
   if (phase !== "ready" || !task) {
     return (
-      <div className="py-12 text-center text-muted-foreground">
+      <div className="flex-1 flex items-center justify-center text-muted-foreground">
         Carregando...
       </div>
     );
@@ -399,9 +399,9 @@ function TaskSheetEditor({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <>
       {/* ── Header ── */}
-      <div className="border-b px-6 pt-6 pb-4 space-y-4">
+      <div className="shrink-0 border-b px-6 pt-6 pb-4 space-y-4">
         {/* Ref */}
         <div>
           <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
@@ -640,13 +640,13 @@ function TaskSheetEditor({
       </div>
 
       {/* ── Footer ── */}
-      <div className="border-t px-6 py-3 flex items-center justify-between">
+      <div className="shrink-0 sticky bottom-0 border-t bg-popover px-6 py-3 pb-safe flex items-center justify-between">
         <span className="text-xs text-muted-foreground">{fmtDate(task.dueDate)}</span>
         <Button variant="ghost" size="sm" onClick={onDelete} className="text-destructive">
           <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remover
         </Button>
       </div>
-    </div>
+    </>
   );
 }
 

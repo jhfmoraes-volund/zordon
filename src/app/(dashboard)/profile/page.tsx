@@ -579,37 +579,36 @@ function SkillsWidget({ summary }: { summary: SkillsSummary | null }) {
         }}
       />
 
-      <CardContent className="relative py-5 space-y-4">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <StarMark />
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-semibold leading-none">Avaliação de Skills</p>
-                {isComplete ? (
-                  <Badge variant="secondary" className="text-[10px]">Publicada</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px]">Rascunho</Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2 leading-none">
-                <span
-                  className="font-mono text-base tabular-nums leading-none"
-                  style={{ color: "oklch(0.82 0.2 22)" }}
-                >
-                  {String(answered).padStart(2, "0")}/{String(total).padStart(2, "0")}
-                </span>
-                <PixelHud size="xs" tone="muted">torres avaliadas</PixelHud>
-              </div>
-            </div>
-          </div>
+      <CardHeader className="pb-3 relative">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
+            <Star className="h-4 w-4 text-primary" />
+            Avaliação de Skills
+            {isComplete ? (
+              <Badge variant="secondary" className="text-[10px]">Publicada</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px]">Rascunho</Badge>
+            )}
+          </CardTitle>
           <Link href="/profile/skills">
-            <Button size="sm" variant={isComplete ? "outline" : "default"}>
+            <Button variant={isComplete ? "outline" : "default"} size="sm" className="h-7 text-xs">
               {isComplete ? "Atualizar" : "Continuar"}
               <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
             </Button>
           </Link>
+        </div>
+      </CardHeader>
+
+      <CardContent className="relative space-y-4">
+        {/* Progresso */}
+        <div className="flex items-center gap-2 leading-none">
+          <span
+            className="font-mono text-base tabular-nums leading-none"
+            style={{ color: "oklch(0.82 0.2 22)" }}
+          >
+            {String(answered).padStart(2, "0")}/{String(total).padStart(2, "0")}
+          </span>
+          <PixelHud size="xs" tone="muted">torres avaliadas</PixelHud>
         </div>
 
         {/* Area strip — torre primária + secundária + selos */}
@@ -688,28 +687,6 @@ function SkillsWidget({ summary }: { summary: SkillsSummary | null }) {
 
       </CardContent>
     </Card>
-  );
-}
-
-// ─── Star mark with brand glow (arcade-style achievement glyph) ─
-
-function StarMark() {
-  return (
-    <div
-      className="grid place-items-center shrink-0 rounded-[10px]"
-      style={{
-        width: 36,
-        height: 36,
-        background: "oklch(0.637 0.237 22 / 0.12)",
-        boxShadow:
-          "inset 0 0 0 1px oklch(0.637 0.237 22 / 0.35), 0 0 24px oklch(0.637 0.237 22 / 0.15)",
-        color: "oklch(0.82 0.2 22)",
-      }}
-    >
-      <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2.5 14.6 8.6 21 9.4l-4.6 4.3 1.3 6.4L12 16.9 6.3 20.1l1.3-6.4L3 9.4 9.4 8.6 12 2.5z" />
-      </svg>
-    </div>
   );
 }
 
