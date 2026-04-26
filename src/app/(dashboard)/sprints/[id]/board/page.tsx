@@ -27,6 +27,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { TaskSheet } from "@/components/task-sheet";
 import { TaskList } from "@/components/task-list";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { PageTitle } from "@/components/app-shell";
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -279,6 +280,12 @@ export default function SprintBoardPage({
 
   return (
     <div className="space-y-4">
+      {sprint && (
+        <PageTitle
+          title={sprint.name}
+          subtitle={`${sprint.project.name} · ${totalFp} FP`}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

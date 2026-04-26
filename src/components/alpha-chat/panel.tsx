@@ -1,33 +1,50 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Loader2, Send, Wrench } from "lucide-react";
+import Link from "next/link";
+import { Bot, History, Loader2, Send, Wrench, X } from "lucide-react";
 import type { UIMessage } from "ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Markdown } from "@/components/ui/markdown";
+import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAlphaChat } from "./store";
+import { useAlphaKeyboard } from "./use-alpha-keyboard";
 
 /**
- * Renders the Alpha conversation. On mobile it lives in a bottom sheet (full
- * height); on desktop it is a fixed 420×550 panel anchored to bottom-right.
+ * Renders the Alpha conversation in two shapes that share the same underlying
+ * content (header + messages + composer):
  *
- * Mounted once at the dashboard layout level. Trigger lives separately
- * (header on mobile, floating bubble on desktop) and shares state via
- * AlphaChatProvider.
+ * - **Desktop**: right column that lives as a flex sibling of <main>. Animates
+ *   from w-0 to w-96 via transition-[width]. Inner div has w-96 fixed so the
+ *   content doesn't reflow during the transition (just gets clipped by the
+ *   outer overflow-hidden).
+ *
+ * - **Mobile**: Sheet `side="right"` full-screen. No reflow — overlays content.
+ *
+ * Mounted once in the dashboard layout. Trigger lives in the header and shares
+ * state via AlphaChatProvider.
+ *
+ * Keyboard shortcut: ⌘⇧A / Ctrl+Shift+A toggles open (registered here).
  */
 export function AlphaChatPanel() {
-  const { enabled, isOpen, setOpen, messages, isLoading, sendMessage } = useAlphaChat();
+  const { enabled, isOpen, setOpen, messages, isLoading, sendMessage } =
+    useAlphaChat();
   const isMobile = useIsMobile();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  useAlphaKeyboard();
+
   useEffect(() => {
     if (!scrollRef.current) return;
-    scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
 
   useEffect(() => {
@@ -49,22 +66,41 @@ export function AlphaChatPanel() {
     }
   };
 
-  const renderHeader = () => (
-    <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30 shrink-0">
+  const Header = (
+    <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-muted/30 px-4">
       <div className="flex items-center gap-2">
-        <Bot className="h-5 w-5 text-primary" />
+        <Bot className="size-4 text-primary" />
         <span className="text-sm font-semibold">Alpha</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <Link
+          href="/ops"
+          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          title="Histórico de conversas"
+          aria-label="Histórico de conversas"
+        >
+          <History className="size-3.5" />
+        </Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          onClick={() => setOpen(false)}
+          aria-label="Fechar Alpha"
+        >
+          <X className="size-3.5" />
+        </Button>
       </div>
     </div>
   );
 
-  const renderMessages = () => (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+  const Messages = (
+    <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
       {messages.length === 0 && (
-        <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-          <Bot className="h-10 w-10 mb-3 opacity-30" />
+        <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+          <Bot className="mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm font-medium">Como posso ajudar?</p>
-          <p className="text-xs mt-1 max-w-[250px]">
+          <p className="mt-1 max-w-[250px] text-xs">
             Pergunte sobre o sprint, alocação, reuniões ou peça para criar tasks.
           </p>
         </div>
@@ -76,10 +112,10 @@ export function AlphaChatPanel() {
           className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
         >
           <div
-            className={`max-w-[85%] min-w-0 rounded-2xl text-sm overflow-hidden break-words ${
+            className={`max-w-[85%] min-w-0 break-words overflow-hidden rounded-2xl text-sm ${
               msg.role === "user"
-                ? "px-4 py-2.5 bg-primary text-primary-foreground rounded-tr-sm"
-                : "px-4 py-3 bg-muted rounded-tl-sm"
+                ? "rounded-tr-sm bg-primary px-4 py-2.5 text-primary-foreground"
+                : "rounded-tl-sm bg-muted px-4 py-3"
             }`}
           >
             {msg.parts?.map((part, i) => {
@@ -87,12 +123,22 @@ export function AlphaChatPanel() {
                 return <Markdown key={i}>{part.text}</Markdown>;
               }
               if (part.type.startsWith("tool-")) {
-                const toolPart = part as { type: string; toolCallId: string; state: string; title?: string };
+                const toolPart = part as {
+                  type: string;
+                  toolCallId: string;
+                  state: string;
+                  title?: string;
+                };
                 return (
-                  <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground py-1">
+                  <div
+                    key={i}
+                    className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground"
+                  >
                     <Wrench className="h-3 w-3" />
                     <span>{toolPart.title || toolPart.toolCallId}</span>
-                    {toolPart.state === "result" && <span className="text-green-600">✓</span>}
+                    {toolPart.state === "result" && (
+                      <span className="text-green-600">✓</span>
+                    )}
                   </div>
                 );
               }
@@ -104,7 +150,7 @@ export function AlphaChatPanel() {
 
       {isLoading && messages[messages.length - 1]?.role === "user" && (
         <div className="flex justify-start">
-          <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-muted px-4 py-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Pensando...
           </div>
@@ -113,8 +159,10 @@ export function AlphaChatPanel() {
     </div>
   );
 
-  const renderComposer = (extraClassName = "") => (
-    <div className={`border-t p-3 shrink-0 ${extraClassName}`}>
+  const Composer = (extraClassName?: string) => (
+    <div
+      className={cn("shrink-0 border-t border-border/50 p-3", extraClassName)}
+    >
       <div className="flex gap-2">
         <Textarea
           ref={textareaRef}
@@ -123,15 +171,19 @@ export function AlphaChatPanel() {
           onKeyDown={onKeyDown}
           placeholder="Pergunte ao Alpha..."
           rows={1}
-          className="flex-1 min-h-[36px] max-h-[100px] resize-none"
+          className="max-h-[100px] min-h-[36px] flex-1 resize-none"
         />
         <Button
           size="icon"
           disabled={!input.trim() || isLoading}
           onClick={handleSend}
-          className="shrink-0 h-10 w-10"
+          className="h-10 w-10 shrink-0"
         >
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
         </Button>
       </div>
     </div>
@@ -141,25 +193,32 @@ export function AlphaChatPanel() {
     return (
       <Sheet open={isOpen} onOpenChange={setOpen}>
         <SheetContent
-          side="bottom"
+          side="right"
           showCloseButton={false}
-          className="h-[100dvh] p-0 gap-0 flex flex-col rounded-none"
+          className="flex h-[100dvh] w-full max-w-full flex-col gap-0 rounded-none p-0 sm:max-w-full"
         >
-          {renderHeader()}
-          {renderMessages()}
-          {renderComposer("pb-safe")}
+          {Header}
+          {Messages}
+          {Composer("pb-safe")}
         </SheetContent>
       </Sheet>
     );
   }
 
-  if (!isOpen) return null;
-
+  // Desktop: right column with width transition (push reflow Notion-style).
   return (
-    <div className="fixed bottom-24 right-6 z-50 w-[420px] h-[550px] flex flex-col rounded-2xl border bg-background shadow-2xl overflow-hidden">
-      {renderHeader()}
-      {renderMessages()}
-      {renderComposer()}
-    </div>
+    <aside
+      aria-hidden={!isOpen}
+      className={cn(
+        "shrink-0 overflow-hidden border-l border-border/50 bg-background transition-[width] duration-300 ease-in-out",
+        isOpen ? "w-96" : "w-0",
+      )}
+    >
+      <div className="flex h-full w-96 flex-col">
+        {Header}
+        {Messages}
+        {Composer()}
+      </div>
+    </aside>
   );
 }

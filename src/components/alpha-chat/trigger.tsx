@@ -1,69 +1,46 @@
 "use client";
 
+import { Bot, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MessageCircle, X } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAlphaChat } from "./store";
 
-type Variant = "header" | "floating";
-
 /**
- * Two render targets:
- * - "header"   — small button rendered inside the dashboard header. Visible
- *                only on mobile (md:hidden via parent classes).
- * - "floating" — the classic 56px bubble fixed to bottom-right. Visible only
- *                on desktop (hidden md:block via parent classes).
+ * Botão Bot que vive no header (mobile + desktop). Toggle do panel/sheet.
+ * Estado ativo (isOpen) usa primary color; loading mostra dot pulsando.
  *
- * Both call the same toggle() from the AlphaChatProvider, so state is shared.
+ * Atalho: ⌘⇧A / Ctrl+Shift+A (registrado em useAlphaKeyboard).
  */
-export function AlphaChatTrigger({ variant }: { variant: Variant }) {
+export function AlphaChatTrigger() {
   const { enabled, isOpen, toggle, isLoading } = useAlphaChat();
   if (!enabled) return null;
 
-  if (variant === "header") {
-    return (
-      <Button
-        onClick={toggle}
-        size="icon"
-        variant={isOpen ? "secondary" : "ghost"}
-        className="h-9 w-9 shrink-0"
-        aria-label={isOpen ? "Fechar Alpha" : "Abrir Alpha"}
-      >
-        {isOpen ? (
-          <X className="h-4 w-4" />
-        ) : (
-          <div className="relative">
-            <MessageCircle className="h-4 w-4" />
-            {isLoading && (
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-yellow-400 animate-pulse" />
-            )}
-          </div>
-        )}
-      </Button>
-    );
-  }
-
   return (
-    <div
-      className="fixed right-6 z-50"
-      style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
-    >
-      <Button
-        onClick={toggle}
-        size="icon"
-        className="h-14 w-14 rounded-full shadow-lg"
-        aria-label={isOpen ? "Fechar Alpha" : "Abrir Alpha"}
-      >
-        {isOpen ? (
-          <X className="h-6 w-6" />
-        ) : (
-          <div className="relative">
-            <MessageCircle className="h-6 w-6" />
-            {isLoading && (
-              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-yellow-400 animate-pulse" />
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            onClick={toggle}
+            size="icon"
+            variant="ghost"
+            data-active={isOpen}
+            aria-label={isOpen ? "Fechar Alpha" : "Abrir Alpha"}
+            className="relative size-9 shrink-0 data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:ring-1 data-[active=true]:ring-primary/30"
+          >
+            {isOpen ? <X className="size-4" /> : <Bot className="size-4" />}
+            {isLoading && !isOpen && (
+              <span className="absolute right-1.5 top-1.5 size-2 animate-pulse rounded-full bg-yellow-400" />
             )}
-          </div>
-        )}
-      </Button>
-    </div>
+          </Button>
+        }
+      />
+      <TooltipContent side="bottom">
+        {isOpen ? "Fechar Alpha" : "Alpha · ⌘⇧A"}
+      </TooltipContent>
+    </Tooltip>
   );
 }

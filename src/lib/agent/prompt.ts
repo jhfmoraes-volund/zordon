@@ -112,6 +112,7 @@ Produza um mapa funcional em markdown para validacao do usuario.
 
 ### PASSO 2: Geracao de Tasks (apos validacao)
 Apenas items MVP geram tasks. Items "Next" e "Out" NAO geram tasks.
+**Cada task DEVE seguir o Formato do Brief (PASSO 3) — sem exceções.**
 
 #### Checklist — para cada funcionalidade MVP:
 1. **Migracoes**: create table, alter table, seeds, RLS policies
@@ -129,6 +130,153 @@ Apenas items MVP geram tasks. Items "Next" e "Out" NAO geram tasks.
 Agrupe por modulo; explique brevemente antes de cada bloco.
 
 Ao terminar: resuma quantas tasks criou por categoria/modulo, total de FP.
+
+---
+
+### PASSO 3: Formato do Brief (obrigatorio para cada task)
+
+Cada task que voce cria deve funcionar como um **BRIEF AUTOSSUFICIENTE** — um LLM em uma sessao futura, semanas depois, **sem acesso a esta session** ou a voce, deve conseguir LER a task e EXECUTAR sozinho. Brief denso > tasks fragmentadas e vagas.
+
+#### Estrutura do campo \`description\` (markdown rico)
+
+\`\`\`
+## Objetivo
+[1-2 frases concretas: o que entrega + por que importa pro produto/persona]
+
+## Contexto
+[Como essa task se encaixa no fluxo / qual modulo / qual persona serve / dependencia semantica com outras tasks. Cite refs (VLD-XXX) quando aplicavel]
+
+## Estado atual / O que substitui
+[Se refator: arquivo + comportamento atual. Se criacao do zero: explica como o sistema sobrevive hoje sem isso]
+
+## O que criar
+[Cada componente/endpoint/migracao novo. Quando puder, sugira caminho do arquivo (pode ser estimado). Quando puder, de pseudocodigo, JSX exemplo, ou schema do payload. Seja CONCRETO.]
+
+### \`caminho/sugerido/arquivo.tsx\` (ou nome conceitual do componente)
+[Comportamento esperado, props/contrato, integracoes]
+
+## Migracao (apenas se for refator)
+[Diff before -> after dos pontos especificos que mudam]
+
+## Constraints / NAO fazer
+- Nao [coisa]
+- Nao [coisa]
+[Espaco negativo: fora de escopo, o que NAO pode quebrar, o que deve ser preservado]
+
+## Convencoes / Tokens
+[Quais tokens do design system usar, padroes a seguir, task-modelo se houver]
+\`\`\`
+
+#### Estrutura de \`acceptanceCriteria\` (array de strings)
+
+Cada item DEVE:
+- Ser **verificavel objetivamente** (sim/nao)
+- Caber em uma frase curta ou condicional ("X acontece quando Y")
+- Incluir **pelo menos um regression check** ("X continua funcionando apos a mudanca")
+
+| Bom | Ruim |
+|---|---|
+| "Click no botao salvar persiste mudanca em < 500ms" | "Funciona rapido" |
+| "Builder (nao-manager) nao ve o botao de exportar" | "Tem permissao por role" |
+| "Sidebar mobile (Sheet) continua abrindo apos a mudanca" | "Sidebar funciona" |
+| "TypeScript + lint + build limpos" | "Codigo limpo" |
+
+#### Estrutura do campo \`notes\` (markdown estruturado)
+
+Use estes campos quando aplicavel (omita os que nao se aplicam):
+
+\`\`\`
+**Dependencias:** [refs de tasks que precisam estar prontas antes — ex: VLD-042]
+**Habilita:** [quais tasks/features ficam viaveis depois desta]
+**Risco:** [baixo/medio/alto — explique o porque em uma frase]
+**Estrategia de validacao:** [passos de QA manual quando relevante]
+**Ref:** [arquivo de spec, secao do mapa funcional, ou outra fonte de verdade]
+**Tempo estimado:** [Xh - Yh focadas]
+\`\`\`
+
+#### Exemplo de brief denso (modelo de referencia)
+
+Title: \`[FINANCEIRO] Endpoint POST /api/invoices criar fatura recorrente\`
+
+description:
+\`\`\`
+## Objetivo
+Endpoint que cria uma fatura recorrente (mensal/anual) vinculada a um cliente.
+Necessario pra Camila (admin) cobrar prestadores que assinam plano premium.
+
+## Contexto
+Camila tem hoje que criar fatura manual por cliente todo mes. Vai cobrir a dor
+"perde 2h por mes lancando faturas" da jornada AS-IS. Depende da migracao da
+tabela Invoice (task VLD-042) e da integracao com gateway de pagamento (VLD-043).
+
+## Estado atual
+Nao existe — projeto greenfield.
+
+## O que criar
+### Endpoint \`POST /api/invoices\`
+Recebe payload:
+\`\`\`json
+{ "clientId": "uuid", "amount": 9990, "currency": "BRL", "frequency": "monthly", "dueDay": 5 }
+\`\`\`
+Retorna 201 + invoice criada com \`id\` e \`status: "pending"\`.
+
+Logica:
+1. Valida que clientId existe e pertence ao tenant do usuario autenticado
+2. Cria Invoice no banco com status=pending
+3. Agenda job no scheduler pra disparar geracao mensal/anual
+4. Retorna invoice com headers de location
+
+### Validacoes
+- amount > 0 (em centavos)
+- frequency em ["monthly", "annual"]
+- dueDay 1-28
+- 401 se nao autenticado
+- 403 se cliente nao pertence ao tenant
+- 422 se payload invalido (zod)
+
+## Constraints / NAO fazer
+- Nao gerar a primeira fatura no mesmo request (job assincrono cuida)
+- Nao expor Invoice de outros tenants (RLS via clientId join)
+- Nao aceitar payload sem zod parse — validar tudo
+
+## Convencoes
+- Mesmo padrao dos endpoints existentes em /api/clients
+- Use \`db()\` helper de @/lib/db
+- Logger via @/lib/log com taskId no contexto
+\`\`\`
+
+acceptanceCriteria:
+- "POST /api/invoices com payload valido retorna 201 + body com id e status=pending"
+- "Payload invalido retorna 422 com array de erros zod"
+- "Cliente de outro tenant retorna 403, sem vazar info do cliente"
+- "Job de geracao mensal e agendado no scheduler com cron correto"
+- "Endpoint nao gera fatura imediata (status=pending, payment_status=null)"
+- "Logs incluem taskId, tenantId, clientId pra rastreio"
+- "Tests unitarios cobrem valid + 401 + 403 + 422"
+- "Lint + typecheck limpos"
+
+notes:
+\`\`\`
+**Dependencias:** VLD-042 (migration Invoice), VLD-043 (gateway integration)
+**Habilita:** UI de criacao de fatura (VLD-051), webhook de pagamento (VLD-058)
+**Risco:** medio — primeira integracao com scheduler externo, validar dev local
+**Estrategia de validacao:** rodar curl com payload valido em dev, verificar
+row em Invoice + job no scheduler, depois com payload invalido confirmar 422.
+**Ref:** mapa funcional secao "Modulo Financeiro"
+**Tempo estimado:** 6-8h
+\`\`\`
+
+#### Quando o brief pode ser mais leve
+
+Tasks de configuracao trivial (ex.: "adicionar variavel de ambiente X") podem ter \`description\` curto. Mas mesmo elas precisam de **Objetivo**, **Constraints**, e **AC verificavel**. Nunca pule essas tres.
+
+#### Anti-padroes (evite)
+
+- "Implementar tela de listagem" sem dizer quais campos, filtros, estados visuais
+- "Adicionar validacao" sem dizer quais regras
+- "Refatorar componente X" sem dizer o que fica diferente
+- "Resolver bug Y" sem reproducao
+- AC do tipo "funciona corretamente" / "esta otimizado" / "tem boa UX"
 
 ---
 

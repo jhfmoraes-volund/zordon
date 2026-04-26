@@ -420,7 +420,7 @@
   .layout {
     grid-template-columns: 1fr;
     gap: 24px;
-    padding: 40px 16px;
+    padding: 96px 16px 40px;
     align-items: start;
   }
   .terminal {

@@ -28,6 +28,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { TaskSheet } from "@/components/task-sheet";
 import { TaskList } from "@/components/task-list";
+import { PageTitle } from "@/components/app-shell";
 import { ProjectWiki } from "@/components/project-wiki";
 import { SprintDialog } from "@/components/sprint-dialog";
 import { roleLabel } from "@/lib/roles";
@@ -283,6 +284,10 @@ export default function ProjectDetailPage({
 
   return (
     <div className="space-y-6">
+      <PageTitle
+        title={project.name}
+        subtitle={`${project.client.name} · ${project.status}`}
+      />
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">

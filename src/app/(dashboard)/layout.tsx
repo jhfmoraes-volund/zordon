@@ -1,6 +1,11 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
+  ShellHeader,
+  ShellHeaderTriggerGroup,
+  PageTitleProvider,
+} from "@/components/app-shell";
+import {
   AuthProvider,
   type AuthValue,
   type SessionMember,
@@ -63,24 +68,30 @@ export default async function DashboardLayout({
       <SidebarProvider>
         <AppSidebar />
         <AlphaChatProvider>
-          <main className="flex-1 overflow-auto">
-            <div className="sticky top-0 z-40 flex items-center gap-2 border-b border-border/50 bg-background/80 px-6 py-3 pt-[max(env(safe-area-inset-top),0.75rem)] backdrop-blur md:static md:bg-transparent md:backdrop-blur-none">
-              <SidebarTrigger className="h-10 w-10" />
-              {auth.isImpersonating && (
-                <span className="text-xs text-amber-500 font-medium uppercase tracking-wider">
-                  Impersonando · {auth.member?.name}
-                </span>
-              )}
-              <div className="ml-auto md:hidden">
-                <AlphaChatTrigger variant="header" />
-              </div>
+          <PageTitleProvider>
+            {/* Flex container pro reflow do Alpha panel: <main> + <AlphaChatPanel>
+                como flex siblings. AlphaChatPanel anima w-0 → w-96 no desktop;
+                no mobile renderiza Sheet (ignora a flex column). */}
+            <div className="flex flex-1 min-w-0">
+              <main className="flex-1 min-w-0 overflow-auto">
+                <ShellHeader
+                  left={<SidebarTrigger className="size-9" />}
+                  right={
+                    <ShellHeaderTriggerGroup>
+                      {auth.isImpersonating && (
+                        <span className="text-xs font-medium uppercase tracking-wider text-amber-500">
+                          Impersonando · {auth.member?.name}
+                        </span>
+                      )}
+                      <AlphaChatTrigger />
+                    </ShellHeaderTriggerGroup>
+                  }
+                />
+                <div className="px-3 py-4 sm:px-4 lg:p-6">{children}</div>
+              </main>
+              <AlphaChatPanel />
             </div>
-            <div className="px-3 py-4 sm:px-4 lg:p-6">{children}</div>
-          </main>
-          <div className="hidden md:block">
-            <AlphaChatTrigger variant="floating" />
-          </div>
-          <AlphaChatPanel />
+          </PageTitleProvider>
         </AlphaChatProvider>
       </SidebarProvider>
     </AuthProvider>

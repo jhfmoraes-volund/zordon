@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionBar } from "@/components/app-shell";
 import { IntroStep } from "@/components/skill-assessment/intro-step";
 import { TowerStep } from "@/components/skill-assessment/tower-step";
 import { GoalsStep } from "@/components/skill-assessment/goals-step";
@@ -334,36 +335,34 @@ export default function SkillAssessmentPage() {
 
       {/* Footer nav */}
       {stepIndex !== DONE_INDEX && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-border/50 bg-background/95 backdrop-blur">
-          <div className={`mx-auto ${containerWidth} px-6 lg:px-10 py-3 flex items-center justify-between gap-2`}>
-            <Button
-              variant="ghost"
-              onClick={prev}
-              disabled={stepIndex === 0}
-              size="sm"
-            >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Voltar
-            </Button>
+        <ActionBar maxWidth={containerWidth}>
+          <Button
+            variant="ghost"
+            onClick={prev}
+            disabled={stepIndex === 0}
+            size="sm"
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Voltar
+          </Button>
 
-            <div className="flex items-center gap-2">
-              {currentTower && (
-                <Button variant="ghost" size="sm" onClick={next}>
-                  <SkipForward className="h-4 w-4 mr-1" />
-                  Pular torre
-                </Button>
-              )}
-              {stepIndex === REVIEW_INDEX ? (
-                <Button onClick={complete}>Salvar e publicar</Button>
-              ) : (
-                <Button onClick={next}>
-                  {stepIndex === 0 ? "Começar" : "Próxima"}
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              )}
-            </div>
+          <div className="flex items-center gap-2">
+            {currentTower && (
+              <Button variant="ghost" size="sm" onClick={next}>
+                <SkipForward className="h-4 w-4 mr-1" />
+                Pular torre
+              </Button>
+            )}
+            {stepIndex === REVIEW_INDEX ? (
+              <Button onClick={complete}>Salvar e publicar</Button>
+            ) : (
+              <Button onClick={next}>
+                {stepIndex === 0 ? "Começar" : "Próxima"}
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
           </div>
-        </div>
+        </ActionBar>
       )}
     </div>
   );

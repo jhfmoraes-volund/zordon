@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { X } from "lucide-react";
 import {
+  ShellHeader,
+  ShellHeaderTriggerGroup,
+  PageTitleProvider,
+} from "@/components/app-shell";
+import {
   AuthProvider,
   type AuthValue,
   type SessionMember,
@@ -49,22 +54,33 @@ export default async function FocusLayout({
 
   return (
     <AuthProvider value={auth}>
-      <main className="flex-1 min-h-screen w-full bg-background">
-        <header className="flex items-center justify-between border-b border-border/50 px-6 py-3">
-          <Link href="/profile" className="text-sm font-semibold tracking-tight">
-            Volund
-          </Link>
-          <Link
-            href="/profile"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Sair do modo foco"
-          >
-            <X className="h-3.5 w-3.5" />
-            Sair
-          </Link>
-        </header>
-        {children}
-      </main>
+      <PageTitleProvider>
+        <main className="flex-1 min-h-screen w-full bg-background">
+          <ShellHeader
+            left={
+              <Link
+                href="/profile"
+                className="text-sm font-semibold tracking-tight"
+              >
+                Volund
+              </Link>
+            }
+            right={
+              <ShellHeaderTriggerGroup>
+                <Link
+                  href="/profile"
+                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  aria-label="Sair do modo foco"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Sair
+                </Link>
+              </ShellHeaderTriggerGroup>
+            }
+          />
+          {children}
+        </main>
+      </PageTitleProvider>
     </AuthProvider>
   );
 }

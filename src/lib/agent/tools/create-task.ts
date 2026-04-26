@@ -11,20 +11,28 @@ import { suggestFunctionPoints } from "@/lib/function-points";
 export function createTaskTool(sessionId: string, projectId: string) {
   return tool({
     description:
-      "Cria uma task técnica no backlog do projeto. Use para cada task granular que deve ser implementada. A tool calcula Function Points automaticamente.",
+      "Cria uma task técnica no backlog do projeto. Cada task deve ser um BRIEF AUTOSSUFICIENTE: um LLM em sessão futura, sem acesso a esta design session, deve conseguir ler a task e executar sozinho. Use markdown rico em description e notes (ver PASSO 3 do system prompt). A tool calcula Function Points automaticamente.",
     inputSchema: z.object({
-      title: z.string().describe("Título curto e acionável da task"),
+      title: z
+        .string()
+        .describe(
+          "Título curto e acionável. Prefixe com [MÓDULO] quando agrupar (ex: '[FINANCEIRO] Endpoint POST /api/invoices')."
+        ),
       description: z
         .string()
-        .describe("O que entregar e por quê (contexto de negócio)"),
+        .describe(
+          "Markdown rico com seções: ## Objetivo, ## Contexto, ## Estado atual, ## O que criar (com caminhos de arquivo sugeridos + pseudocódigo/JSX/schema quando útil), ## Constraints / NÃO fazer, ## Convenções. Veja PASSO 3 do system prompt pro template completo. Brief denso > task fragmentada."
+        ),
       acceptanceCriteria: z
         .array(z.string())
-        .describe("Lista de critérios de aceite verificáveis"),
+        .describe(
+          "Cada item: verificável objetivamente (sim/não), em uma frase. Inclua pelo menos um regression check ('X continua funcionando após a mudança'). Evite 'funciona bem', 'otimizado', 'boa UX'."
+        ),
       notes: z
         .string()
         .optional()
         .describe(
-          "Observações técnicas: snippets, queries, referências. Só se agregar valor."
+          "Markdown estruturado com campos quando aplicáveis: **Dependências:** (refs de tasks anteriores), **Habilita:** (o que fica viável depois), **Risco:** (baixo/médio/alto + razão), **Estratégia de validação:** (QA manual passo a passo), **Ref:** (spec/mapa), **Tempo estimado:** (Xh-Yh)."
         ),
       complexity: z
         .enum(["trivial", "low", "medium", "high"])

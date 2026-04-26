@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PageTitle } from "@/components/app-shell";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -281,6 +282,10 @@ export default function MeetingDetailPage({
 
   return (
     <div className="space-y-6">
+      <PageTitle
+        title={headerTitle}
+        subtitle={`${meeting.status} · ${fmtDate(meeting.date)}`}
+      />
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">

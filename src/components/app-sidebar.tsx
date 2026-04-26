@@ -15,7 +15,6 @@ import {
   User,
   LogOut,
   Settings,
-  Bot,
   SlidersHorizontal,
 } from "lucide-react";
 import {
@@ -61,9 +60,11 @@ const sharedNav: NavItem[] = [
 ];
 
 // Manager+ only (PM, head-ops, CEO).
+// Nota: "Alpha" foi removido do sidebar — Alpha é acessível pelo botão Bot
+// no header em qualquer página. Página /ops continua existindo (acesso via
+// botão "Histórico" dentro do panel do Alpha).
 const managerOnlyNav: NavItem[] = [
   { title: "Overview", href: "/", icon: LayoutDashboard },
-  { title: "Alpha", href: "/ops", icon: Bot },
   { title: "Reuniões", href: "/meetings", icon: CalendarCheck },
 ];
 
