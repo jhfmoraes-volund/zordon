@@ -21,7 +21,9 @@ export function ShellHeader({ left, right, className }: Props) {
   return (
     <header
       className={cn(
-        "sticky top-0 z-30 border-b border-border/50 bg-background/95 backdrop-blur",
+        // pt-safe respeita o notch em PWA standalone iOS (env(safe-area-inset-top));
+        // fora de PWA o valor é 0, então não há diff visual.
+        "sticky top-0 z-30 border-b border-border/50 bg-background/95 pt-safe backdrop-blur",
         className,
       )}
     >

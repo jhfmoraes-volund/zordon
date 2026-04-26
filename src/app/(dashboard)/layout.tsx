@@ -74,8 +74,11 @@ export default async function DashboardLayout({
           <PageTitleProvider>
             {/* Flex container pro reflow do Alpha panel: <main> + <AlphaChatPanel>
                 como flex siblings. AlphaChatPanel anima w-0 → w-96 no desktop;
-                no mobile renderiza Sheet (ignora a flex column). */}
-            <div className="flex flex-1 min-w-0">
+                no mobile renderiza Sheet (ignora a flex column).
+                h-svh trava altura ao viewport — main vira scroll container real
+                (overflow-auto so funciona com altura explicita), header sticky
+                gruda no topo de verdade. */}
+            <div className="flex flex-1 h-svh min-w-0">
               <main className="flex-1 min-w-0 overflow-auto">
                 <ShellHeader
                   left={<SidebarTrigger className="size-9" />}
