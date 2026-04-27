@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   const denied = await requireProjectMemberApi(body.projectId);
   if (denied) return denied;
 
-  const totalSteps = body.type === "inception" ? 7 : 5;
+  const totalSteps = body.type === "inception" ? 9 : 5;
 
   const { data: session, error } = await db()
     .from("DesignSession")

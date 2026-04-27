@@ -23,6 +23,7 @@ export function assembleAlphaTools(
     activeMeetingId?: string;
     routeProjectId?: string;
     routeSprintId?: string;
+    currentMemberId?: string;
   } = {},
 ): ToolSet {
   const supabase = db();
@@ -31,6 +32,7 @@ export function assembleAlphaTools(
   const activeMeetingId = opts.activeMeetingId;
   const routeProjectId = opts.routeProjectId;
   const routeSprintId = opts.routeSprintId;
+  const currentMemberId = opts.currentMemberId;
   const NO_ROAM_TOKEN =
     "Roam nao conectado. Peca ao PM para conectar em Configuracoes > Integracoes.";
 
@@ -953,8 +955,8 @@ export function assembleAlphaTools(
               .select("projectId, sprintHealth, attentionPoints, nextSteps, additionalNotes, member:Member(name), project:Project(name)")
               .eq("meetingId", m.id),
             supabase
-              .from("MeetingActionItem")
-              .select("description, status, dueDate, resolvedAt, assignee:Member(name)")
+              .from("Todo")
+              .select("description, status, dueDate, resolvedAt, assignee:Member!Todo_assigneeId_fkey(name)")
               .eq("meetingId", m.id),
           ]);
           return { ...m, reviews: reviews || [], actions: actions || [] };
@@ -1180,19 +1182,18 @@ export function assembleAlphaTools(
       },
     });
 
-    tools.create_meeting_action = tool({
+    tools.create_todo = tool({
       description:
-        "Cria uma ação (MeetingActionItem) numa reunião, opcionalmente vinculada a uma revisão de projeto. Use para registrar tarefas acordadas durante a revisão por PM.",
+        "Cria uma To-do — obrigação atribuída a um membro. Pode nascer de uma reunião (origem='meeting') ou ser uma tarefa solta atribuída a alguém (origem='manual'). Use sem meetingId para registrar To-do pessoal/operacional fora de reunião.",
       inputSchema: z.object({
-        meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
+        meetingId: z.string().optional().describe("UUID da reunião (opcional — default: reunião do contexto se houver). Se ausente e sem contexto, To-do é criada como manual."),
         description: z.string().min(1).describe("O que precisa ser feito"),
         assigneeName: z.string().describe("Nome parcial do responsável"),
         dueDate: z.string().optional().describe("Prazo em YYYY-MM-DD (opcional)"),
-        projectName: z.string().optional().describe("Nome parcial do projeto pra vincular à revisão correspondente (opcional)"),
+        projectName: z.string().optional().describe("Nome parcial do projeto pra vincular à revisão correspondente (só se vinculada a reunião)"),
       }),
       execute: async ({ meetingId, description, assigneeName, dueDate, projectName }) => {
-        const targetId = meetingId || activeMeetingId;
-        if (!targetId) return { error: "Nenhuma reunião no contexto. Informe meetingId." };
+        const targetMeetingId = meetingId || activeMeetingId || null;
 
         const { data: member } = await supabase
           .from("Member")
@@ -1203,37 +1204,42 @@ export function assembleAlphaTools(
         if (!member) return { error: `Membro "${assigneeName}" não encontrado.` };
 
         let sourceReviewId: string | null = null;
-        if (projectName) {
+        if (targetMeetingId && projectName) {
           const { data: review } = await supabase
             .from("MeetingProjectReview")
             .select("id, project:Project!inner(name)")
-            .eq("meetingId", targetId)
+            .eq("meetingId", targetMeetingId)
             .ilike("project.name", `%${projectName}%`)
             .limit(1)
             .maybeSingle();
           if (review) sourceReviewId = review.id;
         }
 
-        const { data: action, error } = await supabase
-          .from("MeetingActionItem")
+        const source = targetMeetingId ? "meeting" : "agent";
+
+        const { data: todo, error } = await supabase
+          .from("Todo")
           .insert({
             id: crypto.randomUUID(),
-            meetingId: targetId,
+            meetingId: targetMeetingId,
+            source,
             description,
             assigneeId: member.id,
+            createdById: currentMemberId ?? member.id,
             dueDate: dueDate ? new Date(dueDate).toISOString() : null,
             status: "todo",
             sourceReviewId,
             updatedAt: new Date().toISOString(),
           })
-          .select("id, description, status, dueDate")
+          .select("id, description, status, dueDate, source")
           .single();
-        if (error) return { error: `Erro ao criar ação: ${error.message}` };
+        if (error) return { error: `Erro ao criar To-do: ${error.message}` };
 
         return {
           created: true,
-          action,
+          todo,
           assignee: member.name,
+          source,
           linkedToProject: projectName && sourceReviewId ? projectName : null,
         };
       },
@@ -1242,13 +1248,13 @@ export function assembleAlphaTools(
 
   tools.get_pending_actions = tool({
     description:
-      "Lista acoes de reunioes que ainda nao foram resolvidas. Cruza MeetingActionItem com status pendente. Use para cobrar acoes ou preparar pauta da proxima reuniao.",
+      "Lista To-dos pendentes (status != done) com suas origens (reunião ou manual). Use para cobrar ações, preparar pauta da próxima reunião, ou verificar carga atual.",
     inputSchema: z.object({}),
     execute: async () => {
       const { data: actions } = await supabase
-        .from("MeetingActionItem")
-        .select("description, status, dueDate, assignee:Member(name), meeting:Meeting(date)")
-        .neq("status", "resolved")
+        .from("Todo")
+        .select("description, status, dueDate, source, assignee:Member!Todo_assigneeId_fkey(name), meeting:Meeting(date)")
+        .neq("status", "done")
         .order("dueDate", { ascending: true });
 
       const actionList = (actions || []).map((a) => ({

@@ -8,8 +8,8 @@ const MEETING_SELECT = `
   projectReviews:MeetingProjectReview(
     *, project:Project(name), member:Member(name)
   ),
-  actionItems:MeetingActionItem(
-    *, assignee:Member!MeetingActionItem_assigneeId_fkey(name)
+  actionItems:Todo(
+    *, assignee:Member!Todo_assigneeId_fkey(name)
   ),
   attendees:MeetingAttendee(
     *, member:Member(id, name)
@@ -53,17 +53,49 @@ export async function POST(req: NextRequest) {
       pmMemberIds = [],
       attendees = [],
       projectIds = [],
+      sprintId = null,
     }: {
       date: string;
       notes?: string;
-      type?: "pm_review" | "general";
+      type?: "pm_review" | "general" | "daily" | "super_planning";
       title?: string | null;
       pmMemberIds?: string[];
       attendees?: AttendeeInput[];
       projectIds?: string[];
+      sprintId?: string | null;
     } = body;
 
     const supabase = db();
+
+    if (type === "daily" && projectIds.length === 0) {
+      return NextResponse.json(
+        { error: "Daily requer ao menos um projeto vinculado." },
+        { status: 400 }
+      );
+    }
+
+    let resolvedSprintId: string | null = sprintId;
+    if (type === "super_planning") {
+      if (projectIds.length !== 1) {
+        return NextResponse.json(
+          { error: "Super Planning requer exatamente um projeto." },
+          { status: 400 }
+        );
+      }
+      const { data: activeSprint } = await supabase
+        .from("Sprint")
+        .select("id")
+        .eq("projectId", projectIds[0])
+        .eq("status", "active")
+        .maybeSingle();
+      if (!activeSprint) {
+        return NextResponse.json(
+          { error: "Projeto sem sprint ativa. Crie ou ative uma sprint antes." },
+          { status: 400 }
+        );
+      }
+      resolvedSprintId = activeSprint.id;
+    }
 
     let reviews: Array<{ projectId: string; memberId: string; order: number }> = [];
     let resolvedAttendees: AttendeeInput[] = attendees;
@@ -108,7 +140,7 @@ export async function POST(req: NextRequest) {
     }> = [];
     if (lastMeeting) {
       const { data: pendingActions } = await supabase
-        .from("MeetingActionItem")
+        .from("Todo")
         .select("description, assigneeId, dueDate")
         .eq("meetingId", lastMeeting.id)
         .in("status", ["todo", "doing"]);
@@ -130,6 +162,7 @@ export async function POST(req: NextRequest) {
         p_attendees: resolvedAttendees,
         p_project_ids: projectIds,
         p_notes: notes ?? null,
+        p_sprint_id: resolvedSprintId,
       }
     );
     if (rpcError) throw rpcError;

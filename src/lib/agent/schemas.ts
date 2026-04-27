@@ -62,6 +62,13 @@ export type PrioritizationItem = z.infer<typeof prioritizationItemSchema> & { id
 const STEP_SCHEMA_DOCS: Record<string, string> = {
   product_vision:
     "Campos texto: problem, whoSuffers, consequences, successVision, impactMetrics",
+  scope_definition: [
+    'Quatro arrays paralelos com items {id, text}:',
+    '"is" (o que o produto E em essencia),',
+    '"isNot" (o que o produto NAO E — clarifica mal-entendidos),',
+    '"does" (o que o produto FAZ — capacidades),',
+    '"doesNot" (o que o produto NAO FAZ — fronteiras explicitas).',
+  ].join(" "),
   personas_journeys: [
     'Array "personas", cada persona tem: id, name, role, context,',
     "asIsSteps (array de {id, description, painOrGain}),",

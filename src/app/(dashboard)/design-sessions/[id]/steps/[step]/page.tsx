@@ -7,6 +7,7 @@ import { PersonaJourneyBoard, Persona, JourneyStep } from "@/components/design-s
 import { SolutionCardBoard, SolutionCard } from "@/components/design-session/solution-card-board";
 import { HypothesisBoard, Hypothesis } from "@/components/design-session/hypothesis-board";
 import { PriorityBoard, PrioritizedItem, PriorityBucket } from "@/components/design-session/priority-board";
+import { PostItBoard, PostItItem, PostItSection } from "@/components/design-session/post-it-board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
 import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -214,6 +215,8 @@ function StepContent({
       return <PreWorkStep sessionId={sessionId} data={data} onChange={onChange} />;
     case "product_vision":
       return <ProductVisionStep data={data} onChange={onChange} />;
+    case "scope_definition":
+      return <ScopeDefinitionStep data={data} onChange={onChange} />;
     case "personas_journeys":
       return <PersonasJourneysStep data={data} onChange={onChange} />;
     case "brainstorm":
@@ -329,6 +332,70 @@ function ProductVisionStep({
         </CardContent>
       </Card>
 
+    </div>
+  );
+}
+
+// ─── Step: E / Nao E / Faz / Nao Faz ──────────────────────
+
+const SCOPE_BUCKETS = [
+  { key: "is", title: "É", color: "bg-emerald-500/10 border border-emerald-500/20" },
+  { key: "isNot", title: "NÃO É", color: "bg-rose-500/10 border border-rose-500/20" },
+  { key: "does", title: "FAZ", color: "bg-sky-500/10 border border-sky-500/20" },
+  { key: "doesNot", title: "NÃO FAZ", color: "bg-amber-500/10 border border-amber-500/20" },
+] as const;
+
+type ScopeBucketKey = (typeof SCOPE_BUCKETS)[number]["key"];
+
+function ScopeDefinitionStep({
+  data,
+  onChange,
+}: {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}) {
+  const genId = () => Math.random().toString(36).slice(2, 9);
+  const getItems = (key: ScopeBucketKey) => (data[key] as PostItItem[]) || [];
+
+  const sections: PostItSection[] = SCOPE_BUCKETS.map((b) => ({
+    key: b.key,
+    title: b.title,
+    color: b.color,
+    items: getItems(b.key),
+  }));
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground space-y-2">
+        <p>
+          Alinhe identidade e fronteiras do produto antes de explorar personas. Items curtos e afirmativos.
+        </p>
+        <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+          <li><strong className="text-emerald-500">É</strong> — o que o produto é em essência (categoria, posicionamento)</li>
+          <li><strong className="text-rose-500">NÃO É</strong> — mal-entendidos a evitar (com o que costumam confundir)</li>
+          <li><strong className="text-sky-500">FAZ</strong> — capacidades concretas que vai entregar</li>
+          <li><strong className="text-amber-500">NÃO FAZ</strong> — fronteiras explícitas, protege contra scope creep</li>
+        </ul>
+      </div>
+      <PostItBoard
+        sections={sections}
+        columns={2}
+        onAdd={(sectionKey, text) => {
+          const key = sectionKey as ScopeBucketKey;
+          onChange({ ...data, [key]: [...getItems(key), { id: genId(), text }] });
+        }}
+        onUpdate={(sectionKey, itemId, text) => {
+          const key = sectionKey as ScopeBucketKey;
+          onChange({
+            ...data,
+            [key]: getItems(key).map((i) => (i.id === itemId ? { ...i, text } : i)),
+          });
+        }}
+        onDelete={(sectionKey, itemId) => {
+          const key = sectionKey as ScopeBucketKey;
+          onChange({ ...data, [key]: getItems(key).filter((i) => i.id !== itemId) });
+        }}
+      />
     </div>
   );
 }
@@ -741,7 +808,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   useEffect(() => {
-    const stepKeys = ["product_vision", "personas_journeys", "brainstorm", "prioritization", "technical_specs", "hypotheses"];
+    const stepKeys = ["product_vision", "scope_definition", "personas_journeys", "brainstorm", "prioritization", "technical_specs", "hypotheses"];
     Promise.all([
       ...stepKeys.map((key) =>
         fetch(`/api/design-sessions/${sessionId}/steps/${key}`)
@@ -770,6 +837,14 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   const isOpen = briefingOpen ?? false;
   const vision = allData.product_vision || {};
   const v = (key: string) => (vision[key] as string) || "";
+  const scope = allData.scope_definition || {};
+  const scopeBuckets = (key: "is" | "isNot" | "does" | "doesNot") =>
+    (scope[key] as Array<{ id: string; text: string }> | undefined) || [];
+  const hasScope =
+    scopeBuckets("is").length > 0 ||
+    scopeBuckets("isNot").length > 0 ||
+    scopeBuckets("does").length > 0 ||
+    scopeBuckets("doesNot").length > 0;
   const personas = (allData.personas_journeys?.personas as Persona[]) || [];
   const solutions = ((allData.brainstorm?.solutions as SolutionCard[]) || []).filter(
     (s) => !s.archived,
@@ -828,9 +903,34 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
             </div>
           </section>
 
+          {hasScope && (
+            <section>
+              <h3 className="font-semibold mb-2">2. Escopo & Fronteiras</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-4">
+                {([
+                  { key: "is" as const, label: "É", className: "text-emerald-500" },
+                  { key: "isNot" as const, label: "NÃO É", className: "text-rose-500" },
+                  { key: "does" as const, label: "FAZ", className: "text-sky-500" },
+                  { key: "doesNot" as const, label: "NÃO FAZ", className: "text-amber-500" },
+                ]).map(({ key, label, className }) => {
+                  const items = scopeBuckets(key);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={key}>
+                      <p className={`text-xs font-medium ${className}`}>{label}</p>
+                      <ul className="list-disc list-inside text-xs">
+                        {items.map((i) => <li key={i.id}>{i.text}</li>)}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {personas.length > 0 && (
             <section>
-              <h3 className="font-semibold mb-2">2. Personas & Jornadas</h3>
+              <h3 className="font-semibold mb-2">3. Personas & Jornadas</h3>
               {personas.map((p) => (
                 <div key={p.id} className="pl-4 mb-3">
                   <p className="font-medium">{p.name} — {p.role}</p>
@@ -862,7 +962,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
 
           {solutions.length > 0 && (
             <section>
-              <h3 className="font-semibold mb-2">3. Solucoes Levantadas</h3>
+              <h3 className="font-semibold mb-2">4. Solucoes Levantadas</h3>
               <ul className="list-disc list-inside pl-4">
                 {solutions.map((s) => (
                   <li key={s.id}><strong>{s.title}</strong>{s.howItSolves && ` — ${s.howItSolves}`}{s.targetPersona && <span className="text-muted-foreground"> (Persona: {s.targetPersona})</span>}</li>
@@ -873,7 +973,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
 
           {priorityItems.length > 0 && (
             <section>
-              <h3 className="font-semibold mb-2">4. Priorizacao</h3>
+              <h3 className="font-semibold mb-2">5. Priorizacao</h3>
               <div className="pl-4 space-y-2">
                 {mvpItems.length > 0 && (<div><p className="text-xs font-medium text-green-700">MVP ({mvpItems.length})</p><ul className="list-disc list-inside text-xs">{mvpItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
                 {nextItems.length > 0 && (<div><p className="text-xs font-medium text-blue-700">Next ({nextItems.length})</p><ul className="list-disc list-inside text-xs">{nextItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
@@ -884,7 +984,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
 
           {hypotheses.length > 0 && (
             <section>
-              <h3 className="font-semibold mb-2">5. Hipoteses & Metricas</h3>
+              <h3 className="font-semibold mb-2">6. Hipoteses & Metricas</h3>
               <div className="pl-4 space-y-3">
                 {hypotheses.map((h, i) => (
                   <div key={h.id}>

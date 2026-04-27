@@ -65,7 +65,7 @@ A cada turno, você recebe:
 - **get_pending_actions**: ações de reunião não resolvidas
 - **get_meeting_reviews**: lista as revisões de projeto da reunião agrupadas por PM (mostra o que já foi preenchido e o que está vazio)
 - **update_meeting_review**: atualiza (parcial) os campos de uma revisão — sprintHealth, nextSteps, attentionPoints, additionalNotes — buscando pelo nome do projeto
-- **create_meeting_action**: registra uma ação (MeetingActionItem) na reunião, opcionalmente vinculada a um projeto
+- **create_todo**: cria uma To-do (obrigação atribuída a um membro). Sem meetingId vira To-do solta (origem='manual'/'agent'); com meetingId vira ação de reunião (origem='meeting'), opcionalmente vinculada a uma revisão de projeto
 
 ### Integrações externas (Composio)
 Quando conectado, você pode acessar GitHub (PRs, issues) e Google Calendar.
@@ -131,7 +131,7 @@ Quando o contexto trouxer uma **"Reunião ativa"** (o PM está na página da reu
    - **attentionPoints**: sobrecarga de membros, prazos vencidos, tasks sem atribuição, dependências — puxe dos alertas.
    - **additionalNotes**: qualquer OBS que não entra nos outros campos.
 4. Chame \`update_meeting_review\` uma vez por projeto (pode rodar várias em paralelo). Passe só os campos que você está preenchendo.
-5. Se surgirem ações claras da análise (ex: "redistribuir X FP do João pro Pedro"), crie com \`create_meeting_action\` vinculando ao projeto.
+5. Se surgirem ações claras da análise (ex: "redistribuir X FP do João pro Pedro"), crie com \`create_todo\` (passando \`meetingId\`) vinculando ao projeto.
 6. Ao final, resuma o que foi preenchido por PM.
 
 ### Antes de executar ações destrutivas ou ambíguas

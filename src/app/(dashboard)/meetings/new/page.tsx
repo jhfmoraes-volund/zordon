@@ -12,9 +12,21 @@ import { ArrowLeft, Plus, X } from "lucide-react";
 
 type Member = { id: string; name: string; role: string };
 type Project = { id: string; name: string; status: string };
+type Sprint = { id: string; name: string; status: string; projectId: string };
 type ExternalAttendee = { name: string; email: string; role: string };
 
-type MeetingType = "pm_review" | "general";
+type MeetingType = "pm_review" | "general" | "daily" | "super_planning";
+
+const TYPE_DESCRIPTIONS: Record<MeetingType, string> = {
+  pm_review:
+    "Selecione 1 ou mais PMs participantes. Os projetos ativos de cada PM serão revisados (próximos passos, saudabilidade, pontos de atenção, OBS) e ações pendentes da última reunião concluída serão trazidas.",
+  general:
+    "Reunião sem revisão estruturada. Você pode juntar projetos relacionados (opcional) e registrar pontos de ação.",
+  daily:
+    "Daily de um ou mais projetos. Discuta progresso, blockers e plano de ação sobre as tasks da sprint atual.",
+  super_planning:
+    "Planejamento da sprint atual de um projeto (segundas-feiras). Sugestões de IA + aprovação manual de criação/edição/movimentação de tasks.",
+};
 
 export default function NewMeetingPage() {
   const router = useRouter();
@@ -26,6 +38,7 @@ export default function NewMeetingPage() {
 
   const [members, setMembers] = useState<Member[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [sprints, setSprints] = useState<Sprint[]>([]);
 
   const [pmIds, setPmIds] = useState<Set<string>>(new Set());
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
@@ -40,9 +53,11 @@ export default function NewMeetingPage() {
     Promise.all([
       supabase.from("Member").select("id, name, role").order("name"),
       supabase.from("Project").select("id, name, status").eq("status", "active").order("name"),
-    ]).then(([m, p]) => {
+      supabase.from("Sprint").select("id, name, status, projectId").eq("status", "active"),
+    ]).then(([m, p, s]) => {
       setMembers((m.data ?? []) as Member[]);
       setProjects((p.data ?? []) as Project[]);
+      setSprints((s.data ?? []) as Sprint[]);
     });
   }, []);
 
@@ -61,6 +76,11 @@ export default function NewMeetingPage() {
   const toggleMember = toggleInSet(setMemberIds);
   const toggleProject = toggleInSet(setProjectIds);
 
+  // Super Planning aceita só um projeto — radio behavior
+  const selectSingleProject = (id: string) => {
+    setProjectIds(new Set([id]));
+  };
+
   const addExternal = () => {
     if (!extName.trim()) return;
     setExternals((prev) => [
@@ -75,27 +95,48 @@ export default function NewMeetingPage() {
   const removeExternal = (i: number) =>
     setExternals((prev) => prev.filter((_, idx) => idx !== i));
 
+  // Reset quando muda de tipo (evita carregar seleções incompatíveis)
+  const switchType = (next: MeetingType) => {
+    setType(next);
+    setProjectIds(new Set());
+    setPmIds(new Set());
+    setMemberIds(new Set());
+    setExternals([]);
+    setTitle("");
+  };
+
   const canSubmit = () => {
     if (!date) return false;
     if (type === "pm_review") return pmIds.size > 0;
+    if (type === "daily") return projectIds.size > 0;
+    if (type === "super_planning") {
+      if (projectIds.size !== 1) return false;
+      // valida que tem sprint ativa
+      const pid = Array.from(projectIds)[0];
+      return sprints.some((s) => s.projectId === pid);
+    }
     return title.trim().length > 0 && (memberIds.size > 0 || externals.length > 0);
   };
 
   const create = async () => {
     setSaving(true);
     try {
-      const attendees =
-        type === "pm_review"
-          ? Array.from(pmIds).map((id) => ({ memberId: id, role: "pm" }))
-          : [
-              ...Array.from(memberIds).map((id) => ({ memberId: id, role: "attendee" })),
-              ...externals.map((e) => ({
-                externalName: e.name,
-                externalEmail: e.email || null,
-                externalRole: e.role || null,
-                role: "external",
-              })),
-            ];
+      let attendees;
+      if (type === "pm_review") {
+        attendees = Array.from(pmIds).map((id) => ({ memberId: id, role: "pm" }));
+      } else if (type === "daily" || type === "super_planning") {
+        attendees = Array.from(memberIds).map((id) => ({ memberId: id, role: "attendee" }));
+      } else {
+        attendees = [
+          ...Array.from(memberIds).map((id) => ({ memberId: id, role: "attendee" })),
+          ...externals.map((e) => ({
+            externalName: e.name,
+            externalEmail: e.email || null,
+            externalRole: e.role || null,
+            role: "external",
+          })),
+        ];
+      }
 
       const body = {
         type,
@@ -104,7 +145,9 @@ export default function NewMeetingPage() {
         notes: notes.trim() || null,
         pmMemberIds: type === "pm_review" ? Array.from(pmIds) : [],
         attendees,
-        projectIds: type === "general" ? Array.from(projectIds) : [],
+        projectIds: ["general", "daily", "super_planning"].includes(type)
+          ? Array.from(projectIds)
+          : [],
       };
 
       const res = await fetch("/api/meetings", {
@@ -115,7 +158,12 @@ export default function NewMeetingPage() {
       if (!res.ok) {
         const err = await res.text();
         console.error("Erro ao criar reunião:", err);
-        alert("Erro ao criar reunião. Verifique o console.");
+        let msg = "Erro ao criar reunião.";
+        try {
+          const parsed = JSON.parse(err);
+          if (parsed?.error) msg = parsed.error;
+        } catch {}
+        alert(msg);
         return;
       }
       const meeting = await res.json();
@@ -127,6 +175,18 @@ export default function NewMeetingPage() {
       setSaving(false);
     }
   };
+
+  const showProjectPicker = type === "daily" || type === "super_planning" || type === "general";
+  const showMemberPicker = type === "general" || type === "daily" || type === "super_planning";
+  const showExternalsPicker = type === "general";
+  const showTitleField = type === "general";
+  const showPmPicker = type === "pm_review";
+
+  // Super Planning: avisa se projeto não tem sprint ativa
+  const selectedProjectId = type === "super_planning" ? Array.from(projectIds)[0] : null;
+  const selectedProjectHasSprint = selectedProjectId
+    ? sprints.some((s) => s.projectId === selectedProjectId)
+    : true;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -140,26 +200,34 @@ export default function NewMeetingPage() {
       </div>
 
       {/* Type toggle */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant={type === "pm_review" ? "default" : "outline"}
-          onClick={() => setType("pm_review")}
+          onClick={() => switchType("pm_review")}
         >
           Reunião com PMs
         </Button>
         <Button
           variant={type === "general" ? "default" : "outline"}
-          onClick={() => setType("general")}
+          onClick={() => switchType("general")}
         >
           Reunião geral
         </Button>
+        <Button
+          variant={type === "daily" ? "default" : "outline"}
+          onClick={() => switchType("daily")}
+        >
+          Daily
+        </Button>
+        <Button
+          variant={type === "super_planning" ? "default" : "outline"}
+          onClick={() => switchType("super_planning")}
+        >
+          Super Planning
+        </Button>
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        {type === "pm_review"
-          ? "Selecione 1 ou mais PMs participantes. Os projetos ativos de cada PM serão revisados (próximos passos, saudabilidade, pontos de atenção, OBS) e ações pendentes da última reunião concluída serão trazidas."
-          : "Reunião sem revisão estruturada. Você pode juntar projetos relacionados (opcional) e registrar pontos de ação."}
-      </p>
+      <p className="text-sm text-muted-foreground">{TYPE_DESCRIPTIONS[type]}</p>
 
       <div className="grid gap-4">
         <div className="grid gap-2 max-w-xs">
@@ -167,7 +235,7 @@ export default function NewMeetingPage() {
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
 
-        {type === "general" && (
+        {showTitleField && (
           <div className="grid gap-2">
             <Label>Título</Label>
             <Input
@@ -178,7 +246,7 @@ export default function NewMeetingPage() {
           </div>
         )}
 
-        {type === "pm_review" && (
+        {showPmPicker && (
           <div className="grid gap-2">
             <Label>PMs participantes</Label>
             <div className="flex flex-wrap gap-2">
@@ -203,114 +271,120 @@ export default function NewMeetingPage() {
           </div>
         )}
 
-        {type === "general" && (
-          <>
-            <div className="grid gap-2">
-              <Label>Membros participantes</Label>
-              <div className="flex flex-wrap gap-2">
-                {members.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => toggleMember(m.id)}
-                    className={`px-3 py-1.5 rounded-md border text-sm transition-colors ${
-                      memberIds.has(m.id)
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background hover:bg-accent"
-                    }`}
-                  >
-                    {m.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Externos (opcional)</Label>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:flex-wrap">
-                <div className="grid gap-1 w-full sm:flex-1 sm:min-w-[140px]">
-                  <Label className="text-xs text-muted-foreground">Nome</Label>
-                  <Input
-                    value={extName}
-                    onChange={(e) => setExtName(e.target.value)}
-                    placeholder="Nome"
-                  />
-                </div>
-                <div className="grid gap-1 w-full sm:flex-1 sm:min-w-[160px]">
-                  <Label className="text-xs text-muted-foreground">E-mail</Label>
-                  <Input
-                    value={extEmail}
-                    onChange={(e) => setExtEmail(e.target.value)}
-                    placeholder="email@..."
-                  />
-                </div>
-                <div className="grid gap-1 w-full sm:flex-1 sm:min-w-[120px]">
-                  <Label className="text-xs text-muted-foreground">Cargo</Label>
-                  <Input
-                    value={extRole}
-                    onChange={(e) => setExtRole(e.target.value)}
-                    placeholder="Cargo"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addExternal}
-                  className="w-full sm:w-9 sm:h-9 sm:p-0 sm:shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span className="sm:hidden ml-1">Adicionar externo</span>
-                </Button>
-              </div>
-              {externals.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {externals.map((e, i) => (
-                    <span
-                      key={i}
-                      className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-muted text-sm"
-                    >
-                      {e.name}
-                      {e.role && (
-                        <span className="text-xs text-muted-foreground">({e.role})</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeExternal(i)}
-                        className="hover:text-destructive"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
+        {showProjectPicker && (
+          <div className="grid gap-2">
+            <Label>
+              {type === "super_planning"
+                ? "Projeto (1)"
+                : type === "daily"
+                  ? "Projetos (1+)"
+                  : "Projetos vinculados (opcional)"}
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {projects.length === 0 && (
+                <span className="text-sm text-muted-foreground">Nenhum projeto ativo.</span>
               )}
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Projetos vinculados (opcional)</Label>
-              <div className="flex flex-wrap gap-2">
-                {projects.length === 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    Nenhum projeto ativo.
-                  </span>
-                )}
-                {projects.map((p) => (
+              {projects.map((p) => {
+                const selected = projectIds.has(p.id);
+                const hasSprint = sprints.some((s) => s.projectId === p.id);
+                return (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => toggleProject(p.id)}
+                    onClick={() =>
+                      type === "super_planning" ? selectSingleProject(p.id) : toggleProject(p.id)
+                    }
                     className={`px-3 py-1.5 rounded-md border text-sm transition-colors ${
-                      projectIds.has(p.id)
+                      selected
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-background hover:bg-accent"
                     }`}
                   >
                     {p.name}
+                    {type === "super_planning" && !hasSprint && (
+                      <span className="ml-1 text-xs opacity-70">(sem sprint ativa)</span>
+                    )}
                   </button>
+                );
+              })}
+            </div>
+            {type === "super_planning" && selectedProjectId && !selectedProjectHasSprint && (
+              <p className="text-xs text-destructive">
+                Esse projeto não tem sprint ativa. Crie ou ative uma sprint antes.
+              </p>
+            )}
+          </div>
+        )}
+
+        {showMemberPicker && (
+          <div className="grid gap-2">
+            <Label>
+              {type === "general"
+                ? "Membros participantes"
+                : "Participantes (opcional)"}
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {members.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => toggleMember(m.id)}
+                  className={`px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                    memberIds.has(m.id)
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background hover:bg-accent"
+                  }`}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showExternalsPicker && (
+          <div className="grid gap-2">
+            <Label>Externos (opcional)</Label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:flex-wrap">
+              <div className="grid gap-1 w-full sm:flex-1 sm:min-w-[140px]">
+                <Label className="text-xs text-muted-foreground">Nome</Label>
+                <Input value={extName} onChange={(e) => setExtName(e.target.value)} placeholder="Nome" />
+              </div>
+              <div className="grid gap-1 w-full sm:flex-1 sm:min-w-[160px]">
+                <Label className="text-xs text-muted-foreground">E-mail</Label>
+                <Input value={extEmail} onChange={(e) => setExtEmail(e.target.value)} placeholder="email@..." />
+              </div>
+              <div className="grid gap-1 w-full sm:flex-1 sm:min-w-[120px]">
+                <Label className="text-xs text-muted-foreground">Cargo</Label>
+                <Input value={extRole} onChange={(e) => setExtRole(e.target.value)} placeholder="Cargo" />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addExternal}
+                className="w-full sm:w-9 sm:h-9 sm:p-0 sm:shrink-0"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="sm:hidden ml-1">Adicionar externo</span>
+              </Button>
+            </div>
+            {externals.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {externals.map((e, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-muted text-sm"
+                  >
+                    {e.name}
+                    {e.role && <span className="text-xs text-muted-foreground">({e.role})</span>}
+                    <button type="button" onClick={() => removeExternal(i)} className="hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
                 ))}
               </div>
-            </div>
-          </>
+            )}
+          </div>
         )}
 
         <div className="grid gap-2">
@@ -325,11 +399,7 @@ export default function NewMeetingPage() {
       </div>
 
       <div className="flex gap-2 sticky bottom-0 -mx-3 px-3 py-3 bg-background border-t pb-safe sm:static sm:mx-0 sm:px-0 sm:py-0 sm:border-0 sm:pb-0">
-        <Button
-          onClick={create}
-          disabled={!canSubmit() || saving}
-          className="flex-1 sm:flex-initial"
-        >
+        <Button onClick={create} disabled={!canSubmit() || saving} className="flex-1 sm:flex-initial">
           {saving ? "Criando..." : "Criar reunião"}
         </Button>
         <Link href="/meetings" className="flex-1 sm:flex-initial">

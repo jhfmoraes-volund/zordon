@@ -30,6 +30,27 @@ export async function buildSessionContext(sessionId: string): Promise<string> {
 - **Métricas de impacto:** ${vision.impactMetrics || "N/A"}`);
   }
 
+  // Scope Definition (E / NAO E / FAZ / NAO FAZ)
+  const scope = stepMap["scope_definition"] as {
+    is?: Array<{ text: string }>;
+    isNot?: Array<{ text: string }>;
+    does?: Array<{ text: string }>;
+    doesNot?: Array<{ text: string }>;
+  } | undefined;
+  if (scope && (scope.is?.length || scope.isNot?.length || scope.does?.length || scope.doesNot?.length)) {
+    const fmt = (items?: Array<{ text: string }>) =>
+      items?.length ? items.map((i) => `  - ${i.text}`).join("\n") : "  Nenhum";
+    sections.push(`## Escopo & Fronteiras (E / NAO E / FAZ / NAO FAZ)
+**E (identidade):**
+${fmt(scope.is)}
+**NAO E (mal-entendidos a evitar):**
+${fmt(scope.isNot)}
+**FAZ (capacidades):**
+${fmt(scope.does)}
+**NAO FAZ (fora do escopo, evitar gerar tasks pra isso):**
+${fmt(scope.doesNot)}`);
+  }
+
   // Personas & Journeys
   const personas = stepMap["personas_journeys"] as { personas?: Array<{ name: string; role: string; context: string; asIsSteps?: Array<{ description: string; painOrGain: string }>; toBeSteps?: Array<{ description: string; painOrGain: string }> }> } | undefined;
   if (personas?.personas?.length) {

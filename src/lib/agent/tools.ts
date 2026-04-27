@@ -17,6 +17,7 @@ const stepKeySchema = z
   .enum([
     "pre_work",
     "product_vision",
+    "scope_definition",
     "personas_journeys",
     "brainstorm",
     "prioritization",

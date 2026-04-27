@@ -21,6 +21,7 @@ export const alphaAgent: AgentDefinition = {
       route,
       routeProjectId: routeProjectId(route),
       routeSprintId: routeSprintId(route),
+      currentMemberId: req.memberId ?? null,
     };
   },
 
@@ -32,10 +33,12 @@ export const alphaAgent: AgentDefinition = {
     const activeMeetingId = (agentContext.meetingId as string | null) ?? undefined;
     const routeProjectIdValue = (agentContext.routeProjectId as string | undefined) ?? undefined;
     const routeSprintIdValue = (agentContext.routeSprintId as string | undefined) ?? undefined;
+    const currentMemberId = (agentContext.currentMemberId as string | null) ?? undefined;
     const nativeTools = assembleAlphaTools(capabilities, {
       activeMeetingId,
       routeProjectId: routeProjectIdValue,
       routeSprintId: routeSprintIdValue,
+      currentMemberId,
     });
 
     // Merge Composio tools if configured

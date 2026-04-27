@@ -23,6 +23,7 @@ import {
   ArrowLeft, Plus, Trash2, CheckCircle2, Circle, Clock,
   ChevronDown, ChevronRight, ChevronsUpDown,
 } from "lucide-react";
+import { TaskActionWidget } from "@/components/meetings/task-action-widget";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -74,8 +75,9 @@ type Meeting = {
   date: string;
   status: string;
   notes: string | null;
-  type: "pm_review" | "general";
+  type: "pm_review" | "general" | "daily" | "super_planning";
   title: string | null;
+  sprintId: string | null;
   projectReviews: ProjectReview[];
   actionItems: ActionItem[];
   attendees: Attendee[];
@@ -99,11 +101,15 @@ const statusLabels: Record<string, string> = {
 const typeLabels: Record<string, string> = {
   pm_review: "Reunião com PMs",
   general: "Reunião geral",
+  daily: "Daily",
+  super_planning: "Super Planning",
 };
 
 const typeColors: Record<string, string> = {
   pm_review: "bg-purple-100 text-purple-800",
   general: "bg-slate-100 text-slate-800",
+  daily: "bg-cyan-100 text-cyan-800",
+  super_planning: "bg-amber-100 text-amber-800",
 };
 
 const healthConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -332,8 +338,8 @@ export default function MeetingDetailPage({
         </div>
       </div>
 
-      {/* Attendees + project links (general meetings show this prominently) */}
-      {meeting.type === "general" && (
+      {/* Attendees + project links (general/daily/super_planning) */}
+      {(meeting.type === "general" || meeting.type === "daily" || meeting.type === "super_planning") && (
         <div className="surface p-4 space-y-3">
           <div>
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -440,24 +446,41 @@ export default function MeetingDetailPage({
         </div>
       )}
 
+      {/* Task Action widgets — 1 por projeto vinculado em daily/super_planning */}
+      {(meeting.type === "daily" || meeting.type === "super_planning") &&
+        meeting.projectLinks.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">Plano de Tasks</h2>
+            {meeting.projectLinks.map((l) =>
+              l.project ? (
+                <TaskActionWidget
+                  key={l.projectId}
+                  meetingId={meeting.id}
+                  project={{ id: l.project.id, name: l.project.name }}
+                />
+              ) : null
+            )}
+          </div>
+        )}
+
       {/* Action Items */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Pontos de ação</h2>
+          <h2 className="text-lg font-semibold">To-dos</h2>
           <Button
             size="sm"
             variant="outline"
             onClick={() => setActionDialogOpen(true)}
           >
             <Plus className="mr-1 h-4 w-4" />
-            Nova ação
+            Nova To-do
           </Button>
         </div>
 
         <div className="surface divide-y">
           {meeting.actionItems.length === 0 && (
             <div className="p-6 text-center text-muted-foreground text-sm">
-              Nenhuma ação registrada.
+              Nenhuma To-do registrada.
             </div>
           )}
           {meeting.actionItems.map((action) => {
@@ -557,7 +580,7 @@ export default function MeetingDetailPage({
       <ResponsiveDialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
         <ResponsiveDialogContent>
           <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>Nova ação</ResponsiveDialogTitle>
+            <ResponsiveDialogTitle>Nova To-do</ResponsiveDialogTitle>
           </ResponsiveDialogHeader>
           <ResponsiveDialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">

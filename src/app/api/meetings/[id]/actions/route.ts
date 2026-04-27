@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi } from "@/lib/dal";
+import { requireMinLevelApi, getCurrentMember } from "@/lib/dal";
 import { MANAGER } from "@/lib/roles";
 
 export async function POST(
@@ -10,22 +10,27 @@ export async function POST(
   const denied = await requireMinLevelApi(MANAGER);
   if (denied) return denied;
 
+  const me = await getCurrentMember();
+  if (!me) return NextResponse.json({ error: "No member" }, { status: 401 });
+
   const { id } = await params;
   const body = await req.json();
 
   const { data: action, error } = await db()
-    .from("MeetingActionItem")
+    .from("Todo")
     .insert({
       id: crypto.randomUUID(),
       meetingId: id,
+      source: "meeting",
       description: body.description,
       assigneeId: body.assigneeId,
+      createdById: me.id,
       dueDate: body.dueDate ? new Date(body.dueDate).toISOString() : null,
       status: "todo",
       sourceReviewId: body.sourceReviewId || null,
       updatedAt: new Date().toISOString(),
     })
-    .select("*, assignee:Member!MeetingActionItem_assigneeId_fkey(id, name)")
+    .select("*, assignee:Member!Todo_assigneeId_fkey(id, name)")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

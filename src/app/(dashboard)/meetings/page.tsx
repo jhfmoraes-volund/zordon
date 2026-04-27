@@ -20,7 +20,7 @@ type Meeting = {
   date: string;
   status: string;
   notes: string | null;
-  type: "pm_review" | "general";
+  type: "pm_review" | "general" | "daily" | "super_planning";
   title: string | null;
   projectReviews: {
     id: string;
@@ -59,11 +59,15 @@ const statusLabels: Record<string, string> = {
 const typeLabels: Record<string, string> = {
   pm_review: "PMs",
   general: "Geral",
+  daily: "Daily",
+  super_planning: "Super Planning",
 };
 
 const typeColors: Record<string, string> = {
   pm_review: "bg-purple-100 text-purple-800",
   general: "bg-slate-100 text-slate-800",
+  daily: "bg-cyan-100 text-cyan-800",
+  super_planning: "bg-amber-100 text-amber-800",
 };
 
 function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
@@ -80,7 +84,12 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
           .filter((a) => a.role === "pm" && a.member)
           .map((a) => a.member!.name)
           .join(", ") || null
-      : meeting.title;
+      : meeting.type === "daily" || meeting.type === "super_planning"
+        ? meeting.projectLinks
+            .map((l) => l.project?.name)
+            .filter(Boolean)
+            .join(", ") || null
+        : meeting.title;
 
   const shortDate = new Date(meeting.date).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -113,7 +122,7 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
         </Badge>
         <span>
           {projectCount} {projectCount === 1 ? "projeto" : "projetos"} · {totalActions}{" "}
-          {totalActions === 1 ? "ação" : "ações"}
+          {totalActions === 1 ? "to-do" : "to-dos"}
         </span>
         {pendingActions > 0 && (
           <span className="font-medium text-yellow-700 dark:text-yellow-500">
@@ -127,7 +136,7 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
 
 export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [typeFilter, setTypeFilter] = useState<"all" | "pm_review" | "general">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "pm_review" | "general" | "daily" | "super_planning">("all");
   const [pmFilter, setPmFilter] = useState<string>("all");
   const router = useRouter();
 
@@ -138,7 +147,7 @@ export default function MeetingsPage() {
       .select(`
         *,
         projectReviews:MeetingProjectReview(*, project:Project(name), member:Member(id, name)),
-        actionItems:MeetingActionItem(*, assignee:Member(name)),
+        actionItems:Todo(*, assignee:Member!Todo_assigneeId_fkey(name)),
         attendees:MeetingAttendee(id, role, externalName, member:Member(id, name)),
         projectLinks:MeetingProjectLink(project:Project(id, name))
       `)
@@ -210,6 +219,8 @@ export default function MeetingsPage() {
               <SelectItem value="all">Todas</SelectItem>
               <SelectItem value="pm_review">Reunião com PMs</SelectItem>
               <SelectItem value="general">Reunião geral</SelectItem>
+              <SelectItem value="daily">Daily</SelectItem>
+              <SelectItem value="super_planning">Super Planning</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -270,7 +281,9 @@ export default function MeetingsPage() {
                       .filter((a) => a.role === "pm" && a.member)
                       .map((a) => a.member!.name)
                       .join(", ") || "—"
-                  : m.title || "—";
+                  : m.type === "daily" || m.type === "super_planning"
+                    ? m.projectLinks.map((l) => l.project?.name).filter(Boolean).join(", ") || "—"
+                    : m.title || "—";
               return (
                 <TableRow key={m.id} className="cursor-pointer">
                   <TableCell>

@@ -31,6 +31,7 @@ import {
 import { PixelBar, pixelBarLabel, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
 import { MemberBattery, type BatterySegment } from "@/components/member-battery";
 import { PdiWidget } from "@/components/pdi-widget";
+import { TodosWidget } from "@/components/todos-widget";
 import { bucketSprintsByWeek, type SprintInput } from "@/lib/weekBuckets";
 
 // ─── Types ────────────────────────────────────────────────
@@ -236,6 +237,9 @@ export default function ProfilePage() {
 
       {/* Capacity widget — bateria + esta semana */}
       <CapacityCard summary={capacity} />
+
+      {/* To-dos pessoais */}
+      <TodosWidget />
 
       {/* Tasks ativas + Projetos */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

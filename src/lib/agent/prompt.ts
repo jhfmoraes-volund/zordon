@@ -44,6 +44,7 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
 
 ### O que preencher (somente quando o usuario pedir):
 - **product_vision**: problem, whoSuffers, consequences, successVision, impactMetrics
+- **scope_definition**: arrays "is", "isNot", "does", "doesNot" (cada item {id, text}). Items curtos e afirmativos. Use add_item com arrayKey correspondente.
 - **personas_journeys**: crie personas com asIsSteps e toBeSteps
 - **brainstorm**: sugira funcionalidades ricas. Para cada uma, preencha:
   - title: nome curto da funcionalidade
@@ -356,6 +357,33 @@ Use set_field para cada campo. Sempre explique o que escreveu e por que.
 `
       : "";
 
+  const scopeDefinitionSection =
+    currentStepKey === "scope_definition"
+      ? `
+## Modo E / Nao E / Faz / Nao Faz
+Voce esta ajudando a delimitar identidade e fronteiras do produto. Esse exercicio acontece DEPOIS da Visao do Produto e ANTES de personas — serve pra alinhar o time sobre escopo antes de explorar quem usa.
+
+### As quatro dimensoes:
+- **is** (E): o que o produto E em essencia. Categoria, posicionamento, natureza. Ex: "uma plataforma de operacoes pra software houses agentic", "uma ferramenta de discovery estruturado".
+- **isNot** (NAO E): o que as pessoas podem CONFUNDIR com o produto, mas ele NAO e. Clarifica mal-entendidos. Ex: "nao e um Jira/Linear", "nao e um chatbot de atendimento", "nao e um marketplace".
+- **does** (FAZ): capacidades concretas que o produto VAI entregar. Ex: "gera tasks tecnicas a partir de design sessions", "rastreia FP por sprint".
+- **doesNot** (NAO FAZ): fronteiras EXPLICITAS — features intencionalmente excluidas pra evitar scope creep. Ex: "nao gera codigo automaticamente", "nao integra com sistemas legados v1".
+
+### Como avaliar:
+- Items curtos, afirmativos, sem ambiguidade. Bom: "uma camada de orquestracao". Ruim: "ajuda equipes a serem produtivas".
+- "isNot" deve ser comparacao com algo CONHECIDO — facilita o time a se calibrar. Se o usuario escrever "nao e ruim", pressione: "Comparado a que produto?".
+- "doesNot" tem que ter MOTIVO implicito — se for trivial demais ("nao faz cafe"), nao agrega.
+- Simetria opcional: se algo e "nao e X", muitas vezes existe um "e Y" complementar.
+
+### Antes de preencher:
+1. Use get_step_data pra ler "product_vision" — alinhe scope_definition com problema e visao de sucesso ja definidos
+2. Se a visao estiver vazia, sugira voltar pro product_vision antes de delimitar escopo
+
+### Ao preencher:
+Use add_item com stepKey "scope_definition" e arrayKey "is", "isNot", "does" ou "doesNot". Cada item tem so {id, text}.
+`
+      : "";
+
   const personasSection =
     currentStepKey === "personas_journeys"
       ? `
@@ -503,7 +531,7 @@ ${JSON.stringify(currentStepData, null, 2)}
 
 ${generateSchemaDocsForPrompt()}
 
-${preWorkSection}${briefingSection}${productVisionSection}${personasSection}${brainstormSection}${prioritizationSection}${hypothesesSection}${technicalSpecsSection}${webSearchSection}
+${preWorkSection}${briefingSection}${productVisionSection}${scopeDefinitionSection}${personasSection}${brainstormSection}${prioritizationSection}${hypothesesSection}${technicalSpecsSection}${webSearchSection}
 ## Anotacoes do step atual
 O campo "_notes" nos dados do step contem anotacoes do facilitador (sticky notes). Essas anotacoes sao instrucoes, lembretes ou observacoes sobre o que precisa ser ajustado neste step.
 - Leia as anotacoes ao iniciar a conversa e use-as como contexto para suas sugestoes

@@ -731,6 +731,7 @@ export type Database = {
           date: string
           id: string
           notes: string | null
+          sprintId: string | null
           status: string
           title: string | null
           type: string
@@ -741,6 +742,7 @@ export type Database = {
           date: string
           id: string
           notes?: string | null
+          sprintId?: string | null
           status?: string
           title?: string | null
           type?: string
@@ -751,92 +753,33 @@ export type Database = {
           date?: string
           id?: string
           notes?: string | null
+          sprintId?: string | null
           status?: string
           title?: string | null
           type?: string
           updatedAt?: string
         }
-        Relationships: []
-      }
-      MeetingActionItem: {
-        Row: {
-          assigneeId: string
-          createdAt: string
-          description: string
-          dueDate: string | null
-          id: string
-          meetingId: string
-          resolvedAt: string | null
-          sourceReviewId: string | null
-          status: string
-          updatedAt: string
-        }
-        Insert: {
-          assigneeId: string
-          createdAt?: string
-          description: string
-          dueDate?: string | null
-          id: string
-          meetingId: string
-          resolvedAt?: string | null
-          sourceReviewId?: string | null
-          status?: string
-          updatedAt: string
-        }
-        Update: {
-          assigneeId?: string
-          createdAt?: string
-          description?: string
-          dueDate?: string | null
-          id?: string
-          meetingId?: string
-          resolvedAt?: string | null
-          sourceReviewId?: string | null
-          status?: string
-          updatedAt?: string
-        }
         Relationships: [
           {
-            foreignKeyName: "MeetingActionItem_assigneeId_fkey"
-            columns: ["assigneeId"]
+            foreignKeyName: "Meeting_sprintId_fkey"
+            columns: ["sprintId"]
             isOneToOne: false
-            referencedRelation: "Member"
+            referencedRelation: "Sprint"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "MeetingActionItem_assigneeId_fkey"
-            columns: ["assigneeId"]
+            foreignKeyName: "Meeting_sprintId_fkey"
+            columns: ["sprintId"]
             isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
+            referencedRelation: "sprint_capacity_overview"
+            referencedColumns: ["sprintId"]
           },
           {
-            foreignKeyName: "MeetingActionItem_assigneeId_fkey"
-            columns: ["assigneeId"]
+            foreignKeyName: "Meeting_sprintId_fkey"
+            columns: ["sprintId"]
             isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "MeetingActionItem_assigneeId_fkey"
-            columns: ["assigneeId"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "MeetingActionItem_meetingId_fkey"
-            columns: ["meetingId"]
-            isOneToOne: false
-            referencedRelation: "Meeting"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "MeetingActionItem_sourceReviewId_fkey"
-            columns: ["sourceReviewId"]
-            isOneToOne: false
-            referencedRelation: "MeetingProjectReview"
-            referencedColumns: ["id"]
+            referencedRelation: "sprint_member_capacity"
+            referencedColumns: ["sprintId"]
           },
         ]
       }
@@ -1023,6 +966,152 @@ export type Database = {
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      MeetingTaskAction: {
+        Row: {
+          aiConfidence: number | null
+          aiReasoning: string | null
+          appliedAt: string | null
+          createdAt: string
+          decidedAt: string | null
+          decidedById: string | null
+          decision: string
+          errorMessage: string | null
+          execution: string
+          id: string
+          meetingId: string
+          notes: string | null
+          payload: Json
+          projectId: string
+          reviewNote: string | null
+          reviewReasons: string[] | null
+          source: string
+          targetSprintId: string | null
+          taskId: string | null
+          type: string
+          updatedAt: string
+          wasEdited: boolean
+        }
+        Insert: {
+          aiConfidence?: number | null
+          aiReasoning?: string | null
+          appliedAt?: string | null
+          createdAt?: string
+          decidedAt?: string | null
+          decidedById?: string | null
+          decision?: string
+          errorMessage?: string | null
+          execution?: string
+          id?: string
+          meetingId: string
+          notes?: string | null
+          payload?: Json
+          projectId: string
+          reviewNote?: string | null
+          reviewReasons?: string[] | null
+          source: string
+          targetSprintId?: string | null
+          taskId?: string | null
+          type: string
+          updatedAt?: string
+          wasEdited?: boolean
+        }
+        Update: {
+          aiConfidence?: number | null
+          aiReasoning?: string | null
+          appliedAt?: string | null
+          createdAt?: string
+          decidedAt?: string | null
+          decidedById?: string | null
+          decision?: string
+          errorMessage?: string | null
+          execution?: string
+          id?: string
+          meetingId?: string
+          notes?: string | null
+          payload?: Json
+          projectId?: string
+          reviewNote?: string | null
+          reviewReasons?: string[] | null
+          source?: string
+          targetSprintId?: string | null
+          taskId?: string | null
+          type?: string
+          updatedAt?: string
+          wasEdited?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MeetingTaskAction_decidedById_fkey"
+            columns: ["decidedById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_decidedById_fkey"
+            columns: ["decidedById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_decidedById_fkey"
+            columns: ["decidedById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_decidedById_fkey"
+            columns: ["decidedById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_targetSprintId_fkey"
+            columns: ["targetSprintId"]
+            isOneToOne: false
+            referencedRelation: "Sprint"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_targetSprintId_fkey"
+            columns: ["targetSprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_capacity_overview"
+            referencedColumns: ["sprintId"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_targetSprintId_fkey"
+            columns: ["targetSprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_member_capacity"
+            referencedColumns: ["sprintId"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "Task"
             referencedColumns: ["id"]
           },
         ]
@@ -2097,6 +2186,122 @@ export type Database = {
           },
         ]
       }
+      Todo: {
+        Row: {
+          assigneeId: string
+          createdAt: string
+          createdById: string
+          description: string
+          dueDate: string | null
+          id: string
+          meetingId: string | null
+          resolvedAt: string | null
+          source: string
+          sourceReviewId: string | null
+          status: string
+          updatedAt: string
+        }
+        Insert: {
+          assigneeId: string
+          createdAt?: string
+          createdById: string
+          description: string
+          dueDate?: string | null
+          id: string
+          meetingId?: string | null
+          resolvedAt?: string | null
+          source?: string
+          sourceReviewId?: string | null
+          status?: string
+          updatedAt: string
+        }
+        Update: {
+          assigneeId?: string
+          createdAt?: string
+          createdById?: string
+          description?: string
+          dueDate?: string | null
+          id?: string
+          meetingId?: string | null
+          resolvedAt?: string | null
+          source?: string
+          sourceReviewId?: string | null
+          status?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Todo_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Todo_sourceReviewId_fkey"
+            columns: ["sourceReviewId"]
+            isOneToOne: false
+            referencedRelation: "MeetingProjectReview"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       client_summary: {
@@ -2322,6 +2527,7 @@ export type Database = {
               p_notes?: string
               p_project_ids?: Json
               p_reviews?: Json
+              p_sprint_id?: string
               p_title?: string
               p_type?: string
             }

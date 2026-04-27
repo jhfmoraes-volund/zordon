@@ -149,7 +149,12 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarMenu>
             {projectNav.map((item) => {
-              const isActive = pathname.startsWith(item.href);
+              // /design-sessions vive dentro do contexto de Projetos: highlight
+              // o item "Projetos" também quando o usuário está numa sessão.
+              const isActive =
+                pathname.startsWith(item.href) ||
+                (item.href === "/projects" &&
+                  pathname.startsWith("/design-sessions"));
               return (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton

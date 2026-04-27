@@ -9,13 +9,13 @@ const MEETING_SELECT = `
     *,
     project:Project(id, name, status),
     member:Member(id, name),
-    actionItems:MeetingActionItem(
-      *, assignee:Member!MeetingActionItem_assigneeId_fkey(id, name)
+    actionItems:Todo(
+      *, assignee:Member!Todo_assigneeId_fkey(id, name)
     )
   ),
-  actionItems:MeetingActionItem(
+  actionItems:Todo(
     *,
-    assignee:Member!MeetingActionItem_assigneeId_fkey(id, name),
+    assignee:Member!Todo_assigneeId_fkey(id, name),
     sourceReview:MeetingProjectReview(project:Project(name))
   ),
   attendees:MeetingAttendee(

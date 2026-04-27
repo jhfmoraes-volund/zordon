@@ -11,7 +11,6 @@ const STATIC_FALLBACKS: Record<string, string> = {
   "/meetings": "Reuniões",
   "/members": "Membros",
   "/squads": "Squads",
-  "/design-sessions": "Design Sessions",
   "/agents": "Agentes",
   "/ops": "Alpha",
   "/profile": "Meu Perfil",

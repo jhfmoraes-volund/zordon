@@ -4,7 +4,7 @@ import { requireMinLevelApi } from "@/lib/dal";
 import { MANAGER } from "@/lib/roles";
 import type { Database } from "@/lib/supabase/database.types";
 
-type ActionUpdate = Database["public"]["Tables"]["MeetingActionItem"]["Update"];
+type ActionUpdate = Database["public"]["Tables"]["Todo"]["Update"];
 
 export async function PUT(
   req: NextRequest,
@@ -27,10 +27,10 @@ export async function PUT(
 
   const supabase = db();
   const { data: action, error } = await supabase
-    .from("MeetingActionItem")
+    .from("Todo")
     .update(data)
     .eq("id", actionId)
-    .select("*, assignee:Member!MeetingActionItem_assigneeId_fkey(id, name)")
+    .select("*, assignee:Member!Todo_assigneeId_fkey(id, name)")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -45,7 +45,7 @@ export async function DELETE(
   if (denied) return denied;
 
   const { actionId } = await params;
-  const { error } = await db().from("MeetingActionItem").delete().eq("id", actionId);
+  const { error } = await db().from("Todo").delete().eq("id", actionId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
