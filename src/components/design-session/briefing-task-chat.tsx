@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/ui/markdown";
 import { ToolCallCard } from "./tool-call-card";
+import { VitorBadge } from "./vitor-badge";
 import { Send, Square, Sparkles } from "lucide-react";
 
 function mapToolState(state: string): "partial-call" | "call" | "result" {
@@ -226,6 +227,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className="max-w-[85%] min-w-0 space-y-2">
+        {!isUser && <VitorBadge size="sm" />}
         {message.parts.map((part, i) => {
           if (part.type === "text" && part.text) {
             return (
