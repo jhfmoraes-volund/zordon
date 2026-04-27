@@ -10,8 +10,14 @@ import {
   ArrowLeft, ExternalLink, Users, KanbanSquare, Plus,
   Lightbulb, ListTodo, Zap, Play, Trash2,
   CheckCircle2, Circle, Loader2, Eye, AlertCircle, CalendarRange,
-  FileText, Pencil, AlertTriangle, Settings,
+  FileText, Pencil, AlertTriangle, Settings, MoreVertical,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,6 +37,7 @@ import { TaskList } from "@/components/task-list";
 import { PageTitle } from "@/components/app-shell";
 import { ProjectWiki } from "@/components/project-wiki";
 import { SprintDialog } from "@/components/sprint-dialog";
+import { PixelBar } from "@/components/ui/pixel-bar";
 import { roleLabel } from "@/lib/roles";
 
 // ─── Types ────────────────────────────────────────────────
@@ -943,13 +950,6 @@ function SprintsTab({ project }: { project: Project }) {
 
   const fmt = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
-  const usageColor = (pct: number) => {
-    if (pct <= 0.5) return "bg-green-500";
-    if (pct <= 0.7) return "bg-blue-500";
-    if (pct <= 0.85) return "bg-yellow-500";
-    return "bg-red-500";
-  };
-
   if (loading) return <p className="text-muted-foreground py-8 text-center">Carregando...</p>;
 
   return (
@@ -964,71 +964,154 @@ function SprintsTab({ project }: { project: Project }) {
         <p className="text-center text-muted-foreground py-8">Nenhum sprint cadastrado.</p>
       )}
 
-      <div className="flex gap-3 overflow-x-auto pb-3 -mx-3 px-3 snap-x snap-mandatory scrollbar-none md:block md:space-y-3 md:overflow-visible md:m-0 md:p-0">
-      {sprintsData.map((s) => (
-        <div key={s.id} className="surface-inset overflow-hidden min-w-[420px] shrink-0 snap-start md:min-w-0">
-          {/* Sprint header */}
-          <div className="flex items-center gap-4 p-4">
-            <Badge className={statusColors[s.status]}>{s.status}</Badge>
-            <div className="flex-1">
-              <p className="text-sm font-medium">{s.name}</p>
-              <p className="text-xs text-muted-foreground">{fmt(s.startDate)} — {fmt(s.endDate)}</p>
+      {/* Mobile: vertical feed of tall cards */}
+      <div className="space-y-3 md:hidden">
+        {sprintsData.map((s) => (
+          <Link
+            key={s.id}
+            href={`/sprints/${s.id}/board`}
+            className="surface-inset block overflow-hidden relative active:bg-accent/40 transition-colors"
+          >
+            {/* 3-dot menu — absolute, stops propagation */}
+            <div
+              className="absolute top-2 right-2 z-10"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="ghost" size="icon" className="h-9 w-9" />}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => { setEditing(s); setOpen(true); }}>
+                    <Pencil className="h-3.5 w-3.5 mr-2" /> Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onClick={() => remove(s.id)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-2" /> Excluir
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <span className="text-sm font-bold tabular-nums">{s.totalFp || 0} FP</span>
-            <div className="flex items-center gap-2 min-w-[140px]">
-              <div className="h-2 flex-1 rounded-full bg-secondary overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${s.taskStats.percent === 100 ? "bg-green-500" : "bg-primary"}`}
-                  style={{ width: `${s.taskStats.percent}%` }}
-                />
-              </div>
-              <span className="text-xs font-medium tabular-nums">{s.taskStats.done}/{s.taskStats.total}</span>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <Link href={`/sprints/${s.id}/board`} aria-label="Abrir board">
-                <Button variant="outline" size="sm" className="h-7 w-7 p-0">
-                  <KanbanSquare className="h-3.5 w-3.5" />
-                </Button>
-              </Link>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(s); setOpen(true); }}>
-                <Pencil className="h-3 w-3" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(s.id)}>
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
 
-          {/* Capacity per member */}
-          {s.members && s.members.length > 0 && (
-            <div className="border-t border-foreground/5 px-4 py-3">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Capacity</p>
+            <div className="p-4 space-y-3">
+              {/* Header: badge + dates, name */}
+              <div className="pr-10 space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className={statusColors[s.status]}>{s.status}</Badge>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {fmt(s.startDate)} → {fmt(s.endDate)}
+                  </span>
+                </div>
+                <h3 className="font-medium text-base leading-tight">{s.name}</h3>
+              </div>
+
+              {/* Progress + FP */}
               <div className="space-y-1.5">
-                {s.members.map((m: any) => {
-                  const pct = m.fpCapacity > 0 ? m.fpAllocated / m.fpCapacity : 0;
-                  return (
-                    <div key={m.id} className="flex items-center gap-2">
-                      <span className="text-xs w-28 truncate">{m.name}</span>
-                      <div className="h-1.5 flex-1 rounded-full bg-secondary overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${usageColor(pct)}`}
-                          style={{ width: `${Math.min(pct * 100, 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] tabular-nums text-muted-foreground w-14 text-right">
-                        {m.fpAllocated}/{m.fpCapacity}
-                      </span>
-                      <span className="text-[10px] tabular-nums font-medium w-8 text-right">
-                        {Math.round(pct * 100)}%
-                      </span>
-                    </div>
-                  );
-                })}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-mono tabular-nums text-muted-foreground">
+                    {s.taskStats.done}/{s.taskStats.total} tasks
+                  </span>
+                  <span className="font-bold tabular-nums">{s.totalFp || 0} FP</span>
+                </div>
+                <PixelBar score={s.taskStats.percent} cells={20} height={10} variant="skill" />
               </div>
             </div>
-          )}
-        </div>
-      ))}
+
+            {/* Capacity per member */}
+            {s.members && s.members.length > 0 && (
+              <div className="border-t border-foreground/5 px-4 py-3">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Capacity</p>
+                <div className="space-y-1.5">
+                  {s.members.map((m: any) => {
+                    const pct = m.fpCapacity > 0 ? (m.fpAllocated / m.fpCapacity) * 100 : 0;
+                    return (
+                      <div key={m.id} className="flex items-center gap-2">
+                        <span className="text-xs w-24 truncate">{m.name}</span>
+                        <div className="flex-1">
+                          <PixelBar score={Math.min(pct, 100)} cells={14} height={8} variant="load" />
+                        </div>
+                        <span className="font-mono text-[10px] tabular-nums text-muted-foreground w-12 text-right leading-none">
+                          {m.fpAllocated}/{m.fpCapacity}
+                        </span>
+                        <span className="font-mono text-[10px] tabular-nums font-medium w-8 text-right leading-none">
+                          {Math.round(pct)}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </Link>
+        ))}
+      </div>
+
+      {/* Desktop: single-row layout */}
+      <div className="hidden md:block space-y-3">
+        {sprintsData.map((s) => (
+          <div key={s.id} className="surface-inset overflow-hidden">
+            {/* Sprint header */}
+            <div className="flex items-center gap-4 p-4">
+              <Badge className={statusColors[s.status]}>{s.status}</Badge>
+              <div className="flex-1">
+                <p className="text-sm font-medium">{s.name}</p>
+                <p className="text-xs text-muted-foreground">{fmt(s.startDate)} — {fmt(s.endDate)}</p>
+              </div>
+              <span className="text-sm font-bold tabular-nums">{s.totalFp || 0} FP</span>
+              <div className="flex items-center gap-2 w-32 shrink-0">
+                <div className="flex-1">
+                  <PixelBar score={s.taskStats.percent} cells={16} height={8} variant="skill" />
+                </div>
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground leading-none">
+                  {s.taskStats.done}/{s.taskStats.total}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Link href={`/sprints/${s.id}/board`} aria-label="Abrir board">
+                  <Button variant="outline" size="sm" className="h-7 w-7 p-0">
+                    <KanbanSquare className="h-3.5 w-3.5" />
+                  </Button>
+                </Link>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(s); setOpen(true); }}>
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(s.id)}>
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Capacity per member */}
+            {s.members && s.members.length > 0 && (
+              <div className="border-t border-foreground/5 px-4 py-3">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Capacity</p>
+                <div className="space-y-1.5">
+                  {s.members.map((m: any) => {
+                    const pct = m.fpCapacity > 0 ? (m.fpAllocated / m.fpCapacity) * 100 : 0;
+                    return (
+                      <div key={m.id} className="flex items-center gap-2">
+                        <span className="text-xs w-28 truncate">{m.name}</span>
+                        <div className="flex-1">
+                          <PixelBar score={Math.min(pct, 100)} cells={14} height={8} variant="load" />
+                        </div>
+                        <span className="font-mono text-[10px] tabular-nums text-muted-foreground w-14 text-right leading-none">
+                          {m.fpAllocated}/{m.fpCapacity}
+                        </span>
+                        <span className="font-mono text-[10px] tabular-nums font-medium w-8 text-right leading-none">
+                          {Math.round(pct)}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       <SprintDialog

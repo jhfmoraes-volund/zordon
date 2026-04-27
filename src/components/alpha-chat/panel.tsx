@@ -81,7 +81,9 @@ export function AlphaChatPanel() {
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-muted/30 px-4">
       <div className="flex items-center gap-2">
         <Bot className="size-4 text-primary" />
-        <span className="text-sm font-semibold">Alpha</span>
+        <span className="font-display text-xs font-light uppercase tracking-[0.25em] text-foreground/80">
+          Alpha
+        </span>
       </div>
       <div className="flex items-center gap-1">
         <Button

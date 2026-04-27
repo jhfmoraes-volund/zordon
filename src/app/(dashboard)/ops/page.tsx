@@ -225,7 +225,9 @@ export default function OpsPage() {
       <div className="md:hidden flex items-center justify-between border-b px-3 py-2 shrink-0">
         <div className="flex items-center gap-2">
           <Bot className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Alpha</span>
+          <span className="font-display text-xs font-light uppercase tracking-[0.25em] text-foreground/80">
+            Alpha
+          </span>
         </div>
         <Button
           variant="outline"

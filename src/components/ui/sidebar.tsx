@@ -28,7 +28,6 @@ import { PanelLeftIcon } from "lucide-react"
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
@@ -218,11 +217,11 @@ function Sidebar({
   }
 
   if (isMobile) {
-    // Mobile sidebar arranca abaixo do header (mesma sensação do desktop, que
-    // vive na flex-row sob o ShellHeader). Header tem h-12 + pt-safe; offset o
-    // top do sheet (e do backdrop) por isso pra não cobrir/desfocar o header.
-    // height:auto cancela o h-full — a altura passa a ser definida por top+bottom:0.
-    const headerOffset = "calc(3rem + env(safe-area-inset-top, 0px))"
+    // Bottom sheet pattern (Linear/Telegram/Notion mobile). Mais ergonômico pro
+    // polegar e contorna problemas de stacking/blur que side drawer tem em iOS
+    // Safari. Header continua sem dim/blur via overlayStyle top offset.
+    // Items ganham formato de card (h-14, rounded, padding generoso) pra alvo
+    // de toque confortável — overrides aplicados via [&_...] no wrapper interno.
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
@@ -230,29 +229,45 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
-          // boxShadow inset: renderiza a "border-r" como sombra interna de 1px,
-          // sempre on top do bg-sidebar opaco. À prova de bg-clip-padding do
-          // SheetContent e de conflitos de utility CSS. Substitui também o
-          // shadow-lg default (sidebar não precisa de drop shadow — o que
-          // delimita é a linha cinza, igual desktop).
-          style={
-            {
-              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-              top: headerOffset,
-              bottom: 0,
-              height: "auto",
-              boxShadow: "inset -1px 0 0 var(--border)",
-            } as React.CSSProperties
-          }
-          overlayStyle={{ top: headerOffset }}
-          side={side}
+          side="bottom"
+          showCloseButton={false}
+          // data-[side=bottom]:h-[85dvh] supera o h-auto default do bottom side
+          className="flex flex-col gap-0 rounded-t-xl border-t border-border bg-sidebar p-0 text-sidebar-foreground data-[side=bottom]:h-[85dvh]"
+          overlayStyle={{ top: "calc(3rem + env(safe-area-inset-top, 0px))" }}
         >
           <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+            <SheetTitle>Menu</SheetTitle>
+            <SheetDescription>Menu de navegação.</SheetDescription>
           </SheetHeader>
-          <div className="flex h-full w-full flex-col pb-safe">{children}</div>
+          {/* Drag handle visual (affordance de bottom sheet) */}
+          <div className="flex justify-center pt-2 pb-1">
+            <div className="h-1 w-10 rounded-full bg-sidebar-border" />
+          </div>
+          <div
+            className={cn(
+              "flex h-full min-h-0 w-full flex-col overflow-hidden pb-safe",
+              // Trava scroll lateral: SidebarContent default usa overflow-auto
+              // (eixos x+y). No mobile só queremos scroll vertical.
+              "[&_[data-sidebar=content]]:overflow-x-hidden",
+              "[&_[data-sidebar=menu]]:overflow-x-hidden",
+              // Card-style menu items: h-14 alvo de toque confortável, rounded,
+              // padding generoso, ícone maior. Active item ganha tint primário.
+              "[&_[data-sidebar=menu-button]]:h-14",
+              "[&_[data-sidebar=menu-button]]:gap-3",
+              "[&_[data-sidebar=menu-button]]:rounded-xl",
+              "[&_[data-sidebar=menu-button]]:px-4",
+              "[&_[data-sidebar=menu-button]]:text-base",
+              "[&_[data-sidebar=menu-button]]:bg-sidebar-accent/40",
+              "[&_[data-sidebar=menu-button][data-active]]:bg-sidebar-primary/15",
+              "[&_[data-sidebar=menu-button]_svg]:size-5",
+              // Mais respiro entre items e entre grupos
+              "[&_[data-sidebar=menu]]:gap-2",
+              "[&_[data-sidebar=group]]:px-3",
+              "[&_[data-sidebar=group]]:py-2",
+            )}
+          >
+            {children}
+          </div>
         </SheetContent>
       </Sheet>
     )

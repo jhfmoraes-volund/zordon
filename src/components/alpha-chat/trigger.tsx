@@ -38,7 +38,9 @@ export function AlphaChatTrigger() {
             )}
           >
             {isOpen ? <X className="size-4" /> : <Bot className="size-4" />}
-            <span className="font-semibold italic">Alpha</span>
+            <span className="font-display text-xs font-light uppercase tracking-[0.25em]">
+              Alpha
+            </span>
           </Button>
         }
       />
