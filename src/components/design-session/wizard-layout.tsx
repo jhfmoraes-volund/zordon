@@ -7,7 +7,9 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ArrowLeft, ChevronLeft, ChevronRight, Menu, Check, Circle, Loader2, BookOpen } from "lucide-react";
 import type { StepDef } from "@/lib/design-session-steps";
 import { StickyNoteBoard, type Note } from "./sticky-note";
-import { AIChat } from "./ai-chat";
+import { AIChatBubble } from "./ai-chat-bubble";
+import { AIChatMobileSheet, AIChatDesktopPanel } from "./ai-chat-panel";
+import { useDesignSessionChat } from "@/hooks/use-design-session-chat";
 
 export function WizardLayout({
   sessionTitle,
@@ -51,6 +53,20 @@ export function WizardLayout({
 
   const typeLabel =
     sessionType === "inception" ? "Inception" : "Continuous Improvement";
+
+  const chat = useDesignSessionChat();
+  const chatLoading = chat.status === "streaming" || chat.status === "submitted";
+  const chatProps = {
+    messages: chat.messages,
+    input: chat.input,
+    isLoading: chatLoading,
+    currentStepTitle: step?.title ?? "",
+    onInputChange: chat.setInput,
+    onSubmit: (e: React.FormEvent) => {
+      e.preventDefault();
+      chat.sendMessage(chat.input);
+    },
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -174,24 +190,45 @@ export function WizardLayout({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className={`flex-1 p-6 ${chat.isOpen ? "overflow-hidden" : "overflow-auto"}`}>
         <div className="flex gap-6 h-full">
-          <main className="flex-1 min-w-0">{children}</main>
+          <main className={`flex-1 min-w-0 ${chat.isOpen ? "overflow-y-auto" : ""}`}>{children}</main>
           {!hideSidePanels && (
-            <aside className="hidden lg:block shrink-0">
-              <StickyNoteBoard
-                notes={notes}
-                onAdd={onAddNote}
-                onUpdate={onUpdateNote}
-                onDelete={onDeleteNote}
-              />
-            </aside>
+            chat.isOpen ? (
+              <aside className="hidden lg:flex shrink-0 w-[420px] h-full">
+                <AIChatDesktopPanel {...chatProps} onClose={chat.close} />
+              </aside>
+            ) : (
+              <aside className="hidden lg:block shrink-0">
+                <StickyNoteBoard
+                  notes={notes}
+                  onAdd={onAddNote}
+                  onUpdate={onUpdateNote}
+                  onDelete={onDeleteNote}
+                />
+              </aside>
+            )
           )}
         </div>
       </div>
 
       {/* AI Chat */}
-      {!hideSidePanels && <AIChat />}
+      {!hideSidePanels && (
+        <>
+          <AIChatBubble
+            isOpen={chat.isOpen}
+            isStreaming={chat.status === "streaming"}
+            onToggle={chat.toggle}
+          />
+          <AIChatMobileSheet
+            {...chatProps}
+            isOpen={chat.isOpen}
+            onOpenChange={(open) => {
+              if (open !== chat.isOpen) chat.toggle();
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }

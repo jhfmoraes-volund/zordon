@@ -11,12 +11,13 @@ export function AIChatBubble({
   isStreaming: boolean;
   onToggle: () => void;
 }) {
+  if (isOpen) return null;
   return (
     <div className="fixed bottom-6 right-6 z-50">
       <button
         type="button"
         onClick={onToggle}
-        aria-label={isOpen ? "Fechar Vitor" : "Abrir Vitor"}
+        aria-label="Abrir Vitor"
         aria-pressed={isOpen}
         className={[
           "relative grid h-14 w-14 place-items-center rounded-2xl",

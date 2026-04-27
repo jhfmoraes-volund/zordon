@@ -49,13 +49,15 @@ export const ruleSchema = z.object({
   text: z.string().min(1),
 });
 
-export const gapSchema = z.object({
-  text: z.string().min(1),
-  relatedFeature: z.string().optional(),
-});
-
 export const riskCategoryEnum = z.enum(["business", "technical"]);
 export const riskSeverityEnum = z.enum(["high", "medium", "low"]);
+
+export const gapSchema = z.object({
+  text: z.string().min(1),
+  category: riskCategoryEnum.optional(),
+  severity: riskSeverityEnum.optional(),
+  relatedFeature: z.string().optional(),
+});
 
 export const riskSchema = z.object({
   text: z.string().min(1),
@@ -101,11 +103,11 @@ const STEP_SCHEMA_DOCS: Record<string, string> = {
   ].join(" "),
   risks_gaps: [
     'Dois arrays paralelos:',
-    '"gaps" — itens {id, text, relatedFeature?} representam regras de negocio que ainda nao estao explicitas (ambiguidades em funcionalidades).',
+    '"gaps" — itens {id, text, category?, severity?, relatedFeature?} representam regras de negocio que ainda nao estao explicitas (ambiguidades em funcionalidades).',
     '"risks" — itens {id, text, category, severity, relatedFeature?, mitigation?} representam o que pode dar errado no MVP.',
-    'category: "business" | "technical".',
-    'severity: "high" | "medium" | "low".',
-    'relatedFeature (opcional) referencia o id ou title de um card de brainstorm. mitigation (opcional) descreve como reduzir o risco.',
+    'category: "business" | "technical" (mesma taxonomia para gaps e risks).',
+    'severity: "high" | "medium" | "low" (em gap indica o quanto a ambiguidade trava o MVP; em risk indica o impacto se acontecer).',
+    'relatedFeature (opcional) referencia o id ou title de um card de brainstorm. mitigation (opcional, so em risk) descreve como reduzir o risco.',
   ].join(" "),
   prioritization: [
     'Array "items", cada item tem: id, title, howItSolves, targetPersona,',

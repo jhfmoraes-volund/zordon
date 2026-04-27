@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, AlertTriangle, HelpCircle } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, HelpCircle, ChevronDown, ChevronUp } from "lucide-react";
 import type { Gap, Risk, RiskCategory, RiskSeverity } from "@/lib/agent/schemas";
 
 export type { Gap, Risk };
@@ -103,7 +103,7 @@ function GapColumn({
   const handleAdd = () => {
     const t = text.trim();
     if (!t) return;
-    onAdd({ id: genId(), text: t });
+    onAdd({ id: genId(), text: t, category: "business", severity: "medium" });
     setText("");
   };
 
@@ -116,13 +116,9 @@ function GapColumn({
           {gaps.length}
         </Badge>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Ambiguidades nas funcionalidades que precisam de decisao explicita antes de virar task.
-      </p>
-
       <div className="space-y-2">
         {gaps.map((gap) => (
-          <Card key={gap.id} className="bg-sky-500/5">
+          <Card key={gap.id}>
             <CardContent className="pt-3 pb-3 space-y-2">
               <div className="flex items-start gap-2">
                 <Textarea
@@ -140,6 +136,45 @@ function GapColumn({
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-1">
+                  <Label className="text-xs text-muted-foreground">Categoria</Label>
+                  <Select
+                    value={gap.category ?? "business"}
+                    onValueChange={(v) =>
+                      onUpdate(gap.id, { category: v as RiskCategory })
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="business">Negocio</SelectItem>
+                      <SelectItem value="technical">Tecnico</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-1">
+                  <Label className="text-xs text-muted-foreground">Severidade</Label>
+                  <Select
+                    value={gap.severity ?? "medium"}
+                    onValueChange={(v) =>
+                      onUpdate(gap.id, { severity: v as RiskSeverity })
+                    }
+                  >
+                    <SelectTrigger className={`h-8 text-xs ${SEVERITY_TONE[gap.severity ?? "medium"]}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="high">Alta</SelectItem>
+                      <SelectItem value="medium">Media</SelectItem>
+                      <SelectItem value="low">Baixa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <FeatureSelect
@@ -187,6 +222,16 @@ function RiskColumn({
   onDelete: (id: string) => void;
 }) {
   const [text, setText] = useState("");
+  const [expandedMitigations, setExpandedMitigations] = useState<Set<string>>(new Set());
+
+  const toggleMitigation = (id: string, expand: boolean) => {
+    setExpandedMitigations((prev) => {
+      const next = new Set(prev);
+      if (expand) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
 
   const handleAdd = () => {
     const t = text.trim();
@@ -209,13 +254,9 @@ function RiskColumn({
           {risks.length}
         </Badge>
       </div>
-      <p className="text-xs text-muted-foreground">
-        O que pode dar errado — negocio ou tecnico — antes mesmo de cortar escopo.
-      </p>
-
       <div className="space-y-2">
         {risks.map((risk) => (
-          <Card key={risk.id} className="bg-red-500/5">
+          <Card key={risk.id}>
             <CardContent className="pt-3 pb-3 space-y-2">
               <div className="flex items-start gap-2">
                 <Textarea
@@ -280,18 +321,35 @@ function RiskColumn({
                 onChange={(value) => onUpdate(risk.id, { relatedFeature: value })}
               />
 
-              <div className="grid gap-1">
-                <Label className="text-xs text-muted-foreground">
-                  Mitigacao (opcional)
-                </Label>
-                <Textarea
-                  value={risk.mitigation || ""}
-                  onChange={(e) => onUpdate(risk.id, { mitigation: e.target.value })}
-                  rows={2}
-                  className="text-xs"
-                  placeholder="Como vamos reduzir esse risco? Plano B?"
-                />
-              </div>
+              {(() => {
+                const hasContent = !!risk.mitigation?.trim();
+                const isExpanded = expandedMitigations.has(risk.id);
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => toggleMitigation(risk.id, !isExpanded)}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                    >
+                      {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      {hasContent ? "Mitigacao" : "Adicionar mitigacao"}
+                      {hasContent && !isExpanded && (
+                        <span className="ml-1 h-1.5 w-1.5 rounded-full bg-yellow-500 inline-block" />
+                      )}
+                    </button>
+                    {isExpanded && (
+                      <Textarea
+                        value={risk.mitigation ?? ""}
+                        onChange={(e) => onUpdate(risk.id, { mitigation: e.target.value })}
+                        rows={2}
+                        className="text-xs"
+                        placeholder="Como vamos reduzir esse risco? Plano B?"
+                        autoFocus={!hasContent}
+                      />
+                    )}
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         ))}

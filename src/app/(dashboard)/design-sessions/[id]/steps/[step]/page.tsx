@@ -152,6 +152,7 @@ export default function StepPage({
   }
 
   return (
+    <div className="-mx-3 -my-4 h-[calc(100svh-3rem)] overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
     <DesignSessionProvider
       sessionId={id}
       sessionTitle={session.title}
@@ -197,6 +198,7 @@ export default function StepPage({
         )}
       </WizardLayout>
     </DesignSessionProvider>
+    </div>
   );
 }
 
@@ -344,10 +346,10 @@ function ProductVisionStep({
 // ─── Step: E / Nao E / Faz / Nao Faz ──────────────────────
 
 const SCOPE_BUCKETS = [
-  { key: "is", title: "É", color: "bg-emerald-500/10 border border-emerald-500/20" },
-  { key: "isNot", title: "NÃO É", color: "bg-rose-500/10 border border-rose-500/20" },
-  { key: "does", title: "FAZ", color: "bg-sky-500/10 border border-sky-500/20" },
-  { key: "doesNot", title: "NÃO FAZ", color: "bg-amber-500/10 border border-amber-500/20" },
+  { key: "is", title: "É", tone: "emerald" },
+  { key: "isNot", title: "NÃO É", tone: "rose" },
+  { key: "does", title: "FAZ", tone: "sky" },
+  { key: "doesNot", title: "NÃO FAZ", tone: "amber" },
 ] as const;
 
 type ScopeBucketKey = (typeof SCOPE_BUCKETS)[number]["key"];
@@ -365,7 +367,7 @@ function ScopeDefinitionStep({
   const sections: PostItSection[] = SCOPE_BUCKETS.map((b) => ({
     key: b.key,
     title: b.title,
-    color: b.color,
+    tone: b.tone,
     items: getItems(b.key),
   }));
 
@@ -1054,9 +1056,15 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
                 {gaps.length > 0 && (
                   <div>
                     <p className="text-xs font-medium text-sky-600">Lacunas ({gaps.length})</p>
-                    <ul className="list-disc list-inside text-xs">
+                    <ul className="list-disc list-inside text-xs space-y-1">
                       {gaps.map((g) => (
                         <li key={g.id}>
+                          {(g.category || g.severity) && (
+                            <span className="font-medium">
+                              [{g.category ? CATEGORY_LABEL[g.category] : "—"}
+                              {g.severity ? ` · ${SEVERITY_LABEL[g.severity]}` : ""}]
+                            </span>
+                          )}{" "}
                           {g.text}
                           {featureLabel(g.relatedFeature) && (
                             <span className="text-muted-foreground"> — ref: {featureLabel(g.relatedFeature)}</span>

@@ -645,7 +645,10 @@ Voce esta ajudando a mapear o que ainda nao esta claro nas regras de negocio (la
 
 ### Estrutura do step:
 Dois arrays paralelos no stepKey "risks_gaps":
-- **gaps**: items {id, text, relatedFeature?} — ambiguidades em regras de negocio que precisam de decisao explicita antes de virar task
+- **gaps**: items {id, text, category?, severity?, relatedFeature?} — ambiguidades em regras de negocio que precisam de decisao explicita antes de virar task
+  - category (opcional): "business" (regra/processo/regulacao ambigua) ou "technical" (mecanismo/contrato/integracao indefinido)
+  - severity (opcional): "high" (sem decidir, MVP nao avanca), "medium" (atrasa/dificulta uma feature), "low" (afina depois)
+  - relatedFeature (opcional): id de uma solucao do brainstorm
 - **risks**: items {id, text, category, severity, relatedFeature?, mitigation?} — o que pode dar errado
   - category: "business" (impacto em adesao, fit, regulacao, processo) ou "technical" (integracao, performance, dados, prazo)
   - severity: "high" (mata MVP), "medium" (atrasa/reduz qualidade), "low" (incomoda mas contornavel)

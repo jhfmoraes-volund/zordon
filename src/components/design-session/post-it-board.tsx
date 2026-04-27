@@ -7,11 +7,21 @@ import { Plus, X } from "lucide-react";
 
 export type PostItItem = { id: string; text: string };
 
+export type PostItTone = "emerald" | "rose" | "sky" | "amber" | "neutral";
+
 export type PostItSection = {
   key: string;
   title: string;
-  color: string;
+  tone: PostItTone;
   items: PostItItem[];
+};
+
+const TONE_BADGE: Record<PostItTone, string> = {
+  emerald: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+  rose: "bg-rose-500/15 text-rose-600 border-rose-500/30",
+  sky: "bg-sky-500/15 text-sky-600 border-sky-500/30",
+  amber: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  neutral: "bg-muted text-muted-foreground border-border",
 };
 
 export function PostItBoard({
@@ -44,8 +54,17 @@ export function PostItBoard({
   return (
     <div className={`grid gap-4 ${gridClass}`}>
       {sections.map((section) => (
-        <div key={section.key} className={`rounded-lg ${section.color} p-4`}>
-          <h3 className="text-sm font-semibold mb-3">{section.title}</h3>
+        <div
+          key={section.key}
+          className="rounded-lg border bg-card p-4"
+        >
+          <div className="mb-3">
+            <span
+              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide ${TONE_BADGE[section.tone]}`}
+            >
+              {section.title}
+            </span>
+          </div>
 
           <div className="space-y-2 mb-3">
             {section.items.map((item) => (
