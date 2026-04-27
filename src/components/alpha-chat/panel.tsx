@@ -87,16 +87,17 @@ export function AlphaChatPanel() {
       </div>
       <div className="flex items-center gap-1">
         <Button
-          asChild
+          nativeButton={false}
+          render={
+            <Link href="/ops" onClick={() => setOpen(false)} />
+          }
           variant="ghost"
           size="icon"
           className="size-7"
           aria-label="Abrir página completa"
           title="Abrir página completa"
         >
-          <Link href="/ops" onClick={() => setOpen(false)}>
-            <Maximize2 className="size-3.5" />
-          </Link>
+          <Maximize2 className="size-3.5" />
         </Button>
         <Button
           variant="ghost"

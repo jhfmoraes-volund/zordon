@@ -16,6 +16,7 @@ import {
   LogOut,
   Settings,
   SlidersHorizontal,
+  FlaskConical,
 } from "lucide-react";
 import {
   Sidebar,
@@ -68,9 +69,10 @@ const managerOnlyNav: NavItem[] = [
   { title: "Reuniões", href: "/meetings", icon: CalendarCheck },
 ];
 
-// Admin only (head-ops, CEO) — tuning de agentes.
+// Admin only (head-ops, CEO) — tuning de agentes + sandbox de UI.
 const adminOnlyNav: NavItem[] = [
   { title: "Agentes", href: "/agents", icon: SlidersHorizontal },
+  { title: "Sandbox", href: "/dev", icon: FlaskConical },
 ];
 
 export function AppSidebar() {

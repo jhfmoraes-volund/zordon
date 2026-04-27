@@ -419,14 +419,19 @@
   }
   .layout {
     grid-template-columns: 1fr;
-    gap: 24px;
-    padding: 96px 16px 40px;
+    gap: 20px;
+    padding: 88px 16px 32px;
     align-items: start;
   }
   .terminal {
-    display: none;
+    order: 2;
+    justify-self: stretch;
+    max-width: 380px;
+    margin: 0 auto;
+    height: 360px;
   }
   .formWrap {
+    order: 1;
     justify-self: stretch;
     max-width: 380px;
     margin: 0 auto;

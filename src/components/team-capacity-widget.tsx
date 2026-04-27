@@ -72,7 +72,7 @@ export function TeamCapacityWidget({
       <CardContent>
         <div
           ref={scrollRef}
-          className="flex gap-3 overflow-x-auto pt-1.5 pb-3 -mx-3 px-3 snap-x snap-mandatory scrollbar-none md:block md:space-y-4 md:overflow-visible md:m-0 md:p-0 md:pb-0 md:pt-0"
+          className="flex gap-3 overflow-x-auto pt-1.5 pb-3 -mx-3 px-3 scroll-px-3 snap-x snap-mandatory scrollbar-none md:block md:space-y-4 md:overflow-visible md:m-0 md:p-0 md:pb-0 md:pt-0 md:scroll-p-0"
         >
           {members.map((m) => {
             const weeklyCapacity = Math.round(m.fpCapacity / 2);
