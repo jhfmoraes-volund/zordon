@@ -39,6 +39,10 @@ import { ProjectWiki } from "@/components/project-wiki";
 import { SprintDialog } from "@/components/sprint-dialog";
 import { PixelBar } from "@/components/ui/pixel-bar";
 import { roleLabel } from "@/lib/roles";
+import { StatusChip } from "@/components/ui/status-chip";
+import {
+  PROJECT_STATUS, SPRINT_STATUS, DESIGN_SESSION_STATUS, TASK_TYPE, lookupChip,
+} from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -137,17 +141,6 @@ const tabs = [
 
 type TabKey = (typeof tabs)[number]["key"];
 
-const statusColors: Record<string, string> = {
-  active: "bg-green-100 text-green-800",
-  paused: "bg-yellow-100 text-yellow-800",
-  completed: "bg-blue-100 text-blue-800",
-  archived: "bg-gray-100 text-gray-800",
-  draft: "bg-gray-100 text-gray-700",
-  in_progress: "bg-yellow-100 text-yellow-700",
-  done: "bg-green-100 text-green-700",
-  planning: "bg-gray-100 text-gray-700",
-};
-
 const taskStatusIcons: Record<string, React.ReactNode> = {
   backlog: <Circle className="h-3.5 w-3.5 text-gray-400" />,
   todo: <Circle className="h-3.5 w-3.5 text-blue-500" />,
@@ -157,18 +150,6 @@ const taskStatusIcons: Record<string, React.ReactNode> = {
 };
 
 const scopeWeights: Record<string, number> = { micro: 1, small: 2, medium: 4, large: 8 };
-
-const typeLabels: Record<string, string> = {
-  setup: "Setup", feature: "Feature", component: "Componente",
-  seed: "Seed", bugfix: "Bugfix", refactor: "Refactor",
-  management: "Gestao",
-};
-const typeColors: Record<string, string> = {
-  setup: "bg-purple-100 text-purple-700", feature: "bg-blue-100 text-blue-700",
-  component: "bg-teal-100 text-teal-700", seed: "bg-amber-100 text-amber-700",
-  bugfix: "bg-red-100 text-red-700", refactor: "bg-gray-100 text-gray-700",
-  management: "bg-pink-100 text-pink-700",
-};
 
 // ─── Main Page ────────────────────────────────────────────
 
@@ -306,7 +287,7 @@ export default function ProjectDetailPage({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold truncate">{project.name}</h1>
-              <Badge className={statusColors[project.status]}>{project.status}</Badge>
+              <StatusChip {...lookupChip(PROJECT_STATUS, project.status)} dot />
             </div>
             <p className="text-sm text-muted-foreground">{project.client.name}</p>
           </div>
@@ -697,7 +678,7 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
                           {s.type === "inception" ? "Inception" : "Melhoria Continua"}
                         </p>
                       </div>
-                      <Badge className={statusColors[s.status]}>{s.status}</Badge>
+                      <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} />
                     </div>
                   </Link>
                 ))}
@@ -767,7 +748,7 @@ function SessionsTab({ project, onRefresh }: { project: Project; onRefresh: () =
                     <p className="font-medium">{s.title}</p>
                     <Badge variant="outline" className="text-xs mt-1">{typeLabels[s.type]}</Badge>
                   </div>
-                  <Badge className={statusColors[s.status]}>{s.status}</Badge>
+                  <StatusChip {...lookupChip(DESIGN_SESSION_STATUS, s.status)} dot />
                 </div>
 
                 <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -1001,7 +982,7 @@ function SprintsTab({ project }: { project: Project }) {
               {/* Header: badge + dates, name */}
               <div className="pr-10 space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge className={statusColors[s.status]}>{s.status}</Badge>
+                  <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} dot />
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {fmt(s.startDate)} → {fmt(s.endDate)}
                   </span>
@@ -1056,7 +1037,7 @@ function SprintsTab({ project }: { project: Project }) {
           <div key={s.id} className="surface-inset overflow-hidden">
             {/* Sprint header */}
             <div className="flex items-center gap-4 p-4">
-              <Badge className={statusColors[s.status]}>{s.status}</Badge>
+              <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} dot />
               <div className="flex-1">
                 <p className="text-sm font-medium">{s.name}</p>
                 <p className="text-xs text-muted-foreground">{fmt(s.startDate)} — {fmt(s.endDate)}</p>
@@ -1249,7 +1230,7 @@ function ScheduleTab({ projectId }: { projectId: string }) {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-semibold">{s.name}</h3>
-                  <Badge className={statusColors[s.status]}>{s.status}</Badge>
+                  <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} dot />
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground">{fmt(s.startDate)} — {fmt(s.endDate)}</span>
@@ -1296,9 +1277,7 @@ function ScheduleTab({ projectId }: { projectId: string }) {
                     <span className={`flex-1 truncate ${isDone ? "line-through" : ""}`}>{t.title}</span>
 
                     {/* Type */}
-                    <Badge className={`text-[10px] px-1.5 ${typeColors[t.type] || "bg-muted text-muted-foreground"}`}>
-                      {typeLabels[t.type] || t.type}
-                    </Badge>
+                    <StatusChip {...lookupChip(TASK_TYPE, t.type)} />
 
                     {/* FP */}
                     {t.functionPoints != null && (

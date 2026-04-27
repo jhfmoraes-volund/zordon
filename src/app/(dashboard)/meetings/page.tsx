@@ -8,11 +8,12 @@ import { PageHeader } from "@/components/page-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { StatusChip } from "@/components/ui/status-chip";
+import { MEETING_STATUS, MEETING_TYPE, lookupChip } from "@/lib/status-chips";
 import { Trash2 } from "lucide-react";
 
 type Meeting = {
@@ -42,32 +43,6 @@ type Meeting = {
   projectLinks: {
     project: { id: string; name: string } | null;
   }[];
-};
-
-const statusColors: Record<string, string> = {
-  scheduled: "bg-blue-100 text-blue-800",
-  in_progress: "bg-yellow-100 text-yellow-800",
-  done: "bg-green-100 text-green-800",
-};
-
-const statusLabels: Record<string, string> = {
-  scheduled: "Agendada",
-  in_progress: "Em andamento",
-  done: "Concluída",
-};
-
-const typeLabels: Record<string, string> = {
-  pm_review: "PMs",
-  general: "Geral",
-  daily: "Daily",
-  super_planning: "Super Planning",
-};
-
-const typeColors: Record<string, string> = {
-  pm_review: "bg-purple-100 text-purple-800",
-  general: "bg-slate-100 text-slate-800",
-  daily: "bg-cyan-100 text-cyan-800",
-  super_planning: "bg-amber-100 text-amber-800",
 };
 
 function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
@@ -103,9 +78,7 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">{shortDate}</span>
-        <Badge variant="secondary" className={`${typeColors[meeting.type]} text-xs`}>
-          {typeLabels[meeting.type]}
-        </Badge>
+        <StatusChip {...lookupChip(MEETING_TYPE, meeting.type)} />
       </div>
 
       <p
@@ -117,9 +90,7 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <Badge variant="secondary" className={`${statusColors[meeting.status]} text-xs`}>
-          {statusLabels[meeting.status] || meeting.status}
-        </Badge>
+        <StatusChip {...lookupChip(MEETING_STATUS, meeting.status)} dot />
         <span>
           {projectCount} {projectCount === 1 ? "projeto" : "projetos"} · {totalActions}{" "}
           {totalActions === 1 ? "to-do" : "to-dos"}
@@ -295,25 +266,21 @@ export default function MeetingsPage() {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className={typeColors[m.type]}>
-                      {typeLabels[m.type]}
-                    </Badge>
+                    <StatusChip {...lookupChip(MEETING_TYPE, m.type)} />
                   </TableCell>
                   <TableCell className="max-w-[260px] truncate text-sm text-muted-foreground">
                     {titleCell}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className={statusColors[m.status]}>
-                      {statusLabels[m.status] || m.status}
-                    </Badge>
+                    <StatusChip {...lookupChip(MEETING_STATUS, m.status)} dot />
                   </TableCell>
                   <TableCell>{projectCount}</TableCell>
                   <TableCell>{m.actionItems.length}</TableCell>
                   <TableCell>
                     {pendingActions > 0 ? (
-                      <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                      <StatusChip tone="amber">
                         {pendingActions} pendente{pendingActions > 1 ? "s" : ""}
-                      </Badge>
+                      </StatusChip>
                     ) : (
                       <span className="text-muted-foreground text-sm">—</span>
                     )}

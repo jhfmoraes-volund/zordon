@@ -18,6 +18,8 @@ import {
   TASK_TYPES, TYPE_LABELS,
   SCOPES, COMPLEXITIES,
 } from "@/lib/task-constants";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ACTION_TYPE, lookupChip } from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -190,20 +192,15 @@ function Body({ action, meetingId, projectId, onChange, onOpenChange }: MeetingT
 
   const ref = action.task?.reference;
 
-  const typeColors: Record<ActionType, string> = {
-    create: "bg-green-100 text-green-700",
-    update: "bg-blue-100 text-blue-700",
-    delete: "bg-red-100 text-red-700",
-    move: "bg-purple-100 text-purple-700",
-    review: "bg-amber-100 text-amber-700",
-  };
-  const typeLabels: Record<ActionType, string> = {
+  // Action labels overridden locally — registry has shorter labels for inline chips
+  const actionLongLabels: Record<ActionType, string> = {
     create: "Criar",
     update: "Atualizar",
     delete: "Remover da sprint",
     move: "Mover sprint",
     review: "Revisar",
   };
+  const actionChip = lookupChip(ACTION_TYPE, action.type);
 
   return (
     <>
@@ -217,7 +214,7 @@ function Body({ action, meetingId, projectId, onChange, onOpenChange }: MeetingT
               <Wand2 className="h-3.5 w-3.5" />
             )}
             <span className="font-medium uppercase tracking-wide">
-              Proposta de {typeLabels[action.type]} ·{" "}
+              Proposta de {actionLongLabels[action.type]} ·{" "}
               {action.source === "ai" ? "Sugestão da IA" : "Manual"}
             </span>
             {action.source === "ai" && action.aiConfidence != null && (
@@ -240,9 +237,7 @@ function Body({ action, meetingId, projectId, onChange, onOpenChange }: MeetingT
             </span>
           )}
           <h2 className="text-xl font-bold leading-tight">{currentTitle}</h2>
-          <Badge variant="secondary" className={`${typeColors[action.type]} text-xs`}>
-            {typeLabels[action.type]}
-          </Badge>
+          <StatusChip tone={actionChip.tone} label={actionLongLabels[action.type]} />
         </div>
       </div>
 

@@ -24,6 +24,11 @@ import {
   ChevronDown, ChevronRight, ChevronsUpDown,
 } from "lucide-react";
 import { TaskActionWidget } from "@/components/meetings/task-action-widget";
+import { StatusChip } from "@/components/ui/status-chip";
+import { StatusChipSelect } from "@/components/ui/status-chip-select";
+import {
+  MEETING_STATUS, MEETING_TYPE, HEALTH, ACTION_ITEM_STATUS, lookupChip,
+} from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -86,42 +91,24 @@ type Meeting = {
 
 // ─── Constants ────────────────────────────────────────────
 
-const statusColors: Record<string, string> = {
-  scheduled: "bg-blue-100 text-blue-800",
-  in_progress: "bg-yellow-100 text-yellow-800",
-  done: "bg-green-100 text-green-800",
-};
-
-const statusLabels: Record<string, string> = {
-  scheduled: "Agendada",
-  in_progress: "Em andamento",
-  done: "Concluída",
-};
-
-const typeLabels: Record<string, string> = {
+// Long-form labels for the detail-page header (registry has short labels for lists)
+const typeLongLabels: Record<string, string> = {
   pm_review: "Reunião com PMs",
   general: "Reunião geral",
   daily: "Daily",
   super_planning: "Super Planning",
 };
 
-const typeColors: Record<string, string> = {
-  pm_review: "bg-purple-100 text-purple-800",
-  general: "bg-slate-100 text-slate-800",
-  daily: "bg-cyan-100 text-cyan-800",
-  super_planning: "bg-amber-100 text-amber-800",
+const actionIcons: Record<string, typeof Circle> = {
+  todo: Circle,
+  doing: Clock,
+  done: CheckCircle2,
 };
 
-const healthConfig: Record<string, { label: string; color: string; bg: string }> = {
-  healthy: { label: "Saudável", color: "text-green-600", bg: "bg-green-100 text-green-800" },
-  attention: { label: "Atenção", color: "text-yellow-600", bg: "bg-yellow-100 text-yellow-800" },
-  critical: { label: "Crítico", color: "text-red-600", bg: "bg-red-100 text-red-800" },
-};
-
-const actionStatusConfig: Record<string, { label: string; icon: typeof Circle; color: string }> = {
-  todo: { label: "TODO", icon: Circle, color: "text-red-500" },
-  doing: { label: "DOING", icon: Clock, color: "text-yellow-500" },
-  done: { label: "DONE", icon: CheckCircle2, color: "text-green-500" },
+const actionIconColor: Record<string, string> = {
+  todo: "text-red-500",
+  doing: "text-yellow-500",
+  done: "text-green-500",
 };
 
 const actionStatusCycle: Record<string, string> = {
@@ -303,12 +290,11 @@ export default function MeetingDetailPage({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold truncate">{headerTitle}</h1>
-              <Badge variant="secondary" className={typeColors[meeting.type]}>
-                {typeLabels[meeting.type]}
-              </Badge>
-              <Badge className={statusColors[meeting.status]}>
-                {statusLabels[meeting.status]}
-              </Badge>
+              <StatusChip
+                tone={lookupChip(MEETING_TYPE, meeting.type).tone}
+                label={typeLongLabels[meeting.type] ?? meeting.type}
+              />
+              <StatusChip {...lookupChip(MEETING_STATUS, meeting.status)} dot />
             </div>
             {meeting.type === "general" && (
               <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
@@ -484,8 +470,9 @@ export default function MeetingDetailPage({
             </div>
           )}
           {meeting.actionItems.map((action) => {
-            const cfg = actionStatusConfig[action.status];
-            const Icon = cfg.icon;
+            const chip = lookupChip(ACTION_ITEM_STATUS, action.status);
+            const Icon = actionIcons[action.status] ?? Circle;
+            const iconColor = actionIconColor[action.status] ?? "text-muted-foreground";
             const overdue = action.status !== "done" && isOverdue(action.dueDate);
             return (
               <div
@@ -496,8 +483,8 @@ export default function MeetingDetailPage({
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <button
                     onClick={() => cycleActionStatus(action)}
-                    className={`shrink-0 mt-0.5 ${cfg.color} hover:opacity-70 transition-opacity`}
-                    title={`Clique para mudar: ${cfg.label}`}
+                    className={`shrink-0 mt-0.5 ${iconColor} hover:opacity-70 transition-opacity`}
+                    title={`Clique para mudar: ${chip.label}`}
                   >
                     <Icon className="h-5 w-5" />
                   </button>
@@ -536,19 +523,13 @@ export default function MeetingDetailPage({
                       {fmtShortDate(action.dueDate)}
                     </span>
                   )}
-                  <Badge
-                    variant="secondary"
-                    className={`text-xs cursor-pointer ${
-                      action.status === "todo"
-                        ? "bg-red-100 text-red-700"
-                        : action.status === "doing"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-green-100 text-green-700"
-                    }`}
+                  <button
+                    type="button"
                     onClick={() => cycleActionStatus(action)}
+                    className="cursor-pointer"
                   >
-                    {cfg.label}
-                  </Badge>
+                    <StatusChip {...chip} />
+                  </button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -692,8 +673,6 @@ function ReviewCard({
     });
   };
 
-  const hCfg = healthConfig[sprintHealth];
-
   return (
     <div className="surface-inset p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -711,29 +690,14 @@ function ReviewCard({
             {review.project.status}
           </Badge>
         </div>
-        <Select
+        <StatusChipSelect
           value={sprintHealth}
+          options={HEALTH}
           onValueChange={(v) => {
-            if (!v) return;
             setSprintHealth(v);
             save({ sprintHealth: v });
           }}
-        >
-          <SelectTrigger className="w-[160px] h-8">
-            <SelectValue>
-              <span className={hCfg.color}>
-                {hCfg.label}
-              </span>
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(healthConfig).map(([key, cfg]) => (
-              <SelectItem key={key} value={key}>
-                <span className={cfg.color}>{cfg.label}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </div>
 
       {!collapsed && (

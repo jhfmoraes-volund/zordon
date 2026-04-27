@@ -30,6 +30,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Pencil, Trash2, Users, ChevronDown, ChevronRight, MoreVertical, ListChecks } from "lucide-react";
 import { roleLabel } from "@/lib/roles";
+import { StatusChip } from "@/components/ui/status-chip";
+import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 
 type ProjectMemberAlloc = {
   id: string;
@@ -56,13 +58,6 @@ type Project = {
 
 type Client = { id: string; name: string };
 type Member = { id: string; name: string; role: string };
-
-const statusColors: Record<string, string> = {
-  active: "bg-green-100 text-green-800",
-  paused: "bg-yellow-100 text-yellow-800",
-  completed: "bg-blue-100 text-blue-800",
-  archived: "bg-gray-100 text-gray-800",
-};
 
 function ProjectCardMobile({
   p,
@@ -116,9 +111,7 @@ function ProjectCardMobile({
 
       {/* Badges row: status + período */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <Badge variant="secondary" className={statusColors[p.status]}>
-          {p.status}
-        </Badge>
+        <StatusChip {...lookupChip(PROJECT_STATUS, p.status)} dot />
         <span className="text-muted-foreground tabular-nums">
           {fmtDate(p.startDate)} → {fmtDate(p.endDate)}
         </span>
@@ -337,9 +330,7 @@ export default function ProjectsPage() {
                     </TableCell>
                     <TableCell>{p.client.name}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className={statusColors[p.status]}>
-                        {p.status}
-                      </Badge>
+                      <StatusChip {...lookupChip(PROJECT_STATUS, p.status)} dot />
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {p.startDate ? new Date(p.startDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "–"}

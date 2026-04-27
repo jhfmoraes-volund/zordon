@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Rocket, ArrowUpCircle, Loader2, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { StatusChip } from "@/components/ui/status-chip";
+import { DEPLOY_STATUS, ENVIRONMENT, lookupChip } from "@/lib/status-chips";
 
 type SprintDeploy = {
   id: string;
@@ -17,14 +19,6 @@ type SprintDeploy = {
   errorLog: string | null;
   startedAt: string;
   completedAt: string | null;
-};
-
-const deployStatusColors: Record<string, string> = {
-  pending: "bg-gray-100 text-gray-700",
-  deploying: "bg-yellow-100 text-yellow-700",
-  success: "bg-green-100 text-green-700",
-  failed: "bg-red-100 text-red-700",
-  rolled_back: "bg-orange-100 text-orange-700",
 };
 
 const deployStatusIcons: Record<string, React.ReactNode> = {
@@ -128,13 +122,11 @@ export function SprintDeployPanel({
                   className="flex items-center justify-between rounded-md border p-3 text-sm"
                 >
                   <div className="flex items-center gap-2">
-                    <Badge className={deployStatusColors[d.status]}>
-                      <span className="flex items-center gap-1">
-                        {deployStatusIcons[d.status]}
-                        {d.status}
-                      </span>
-                    </Badge>
-                    <Badge variant="outline">{d.environment}</Badge>
+                    <StatusChip {...lookupChip(DEPLOY_STATUS, d.status)}>
+                      {deployStatusIcons[d.status]}
+                      {lookupChip(DEPLOY_STATUS, d.status).label}
+                    </StatusChip>
+                    <StatusChip {...lookupChip(ENVIRONMENT, d.environment)} />
                     <span className="text-muted-foreground">
                       {new Date(d.startedAt).toLocaleString("pt-BR")}
                     </span>

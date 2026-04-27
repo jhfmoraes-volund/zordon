@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { useWikiItems } from "@/hooks/use-wiki-items";
 import { TiptapEditor } from "@/components/tiptap-editor";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ENVIRONMENT, lookupChip } from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -951,13 +953,6 @@ function EnvironmentsSection({
     setEditingIndex(null);
   };
 
-  const typeColors: Record<string, string> = {
-    development: "bg-blue-100 text-blue-800",
-    staging: "bg-yellow-100 text-yellow-800",
-    production: "bg-green-100 text-green-800",
-    sandbox: "bg-purple-100 text-purple-800",
-  };
-
   return (
     <SectionWrapper
       title={section.title}
@@ -1042,12 +1037,9 @@ function EnvironmentsSection({
                   {env.url}
                 </a>
               )}
-              <Badge
-                variant="secondary"
-                className={`text-[10px] ml-auto ${typeColors[env.type] || ""}`}
-              >
-                {env.type}
-              </Badge>
+              <span className="ml-auto">
+                <StatusChip {...lookupChip(ENVIRONMENT, env.type)} dot />
+              </span>
               {env.notes && (
                 <span className="text-xs text-muted-foreground">
                   {env.notes}

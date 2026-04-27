@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { SprintDialog, type SprintFormData } from "@/components/sprint-dialog";
+import { StatusChip } from "@/components/ui/status-chip";
+import { SPRINT_STATUS, lookupChip } from "@/lib/status-chips";
 import {
   Pencil, Trash2, KanbanSquare, ChevronDown, ChevronRight,
 } from "lucide-react";
@@ -34,12 +35,6 @@ type Sprint = {
 type Project = { id: string; name: string };
 
 type GroupedSprints = { project: Project; sprints: Sprint[] };
-
-const statusColors: Record<string, string> = {
-  planning: "bg-muted text-muted-foreground",
-  active: "bg-green-500/20 text-green-400",
-  completed: "bg-blue-500/20 text-blue-400",
-};
 
 function usageColor(pct: number) {
   if (pct <= 0.5) return "bg-green-500";
@@ -203,9 +198,11 @@ export default function SprintsPage() {
                   {projectSprints.length} sprint{projectSprints.length !== 1 ? "s" : ""}
                 </span>
                 {activeSprint && !isExpanded && (
-                  <Badge variant="secondary" className="ml-auto bg-green-500/20 text-green-400 text-xs">
-                    {activeSprint.name} — {activeSprint.taskStats.percent}%
-                  </Badge>
+                  <span className="ml-auto">
+                    <StatusChip tone="green" dot>
+                      {activeSprint.name} — {activeSprint.taskStats.percent}%
+                    </StatusChip>
+                  </span>
                 )}
               </button>
 
@@ -215,9 +212,7 @@ export default function SprintsPage() {
                     <div key={s.id} className="border-b last:border-b-0">
                       <div className="flex items-center gap-4 px-4 py-2.5 hover:bg-muted/30 transition-colors">
                         <div className="flex items-center gap-2 min-w-[160px]">
-                          <Badge variant="secondary" className={`${statusColors[s.status]} text-xs`}>
-                            {s.status}
-                          </Badge>
+                          <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} dot />
                           <span className="text-sm font-medium">{s.name}</span>
                         </div>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">

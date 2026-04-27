@@ -3,9 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ListChecks, Plus, ChevronDown, ChevronUp, CalendarDays } from "lucide-react";
-import { TodoSheet, TODO_STATUS_LABELS, TODO_STATUS_COLORS, type Todo } from "@/components/todo-sheet";
+import { TodoSheet, TODO_STATUS_LABELS, type Todo } from "@/components/todo-sheet";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
 
 const STATUS_ORDER = { todo: 0, doing: 1, done: 2 } as const;
 
@@ -63,9 +64,9 @@ export function TodosWidget() {
               <ListChecks className="h-4 w-4 text-primary" />
               Minhas To-dos
               {open.length > 0 && (
-                <Badge variant="secondary" className="text-[10px]">
+                <StatusChip tone="amber">
                   {open.length} pendente{open.length === 1 ? "" : "s"}
-                </Badge>
+                </StatusChip>
               )}
             </CardTitle>
             <Button
@@ -112,12 +113,10 @@ export function TodosWidget() {
                       setSheetOpen(true);
                     }}
                   >
-                    <Badge
-                      variant="secondary"
-                      className={`text-[10px] shrink-0 ${TODO_STATUS_COLORS[t.status as keyof typeof TODO_STATUS_COLORS]}`}
-                    >
-                      {TODO_STATUS_LABELS[t.status as keyof typeof TODO_STATUS_LABELS]}
-                    </Badge>
+                    <StatusChip
+                      tone={lookupChip(ACTION_ITEM_STATUS, t.status).tone}
+                      label={TODO_STATUS_LABELS[t.status as keyof typeof TODO_STATUS_LABELS]}
+                    />
                     <div className="flex-1 min-w-0">
                       <p
                         className={`text-sm leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}

@@ -14,11 +14,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { TaskSheet } from "@/components/task-sheet";
-import {
-  STATUS_LABELS, STATUS_COLORS,
-  TYPE_LABELS, TYPE_COLORS,
-  fmtDate, isOverdue,
-} from "@/lib/task-constants";
+import { fmtDate, isOverdue } from "@/lib/task-constants";
+import { StatusChip } from "@/components/ui/status-chip";
+import { TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
 import { roleLabel, specialtyLabel } from "@/lib/roles";
 import {
   TOWERS,
@@ -298,16 +296,12 @@ export default function ProfilePage() {
                         {t.title}
                       </TableCell>
                       <TableCell>
-                        <Badge className={`text-xs ${TYPE_COLORS[t.type] || "bg-gray-100 text-gray-700"}`}>
-                          {TYPE_LABELS[t.type] || t.type}
-                        </Badge>
+                        <StatusChip {...lookupChip(TASK_TYPE, t.type)} />
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{t.project.name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{t.sprint?.name || "—"}</TableCell>
                       <TableCell>
-                        <Badge className={`text-xs ${STATUS_COLORS[t.status] || ""}`}>
-                          {STATUS_LABELS[t.status] || t.status}
-                        </Badge>
+                        <StatusChip {...lookupChip(TASK_STATUS, t.status)} dot />
                       </TableCell>
                       <TableCell className="text-center">
                         <span className="font-medium tabular-nums text-sm">{t.functionPoints ?? "—"}</span>

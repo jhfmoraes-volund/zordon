@@ -11,9 +11,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TaskSheet } from "@/components/task-sheet";
 import { ArrowLeft, CheckCircle2, Loader2, Rocket } from "lucide-react";
 import {
-  SCOPES, COMPLEXITIES, TYPE_LABELS, TYPE_COLORS,
-  fmtDate,
+  SCOPES, COMPLEXITIES, fmtDate,
 } from "@/lib/task-constants";
+import { StatusChip } from "@/components/ui/status-chip";
+import { TASK_TYPE, lookupChip } from "@/lib/status-chips";
 
 type ReviewTask = {
   id: string;
@@ -239,15 +240,14 @@ export default function ReviewPage({
 
       {byType.length > 0 && (
         <div className="flex flex-wrap gap-2 text-xs">
-          {byType.map(([type, count]) => (
-            <Badge
-              key={type}
-              variant="secondary"
-              className={TYPE_COLORS[type] ?? ""}
-            >
-              {count} {TYPE_LABELS[type] ?? type}
-            </Badge>
-          ))}
+          {byType.map(([type, count]) => {
+            const chip = lookupChip(TASK_TYPE, type);
+            return (
+              <StatusChip key={type} tone={chip.tone}>
+                {count} {chip.label}
+              </StatusChip>
+            );
+          })}
         </div>
       )}
 
@@ -274,12 +274,7 @@ export default function ReviewPage({
                         <span className="font-medium truncate">
                           {task.title}
                         </span>
-                        <Badge
-                          variant="secondary"
-                          className={TYPE_COLORS[task.type] ?? ""}
-                        >
-                          {TYPE_LABELS[task.type] ?? task.type}
-                        </Badge>
+                        <StatusChip {...lookupChip(TASK_TYPE, task.type)} />
                       </div>
                       {task.description && (
                         <p className="text-xs text-muted-foreground line-clamp-1 mt-1">

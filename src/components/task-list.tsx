@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -14,11 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
-import {
-  TASK_STATUSES, STATUS_LABELS, STATUS_COLORS,
-  TYPE_LABELS, TYPE_COLORS,
-  fmtDate, isOverdue,
-} from "@/lib/task-constants";
+import { fmtDate, isOverdue } from "@/lib/task-constants";
+import { StatusChip } from "@/components/ui/status-chip";
+import { StatusChipSelect } from "@/components/ui/status-chip-select";
+import { TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -180,34 +178,14 @@ export function TaskList({
                   {task.title}
                 </TableCell>
                 <TableCell>
-                  <Badge className={`text-xs ${TYPE_COLORS[task.type] || "bg-gray-100 text-gray-700"}`}>
-                    {TYPE_LABELS[task.type] || task.type}
-                  </Badge>
+                  <StatusChip {...lookupChip(TASK_TYPE, task.type)} />
                 </TableCell>
                 <TableCell onClick={stop} onPointerDown={stop}>
-                  <Select
+                  <StatusChipSelect
                     value={task.status}
-                    onValueChange={(v) => v && onStatusChange(task.id, v)}
-                  >
-                    <SelectTrigger className="h-7 text-xs w-[140px]">
-                      <SelectValue>
-                        {() => (
-                          <Badge className={`text-xs ${STATUS_COLORS[task.status] || ""}`}>
-                            {STATUS_LABELS[task.status] || task.status}
-                          </Badge>
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TASK_STATUSES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          <Badge className={`text-xs ${STATUS_COLORS[s]}`}>
-                            {STATUS_LABELS[s]}
-                          </Badge>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={TASK_STATUS}
+                    onValueChange={(v) => onStatusChange(task.id, v)}
+                  />
                 </TableCell>
                 <TableCell onClick={stop} onPointerDown={stop}>
                   <Select

@@ -5,28 +5,24 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Trash2, Calendar, FileText, Link2 } from "lucide-react";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
 
 const STATUSES = ["todo", "doing", "done"] as const;
 type Status = (typeof STATUSES)[number];
 
+// Label override — registry uses uppercase TODO/DOING/DONE; this surface uses prose
 const STATUS_LABELS: Record<Status, string> = {
   todo: "To-do",
   doing: "Em andamento",
   done: "Concluído",
-};
-
-const STATUS_COLORS: Record<Status, string> = {
-  todo: "bg-red-100 text-red-700",
-  doing: "bg-yellow-100 text-yellow-700",
-  done: "bg-green-100 text-green-700",
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -210,17 +206,20 @@ function TodoSheetBody({
       {/* Header */}
       <div className="shrink-0 border-b px-6 pt-6 pb-4 space-y-3">
         <div className="flex items-center gap-2">
-          <Badge
-            variant="secondary"
-            className={`text-xs cursor-pointer ${STATUS_COLORS[draft.status]}`}
+          <button
+            type="button"
+            className="cursor-pointer"
             onClick={() => {
               const idx = STATUSES.indexOf(draft.status);
               const next = STATUSES[(idx + 1) % STATUSES.length];
               handleStatus(next);
             }}
           >
-            {STATUS_LABELS[draft.status]}
-          </Badge>
+            <StatusChip
+              tone={lookupChip(ACTION_ITEM_STATUS, draft.status).tone}
+              label={STATUS_LABELS[draft.status]}
+            />
+          </button>
           {todo && (
             <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
               {sourceLabel}
@@ -335,4 +334,4 @@ function FieldBlock({
   );
 }
 
-export { STATUS_LABELS as TODO_STATUS_LABELS, STATUS_COLORS as TODO_STATUS_COLORS };
+export { STATUS_LABELS as TODO_STATUS_LABELS };

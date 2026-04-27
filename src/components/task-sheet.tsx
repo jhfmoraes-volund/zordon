@@ -18,10 +18,11 @@ import {
 } from "lucide-react";
 import { suggestFunctionPoints } from "@/lib/function-points";
 import {
-  TASK_STATUSES, STATUS_LABELS, STATUS_COLORS,
-  TASK_TYPES, TYPE_LABELS, TYPE_COLORS,
   SCOPES, COMPLEXITIES, fmtDate, isOverdue,
 } from "@/lib/task-constants";
+import { StatusChip } from "@/components/ui/status-chip";
+import { StatusChipSelect } from "@/components/ui/status-chip-select";
+import { TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -421,24 +422,18 @@ function TaskSheetEditor({
         {/* Status + Type */}
         <div className="flex items-center gap-1.5">
           {task.status === "draft" ? (
-            <Badge className={`text-xs ${STATUS_COLORS.draft}`}>
-              {STATUS_LABELS.draft}
-            </Badge>
+            <StatusChip {...lookupChip(TASK_STATUS, "draft")} />
           ) : (
-            <BadgeSelect
+            <StatusChipSelect
               value={task.status}
-              options={[...TASK_STATUSES]}
-              labels={STATUS_LABELS}
-              colors={STATUS_COLORS}
-              onChange={(v) => onSave({ status: v })}
+              options={TASK_STATUS}
+              onValueChange={(v) => onSave({ status: v })}
             />
           )}
-          <BadgeSelect
+          <StatusChipSelect
             value={task.type}
-            options={[...TASK_TYPES]}
-            labels={TYPE_LABELS}
-            colors={TYPE_COLORS}
-            onChange={(v) => onSave({ type: v })}
+            options={TASK_TYPE}
+            onValueChange={(v) => onSave({ type: v })}
           />
         </div>
       </div>
@@ -696,33 +691,3 @@ function SpecSection({
   );
 }
 
-function BadgeSelect({
-  value, options, labels, colors, onChange,
-}: {
-  value: string;
-  options: string[];
-  labels: Record<string, string>;
-  colors: Record<string, string>;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => v && onChange(v)}>
-      <SelectTrigger className="h-7 w-auto border-none bg-transparent shadow-none p-0 hover:opacity-80">
-        <SelectValue>
-          {(v: string | null) => (
-            <Badge className={`text-xs ${colors[v ?? value] || ""}`}>
-              {labels[v ?? value] || v || value}
-            </Badge>
-          )}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o} value={o}>
-            <Badge className={`text-xs ${colors[o]}`}>{labels[o] || o}</Badge>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}

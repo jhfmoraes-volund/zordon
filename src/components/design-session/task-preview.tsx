@@ -10,6 +10,8 @@ import {
   Trash2, CheckSquare, Square, ChevronDown, ChevronRight,
   Bot, Pencil, Check, X,
 } from "lucide-react";
+import { StatusChip } from "@/components/ui/status-chip";
+import { COMPLEXITY, SCOPE, lookupChip } from "@/lib/status-chips";
 
 export type PreviewTask = {
   id: string;
@@ -21,20 +23,6 @@ export type PreviewTask = {
   scope: string;
   dependsOn: string[];
   included: boolean;
-};
-
-const complexityColors: Record<string, string> = {
-  trivial: "bg-muted text-muted-foreground",
-  low: "bg-blue-500/20 text-blue-400",
-  medium: "bg-yellow-500/20 text-yellow-400",
-  high: "bg-red-500/20 text-red-400",
-};
-
-const scopeColors: Record<string, string> = {
-  micro: "bg-muted text-muted-foreground",
-  small: "bg-blue-500/20 text-blue-400",
-  medium: "bg-yellow-500/20 text-yellow-400",
-  large: "bg-red-500/20 text-red-400",
 };
 
 export function TaskPreview({
@@ -154,12 +142,8 @@ export function TaskPreview({
                 )}
 
                 <div className="flex items-center gap-1 shrink-0">
-                  <Badge className={complexityColors[task.complexity]} variant="secondary">
-                    {task.complexity}
-                  </Badge>
-                  <Badge className={scopeColors[task.scope]} variant="secondary">
-                    {task.scope}
-                  </Badge>
+                  <StatusChip {...lookupChip(COMPLEXITY, task.complexity)} />
+                  <StatusChip {...lookupChip(SCOPE, task.scope)} />
                   <Badge variant="outline" className="gap-1 text-xs">
                     <Bot className="h-3 w-3" /> IA
                   </Badge>
