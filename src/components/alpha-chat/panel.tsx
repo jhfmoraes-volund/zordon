@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, History, Loader2, Maximize2, Send, Wrench, X } from "lucide-react";
+import { History, Loader2, Maximize2, Send, Wrench, X } from "lucide-react";
+import { AlphaIcon } from "@/components/icons/alpha-icon";
 import Link from "next/link";
 import type { UIMessage } from "ai";
 import { Button } from "@/components/ui/button";
@@ -122,7 +123,7 @@ export function AlphaChatPanel() {
     <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
       {messages.length === 0 && (
         <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
-          <Bot className="mb-3 h-10 w-10 opacity-30" />
+          <AlphaIcon className="mb-3 h-10 w-10 text-primary/40" strokeWidth={1.75} />
           <p className="text-sm font-medium">Como posso ajudar?</p>
           <p className="mt-1 max-w-[250px] text-xs">
             Pergunte sobre o sprint, alocação, reuniões ou peça para criar tasks.

@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Send, Loader2, Bot, Wrench, X } from "lucide-react";
+import { Send, Loader2, Wrench, X } from "lucide-react";
 import type { UIMessage } from "ai";
 import { Markdown } from "@/components/ui/markdown";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { VitorIcon } from "@/components/icons/vitor-icon";
+import { VitorBadge } from "./vitor-badge";
 
 export function AIChatPanel({
   isOpen,
@@ -47,10 +49,7 @@ export function AIChatPanel({
 
   const Header = (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-muted/30 px-4">
-      <div className="flex items-center gap-2">
-        <Bot className="size-4 text-primary" />
-        <span className="text-sm font-semibold">Assistente de Design</span>
-      </div>
+      <VitorBadge size="sm" />
       <div className="flex items-center gap-2">
         <Badge variant="secondary" className="text-xs">
           {currentStepTitle}
@@ -74,7 +73,7 @@ export function AIChatPanel({
     <div ref={scrollRef} className="flex-1 space-y-5 overflow-y-auto overscroll-contain p-4">
       {messages.length === 0 && !isLoading && (
         <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
-          <Bot className="mb-3 h-10 w-10 opacity-30" />
+          <VitorIcon className="mb-3 h-10 w-10 text-[oklch(0.74_0.18_55)]/40" strokeWidth={1.75} />
           <p className="text-sm font-medium">Como posso ajudar?</p>
           <p className="mt-1 max-w-[250px] text-xs">
             Posso preencher campos, criar cards, sugerir melhorias e analisar a sessao.
@@ -172,8 +171,9 @@ function MessageBubble({ message }: { message: UIMessage }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] min-w-0 space-y-1`}
+        className={`max-w-[85%] min-w-0 space-y-2`}
       >
+        {!isUser && <VitorBadge size="sm" />}
         <div
           className={`rounded-2xl text-sm overflow-hidden break-words ${
             isUser

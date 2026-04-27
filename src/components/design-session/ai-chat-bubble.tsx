@@ -1,7 +1,6 @@
 "use client";
 
-import { MessageCircle, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { VitorIcon } from "@/components/icons/vitor-icon";
 
 export function AIChatBubble({
   isOpen,
@@ -14,22 +13,24 @@ export function AIChatBubble({
 }) {
   return (
     <div className="fixed bottom-6 right-6 z-50">
-      <Button
+      <button
+        type="button"
         onClick={onToggle}
-        size="icon"
-        className="h-14 w-14 rounded-full shadow-lg"
+        aria-label={isOpen ? "Fechar Vitor" : "Abrir Vitor"}
+        aria-pressed={isOpen}
+        className={[
+          "relative grid h-14 w-14 place-items-center rounded-2xl",
+          "bg-[oklch(0.74_0.18_55)] text-white",
+          "shadow-[0_8px_24px_-6px_oklch(0.74_0.18_55/0.55),0_0_0_1px_oklch(0.74_0.18_55/0.4)]",
+          "transition-[transform,box-shadow] hover:scale-[1.03] active:scale-[0.97]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.74_0.18_55)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        ].join(" ")}
       >
-        {isOpen ? (
-          <X className="h-6 w-6" />
-        ) : (
-          <div className="relative">
-            <MessageCircle className="h-6 w-6" />
-            {isStreaming && (
-              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-yellow-400 animate-pulse" />
-            )}
-          </div>
+        <VitorIcon className="h-7 w-7" strokeWidth={2.25} />
+        {isStreaming && (
+          <span className="absolute -top-1 -right-1 h-3 w-3 animate-pulse rounded-full bg-yellow-400 ring-2 ring-background" />
         )}
-      </Button>
+      </button>
     </div>
   );
 }

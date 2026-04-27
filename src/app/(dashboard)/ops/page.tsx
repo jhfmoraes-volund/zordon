@@ -5,7 +5,8 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Loader2, Bot, Wrench, Plus, Trash2, MessageSquare, History } from "lucide-react";
+import { Send, Loader2, Wrench, Plus, Trash2, MessageSquare, History } from "lucide-react";
+import { AlphaIcon } from "@/components/icons/alpha-icon";
 import { Markdown } from "@/components/ui/markdown";
 import { AlphaBadge } from "@/components/alpha-chat/alpha-badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -246,7 +247,7 @@ export default function OpsPage() {
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
             {chat.messages.length === 0 ? (
               <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center px-4 text-center text-muted-foreground">
-                <Bot className="mb-4 h-12 w-12 opacity-30" />
+                <AlphaIcon className="mb-4 h-12 w-12 text-primary/40" strokeWidth={1.75} />
                 <p className="text-base font-medium text-foreground">Olá! Sou o Alpha</p>
                 <p className="mt-1 max-w-md text-sm">
                   Pergunte sobre o sprint, alocação da equipe, ou peça para criar tasks.
