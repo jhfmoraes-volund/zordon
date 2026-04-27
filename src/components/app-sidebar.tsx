@@ -9,7 +9,6 @@ import {
   Shield,
   UserCog,
   LayoutDashboard,
-  Lightbulb,
   BookOpen,
   CalendarCheck,
   User,
@@ -51,11 +50,9 @@ const projectNav: NavItem[] = [
   { title: "Workflow", href: "/workflow", icon: BookOpen },
 ];
 
-// Items shared by Builder and Manager — full access to sessions/tasks,
-// visibility of squads/members. RLS + API guards restrict what Builder can
-// actually mutate (projetos alocados apenas).
+// Items shared by Builder and Manager — visibility of squads/members.
+// Design Sessions são acessadas apenas dentro de cada projeto.
 const sharedNav: NavItem[] = [
-  { title: "Design Sessions", href: "/design-sessions", icon: Lightbulb },
   { title: "Squads", href: "/squads", icon: Shield },
   { title: "Membros", href: "/members", icon: UserCog },
 ];

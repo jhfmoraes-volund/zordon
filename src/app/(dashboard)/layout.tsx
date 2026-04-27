@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
@@ -36,6 +37,13 @@ export default async function DashboardLayout({
   const realRole = await getRealRole();
   const effectiveRole = await getEffectiveRole();
   const member = await getCurrentMember();
+
+  // Membros recém-convidados (onboardedAt nulo) passam pelo flow inicial
+  // antes de acessar qualquer rota do dashboard. Admins impersonando ficam
+  // de fora do gate — caso contrário não dariam pra debugar contas novas.
+  if (member && !member.onboardedAt && !member._impersonatedBy) {
+    redirect("/onboarding");
+  }
 
   // Only fetch the full members list for admins (powers the impersonation dropdown).
   const isAdmin = hasMinLevel(realRole, ADMIN);

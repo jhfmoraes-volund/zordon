@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Link as LinkIcon, Eye, EyeOff, CheckCircle2, Circle } from "lucide-react";
+import { Link as LinkIcon, Eye, EyeOff, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,72 +85,96 @@ export function RoamIntegrationCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 text-sm">
-          {status?.connected ? (
-            <>
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <span className="text-muted-foreground">
-                Conectado{status.tokenHint ? ` (****${status.tokenHint})` : ""}
-              </span>
-            </>
-          ) : (
-            <>
-              <Circle className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Nao conectado</span>
-            </>
-          )}
-        </div>
-
-        <p className="text-sm text-muted-foreground">
-          O token do Roam e pessoal. Gere o seu em Roam &gt; Settings &gt; API,
-          cole abaixo. Ele e validado antes de ser salvo e fica criptografado
-          no Supabase Vault.
-        </p>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="roam-token">
-            {status?.connected ? "Substituir token" : "Token"}
-          </Label>
-          <div className="relative">
-            <Input
-              id="roam-token"
-              type={showToken ? "text" : "password"}
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="Cole o token do Roam"
-              onKeyDown={(e) => e.key === "Enter" && handleSave()}
-            />
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowToken(!showToken)}
-              tabIndex={-1}
-            >
-              {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+        {status === null ? (
+          <div className="flex items-center justify-center py-6 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 text-sm">
+              {status.connected ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <span className="text-muted-foreground">
+                    Conectado{status.tokenHint ? ` (****${status.tokenHint})` : ""}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Circle className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Nao conectado</span>
+                </>
+              )}
+            </div>
 
-        {feedback && (
-          <p className={`text-sm ${feedback.type === "success" ? "text-green-600" : "text-red-600"}`}>
-            {feedback.text}
-          </p>
+            {status.connected ? (
+              <>
+                {feedback && (
+                  <p className={`text-sm ${feedback.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                    {feedback.text}
+                  </p>
+                )}
+                <Button
+                  onClick={handleDisconnect}
+                  disabled={deleting}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {deleting ? "..." : "Desconectar"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  O token do Roam e pessoal. Gere o seu em Roam &gt; Settings &gt; API,
+                  cole abaixo. Ele e validado antes de ser salvo e fica criptografado
+                  no Supabase Vault.
+                </p>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="roam-api-token">Token</Label>
+                  <div className="relative">
+                    <Input
+                      id="roam-api-token"
+                      name="roam-api-token"
+                      type={showToken ? "text" : "password"}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-bwignore="true"
+                      data-form-type="other"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder="Cole o token do Roam"
+                      onKeyDown={(e) => e.key === "Enter" && handleSave()}
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowToken(!showToken)}
+                      tabIndex={-1}
+                    >
+                      {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {feedback && (
+                  <p className={`text-sm ${feedback.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                    {feedback.text}
+                  </p>
+                )}
+
+                <Button onClick={handleSave} disabled={saving} className="w-full">
+                  {saving ? "Validando..." : "Conectar"}
+                </Button>
+              </>
+            )}
+          </>
         )}
-
-        <div className="flex gap-2">
-          <Button onClick={handleSave} disabled={saving} className="flex-1">
-            {saving ? "Validando..." : status?.connected ? "Atualizar" : "Conectar"}
-          </Button>
-          {status?.connected && (
-            <Button
-              onClick={handleDisconnect}
-              disabled={deleting}
-              variant="outline"
-            >
-              {deleting ? "..." : "Desconectar"}
-            </Button>
-          )}
-        </div>
       </CardContent>
     </Card>
   );

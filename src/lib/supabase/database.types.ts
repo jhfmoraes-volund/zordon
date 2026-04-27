@@ -1037,6 +1037,7 @@ export type Database = {
           id: string
           isExternal: boolean
           name: string
+          onboardedAt: string | null
           role: string
           seniority: string | null
           specialty: string | null
@@ -1052,6 +1053,7 @@ export type Database = {
           id: string
           isExternal?: boolean
           name: string
+          onboardedAt?: string | null
           role?: string
           seniority?: string | null
           specialty?: string | null
@@ -1067,6 +1069,7 @@ export type Database = {
           id?: string
           isExternal?: boolean
           name?: string
+          onboardedAt?: string | null
           role?: string
           seniority?: string | null
           specialty?: string | null
