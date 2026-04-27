@@ -40,13 +40,8 @@ export const case09AutoCompactEndSession: EvalCase = {
   ],
 
   expected: {
-    toolCalls: [
-      {
-        name: "update_project_memory",
-        args: { action: "append_section", section: "Aprendizados Cruciais" },
-      },
-    ],
+    toolCalls: [{ name: "compact_session_to_project" }],
     judgeRubric:
-      "A chamada de update_project_memory inclui >= 3 bullets concretos derivados da memória da session (persona confirmada, hipótese validada, decisão de scope). Não inclui ruído ('foi uma boa sessão').",
+      "A chamada de compact_session_to_project (ou update_project_memory) inclui >= 3 learnings concretos derivados da memória da session (persona confirmada, hipótese validada, decisão de scope). Não inclui ruído ('foi uma boa sessão').",
   },
 };

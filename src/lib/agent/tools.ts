@@ -18,6 +18,12 @@ import {
   createListOpenQuestionsTool,
   createListResearchTool,
   createReadBusinessContextTool,
+  createReadSessionMemoryTool,
+  createUpdateSessionMemoryTool,
+  createReadProjectMemoryTool,
+  createUpdateProjectMemoryTool,
+  createListProjectSessionsTool,
+  createCompactSessionToProjectTool,
 } from "./tools/memory";
 import { createMvpCheckTool } from "./tools/mvp-check";
 import type { Capabilities } from "./types";
@@ -172,6 +178,12 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
     tools.list_research = createListResearchTool(sessionId, pid);
     tools.read_business_context = createReadBusinessContextTool(sessionId, pid);
     tools.mvp_check = createMvpCheckTool(sessionId, pid);
+    tools.read_session_memory = createReadSessionMemoryTool(sessionId, pid);
+    tools.update_session_memory = createUpdateSessionMemoryTool(sessionId, pid);
+    tools.read_project_memory = createReadProjectMemoryTool(sessionId, pid);
+    tools.update_project_memory = createUpdateProjectMemoryTool(sessionId, pid);
+    tools.list_project_sessions = createListProjectSessionsTool(sessionId, pid);
+    tools.compact_session_to_project = createCompactSessionToProjectTool(sessionId, pid);
   }
 
   return tools;

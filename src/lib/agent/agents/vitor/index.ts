@@ -28,6 +28,8 @@ export const vitorAgent: AgentDefinition = {
       activeDecisions,
       openQuestions,
       businessContext,
+      project,
+      sessionIndex,
     ] = await Promise.all([
       buildSessionContext(sessionId),
       getStepData(sessionId, currentStepKey),
@@ -48,6 +50,19 @@ export const vitorAgent: AgentDefinition = {
         .select("*")
         .eq("projectId", session.projectId)
         .maybeSingle(),
+      db()
+        .from("Project")
+        .select("memoryMd, memoryVersion, memoryUpdatedAt")
+        .eq("id", session.projectId)
+        .single(),
+      db()
+        .from("DesignSession")
+        .select("id, title, type, status, memoryAbstract, updatedAt")
+        .eq("projectId", session.projectId)
+        .neq("id", sessionId)
+        .neq("status", "draft")
+        .order("updatedAt", { ascending: false })
+        .limit(10),
     ]);
 
     return {
@@ -61,6 +76,9 @@ export const vitorAgent: AgentDefinition = {
       activeDecisions: activeDecisions.data ?? [],
       openQuestions: openQuestions.data ?? [],
       businessContext: businessContext.data ?? null,
+      projectMemoryMd: project.data?.memoryMd ?? null,
+      projectMemoryVersion: project.data?.memoryVersion ?? 0,
+      sessionIndex: sessionIndex.data ?? [],
     };
   },
 
@@ -75,6 +93,8 @@ export const vitorAgent: AgentDefinition = {
       activeDecisions: agentContext.activeDecisions as ActiveDecision[],
       openQuestions: agentContext.openQuestions as OpenQuestion[],
       businessContext: agentContext.businessContext as BusinessContext | null,
+      projectMemoryMd: agentContext.projectMemoryMd as string | null,
+      sessionIndex: agentContext.sessionIndex as SessionIndexEntry[],
     });
   },
 
@@ -111,5 +131,14 @@ export interface BusinessContext {
   ticketRangeBrl: string | null;
   runwayMonths: number | null;
   competitors: unknown;
+  updatedAt: string;
+}
+
+export interface SessionIndexEntry {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  memoryAbstract: string | null;
   updatedAt: string;
 }

@@ -24,6 +24,7 @@ import {
 import type { Capabilities } from "@/lib/agent/types";
 import type { EvalCase, CaseResult } from "./types";
 import { judgeRun, type RunOutput } from "./judge";
+import { llmJudge } from "./llm-judge";
 
 const EVAL_TAG = "__eval__";
 
@@ -50,6 +51,7 @@ interface LiveOptions {
   caseFilter?: string;
   keep?: boolean;
   budgetMaxCases?: number;
+  llmJudge?: boolean;
 }
 
 export async function runLive(
@@ -103,6 +105,45 @@ async function runOneCase(c: EvalCase, options: LiveOptions): Promise<CaseResult
     footprint = await seedCase(c);
     const output = await runConversation(c, footprint);
     const judged = judgeRun(c, output);
+
+    // If rule-based passed and we have a rubric + llmJudge enabled, refine.
+    if (
+      options.llmJudge &&
+      c.expected.judgeRubric &&
+      (judged.status === "pass" || judged.status === "partial")
+    ) {
+      const verdict = await llmJudge(c, output);
+      if (verdict.verdict === "pass") {
+        return {
+          caseName: c.name,
+          status: "pass",
+          reason: `rule-based + LLM judge passed: ${verdict.reason}`,
+          toolCalls: output.toolCalls,
+          responseText: output.responseText,
+          failures: [],
+        };
+      }
+      if (verdict.verdict === "fail") {
+        return {
+          caseName: c.name,
+          status: "fail",
+          reason: `rule-based passed but LLM judge failed rubric: ${verdict.reason}`,
+          toolCalls: output.toolCalls,
+          responseText: output.responseText,
+          failures: [`rubric violation: ${verdict.reason}`],
+        };
+      }
+      // uncertain — keep partial
+      return {
+        caseName: c.name,
+        status: "partial",
+        reason: `rule-based passed; LLM judge uncertain: ${verdict.reason}`,
+        toolCalls: output.toolCalls,
+        responseText: output.responseText,
+        failures: [],
+      };
+    }
+
     return {
       caseName: c.name,
       status: judged.status,

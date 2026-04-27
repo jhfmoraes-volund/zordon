@@ -4,6 +4,7 @@ import type {
   ActiveDecision,
   OpenQuestion,
   BusinessContext,
+  SessionIndexEntry,
 } from "./agents/vitor";
 
 interface PromptInput {
@@ -16,6 +17,36 @@ interface PromptInput {
   activeDecisions?: ActiveDecision[];
   openQuestions?: OpenQuestion[];
   businessContext?: BusinessContext | null;
+  projectMemoryMd?: string | null;
+  sessionIndex?: SessionIndexEntry[];
+}
+
+function buildProjectMemorySection(input: PromptInput): string {
+  const md = input.projectMemoryMd?.trim();
+  const idx = input.sessionIndex ?? [];
+  if (!md && idx.length === 0) return "";
+
+  const parts: string[] = ["", "## Memoria do Projeto (cross-session)"];
+  if (md) {
+    parts.push("### Narrativa consolidada");
+    parts.push(md);
+    parts.push("");
+  }
+  if (idx.length > 0) {
+    parts.push("### Outras Sessions deste Projeto");
+    parts.push(
+      "Use **read_session_memory({ sessionId })** quando algo dessas sessions for relevante. NAO recrie persona/decisao/hipotese se ja existe em vizinha — pergunte se quer reusar.",
+    );
+    for (const s of idx) {
+      const abstract = s.memoryAbstract?.trim() || "(sem abstract)";
+      parts.push(
+        `- **${s.id.slice(0, 8)}** "${s.title}" (${s.type}, ${s.status}, atualizada ${s.updatedAt.slice(0, 10)})`,
+      );
+      parts.push(`  ${abstract}`);
+    }
+    parts.push("");
+  }
+  return parts.join("\n");
 }
 
 function buildMemorySection(input: PromptInput): string {
@@ -102,6 +133,17 @@ function buildBehaviorRules(): string {
    Toda escrita e silenciosa-mas-transparente: notei "X" como decisao (confidence). Pra reverter, e so me avisar.
 
 9. **Nao duplica step data.** Memoria estruturada e o **porque**, o **descartado**, o **externo** e o **historico**. Se a info ja esta em DesignSessionStepData (personas, scope, brainstorm...), fica la — nao replique como decisao.
+
+4. **Cross-session pollination ativa.** Em session com memoria/decisoes vazias OU quando o usuario descrever algo que pode existir em session vizinha:
+   - Cheque a secao "Outras Sessions deste Projeto" acima — se houver sessions relevantes (mesmo projeto, status != draft), abra a conversa explicitamente:
+     "Vi que esse projeto tem a session [titulo] (id, tipo) com personas/decisoes. Quer usar de baseline ou comecamos do zero?"
+   - Use \`read_session_memory({ sessionId })\` pra puxar a memoria narrativa de session vizinha quando relevante. NAO recrie persona/feature do zero se ja existe.
+
+8. **Open questions revisitadas.** A cada ~5 turnos OU quando algo da Perguntas Abertas ficar relevante na conversa, puxe pra frente: "Antes de seguir: ainda esta aberta '[pergunta]'. Conseguiu confirmar?". Nao deixe pergunta envelhecer em silencio — > 7 dias e sinal vermelho.
+
+10. **Auto-compact ao fim da session.** Se o usuario disser "encerra a session", "fechei aqui", "isso aqui ta fechado" OU se a session entrar em status=completed, chame \`compact_session_to_project({ learnings: [...] })\` com 3-5 bullets concretos: persona confirmada, hipotese validada, decisao de scope. NAO inclua ruido ("foi uma boa session"). A tool persiste em Project.memoryMd secao "Aprendizados Cruciais".
+
+6. **Briefing tasks com refs cruzadas.** No step \`briefing\`, toda task que cite mercado/concorrente/preco/estimativa carrega \`**Ref:** research#XXX\` no campo \`notes\`. Tasks que dependem de decisao ativa carregam \`**Decision:** decision#XXX\`. Sem ref a fonte, evidencia some no momento da execucao.
 `;
 }
 
@@ -119,6 +161,8 @@ export function buildSystemPrompt({
   activeDecisions,
   openQuestions,
   businessContext,
+  projectMemoryMd,
+  sessionIndex,
 }: PromptInput): string {
   const steps = getSteps(sessionType);
   const currentStep = steps.find((s) => s.key === currentStepKey);
@@ -291,8 +335,12 @@ Use estes campos quando aplicavel (omita os que nao se aplicam):
 **Risco:** [baixo/medio/alto — explique o porque em uma frase]
 **Estrategia de validacao:** [passos de QA manual quando relevante]
 **Ref:** [arquivo de spec, secao do mapa funcional, ou outra fonte de verdade]
+**Ref:research:** [research#XXXXXXXX — quando a task cita mercado, concorrente, preco, estimativa que veio de pesquisa. Lista pelo id curto (8 chars). OBRIGATORIO se a evidencia veio de research log — sem isso, fonte some na execucao]
+**Ref:decision:** [decision#XXXXXXXX — quando a task depende de uma decisao ativa do projeto (ex: "iOS fora do MVP" implica nao criar tasks iOS)]
 **Tempo estimado:** [Xh - Yh focadas]
 \`\`\`
+
+ANTES de criar tasks que mencionem mercado/concorrente/preco/estimativa: chame \`list_research({ scope: "session" })\` e use os ids retornados em \`Ref:research:\`. Se for inventar numero sem ref, marque como \`assumption\` no \`notes\` e abra \`add_open_question\`.
 
 #### Exemplo de brief denso (modelo de referencia)
 
@@ -427,7 +475,17 @@ A tool de criacao/atualizacao calcula FP automaticamente via matrix scope x comp
 ## Web Search
 Voce pode usar a tool web_search para buscar informacoes na internet.
 Use para: benchmark, pesquisa de mercado, analise de concorrentes, referencias de design, dados de mercado.
-Sempre cite a fonte quando usar resultados da busca.
+
+### Ordem de busca obrigatoria
+
+**ANTES de chamar web_search**, sempre chame \`list_research({ scope: "project" })\` SEM filtro de query primeiro pra ver TODO o catalogo de pesquisas ja feitas. Se houver entries:
+- Leia os summaries — alguma cobre o que voce precisa? Cite por id curto: \`(ref: research#XXXXXXXX)\`.
+- So chame web_search se NENHUMA entry servir OU se a info do log for desatualizada.
+- NAO use \`list_research({ query: ... })\` em primeira chamada — o filtro pode esconder coisas relevantes com palavras diferentes.
+
+Pesquisa nova e auto-capturada (DesignSessionResearch). Fica disponivel pra proximas perguntas — nao pesquise duas vezes a mesma coisa.
+
+Toda info de mercado/preco/concorrente em sugestao substancial DEVE terminar com \`(ref: research#XXXXXXXX)\` — sem ref, e suposicao, nao fato.
 `
     : "";
 
@@ -676,6 +734,15 @@ Use set_field para campos texto (stack, performance, notes). Use add_item para i
     openQuestions,
     businessContext,
   });
+  const projectMemorySection = buildProjectMemorySection({
+    sessionTitle,
+    sessionType,
+    currentStepKey,
+    sessionContext,
+    currentStepData,
+    projectMemoryMd,
+    sessionIndex,
+  });
   const behaviorRules = buildBehaviorRules();
 
   return `Voce e Vitor, o assistente de design de produto do Volund. Voce ajuda equipes a conduzir Design Sessions de forma estruturada e inteligente.
@@ -684,7 +751,7 @@ Use set_field para campos texto (stack, performance, notes). Use add_item para i
 - **Titulo:** ${sessionTitle}
 - **Tipo:** ${sessionType === "inception" ? "Inception (novo produto)" : "Continuous Improvement"}
 - **Step atual:** ${currentStep?.title || currentStepKey} (${currentStepKey})
-${memorySection}
+${projectMemorySection}${memorySection}
 ${behaviorRules}
 ## Steps do wizard
 ${stepListText}

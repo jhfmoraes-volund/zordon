@@ -245,3 +245,337 @@ export function createReadBusinessContextTool(_sessionId: string, projectId: str
     },
   });
 }
+
+// ─── Session Markdown Memory ────────────────────────────────
+
+export function createReadSessionMemoryTool(sessionId: string, projectId: string) {
+  return tool({
+    description:
+      "Lê a memória narrativa (markdown) de uma session. Sem sessionId, lê a memória da session atual. Com sessionId, lê de OUTRA session do mesmo projeto — útil pra puxar contexto de inception anterior, CI passada, etc.",
+    inputSchema: z.object({
+      sessionId: z
+        .string()
+        .optional()
+        .describe(
+          "ID de outra session do mesmo projeto (omita pra ler a session atual)",
+        ),
+    }),
+    execute: async ({ sessionId: targetId }) => {
+      const target = targetId ?? sessionId;
+      const { data, error } = await db()
+        .from("DesignSession")
+        .select("id, title, type, status, projectId, memoryMd, memoryAbstract, memoryVersion, memoryUpdatedAt")
+        .eq("id", target)
+        .maybeSingle();
+      if (error) return { ok: false, error: error.message };
+      if (!data) return { ok: false, error: "session not found" };
+      if (data.projectId !== projectId) {
+        return { ok: false, error: "session belongs to another project" };
+      }
+      return {
+        ok: true,
+        session: {
+          id: data.id,
+          title: data.title,
+          type: data.type,
+          status: data.status,
+          memoryMd: data.memoryMd ?? "",
+          memoryVersion: data.memoryVersion ?? 0,
+          memoryUpdatedAt: data.memoryUpdatedAt,
+        },
+      };
+    },
+  });
+}
+
+const memoryActionSchema = z.enum(["replace", "append_section", "edit_section"]);
+
+function applyMarkdownMutation(
+  current: string,
+  action: "replace" | "append_section" | "edit_section",
+  section: string | undefined,
+  content: string,
+): string {
+  if (action === "replace") return content;
+  if (!section) {
+    throw new Error("section is required for append_section/edit_section");
+  }
+  const heading = `## ${section}`;
+  const body = current ?? "";
+  if (action === "append_section") {
+    if (body.includes(heading)) {
+      // section already exists — append content after the section header
+      const lines = body.split("\n");
+      const idx = lines.findIndex((l) => l.trim() === heading);
+      const after = lines.slice(idx + 1);
+      const nextHeadingOffset = after.findIndex((l) => /^## /.test(l));
+      const insertAt = idx + 1 + (nextHeadingOffset === -1 ? after.length : nextHeadingOffset);
+      lines.splice(insertAt, 0, content.trim(), "");
+      return lines.join("\n");
+    }
+    return `${body.trim()}\n\n${heading}\n${content.trim()}\n`.trimStart();
+  }
+  if (action === "edit_section") {
+    const lines = body.split("\n");
+    const idx = lines.findIndex((l) => l.trim() === heading);
+    if (idx === -1) {
+      // section doesn't exist yet — fall back to append
+      return `${body.trim()}\n\n${heading}\n${content.trim()}\n`.trimStart();
+    }
+    const after = lines.slice(idx + 1);
+    const nextHeadingOffset = after.findIndex((l) => /^## /.test(l));
+    const replaceUntil = idx + 1 + (nextHeadingOffset === -1 ? after.length : nextHeadingOffset);
+    return [
+      ...lines.slice(0, idx + 1),
+      content.trim(),
+      "",
+      ...lines.slice(replaceUntil),
+    ].join("\n");
+  }
+  return current;
+}
+
+export function createUpdateSessionMemoryTool(sessionId: string, _projectId: string) {
+  return tool({
+    description:
+      "Atualiza a memória narrativa (markdown) da session atual. Use pra capturar nuance que não cabe em decision/open question: contexto de projeto solto, hipóteses, descartado-e-por-quê. Use seções fixas (Contexto Específico, Personas Estabelecidas, Hipóteses, Pesquisas Relevantes, Descartado). Optimistic lock: passe expectedVersion lido por read_session_memory; se conflitar (web + telegram), retorna newer state e você relê.",
+    inputSchema: z.object({
+      action: memoryActionSchema,
+      section: z
+        .string()
+        .optional()
+        .describe("Nome da seção (sem '## '). Obrigatório em append/edit_section"),
+      content: z.string().describe("Conteúdo a inserir/substituir"),
+      expectedVersion: z
+        .number()
+        .int()
+        .describe("Versão lida em read_session_memory — protege contra concorrência"),
+    }),
+    execute: async ({ action, section, content, expectedVersion }) => {
+      const { data: current, error: rErr } = await db()
+        .from("DesignSession")
+        .select("memoryMd, memoryVersion")
+        .eq("id", sessionId)
+        .single();
+      if (rErr) return { ok: false, error: rErr.message };
+      if ((current.memoryVersion ?? 0) !== expectedVersion) {
+        return {
+          ok: false,
+          conflict: true,
+          currentVersion: current.memoryVersion ?? 0,
+          currentMd: current.memoryMd ?? "",
+        };
+      }
+
+      let updated: string;
+      try {
+        updated = applyMarkdownMutation(
+          current.memoryMd ?? "",
+          action,
+          section,
+          content,
+        );
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+
+      const newVersion = expectedVersion + 1;
+      const abstract = updated.slice(0, 200);
+      const { error: uErr } = await db()
+        .from("DesignSession")
+        .update({
+          memoryMd: updated,
+          memoryAbstract: abstract,
+          memoryVersion: newVersion,
+          memoryUpdatedAt: new Date().toISOString(),
+        })
+        .eq("id", sessionId);
+      if (uErr) return { ok: false, error: uErr.message };
+      return { ok: true, newVersion, abstract };
+    },
+  });
+}
+
+// ─── Project Memory ─────────────────────────────────────────
+
+export function createReadProjectMemoryTool(_sessionId: string, projectId: string) {
+  return tool({
+    description:
+      "Lê a memória narrativa do PROJETO (cross-session, durável). Inclui businessContext, decisões ativas, perguntas abertas e o markdown agregador. CHAME no início de session nova — abre a conversa reconhecendo o que já existe.",
+    inputSchema: z.object({}),
+    execute: async () => {
+      const [project, ctx, decisions, openQs] = await Promise.all([
+        db()
+          .from("Project")
+          .select("name, memoryMd, memoryVersion, memoryUpdatedAt")
+          .eq("id", projectId)
+          .single(),
+        db()
+          .from("ProjectBusinessContext")
+          .select("*")
+          .eq("projectId", projectId)
+          .maybeSingle(),
+        db()
+          .from("DesignDecision")
+          .select("id, statement, rationale, confidence, tags, createdAt")
+          .eq("projectId", projectId)
+          .eq("status", "active")
+          .order("createdAt", { ascending: false }),
+        db()
+          .from("DesignOpenQuestion")
+          .select("id, question, blocksWhat, sessionId, createdAt")
+          .eq("projectId", projectId)
+          .eq("status", "open")
+          .order("createdAt", { ascending: false }),
+      ]);
+
+      if (project.error) return { ok: false, error: project.error.message };
+      return {
+        ok: true,
+        project: {
+          name: project.data.name,
+          memoryMd: project.data.memoryMd ?? "",
+          memoryVersion: project.data.memoryVersion ?? 0,
+          memoryUpdatedAt: project.data.memoryUpdatedAt,
+        },
+        businessContext: ctx.data ?? null,
+        activeDecisions: decisions.data ?? [],
+        openQuestions: openQs.data ?? [],
+      };
+    },
+  });
+}
+
+export function createUpdateProjectMemoryTool(_sessionId: string, projectId: string) {
+  return tool({
+    description:
+      "Atualiza a memória narrativa do PROJETO. Use no auto-compact ao fim de session (action=append_section, section='Aprendizados Cruciais') ou pra consolidar Visão de Produto cross-session. Mesmo padrão de optimistic lock que update_session_memory.",
+    inputSchema: z.object({
+      action: memoryActionSchema,
+      section: z.string().optional(),
+      content: z.string(),
+      expectedVersion: z.number().int(),
+    }),
+    execute: async ({ action, section, content, expectedVersion }) => {
+      const { data: current, error: rErr } = await db()
+        .from("Project")
+        .select("memoryMd, memoryVersion")
+        .eq("id", projectId)
+        .single();
+      if (rErr) return { ok: false, error: rErr.message };
+      if ((current.memoryVersion ?? 0) !== expectedVersion) {
+        return {
+          ok: false,
+          conflict: true,
+          currentVersion: current.memoryVersion ?? 0,
+          currentMd: current.memoryMd ?? "",
+        };
+      }
+
+      let updated: string;
+      try {
+        updated = applyMarkdownMutation(
+          current.memoryMd ?? "",
+          action,
+          section,
+          content,
+        );
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+
+      const newVersion = expectedVersion + 1;
+      const { error: uErr } = await db()
+        .from("Project")
+        .update({
+          memoryMd: updated,
+          memoryVersion: newVersion,
+          memoryUpdatedAt: new Date().toISOString(),
+        })
+        .eq("id", projectId);
+      if (uErr) return { ok: false, error: uErr.message };
+      return { ok: true, newVersion };
+    },
+  });
+}
+
+// ─── Cross-session ──────────────────────────────────────────
+
+export function createListProjectSessionsTool(_sessionId: string, projectId: string) {
+  return tool({
+    description:
+      "Lista outras sessions do mesmo projeto (excluindo a atual). Use no início de session nova ou quando o usuário descrever algo que pode existir em session vizinha.",
+    inputSchema: z.object({
+      includeDrafts: z.boolean().default(false).describe("Inclui status='draft'?"),
+    }),
+    execute: async ({ includeDrafts }) => {
+      let q = db()
+        .from("DesignSession")
+        .select("id, title, type, status, memoryAbstract, memoryUpdatedAt, updatedAt")
+        .eq("projectId", projectId)
+        .neq("id", _sessionId)
+        .order("updatedAt", { ascending: false });
+      if (!includeDrafts) q = q.neq("status", "draft");
+      const { data, error } = await q;
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, sessions: data ?? [] };
+    },
+  });
+}
+
+// ─── Auto-compact (manual trigger) ──────────────────────────
+
+export function createCompactSessionToProjectTool(
+  sessionId: string,
+  projectId: string,
+) {
+  return tool({
+    description:
+      "Compacta o que vale a pena lembrar desta session pra Project Memory. Chame ao FIM da session (status=completed) ou quando o usuário pedir 'encerra essa session'. Você gera bullets de aprendizados e a tool persiste em Project.memoryMd seção 'Aprendizados Cruciais'.",
+    inputSchema: z.object({
+      learnings: z
+        .array(z.string())
+        .min(3)
+        .describe(
+          "3-5 aprendizados cruciais — bullets concretos. Não inclua ruído ('foi uma boa session'), só fatos com valor cross-session.",
+        ),
+    }),
+    execute: async ({ learnings }) => {
+      const { data: project, error: rErr } = await db()
+        .from("Project")
+        .select("memoryMd, memoryVersion")
+        .eq("id", projectId)
+        .single();
+      if (rErr) return { ok: false, error: rErr.message };
+
+      const { data: session } = await db()
+        .from("DesignSession")
+        .select("title")
+        .eq("id", sessionId)
+        .maybeSingle();
+      const sessionTitle = session?.title ?? "session";
+      const date = new Date().toISOString().slice(0, 10);
+      const bullets = learnings
+        .map((l) => `- ${l} (${date}, via ${sessionTitle})`)
+        .join("\n");
+
+      const updated = applyMarkdownMutation(
+        project.memoryMd ?? "",
+        "append_section",
+        "Aprendizados Cruciais",
+        bullets,
+      );
+      const newVersion = (project.memoryVersion ?? 0) + 1;
+      const { error: uErr } = await db()
+        .from("Project")
+        .update({
+          memoryMd: updated,
+          memoryVersion: newVersion,
+          memoryUpdatedAt: new Date().toISOString(),
+        })
+        .eq("id", projectId);
+      if (uErr) return { ok: false, error: uErr.message };
+      return { ok: true, learnings, newVersion };
+    },
+  });
+}

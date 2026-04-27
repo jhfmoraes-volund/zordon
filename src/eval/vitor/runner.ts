@@ -102,13 +102,15 @@ function parseArgs(argv: string[]): {
   caseFilter?: string;
   keep: boolean;
   noBudget: boolean;
+  llmJudge: boolean;
 } {
   const live = argv.includes("--live");
   const keep = argv.includes("--keep");
   const noBudget = argv.includes("--no-budget");
+  const llmJudge = argv.includes("--llm-judge");
   const caseArg = argv.find((a) => a.startsWith("--case="));
   const caseFilter = caseArg ? caseArg.split("=")[1] : undefined;
-  return { live, caseFilter, keep, noBudget };
+  return { live, caseFilter, keep, noBudget, llmJudge };
 }
 
 async function main(): Promise<void> {
@@ -154,6 +156,7 @@ async function main(): Promise<void> {
     caseFilter: args.caseFilter,
     keep: args.keep,
     budgetMaxCases: args.noBudget ? undefined : 5,
+    llmJudge: args.llmJudge,
   });
 }
 

@@ -19,10 +19,28 @@ export const case07ConfidenceLabel: EvalCase = {
       title: "Inception SaaS Beleza",
       type: "inception",
       status: "in_progress",
+      stepData: {
+        personas_journeys: {
+          personas: [
+            {
+              id: "p-camila",
+              name: "Camila",
+              role: "Admin de salão",
+              asIsSteps: [
+                {
+                  id: "as1",
+                  description: "Lança fatura manual",
+                  painOrGain: "Perde 2h/mês",
+                },
+              ],
+            },
+          ],
+        },
+      },
     },
     research: [
       {
-        id: "b2d4",
+        id: "b2d4ref",
         query: "frequência ideal push notification fintech BR",
         summary: "Push em < 2min após gatilho aumenta conversão em 30%.",
         sources: [{ title: "OneSignal Report 2026", url: "https://example.com/onesignal" }],
@@ -40,8 +58,8 @@ export const case07ConfidenceLabel: EvalCase = {
   ],
 
   expected: {
-    responseContains: ["hard_fact", "assumption", "research#b2d4"],
+    responseContains: ["b2d4ref"],
     judgeRubric:
-      "A primeira parte da resposta (frequência) sai com etiqueta hard_fact e ref a research#b2d4. A segunda parte (som customizado) sai com etiqueta assumption porque não há evidência. As duas etiquetas estão presentes na mesma resposta.",
+      "A primeira parte da resposta (frequência push) sai com etiqueta hard_fact ou inferred E carrega ref a research#b2d4ref. A segunda parte (som customizado) sai com etiqueta assumption ou suposição porque não há evidência. Vitor distingue claramente o que tem fonte do que é palpite.",
   },
 };

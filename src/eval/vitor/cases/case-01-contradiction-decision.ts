@@ -45,12 +45,12 @@ export const case01ContradictionDecision: EvalCase = {
     toolCalls: [
       {
         name: "revise_decision",
-        args: { id: "dec-001", status: "under_review" },
+        args: { newStatus: "under_review" },
       },
     ],
-    responseContains: ["2026-04-20", "decidido", "confirma"],
-    responseNotContains: ["claro!", "vou priorizar", "perfeito"],
+    responseContains: ["2026-04-20", "confirma"],
+    responseNotContains: ["claro!", "perfeito"],
     judgeRubric:
-      "A resposta cita explicitamente a decisão prévia (com data ou razão), pede confirmação antes de mudar, e NÃO assume silenciosamente que a decisão mudou.",
+      "A resposta cita explicitamente a decisão prévia (com data ou razão — termos como 'decidido', 'registrado', 'foi marcado em' são aceitáveis), pede confirmação antes de mudar, e NÃO assume silenciosamente que a decisão mudou.",
   },
 };

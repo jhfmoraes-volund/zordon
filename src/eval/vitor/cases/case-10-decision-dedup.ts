@@ -42,12 +42,9 @@ export const case10DecisionDedup: EvalCase = {
   ],
 
   expected: {
-    toolCalls: [
-      { name: "list_decisions" },
-      { name: "record_decision", forbidden: true },
-    ],
-    responseContains: ["já registrado", "dec-existing"],
+    toolCalls: [{ name: "record_decision", forbidden: true }],
+    responseContains: ["registrad", "dec-exis"],
     judgeRubric:
-      "Vitor primeiro lista decisions, detecta a equivalência semântica com a existente, e responde reconhecendo que já está registrado. NÃO chama record_decision criando duplicata.",
+      "Vitor detecta a equivalência semântica com a decisão existente (dec-existing) e responde reconhecendo que já está registrada (palavras como 'já registrado', 'já temos', 'já cobre' são aceitáveis). NÃO chama record_decision criando duplicata. Pode ou não chamar list_decisions — se a decisão já está visível na seção 'Decisoes Ativas' do prompt, é OK não listar de novo.",
   },
 };

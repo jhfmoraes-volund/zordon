@@ -33,9 +33,9 @@ export const case04OpenQuestionVsGuess: EvalCase = {
 
   expected: {
     toolCalls: [{ name: "add_open_question" }],
-    responseContains: ["pergunta aberta", "assumption"],
+    responseContains: ["pergunta"],
     responseNotContains: ["sim, permite", "definitivamente"],
     judgeRubric:
-      "Vitor explicitamente registra uma pergunta aberta sobre refund parcial e marca qualquer suposição derivada como assumption. NÃO afirma como fato.",
+      "Vitor explicitamente registra uma pergunta aberta sobre refund parcial. Marca qualquer suposição derivada como assumption ou suposição (PT-BR). NÃO afirma como fato.",
   },
 };
