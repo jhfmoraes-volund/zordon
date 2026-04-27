@@ -446,13 +446,13 @@ function TaskSheetEditor({
       {/* ── Body (scrollable) ── */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
         {/* Project / sprint / assignee */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <FieldBlock label="Projeto" icon={<FolderKanban className="h-3.5 w-3.5" />}>
             <Select
               value={task.projectId}
               onValueChange={(v) => v && onSave({ projectId: v, sprintId: null })}
             >
-              <SelectTrigger className="h-8 text-sm">
+              <SelectTrigger className="h-8 w-full min-w-0 text-sm">
                 <SelectValue>
                   {(value: string | null) =>
                     projects.find((p) => p.id === value)?.name ?? task.project?.name ?? "—"
@@ -474,7 +474,7 @@ function TaskSheetEditor({
                 onSave({ sprintId: v === "__none__" ? null : v })
               }
             >
-              <SelectTrigger className="h-8 text-sm">
+              <SelectTrigger className="h-8 w-full min-w-0 text-sm">
                 <SelectValue>
                   {(value: string | null) => {
                     if (!value || value === "__none__") return "Nenhum";
@@ -500,7 +500,7 @@ function TaskSheetEditor({
                 onSave({ assigneeIds });
               }}
             >
-              <SelectTrigger className="h-8 text-sm">
+              <SelectTrigger className="h-8 w-full min-w-0 text-sm">
                 <SelectValue>
                   {(value: string | null) => {
                     if (!value || value === "__none__") return "Ninguem";
@@ -562,7 +562,7 @@ function TaskSheetEditor({
         <div className="grid grid-cols-2 gap-3">
           <FieldBlock label="Scope">
             <Select value={task.scope} onValueChange={(v) => v && updateScope(v)}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-full min-w-0 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SCOPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
@@ -571,7 +571,7 @@ function TaskSheetEditor({
 
           <FieldBlock label="Complexity">
             <Select value={task.complexity} onValueChange={(v) => v && updateComplexity(v)}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-full min-w-0 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {COMPLEXITIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
@@ -672,7 +672,7 @@ function FieldBlock({
   label, icon, children,
 }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 min-w-0">
       <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
         {icon}
         <span>{label}</span>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, History, Loader2, Send, Wrench, X } from "lucide-react";
+import { Bot, History, Loader2, Maximize2, Send, Wrench, X } from "lucide-react";
+import Link from "next/link";
 import type { UIMessage } from "ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -83,6 +84,18 @@ export function AlphaChatPanel() {
         <span className="text-sm font-semibold">Alpha</span>
       </div>
       <div className="flex items-center gap-1">
+        <Button
+          asChild
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label="Abrir página completa"
+          title="Abrir página completa"
+        >
+          <Link href="/ops" onClick={() => setOpen(false)}>
+            <Maximize2 className="size-3.5" />
+          </Link>
+        </Button>
         <Button
           variant="ghost"
           size="icon"

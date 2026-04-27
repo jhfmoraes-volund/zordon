@@ -103,11 +103,11 @@ export default async function DashboardLayout({
                       alt=""
                       width={24}
                       height={24}
-                      className="size-6"
+                      className="size-6 [mask-image:radial-gradient(circle,black_35%,transparent_95%)] [-webkit-mask-image:radial-gradient(circle,black_35%,transparent_95%)]"
                       priority
                     />
                   </Link>
-                  <SidebarTrigger className="size-9" />
+                  <SidebarTrigger className="hidden size-9 md:inline-flex" />
                 </>
               }
               right={
@@ -117,6 +117,7 @@ export default async function DashboardLayout({
                       Impersonando · {auth.member?.name}
                     </span>
                   )}
+                  <SidebarTrigger className="size-9 md:hidden" />
                   <AlphaChatTrigger />
                 </ShellHeaderTriggerGroup>
               }

@@ -27,18 +27,18 @@ export function AlphaChatTrigger() {
         render={
           <Button
             onClick={toggle}
-            size="icon"
             variant="ghost"
             data-active={isOpen}
             aria-label={isOpen ? "Fechar Alpha" : "Abrir Alpha"}
             className={cn(
-              "relative size-9 shrink-0 text-primary",
+              "relative h-9 shrink-0 gap-1.5 px-2.5 text-primary",
               "shadow-[0_0_8px_-1px] shadow-primary/40",
               "hover:text-primary hover:bg-primary/10",
               "data-[active=true]:bg-primary/10 data-[active=true]:ring-1 data-[active=true]:ring-primary/40",
             )}
           >
             {isOpen ? <X className="size-4" /> : <Bot className="size-4" />}
+            <span className="font-semibold italic">Alpha</span>
           </Button>
         }
       />

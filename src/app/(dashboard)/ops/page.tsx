@@ -214,7 +214,13 @@ export default function OpsPage() {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5.5rem)] min-h-0">
+    // Escapa o padding do <main> do dashboard layout pra threads sidebar
+    // encostar nas edges da tela (sem gap entre o sidebar de threads e o
+    // AlphaChatPanel global, quando ambos estão abertos).
+    // - h calc subtrai só o ShellHeader (h-12 mobile / h-14 md+)
+    // - margens negativas casam com o px/py do wrapper interno do main
+    //   (px-3 py-4 sm:px-4 lg:p-6) — ver dashboard/layout.tsx.
+    <div className="flex flex-col h-[calc(100svh-3rem)] md:h-[calc(100svh-3.5rem)] min-h-0 -mx-3 -my-4 sm:-mx-4 lg:-m-6">
       {/* Mobile header with "Histórico" trigger. Hidden on desktop (sidebar is visible). */}
       <div className="md:hidden flex items-center justify-between border-b px-3 py-2 shrink-0">
         <div className="flex items-center gap-2">
@@ -317,8 +323,10 @@ export default function OpsPage() {
           </div>
         </div>
 
-        {/* Threads sidebar — desktop only */}
-        <aside className="hidden md:flex w-64 border-l flex-col shrink-0 bg-muted/20">
+        {/* Threads sidebar — desktop only.
+            w-72 pra dar mais respiro, bg-muted/40 mais opaco pra coluna
+            ficar visualmente sólida até o bottom mesmo com poucas threads. */}
+        <aside className="hidden md:flex w-72 border-l flex-col shrink-0 bg-muted/40">
           {renderThreadsList()}
         </aside>
       </div>

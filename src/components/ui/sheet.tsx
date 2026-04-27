@@ -41,14 +41,20 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  overlayClassName,
+  overlayStyle,
   ...props
 }: SheetPrimitive.Popup.Props & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
+  /** Override classes do backdrop (ex: deslocar o top pra não cobrir o header). */
+  overlayClassName?: string
+  /** Inline style do backdrop — wins sobre classes (top/inset overrides). */
+  overlayStyle?: React.CSSProperties
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay className={overlayClassName} style={overlayStyle} />
       <SheetPrimitive.Popup
         data-slot="sheet-content"
         data-side={side}

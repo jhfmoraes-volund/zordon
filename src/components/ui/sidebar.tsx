@@ -218,6 +218,11 @@ function Sidebar({
   }
 
   if (isMobile) {
+    // Mobile sidebar arranca abaixo do header (mesma sensação do desktop, que
+    // vive na flex-row sob o ShellHeader). Header tem h-12 + pt-safe; offset o
+    // top do sheet (e do backdrop) por isso pra não cobrir/desfocar o header.
+    // height:auto cancela o h-full — a altura passa a ser definida por top+bottom:0.
+    const headerOffset = "calc(3rem + env(safe-area-inset-top, 0px))"
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
@@ -226,18 +231,28 @@ function Sidebar({
           data-slot="sidebar"
           data-mobile="true"
           className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          // boxShadow inset: renderiza a "border-r" como sombra interna de 1px,
+          // sempre on top do bg-sidebar opaco. À prova de bg-clip-padding do
+          // SheetContent e de conflitos de utility CSS. Substitui também o
+          // shadow-lg default (sidebar não precisa de drop shadow — o que
+          // delimita é a linha cinza, igual desktop).
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+              top: headerOffset,
+              bottom: 0,
+              height: "auto",
+              boxShadow: "inset -1px 0 0 var(--border)",
             } as React.CSSProperties
           }
+          overlayStyle={{ top: headerOffset }}
           side={side}
         >
           <SheetHeader className="sr-only">
             <SheetTitle>Sidebar</SheetTitle>
             <SheetDescription>Displays the mobile sidebar.</SheetDescription>
           </SheetHeader>
-          <div className="flex h-full w-full flex-col pt-safe pb-safe">{children}</div>
+          <div className="flex h-full w-full flex-col pb-safe">{children}</div>
         </SheetContent>
       </Sheet>
     )
