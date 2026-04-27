@@ -1,7 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { getStepData, updateStepData } from "./context";
-import { webSearchTool } from "./tools/web-search";
+import { createWebSearchTool } from "./tools/web-search";
 import { createTaskTool } from "./tools/create-task";
 import {
   listSessionTasksTool,
@@ -9,6 +9,17 @@ import {
   updateTaskTool,
   deleteTaskTool,
 } from "./tools/manage-tasks";
+import {
+  createRecordDecisionTool,
+  createReviseDecisionTool,
+  createListDecisionsTool,
+  createAddOpenQuestionTool,
+  createResolveOpenQuestionTool,
+  createListOpenQuestionsTool,
+  createListResearchTool,
+  createReadBusinessContextTool,
+} from "./tools/memory";
+import { createMvpCheckTool } from "./tools/mvp-check";
 import type { Capabilities } from "./types";
 
 const genId = () => Math.random().toString(36).slice(2, 9);
@@ -135,9 +146,9 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
     });
   }
 
-  // Web search
-  if (capabilities?.webSearch) {
-    tools.web_search = webSearchTool;
+  // Web search — requires projectId for research auto-capture
+  if (capabilities?.webSearch && capabilities?.projectId) {
+    tools.web_search = createWebSearchTool(sessionId, capabilities.projectId);
   }
 
   // Task creation & management (briefing step)
@@ -147,6 +158,20 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
     tools.list_project_tasks = listProjectTasksTool(sessionId, capabilities.projectId);
     tools.update_task = updateTaskTool(sessionId);
     tools.delete_task = deleteTaskTool(sessionId);
+  }
+
+  // Memory tools (always-on when projectId is known)
+  if (capabilities?.projectId) {
+    const pid = capabilities.projectId;
+    tools.record_decision = createRecordDecisionTool(sessionId, pid);
+    tools.revise_decision = createReviseDecisionTool(sessionId, pid);
+    tools.list_decisions = createListDecisionsTool(sessionId, pid);
+    tools.add_open_question = createAddOpenQuestionTool(sessionId, pid);
+    tools.resolve_open_question = createResolveOpenQuestionTool(sessionId, pid);
+    tools.list_open_questions = createListOpenQuestionsTool(sessionId, pid);
+    tools.list_research = createListResearchTool(sessionId, pid);
+    tools.read_business_context = createReadBusinessContextTool(sessionId, pid);
+    tools.mvp_check = createMvpCheckTool(sessionId, pid);
   }
 
   return tools;

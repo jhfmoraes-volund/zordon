@@ -1,5 +1,10 @@
 import { getSteps } from "@/lib/design-session-steps";
 import { generateSchemaDocsForPrompt } from "./schemas";
+import type {
+  ActiveDecision,
+  OpenQuestion,
+  BusinessContext,
+} from "./agents/vitor";
 
 interface PromptInput {
   sessionTitle: string;
@@ -8,6 +13,96 @@ interface PromptInput {
   sessionContext: string;
   currentStepData: Record<string, unknown>;
   hasWebSearch?: boolean;
+  activeDecisions?: ActiveDecision[];
+  openQuestions?: OpenQuestion[];
+  businessContext?: BusinessContext | null;
+}
+
+function buildMemorySection(input: PromptInput): string {
+  const decisions = input.activeDecisions ?? [];
+  const questions = input.openQuestions ?? [];
+  const ctx = input.businessContext;
+
+  if (decisions.length === 0 && questions.length === 0 && !ctx) {
+    return `
+## Memoria Estruturada
+Vazia. Esta e uma session nova ou ainda sem decisoes/perguntas registradas.
+- Use **record_decision** quando o usuario disser "vamos focar em X" / "X fora" / "Y e prioridade".
+- Use **add_open_question** quando for chutar — registra o que voce NAO sabe pra revisitar depois.
+`;
+  }
+
+  const lines: string[] = ["", "## Memoria Estruturada"];
+
+  if (ctx) {
+    lines.push("### Contexto de Negocio");
+    if (ctx.businessModel) lines.push(`- Modelo: ${ctx.businessModel}`);
+    if (ctx.stage) lines.push(`- Estagio: ${ctx.stage}`);
+    if (ctx.icp) lines.push(`- ICP: ${ctx.icp}`);
+    if (ctx.ticketRangeBrl) lines.push(`- Faixa de ticket (R$): ${ctx.ticketRangeBrl}`);
+    if (ctx.runwayMonths != null) lines.push(`- Runway (meses): ${ctx.runwayMonths}`);
+    lines.push("");
+  }
+
+  if (decisions.length) {
+    lines.push("### Decisoes Ativas");
+    lines.push(
+      "Cada uma tem id+confidence. Se algo for contradizer, marque under_review IMEDIATAMENTE via revise_decision e peca confirmacao. Antes de criar nova, list_decisions pra evitar duplicata.",
+    );
+    for (const d of decisions) {
+      const tags = d.tags?.length ? ` [${d.tags.join(", ")}]` : "";
+      lines.push(`- **${d.id.slice(0, 8)}** (${d.confidence})${tags}: ${d.statement}`);
+      lines.push(`  -> ${d.rationale} (${d.createdAt.slice(0, 10)})`);
+    }
+    lines.push("");
+  }
+
+  if (questions.length) {
+    lines.push("### Perguntas Abertas");
+    lines.push(
+      "Coisas que VOCE AINDA NAO SABE. Antes de propor algo que dependa de uma destas, levante a pergunta — nao chute em silencio.",
+    );
+    for (const q of questions) {
+      const blocks = q.blocksWhat ? ` — bloqueia: ${q.blocksWhat}` : "";
+      const ageDays = Math.floor(
+        (Date.now() - new Date(q.createdAt).getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const ageBadge = ageDays >= 7 ? ` !! aberta ha ${ageDays}d` : "";
+      lines.push(`- **${q.id.slice(0, 8)}**: ${q.question}${blocks}${ageBadge}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+function buildBehaviorRules(): string {
+  return `
+## Comportamentos Obrigatorios (memoria)
+
+1. **Le estruturado antes de propor.** Antes de qualquer sugestao substancial sobre scope/persona/feature, considere as Decisoes Ativas e Perguntas Abertas listadas acima. Se a sugestao depende de algo aberto ha > 7 dias, levante a pergunta antes de chutar.
+
+2. **Cita confidence + ref em sugestoes substanciais.** Termine com uma das tres:
+   - \`(ref: research#XXX, decision#YYY)\` — hard_fact com fontes
+   - \`(inferido de: persona X + research#YYY)\` — inferred
+   - \`(suposicao minha — sem evidencia)\` — assumption
+   Sem etiqueta, a sugestao nao sai.
+
+3. **Surface contradicao estruturalmente.** Se o usuario disser algo que contradiz uma Decisao Ativa: chame \`revise_decision(id, status: "under_review")\` IMEDIATAMENTE — nao em silencio assumindo que mudou. Cite a decisao por id curto e data, peca confirmacao. Se confirmar reversao, \`revise_decision(status: "reverted")\` + \`record_decision(novo)\`.
+
+7. **Auto-write em momentos-chave (com dedup).**
+   | Trigger | Acao |
+   |---|---|
+   | "vamos focar em X" / "X fora" / "Y e prioridade" | \`record_decision\` (confidence=hard_fact) |
+   | "nao pode Z" / "compliance exige W" | \`record_decision\` (tags=["constraint"]) |
+   | Voce esta chutando algo importante | \`add_open_question\` (nao vira decisao) |
+
+   **Dedup obrigatorio:** antes de \`record_decision\`, chame \`list_decisions\` e cheque se ja existe statement equivalente. Se sim, NAO duplique — confirme com o usuario que a decisao existente cobre o caso.
+
+   Toda escrita e silenciosa-mas-transparente: notei "X" como decisao (confidence). Pra reverter, e so me avisar.
+
+9. **Nao duplica step data.** Memoria estruturada e o **porque**, o **descartado**, o **externo** e o **historico**. Se a info ja esta em DesignSessionStepData (personas, scope, brainstorm...), fica la — nao replique como decisao.
+`;
 }
 
 /**
@@ -21,6 +116,9 @@ export function buildSystemPrompt({
   sessionContext,
   currentStepData,
   hasWebSearch,
+  activeDecisions,
+  openQuestions,
+  businessContext,
 }: PromptInput): string {
   const steps = getSteps(sessionType);
   const currentStep = steps.find((s) => s.key === currentStepKey);
@@ -517,6 +615,7 @@ Voce esta ajudando a classificar funcionalidades em MVP, Next e Out.
 4. Use set_bucket ou update_item para classificar
 
 ### Regras:
+- **OBRIGATORIO antes de marcar MVP:** chame \`mvp_check({ featureId })\` ANTES de update_item({bucket: "mvp"}). Se mvp_check retornar pass=false, NAO marque como MVP — explique os blockers ao usuario e proponha Next/Out, ou abra add_open_question pra gap de evidencia.
 - Se TUDO virar MVP, desafie: "Todas as 12 funcionalidades estao como MVP. Isso sugere que o escopo esta grande demais. Quais 5 sao absolutamente essenciais para o lancamento?"
 - Se uma funcionalidade nao tem painPointRef claro, questione se deveria ser MVP
 - Ordene os MVPs por dependencia — o que precisa ser feito primeiro?
@@ -566,13 +665,27 @@ Use set_field para campos texto (stack, performance, notes). Use add_item para i
 `
       : "";
 
+  const memorySection = buildMemorySection({
+    sessionTitle,
+    sessionType,
+    currentStepKey,
+    sessionContext,
+    currentStepData,
+    hasWebSearch,
+    activeDecisions,
+    openQuestions,
+    businessContext,
+  });
+  const behaviorRules = buildBehaviorRules();
+
   return `Voce e Vitor, o assistente de design de produto do Volund. Voce ajuda equipes a conduzir Design Sessions de forma estruturada e inteligente.
 
 ## Sessao atual
 - **Titulo:** ${sessionTitle}
 - **Tipo:** ${sessionType === "inception" ? "Inception (novo produto)" : "Continuous Improvement"}
 - **Step atual:** ${currentStep?.title || currentStepKey} (${currentStepKey})
-
+${memorySection}
+${behaviorRules}
 ## Steps do wizard
 ${stepListText}
 

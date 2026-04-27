@@ -472,6 +472,138 @@ export type Database = {
         }
         Relationships: []
       }
+      DesignDecision: {
+        Row: {
+          confidence: string
+          createdAt: string
+          createdBy: string
+          id: string
+          projectId: string
+          rationale: string
+          sessionId: string
+          statement: string
+          status: string
+          supersededBy: string | null
+          tags: string[] | null
+          updatedAt: string
+        }
+        Insert: {
+          confidence: string
+          createdAt?: string
+          createdBy: string
+          id?: string
+          projectId: string
+          rationale: string
+          sessionId: string
+          statement: string
+          status?: string
+          supersededBy?: string | null
+          tags?: string[] | null
+          updatedAt?: string
+        }
+        Update: {
+          confidence?: string
+          createdAt?: string
+          createdBy?: string
+          id?: string
+          projectId?: string
+          rationale?: string
+          sessionId?: string
+          statement?: string
+          status?: string
+          supersededBy?: string | null
+          tags?: string[] | null
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignDecision_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignDecision_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignDecision_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignDecision_supersededBy_fkey"
+            columns: ["supersededBy"]
+            isOneToOne: false
+            referencedRelation: "DesignDecision"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignOpenQuestion: {
+        Row: {
+          answer: string | null
+          answeredAt: string | null
+          blocksWhat: string | null
+          createdAt: string
+          id: string
+          projectId: string
+          question: string
+          sessionId: string
+          status: string
+        }
+        Insert: {
+          answer?: string | null
+          answeredAt?: string | null
+          blocksWhat?: string | null
+          createdAt?: string
+          id?: string
+          projectId: string
+          question: string
+          sessionId: string
+          status?: string
+        }
+        Update: {
+          answer?: string | null
+          answeredAt?: string | null
+          blocksWhat?: string | null
+          createdAt?: string
+          id?: string
+          projectId?: string
+          question?: string
+          sessionId?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignOpenQuestion_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignOpenQuestion_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignOpenQuestion_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignSession: {
         Row: {
           actualDurationMin: number | null
@@ -481,6 +613,10 @@ export type Database = {
           currentStep: number
           description: string | null
           id: string
+          memoryAbstract: string | null
+          memoryMd: string | null
+          memoryUpdatedAt: string | null
+          memoryVersion: number
           projectId: string
           scheduledAt: string | null
           status: string
@@ -497,6 +633,10 @@ export type Database = {
           currentStep?: number
           description?: string | null
           id: string
+          memoryAbstract?: string | null
+          memoryMd?: string | null
+          memoryUpdatedAt?: string | null
+          memoryVersion?: number
           projectId: string
           scheduledAt?: string | null
           status?: string
@@ -513,6 +653,10 @@ export type Database = {
           currentStep?: number
           description?: string | null
           id?: string
+          memoryAbstract?: string | null
+          memoryMd?: string | null
+          memoryUpdatedAt?: string | null
+          memoryVersion?: number
           projectId?: string
           scheduledAt?: string | null
           status?: string
@@ -676,6 +820,58 @@ export type Database = {
           },
           {
             foreignKeyName: "DesignSessionParticipant_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionResearch: {
+        Row: {
+          createdAt: string
+          id: string
+          projectId: string
+          query: string
+          sessionId: string
+          sources: Json
+          summary: string
+        }
+        Insert: {
+          createdAt?: string
+          id?: string
+          projectId: string
+          query: string
+          sessionId: string
+          sources: Json
+          summary: string
+        }
+        Update: {
+          createdAt?: string
+          id?: string
+          projectId?: string
+          query?: string
+          sessionId?: string
+          sources?: Json
+          summary?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionResearch_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionResearch_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionResearch_sessionId_fkey"
             columns: ["sessionId"]
             isOneToOne: false
             referencedRelation: "DesignSession"
@@ -1465,6 +1661,9 @@ export type Database = {
           githubRepoName: string | null
           githubRepoOwner: string | null
           id: string
+          memoryMd: string | null
+          memoryUpdatedAt: string | null
+          memoryVersion: number
           name: string
           pmId: string | null
           repoUrl: string | null
@@ -1480,6 +1679,9 @@ export type Database = {
           githubRepoName?: string | null
           githubRepoOwner?: string | null
           id: string
+          memoryMd?: string | null
+          memoryUpdatedAt?: string | null
+          memoryVersion?: number
           name: string
           pmId?: string | null
           repoUrl?: string | null
@@ -1495,6 +1697,9 @@ export type Database = {
           githubRepoName?: string | null
           githubRepoOwner?: string | null
           id?: string
+          memoryMd?: string | null
+          memoryUpdatedAt?: string | null
+          memoryVersion?: number
           name?: string
           pmId?: string | null
           repoUrl?: string | null
@@ -1577,6 +1782,50 @@ export type Database = {
             foreignKeyName: "ProjectAccess_projectId_fkey"
             columns: ["projectId"]
             isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProjectBusinessContext: {
+        Row: {
+          businessModel: string | null
+          competitors: Json | null
+          icp: string | null
+          projectId: string
+          runwayMonths: number | null
+          stage: string | null
+          ticketRangeBrl: unknown
+          updatedAt: string
+          updatedBy: string | null
+        }
+        Insert: {
+          businessModel?: string | null
+          competitors?: Json | null
+          icp?: string | null
+          projectId: string
+          runwayMonths?: number | null
+          stage?: string | null
+          ticketRangeBrl?: unknown
+          updatedAt?: string
+          updatedBy?: string | null
+        }
+        Update: {
+          businessModel?: string | null
+          competitors?: Json | null
+          icp?: string | null
+          projectId?: string
+          runwayMonths?: number | null
+          stage?: string | null
+          ticketRangeBrl?: unknown
+          updatedAt?: string
+          updatedBy?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectBusinessContext_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: true
             referencedRelation: "Project"
             referencedColumns: ["id"]
           },

@@ -79,20 +79,18 @@ export const webConnector = {
     // Persist user message
     await persistUserMessage(threadId, message);
 
-    // Resolve project for task creation capability
+    // Resolve projectId — required for memory tools + research auto-capture.
+    // createTasks ainda fica gated por step=briefing.
+    const { data: session } = await db()
+      .from("DesignSession")
+      .select("projectId")
+      .eq("id", sessionId)
+      .single();
     let capabilities = { ...WEB_CAPABILITIES };
-    if (currentStepKey === "briefing") {
-      const { data: session } = await db()
-        .from("DesignSession")
-        .select("projectId")
-        .eq("id", sessionId)
-        .single();
-      if (session?.projectId) {
-        capabilities = {
-          ...capabilities,
-          createTasks: true,
-          projectId: session.projectId,
-        };
+    if (session?.projectId) {
+      capabilities = { ...capabilities, projectId: session.projectId };
+      if (currentStepKey === "briefing") {
+        capabilities = { ...capabilities, createTasks: true };
       }
     }
 

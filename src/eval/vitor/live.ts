@@ -133,21 +133,9 @@ async function runOneCase(c: EvalCase, options: LiveOptions): Promise<CaseResult
   }
 }
 
-function checkSeedFeasibility(c: EvalCase): string | null {
-  const blockers: string[] = [];
-  if (c.setup.decisions?.length) blockers.push("DesignDecision");
-  if (c.setup.openQuestions?.length) blockers.push("DesignOpenQuestion");
-  if (c.setup.research?.length) blockers.push("DesignSessionResearch");
-  if (c.setup.project?.businessContext) blockers.push("ProjectBusinessContext");
-  if (c.setup.project?.memoryMd) blockers.push("Project.memoryMd");
-  if (c.setup.project?.otherSessions?.some((s) => s.memoryMd))
-    blockers.push("DesignSession.memoryMd");
-  if (c.setup.session.memoryMd) blockers.push("DesignSession.memoryMd");
-
-  const futureBlockers = blockers.filter((b) => FUTURE_TABLES.has(b) || b.startsWith("DesignSession.memoryMd") || b.startsWith("Project.memoryMd"));
-  if (futureBlockers.length > 0) {
-    return `requires phase 1+ infra: ${[...new Set(futureBlockers)].join(", ")}`;
-  }
+function checkSeedFeasibility(_c: EvalCase): string | null {
+  // Phase 1 migrations applied — all tables exist now.
+  // Kept as a hook for future blockers (e.g., features that require Phase 4 hooks).
   return null;
 }
 
@@ -176,14 +164,57 @@ async function seedCase(c: EvalCase): Promise<SeedFootprint> {
     clientId = newId;
   }
 
-  // Project
+  // Project (with optional memoryMd)
   const projectId = crypto.randomUUID();
-  const { error: pErr } = await supabase
-    .from("Project")
-    .insert({ id: projectId, clientId, name: tag, status: "active", updatedAt: now });
+  const { error: pErr } = await supabase.from("Project").insert({
+    id: projectId,
+    clientId,
+    name: tag,
+    status: "active",
+    memoryMd: c.setup.project?.memoryMd ?? null,
+    memoryUpdatedAt: c.setup.project?.memoryMd ? now : null,
+    updatedAt: now,
+  });
   if (pErr) throw new Error(`seed Project: ${pErr.message}`);
 
-  // DesignSession — use the case-defined id but suffix it for uniqueness
+  // BusinessContext (optional)
+  if (c.setup.project?.businessContext) {
+    const bc = c.setup.project.businessContext;
+    const { error: bcErr } = await supabase.from("ProjectBusinessContext").insert({
+      projectId,
+      businessModel: bc.businessModel ?? null,
+      stage: bc.stage ?? null,
+      icp: bc.icp ?? null,
+      ticketRangeBrl: bc.ticketRangeBrl
+        ? `[${bc.ticketRangeBrl[0]},${bc.ticketRangeBrl[1]}]`
+        : null,
+      runwayMonths: bc.runwayMonths ?? null,
+      competitors: (bc.competitors ?? null) as never,
+    });
+    if (bcErr) throw new Error(`seed BusinessContext: ${bcErr.message}`);
+  }
+
+  // Other sessions for cross-session cases
+  if (c.setup.project?.otherSessions?.length) {
+    const otherRows = c.setup.project.otherSessions.map((s) => ({
+      id: `${s.id}-${ts}`,
+      projectId,
+      title: s.title,
+      type: s.type,
+      status: s.status,
+      currentStep: 0,
+      totalSteps: 9,
+      memoryMd: s.memoryMd ?? null,
+      memoryAbstract: s.memoryAbstract ?? null,
+      updatedAt: now,
+    }));
+    const { error: osErr } = await supabase
+      .from("DesignSession")
+      .insert(otherRows);
+    if (osErr) throw new Error(`seed otherSessions: ${osErr.message}`);
+  }
+
+  // Main DesignSession
   const sessionId = `${c.setup.session.id}-${ts}`;
   const { error: sErr } = await supabase.from("DesignSession").insert({
     id: sessionId,
@@ -193,6 +224,8 @@ async function seedCase(c: EvalCase): Promise<SeedFootprint> {
     status: c.setup.session.status,
     currentStep: 0,
     totalSteps: 9,
+    memoryMd: c.setup.session.memoryMd ?? null,
+    memoryAbstract: c.setup.session.memoryAbstract ?? null,
     updatedAt: now,
   });
   if (sErr) throw new Error(`seed DesignSession: ${sErr.message}`);
@@ -215,6 +248,56 @@ async function seedCase(c: EvalCase): Promise<SeedFootprint> {
     if (dErr) throw new Error(`seed StepData: ${dErr.message}`);
   }
 
+  // Decisions
+  if (c.setup.decisions?.length) {
+    const rows = c.setup.decisions.map((d) => ({
+      id: d.id,
+      sessionId,
+      projectId,
+      statement: d.statement,
+      rationale: d.rationale,
+      confidence: d.confidence,
+      status: d.status,
+      tags: d.tags ?? null,
+      createdAt: d.createdAt,
+      createdBy: "eval",
+    }));
+    const { error: decErr } = await supabase.from("DesignDecision").insert(rows);
+    if (decErr) throw new Error(`seed Decisions: ${decErr.message}`);
+  }
+
+  // Open questions
+  if (c.setup.openQuestions?.length) {
+    const rows = c.setup.openQuestions.map((q) => ({
+      id: q.id,
+      sessionId,
+      projectId,
+      question: q.question,
+      blocksWhat: q.blocksWhat ?? null,
+      status: q.status,
+      createdAt: q.createdAt,
+    }));
+    const { error: qErr } = await supabase.from("DesignOpenQuestion").insert(rows);
+    if (qErr) throw new Error(`seed OpenQuestions: ${qErr.message}`);
+  }
+
+  // Research log
+  if (c.setup.research?.length) {
+    const rows = c.setup.research.map((r) => ({
+      id: r.id,
+      sessionId,
+      projectId,
+      query: r.query,
+      summary: r.summary,
+      sources: r.sources as never,
+      createdAt: r.createdAt,
+    }));
+    const { error: rErr } = await supabase
+      .from("DesignSessionResearch")
+      .insert(rows);
+    if (rErr) throw new Error(`seed Research: ${rErr.message}`);
+  }
+
   // Thread
   const threadId = await ensureThread(sessionId, "web");
 
@@ -232,8 +315,9 @@ async function runConversation(
     maxSteps: 6,
     writeTools: true,
     readTools: true,
-    webSearch: false,
+    webSearch: true,
     createTasks: false,
+    projectId: fp.projectId,
   };
 
   for (const turn of c.turns) {
