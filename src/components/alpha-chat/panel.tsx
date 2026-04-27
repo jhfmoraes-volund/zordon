@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Markdown } from "@/components/ui/markdown";
+import { AgentBadge } from "@/components/agent-badge";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAlphaChat } from "./store";
@@ -79,12 +80,7 @@ export function AlphaChatPanel() {
 
   const Header = (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-muted/30 px-4">
-      <div className="flex items-center gap-2">
-        <Bot className="size-4 text-primary" />
-        <span className="font-display text-xs font-light uppercase tracking-[0.25em] text-foreground/80">
-          Alpha
-        </span>
-      </div>
+      <AgentBadge agent="alpha" withDot />
       <div className="flex items-center gap-1">
         <Button
           nativeButton={false}

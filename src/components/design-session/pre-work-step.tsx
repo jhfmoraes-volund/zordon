@@ -7,6 +7,7 @@ import type { UIMessage } from "ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/ui/markdown";
+import { AgentBadge } from "@/components/agent-badge";
 import { ToolCallCard } from "./tool-call-card";
 import {
   Loader2,
@@ -413,6 +414,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[85%] min-w-0 space-y-2`}>
+        {!isUser && <AgentBadge agent="vitor" size="sm" />}
         {message.parts.map((part, i) => {
           if (part.type === "text" && part.text) {
             return (
