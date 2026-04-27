@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TaskSheet } from "@/components/task-sheet";
-import { ArrowLeft, CheckCircle2, Loader2, Rocket } from "lucide-react";
+import { ArrowLeft, BookOpen, CheckCircle2, Loader2, Rocket } from "lucide-react";
 import {
   SCOPES, COMPLEXITIES, fmtDate,
 } from "@/lib/task-constants";
@@ -165,16 +165,25 @@ export default function ReviewPage({
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
-          <Link
-            href={`/design-sessions/${id}/steps/${Math.max(
-              0,
-              (session.totalSteps ?? 1) - 1
-            )}`}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" />
-            Voltar para o briefing
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/design-sessions/${id}/steps/${Math.max(
+                0,
+                (session.totalSteps ?? 1) - 1
+              )}`}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              Voltar para o briefing
+            </Link>
+            <Link
+              href={`/design-sessions/${id}/memoria`}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <BookOpen className="h-3 w-3" />
+              Memória
+            </Link>
+          </div>
           <h1 className="text-2xl font-semibold">{session.title}</h1>
           <p className="text-sm text-muted-foreground">
             Revisão das tasks antes de exportar para {session.project?.name ?? "o projeto"}

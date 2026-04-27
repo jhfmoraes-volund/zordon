@@ -183,6 +183,7 @@ export default function StepPage({
         onDeleteNote={handleDeleteNote}
         hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing"}
         backHref={`/projects/${session.projectId}`}
+        memoriaHref={`/design-sessions/${id}/memoria`}
       >
         {stepDataLoaded ? (
           <StepContent

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { ArrowLeft, ChevronLeft, ChevronRight, Menu, Check, Circle, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Menu, Check, Circle, Loader2, BookOpen } from "lucide-react";
 import type { StepDef } from "@/lib/design-session-steps";
 import { StickyNoteBoard, type Note } from "./sticky-note";
 import { AIChat } from "./ai-chat";
@@ -24,6 +24,7 @@ export function WizardLayout({
   onDeleteNote,
   hideSidePanels,
   backHref,
+  memoriaHref,
   children,
 }: {
   sessionTitle: string;
@@ -40,6 +41,7 @@ export function WizardLayout({
   onDeleteNote: (id: string) => void;
   hideSidePanels?: boolean;
   backHref?: string;
+  memoriaHref?: string;
   children: React.ReactNode;
 }) {
   const step = steps[currentStep];
@@ -118,6 +120,18 @@ export function WizardLayout({
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {memoriaHref && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 sm:px-2.5"
+                nativeButton={false}
+                render={<Link href={memoriaHref} aria-label="Ver memória do Vitor" />}
+              >
+                <BookOpen className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">Memória</span>
+              </Button>
+            )}
             {saving !== undefined && (
               <span className="text-xs text-muted-foreground hidden sm:flex items-center gap-1">
                 {saving ? (
