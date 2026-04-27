@@ -1,19 +1,18 @@
 "use client";
 
-import { Bot, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAlphaChat } from "./store";
+import { AlphaBadge } from "./alpha-badge";
 
 /**
- * Botão Bot que vive no header. Toggle do panel/sheet.
- * Visual: ícone vermelho vivo (`--primary`) com glow leve estático ao redor.
- * Sem animação — o glow é constante. Estado `isOpen` adiciona bg + ring.
+ * Botão do header que abre o panel/sheet do Alpha.
+ * Renderiza o `AlphaBadge` (Scan HUD) como visual; o botão wrapper só
+ * cuida do clique, foco e estado `isOpen` (ring do tile fica realçado).
  *
  * Atalho: ⌘⇧A (registrado em useAlphaKeyboard).
  */
@@ -25,23 +24,21 @@ export function AlphaChatTrigger() {
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button
+          <button
+            type="button"
             onClick={toggle}
-            variant="ghost"
             data-active={isOpen}
             aria-label={isOpen ? "Fechar Alpha" : "Abrir Alpha"}
+            aria-pressed={isOpen}
             className={cn(
-              "relative h-9 shrink-0 gap-1.5 px-2.5 text-primary",
-              "shadow-[0_0_8px_-1px] shadow-primary/40",
-              "hover:text-primary hover:bg-primary/10",
-              "data-[active=true]:bg-primary/10 data-[active=true]:ring-1 data-[active=true]:ring-primary/40",
+              "shrink-0 rounded-md transition-[opacity,box-shadow,transform]",
+              "hover:opacity-90 active:scale-[0.98]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "data-[active=true]:ring-1 data-[active=true]:ring-primary/60 data-[active=true]:ring-offset-2 data-[active=true]:ring-offset-background",
             )}
           >
-            {isOpen ? <X className="size-4" /> : <Bot className="size-4" />}
-            <span className="font-display text-xs font-light uppercase tracking-[0.25em]">
-              Alpha
-            </span>
-          </Button>
+            <AlphaBadge size="sm" />
+          </button>
         }
       />
       <TooltipContent side="bottom">

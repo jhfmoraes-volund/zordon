@@ -8,11 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Markdown } from "@/components/ui/markdown";
-import { AgentBadge } from "@/components/agent-badge";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAlphaChat } from "./store";
 import { useAlphaKeyboard } from "./use-alpha-keyboard";
+import { AlphaBadge } from "./alpha-badge";
 
 /**
  * Renders the Alpha conversation in two shapes that share the same underlying
@@ -80,7 +80,7 @@ export function AlphaChatPanel() {
 
   const Header = (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-muted/30 px-4">
-      <AgentBadge agent="alpha" withDot />
+      <AlphaBadge size="sm" />
       <div className="flex items-center gap-1">
         <Button
           nativeButton={false}

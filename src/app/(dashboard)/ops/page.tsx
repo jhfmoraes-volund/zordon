@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Loader2, Bot, Wrench, Plus, Trash2, MessageSquare, History } from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
-import { AgentBadge } from "@/components/agent-badge";
+import { AlphaBadge } from "@/components/alpha-chat/alpha-badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { UIMessage } from "ai";
@@ -224,7 +224,7 @@ export default function OpsPage() {
     <div className="flex flex-col h-[calc(100svh-3rem)] md:h-[calc(100svh-3.5rem)] min-h-0 -mx-3 -my-4 sm:-mx-4 lg:-m-6">
       {/* Mobile header with "Histórico" trigger. Hidden on desktop (sidebar is visible). */}
       <div className="md:hidden flex items-center justify-between border-b px-3 py-2 shrink-0">
-        <AgentBadge agent="alpha" withDot />
+        <AlphaBadge size="sm" />
 
         <Button
           variant="outline"

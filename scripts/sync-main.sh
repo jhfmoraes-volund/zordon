@@ -109,7 +109,7 @@ if [[ -n "$pending_files" ]]; then
       | { grep -oE '^ZRD-JM-[0-9]+' || true; } \
       | { grep -oE '[0-9]+$' || true; } \
       | sort -n | tail -1)"
-    next_n=$(( ${last_n:-0} + 1 ))
+    next_n=$(( 10#${last_n:-0} + 1 ))
     tag="$(printf 'ZRD-JM-%02d' "$next_n")"
 
     # diff source: --cached em modo real, HEAD em dry-run (nada foi staged)
