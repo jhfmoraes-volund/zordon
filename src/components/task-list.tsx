@@ -32,23 +32,30 @@ export type TaskListItem = {
   type: string;
   functionPoints: number | null;
   dueDate: string | null;
+  projectId?: string;
+  sprintId?: string | null;
   project?: { name: string } | null;
-  sprint?: { name: string } | null;
+  sprint?: { id?: string; name: string } | null;
   designSession?: { id: string; title: string } | null;
   assignments: Assignment[];
 };
 
 type Member = { id: string; name: string; role?: string };
+type Sprint = { id: string; name: string; projectId?: string };
 
 type Props = {
   tasks: TaskListItem[];
   members: Member[];
+  /** Sprints available for inline reassignment. When provided alongside onSprintChange, the sprint cell becomes editable. */
+  sprints?: Sprint[];
   /** Open the task in detail sheet */
   onOpenDetail: (taskId: string) => void;
   /** PATCH status inline */
   onStatusChange: (taskId: string, status: string) => void;
   /** PATCH assignee inline (null = unassign) */
   onAssigneeChange: (taskId: string, memberId: string | null) => void;
+  /** PATCH sprint inline (null = remove from sprint) */
+  onSprintChange?: (taskId: string, sprintId: string | null) => void;
   /** DELETE task */
   onDelete: (taskId: string) => void;
   /** DELETE multiple tasks */
@@ -67,9 +74,11 @@ type Props = {
 export function TaskList({
   tasks,
   members,
+  sprints,
   onOpenDetail,
   onStatusChange,
   onAssigneeChange,
+  onSprintChange,
   onDelete,
   onBulkDelete,
   showProject = false,
@@ -77,6 +86,7 @@ export function TaskList({
   showSession = false,
   emptyMessage = "Nenhuma task.",
 }: Props) {
+  const sprintEditable = !!(sprints && onSprintChange);
   const stop = (e: React.MouseEvent | React.PointerEvent) => e.stopPropagation();
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -223,8 +233,45 @@ export function TaskList({
                   </TableCell>
                 )}
                 {showSprint && (
-                  <TableCell className="text-xs text-muted-foreground">
-                    {task.sprint?.name || "—"}
+                  <TableCell
+                    className="text-xs text-muted-foreground"
+                    onClick={sprintEditable ? stop : undefined}
+                    onPointerDown={sprintEditable ? stop : undefined}
+                  >
+                    {sprintEditable ? (
+                      <Select
+                        value={task.sprintId ?? task.sprint?.id ?? "__none__"}
+                        onValueChange={(v) =>
+                          onSprintChange!(task.id, v === "__none__" ? null : v)
+                        }
+                      >
+                        <SelectTrigger className="h-7 text-xs w-[160px]">
+                          <SelectValue placeholder="Sem sprint">
+                            {(value: string | null) => {
+                              if (!value || value === "__none__") {
+                                return <span className="text-muted-foreground">Sem sprint</span>;
+                              }
+                              const match = sprints!.find((s) => s.id === value);
+                              return match?.name ?? task.sprint?.name ?? "Sem sprint";
+                            }}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">
+                            <span className="text-muted-foreground">Sem sprint</span>
+                          </SelectItem>
+                          {sprints!
+                            .filter((s) => !task.projectId || !s.projectId || s.projectId === task.projectId)
+                            .map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      task.sprint?.name || "—"
+                    )}
                   </TableCell>
                 )}
                 {showSession && (

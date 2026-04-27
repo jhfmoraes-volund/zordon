@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { ADMIN, MANAGER } from "@/lib/roles";
 
 /**
  * PATCH /api/projects/[id]/members/[memberId]
@@ -15,7 +15,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; memberId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const denied = await requireMinLevelApi(ADMIN);
   if (denied) return denied;
 
   const { id: projectId, memberId } = await params;

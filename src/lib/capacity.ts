@@ -22,6 +22,7 @@ export const ROLE_BASE: Record<Role, number> = {
   "pm": 35,
   "head-ops": 0, // strategic, doesn't carry tasks
   "ceo": 0,
+  "guest": 0, // external, never carries tasks
 };
 
 export type Seniority = "junior" | "mid" | "senior" | "principal";

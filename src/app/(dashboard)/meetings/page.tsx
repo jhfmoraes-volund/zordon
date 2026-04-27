@@ -13,13 +13,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
-import { MEETING_STATUS, MEETING_TYPE, lookupChip } from "@/lib/status-chips";
+import {
+  MEETING_STATUS, MEETING_TYPE, lookupChip, meetingStatusFromDate,
+} from "@/lib/status-chips";
 import { Trash2 } from "lucide-react";
 
 type Meeting = {
   id: string;
   date: string;
-  status: string;
   notes: string | null;
   type: "pm_review" | "general" | "daily" | "super_planning";
   title: string | null;
@@ -90,7 +91,10 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <StatusChip {...lookupChip(MEETING_STATUS, meeting.status)} dot />
+        <StatusChip
+          {...lookupChip(MEETING_STATUS, meetingStatusFromDate(meeting.date))}
+          dot
+        />
         <span>
           {projectCount} {projectCount === 1 ? "projeto" : "projetos"} · {totalActions}{" "}
           {totalActions === 1 ? "to-do" : "to-dos"}
@@ -272,7 +276,10 @@ export default function MeetingsPage() {
                     {titleCell}
                   </TableCell>
                   <TableCell>
-                    <StatusChip {...lookupChip(MEETING_STATUS, m.status)} dot />
+                    <StatusChip
+                      {...lookupChip(MEETING_STATUS, meetingStatusFromDate(m.date))}
+                      dot
+                    />
                   </TableCell>
                   <TableCell>{projectCount}</TableCell>
                   <TableCell>{m.actionItems.length}</TableCell>

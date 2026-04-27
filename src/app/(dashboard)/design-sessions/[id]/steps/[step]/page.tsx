@@ -8,6 +8,8 @@ import { SolutionCardBoard, SolutionCard } from "@/components/design-session/sol
 import { HypothesisBoard, Hypothesis } from "@/components/design-session/hypothesis-board";
 import { PriorityBoard, PrioritizedItem, PriorityBucket } from "@/components/design-session/priority-board";
 import { PostItBoard, PostItItem, PostItSection } from "@/components/design-session/post-it-board";
+import { RiskGapBoard, type Gap, type Risk } from "@/components/design-session/risk-gap-board";
+import { CATEGORY_LABEL, SEVERITY_LABEL, SEVERITY_TONE } from "@/components/design-session/risk-gap-board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
 import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -221,6 +223,8 @@ function StepContent({
       return <PersonasJourneysStep data={data} onChange={onChange} />;
     case "brainstorm":
       return <BrainstormStep data={data} onChange={onChange} sessionId={sessionId} />;
+    case "risks_gaps":
+      return <RisksGapsStep data={data} onChange={onChange} sessionId={sessionId} />;
     case "prioritization":
       return <PrioritizationStep data={data} onChange={onChange} sessionId={sessionId} />;
     case "technical_specs":
@@ -521,6 +525,68 @@ function BrainstormStep({
   );
 }
 
+// ─── Step: Riscos & Lacunas ───────────────────────────────
+
+function RisksGapsStep({
+  data,
+  onChange,
+  sessionId,
+}: {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  sessionId: string;
+}) {
+  const gaps = (data.gaps as Gap[]) || [];
+  const risks = (data.risks as Risk[]) || [];
+  const [features, setFeatures] = useState<{ id: string; title: string }[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/design-sessions/${sessionId}/steps/brainstorm`)
+      .then((r) => r.json())
+      .then((r) => {
+        const solutions = ((r.data?.solutions as SolutionCard[]) || []).filter(
+          (s) => !s.archived,
+        );
+        setFeatures(solutions.map((s) => ({ id: s.id, title: s.title })));
+      })
+      .catch(() => {});
+  }, [sessionId]);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Antes de cortar escopo, mapeie o que ainda esta nebuloso e o que pode dar errado.
+        Use isso como criterio na priorizacao.
+      </p>
+      <RiskGapBoard
+        gaps={gaps}
+        risks={risks}
+        features={features}
+        onAddGap={(gap) => onChange({ ...data, gaps: [...gaps, gap] })}
+        onUpdateGap={(id, updates) =>
+          onChange({
+            ...data,
+            gaps: gaps.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+          })
+        }
+        onDeleteGap={(id) =>
+          onChange({ ...data, gaps: gaps.filter((g) => g.id !== id) })
+        }
+        onAddRisk={(risk) => onChange({ ...data, risks: [...risks, risk] })}
+        onUpdateRisk={(id, updates) =>
+          onChange({
+            ...data,
+            risks: risks.map((r) => (r.id === id ? { ...r, ...updates } : r)),
+          })
+        }
+        onDeleteRisk={(id) =>
+          onChange({ ...data, risks: risks.filter((r) => r.id !== id) })
+        }
+      />
+    </div>
+  );
+}
+
 // ─── Step 3: Priorizacao & Escopo ─────────────────────────
 
 function PrioritizationStep({
@@ -808,7 +874,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   useEffect(() => {
-    const stepKeys = ["product_vision", "scope_definition", "personas_journeys", "brainstorm", "prioritization", "technical_specs", "hypotheses"];
+    const stepKeys = ["product_vision", "scope_definition", "personas_journeys", "brainstorm", "risks_gaps", "prioritization", "technical_specs", "hypotheses"];
     Promise.all([
       ...stepKeys.map((key) =>
         fetch(`/api/design-sessions/${sessionId}/steps/${key}`)
@@ -850,6 +916,15 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
     (s) => !s.archived,
   );
   const priorityItems = (allData.prioritization?.items as PrioritizedItem[]) || [];
+  const gaps = (allData.risks_gaps?.gaps as Gap[]) || [];
+  const risks = (allData.risks_gaps?.risks as Risk[]) || [];
+  const featureTitleById = new Map(
+    solutions.map((s) => [s.id, s.title || "Sem titulo"]),
+  );
+  const featureLabel = (ref?: string) => {
+    if (!ref) return null;
+    return featureTitleById.get(ref) || ref;
+  };
   const hypotheses = (allData.hypotheses?.hypotheses as Hypothesis[]) || [];
   const techSpecs = allData.technical_specs || {};
   const ts = (key: string) => {
@@ -971,9 +1046,51 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
             </section>
           )}
 
+          {(gaps.length > 0 || risks.length > 0) && (
+            <section>
+              <h3 className="font-semibold mb-2">5. Riscos & Lacunas</h3>
+              <div className="pl-4 space-y-3">
+                {gaps.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-sky-600">Lacunas ({gaps.length})</p>
+                    <ul className="list-disc list-inside text-xs">
+                      {gaps.map((g) => (
+                        <li key={g.id}>
+                          {g.text}
+                          {featureLabel(g.relatedFeature) && (
+                            <span className="text-muted-foreground"> — ref: {featureLabel(g.relatedFeature)}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {risks.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-red-600">Riscos ({risks.length})</p>
+                    <ul className="list-disc list-inside text-xs space-y-1">
+                      {risks.map((r) => (
+                        <li key={r.id}>
+                          <span className="font-medium">[{CATEGORY_LABEL[r.category]} · {SEVERITY_LABEL[r.severity]}]</span>{" "}
+                          {r.text}
+                          {featureLabel(r.relatedFeature) && (
+                            <span className="text-muted-foreground"> — ref: {featureLabel(r.relatedFeature)}</span>
+                          )}
+                          {r.mitigation && (
+                            <span className="block pl-4 text-muted-foreground">Mitigacao: {r.mitigation}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {priorityItems.length > 0 && (
             <section>
-              <h3 className="font-semibold mb-2">5. Priorizacao</h3>
+              <h3 className="font-semibold mb-2">6. Priorizacao</h3>
               <div className="pl-4 space-y-2">
                 {mvpItems.length > 0 && (<div><p className="text-xs font-medium text-green-700">MVP ({mvpItems.length})</p><ul className="list-disc list-inside text-xs">{mvpItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
                 {nextItems.length > 0 && (<div><p className="text-xs font-medium text-blue-700">Next ({nextItems.length})</p><ul className="list-disc list-inside text-xs">{nextItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
@@ -984,7 +1101,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
 
           {hypotheses.length > 0 && (
             <section>
-              <h3 className="font-semibold mb-2">6. Hipoteses & Metricas</h3>
+              <h3 className="font-semibold mb-2">7. Hipoteses & Metricas</h3>
               <div className="pl-4 space-y-3">
                 {hypotheses.map((h, i) => (
                   <div key={h.id}>
@@ -1003,7 +1120,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
 
           {(ts("stack") || tsItems("integrations").length > 0 || tsItems("rules").length > 0 || ts("performance") || ts("notes")) && (
             <section>
-              <h3 className="font-semibold mb-2">7. Especificacoes Tecnicas</h3>
+              <h3 className="font-semibold mb-2">8. Especificacoes Tecnicas</h3>
               <div className="pl-4 space-y-2">
                 {ts("stack") && (<div><p className="text-xs font-medium">Stack & Infra</p><p className="text-xs text-muted-foreground">{ts("stack")}</p></div>)}
                 {tsItems("integrations").length > 0 && (<div><p className="text-xs font-medium">Integracoes</p><ul className="list-disc list-inside text-xs">{tsItems("integrations").map((i) => <li key={i.id}>{i.text}</li>)}</ul></div>)}

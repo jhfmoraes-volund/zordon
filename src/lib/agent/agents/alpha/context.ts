@@ -646,7 +646,7 @@ async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
 
   const { data: meeting } = await supabase
     .from("Meeting")
-    .select("id, date, status")
+    .select("id, date")
     .eq("id", meetingId)
     .maybeSingle();
   if (!meeting) return null;
@@ -669,7 +669,7 @@ async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
   }
 
   const lines: string[] = [
-    `## Reunião ativa: ${meeting.date} (${meeting.status})`,
+    `## Reunião ativa: ${meeting.date}`,
     `- **ID:** ${meeting.id}`,
     `- Use \`get_meeting_reviews\` para detalhes e \`update_meeting_review\` para preencher os campos de cada projeto.`,
     "",

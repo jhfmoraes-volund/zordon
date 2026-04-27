@@ -940,7 +940,7 @@ export function assembleAlphaTools(
       // Internal meetings
       let intQuery = supabase
         .from("Meeting")
-        .select("id, date, status, notes")
+        .select("id, date, notes")
         .gte("date", sinceISO)
         .order("date", { ascending: false });
       if (untilISO) intQuery = intQuery.lte("date", untilISO);
@@ -1079,7 +1079,7 @@ export function assembleAlphaTools(
 
       const { data: meeting } = await supabase
         .from("Meeting")
-        .select("id, date, status")
+        .select("id, date")
         .eq("id", targetId)
         .maybeSingle();
       if (!meeting) return { error: `Reunião "${targetId}" não encontrada.` };
@@ -1110,7 +1110,7 @@ export function assembleAlphaTools(
       }
 
       return {
-        meeting: { id: meeting.id, date: meeting.date, status: meeting.status },
+        meeting: { id: meeting.id, date: meeting.date },
         pmCount: Object.keys(byPm).length,
         reviewCount: reviewList.length,
         byPm: Object.values(byPm),

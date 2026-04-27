@@ -124,11 +124,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Carry over pending actions from previous done meeting (any type)
+    // Carry over pending actions from the most recent past meeting (any type).
+    // "Past" = date strictly before now; status field is no longer maintained.
     const { data: lastMeeting } = await supabase
       .from("Meeting")
       .select("id")
-      .eq("status", "done")
+      .lt("date", new Date().toISOString())
       .order("date", { ascending: false })
       .limit(1)
       .maybeSingle();

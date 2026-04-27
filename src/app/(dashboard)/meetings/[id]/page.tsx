@@ -28,6 +28,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import {
   MEETING_STATUS, MEETING_TYPE, HEALTH, ACTION_ITEM_STATUS, lookupChip,
+  meetingStatusFromDate,
 } from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
@@ -78,7 +79,6 @@ type ProjectLink = {
 type Meeting = {
   id: string;
   date: string;
-  status: string;
   notes: string | null;
   type: "pm_review" | "general" | "daily" | "super_planning";
   title: string | null;
@@ -167,20 +167,11 @@ export default function MeetingDetailPage({
 
   // ─── Handlers ─────────────────────────────────────────
 
-  const updateStatus = async (status: string) => {
-    await fetch(`/api/meetings/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, notes }),
-    });
-    load();
-  };
-
   const saveNotes = async () => {
     await fetch(`/api/meetings/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: meeting.status, notes }),
+      body: JSON.stringify({ notes }),
     });
   };
 
@@ -275,51 +266,28 @@ export default function MeetingDetailPage({
 
   return (
     <div className="space-y-6">
-      <PageTitle
-        title={headerTitle}
-        subtitle={`${meeting.status} · ${fmtDate(meeting.date)}`}
-      />
+      <PageTitle title={headerTitle} subtitle={fmtDate(meeting.date)} />
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-center gap-3 min-w-0">
-          <Link href="/meetings">
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold truncate">{headerTitle}</h1>
-              <StatusChip
-                tone={lookupChip(MEETING_TYPE, meeting.type).tone}
-                label={typeLongLabels[meeting.type] ?? meeting.type}
-              />
-              <StatusChip {...lookupChip(MEETING_STATUS, meeting.status)} dot />
-            </div>
-            {meeting.type === "general" && (
-              <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
-            )}
+      <div className="flex items-center gap-3 min-w-0">
+        <Link href="/meetings">
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold truncate">{headerTitle}</h1>
+            <StatusChip
+              tone={lookupChip(MEETING_TYPE, meeting.type).tone}
+              label={typeLongLabels[meeting.type] ?? meeting.type}
+            />
+            <StatusChip
+              {...lookupChip(MEETING_STATUS, meetingStatusFromDate(meeting.date))}
+              dot
+            />
           </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {meeting.status === "scheduled" && (
-            <Button size="sm" onClick={() => updateStatus("in_progress")}>
-              Iniciar reunião
-            </Button>
-          )}
-          {meeting.status === "in_progress" && (
-            <Button size="sm" onClick={() => updateStatus("done")}>
-              Concluir reunião
-            </Button>
-          )}
-          {meeting.status === "done" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => updateStatus("in_progress")}
-            >
-              Reabrir
-            </Button>
+          {meeting.type === "general" && (
+            <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
           )}
         </div>
       </div>

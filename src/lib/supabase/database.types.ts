@@ -732,7 +732,6 @@ export type Database = {
           id: string
           notes: string | null
           sprintId: string | null
-          status: string
           title: string | null
           type: string
           updatedAt: string
@@ -743,7 +742,6 @@ export type Database = {
           id: string
           notes?: string | null
           sprintId?: string | null
-          status?: string
           title?: string | null
           type?: string
           updatedAt: string
@@ -754,7 +752,6 @@ export type Database = {
           id?: string
           notes?: string | null
           sprintId?: string | null
-          status?: string
           title?: string | null
           type?: string
           updatedAt?: string
@@ -1546,6 +1543,41 @@ export type Database = {
             columns: ["pmId"]
             isOneToOne: false
             referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProjectAccess: {
+        Row: {
+          grantedAt: string
+          grantedBy: string | null
+          id: string
+          projectId: string
+          role: string
+          userId: string
+        }
+        Insert: {
+          grantedAt?: string
+          grantedBy?: string | null
+          id?: string
+          projectId: string
+          role: string
+          userId: string
+        }
+        Update: {
+          grantedAt?: string
+          grantedBy?: string | null
+          id?: string
+          projectId?: string
+          role?: string
+          userId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectAccess_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
             referencedColumns: ["id"]
           },
         ]
@@ -2518,6 +2550,10 @@ export type Database = {
     }
     Functions: {
       can_access_session: { Args: { p_session_id: string }; Returns: boolean }
+      can_edit_session: { Args: { p_session_id: string }; Returns: boolean }
+      can_edit_sessions: { Args: { p_project_id: string }; Returns: boolean }
+      can_edit_tasks: { Args: { p_project_id: string }; Returns: boolean }
+      can_view_project: { Args: { p_project_id: string }; Returns: boolean }
       create_meeting_with_reviews:
         | {
             Args: {

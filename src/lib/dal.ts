@@ -210,13 +210,17 @@ export async function withAuth<T extends Response>(
 }
 
 // ═══════════════════════════════════════════════════════════
-// Member id + project allocation helpers
+// Member id + project access helpers
+//
+// Visibility (and edit permission) is sourced from ProjectAccess,
+// the single source of truth. ProjectMember now exclusively models
+// FP allocation; it's no longer a visibility gate.
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Current user's Member.id, read from the header proxy.ts injects from
  * auth.users.app_metadata.member_id. Zero DB calls.
- * Returns null if the user has no linked member (shouldn't happen post-invite).
+ * Returns null for users without a linked Member (e.g., guests).
  */
 export const getMemberId = cache(async (): Promise<string | null> => {
   const h = await headers();
@@ -224,35 +228,80 @@ export const getMemberId = cache(async (): Promise<string | null> => {
   return id && id.length > 0 ? id : null;
 });
 
+type ProjectAccessRole =
+  | "viewer"
+  | "session_participant"
+  | "contributor"
+  | "lead";
+
 /**
- * Project ids the current member is allocated to (via ProjectMember).
- * Cached per request via React.cache — shared across sidebar, lists, guards.
+ * All ProjectAccess rows for the current user. One row per (userId, projectId).
+ * Cached per request via React.cache.
  */
-export const getAllocatedProjectIds = cache(
-  async (): Promise<string[]> => {
-    const memberId = await getMemberId();
-    if (!memberId) return [];
+export const getProjectAccessList = cache(
+  async (): Promise<{ projectId: string; role: ProjectAccessRole }[]> => {
+    const user = await getUser();
+    if (!user) return [];
     const { data } = await db()
-      .from("ProjectMember")
-      .select("projectId")
-      .eq("memberId", memberId);
-    return (data ?? []).map((r) => r.projectId);
+      .from("ProjectAccess")
+      .select("projectId, role")
+      .eq("userId", user.id);
+    return (data ?? []) as { projectId: string; role: ProjectAccessRole }[];
   },
 );
 
+/** Project ids the current user can view (from ProjectAccess). */
+export const getAccessibleProjectIds = cache(async (): Promise<string[]> => {
+  const list = await getProjectAccessList();
+  return list.map((r) => r.projectId);
+});
+
 /**
- * True iff the current user can access the given project:
+ * True iff the current user can VIEW the project:
  *   - Manager (PM / head-ops / CEO): always yes
- *   - Builder: only if in ProjectMember for this project
- *
- * Uses real role (not effective) so admins keep their powers while impersonating.
+ *   - Anyone else: needs a ProjectAccess row (any role)
  */
-export async function isAllocatedTo(projectId: string): Promise<boolean> {
+export async function canViewProject(projectId: string): Promise<boolean> {
   const realRole = await getRealRole();
   if (hasMinLevel(realRole, MANAGER)) return true;
-  const ids = await getAllocatedProjectIds();
+  const ids = await getAccessibleProjectIds();
   return ids.includes(projectId);
 }
+
+/**
+ * True iff the current user can EDIT TASKS in the project:
+ *   - Manager: yes
+ *   - Builder/guest: needs ProjectAccess.role IN (contributor, lead)
+ */
+export async function canEditTasks(projectId: string): Promise<boolean> {
+  const realRole = await getRealRole();
+  if (hasMinLevel(realRole, MANAGER)) return true;
+  const list = await getProjectAccessList();
+  const row = list.find((r) => r.projectId === projectId);
+  return row?.role === "contributor" || row?.role === "lead";
+}
+
+/**
+ * True iff the current user can EDIT DESIGN SESSIONS in the project:
+ *   - Manager: yes
+ *   - Builder/guest: needs ProjectAccess.role IN (session_participant, contributor, lead)
+ */
+export async function canEditSessions(projectId: string): Promise<boolean> {
+  const realRole = await getRealRole();
+  if (hasMinLevel(realRole, MANAGER)) return true;
+  const list = await getProjectAccessList();
+  const row = list.find((r) => r.projectId === projectId);
+  return (
+    row?.role === "session_participant" ||
+    row?.role === "contributor" ||
+    row?.role === "lead"
+  );
+}
+
+/** @deprecated Use {@link canViewProject}. Kept for in-flight callers. */
+export const isAllocatedTo = canViewProject;
+/** @deprecated Use {@link getAccessibleProjectIds}. */
+export const getAllocatedProjectIds = getAccessibleProjectIds;
 
 /**
  * Route Handler guard. Returns a Response to return from the handler when the
@@ -273,25 +322,58 @@ export async function requireMinLevelApi(
   return null;
 }
 
-/**
- * Route Handler guard for project-scoped mutations. Returns 401/403 response
- * or null. Admin/PM always pass; Builders must be in ProjectMember(projectId).
- */
-export async function requireProjectMemberApi(
+/** Route Handler guard: caller can VIEW the project. 401/403 or null. */
+export async function requireProjectViewApi(
   projectId: string,
 ): Promise<Response | null> {
   const user = await getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
-  if (await isAllocatedTo(projectId)) return null;
-  return new Response("Forbidden — not allocated to this project", {
+  if (await canViewProject(projectId)) return null;
+  return new Response("Forbidden — no access to this project", { status: 403 });
+}
+
+/** Route Handler guard: caller can EDIT TASKS in the project. 401/403 or null. */
+export async function requireProjectEditTasksApi(
+  projectId: string,
+): Promise<Response | null> {
+  const user = await getUser();
+  if (!user) return new Response("Unauthorized", { status: 401 });
+  if (await canEditTasks(projectId)) return null;
+  return new Response("Forbidden — cannot edit tasks in this project", {
     status: 403,
   });
 }
 
+/** Route Handler guard: caller can EDIT DESIGN SESSIONS in the project. 401/403 or null. */
+export async function requireProjectEditSessionsApi(
+  projectId: string,
+): Promise<Response | null> {
+  const user = await getUser();
+  if (!user) return new Response("Unauthorized", { status: 401 });
+  if (await canEditSessions(projectId)) return null;
+  return new Response("Forbidden — cannot edit sessions in this project", {
+    status: 403,
+  });
+}
+
+/** @deprecated Tasks-mutation guard. Use {@link requireProjectEditTasksApi}. */
+export const requireProjectMemberApi = requireProjectEditTasksApi;
+
+async function lookupSessionProject(
+  sessionId: string,
+): Promise<string | null> {
+  const { data } = await db()
+    .from("DesignSession")
+    .select("projectId")
+    .eq("id", sessionId)
+    .maybeSingle();
+  return data?.projectId ?? null;
+}
+
 /**
  * Route Handler guard for DesignSession-scoped routes. Looks up the session's
- * projectId and gates access by allocation. Returns 401/403/404 or null.
- * Admin/PM pass without the lookup (role check happens first).
+ * projectId and gates access by VIEW permission. Returns 401/403/404 or null.
+ * Admin/PM pass without the lookup.
  */
 export async function requireSessionAccessApi(
   sessionId: string,
@@ -302,15 +384,29 @@ export async function requireSessionAccessApi(
   const realRole = await getRealRole();
   if (hasMinLevel(realRole, MANAGER)) return null;
 
-  const { data: session } = await db()
-    .from("DesignSession")
-    .select("projectId")
-    .eq("id", sessionId)
-    .maybeSingle();
-  if (!session) return new Response("Session not found", { status: 404 });
+  const projectId = await lookupSessionProject(sessionId);
+  if (!projectId) return new Response("Session not found", { status: 404 });
 
-  if (await isAllocatedTo(session.projectId)) return null;
-  return new Response("Forbidden — not allocated to this project", {
-    status: 403,
-  });
+  if (await canViewProject(projectId)) return null;
+  return new Response("Forbidden — no access to this project", { status: 403 });
+}
+
+/**
+ * Stricter session guard for mutations. Requires session_participant+ role
+ * (or manager). Returns 401/403/404 or null.
+ */
+export async function requireSessionEditApi(
+  sessionId: string,
+): Promise<Response | null> {
+  const user = await getUser();
+  if (!user) return new Response("Unauthorized", { status: 401 });
+
+  const realRole = await getRealRole();
+  if (hasMinLevel(realRole, MANAGER)) return null;
+
+  const projectId = await lookupSessionProject(sessionId);
+  if (!projectId) return new Response("Session not found", { status: 404 });
+
+  if (await canEditSessions(projectId)) return null;
+  return new Response("Forbidden — cannot edit this session", { status: 403 });
 }

@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
 import { setImpersonation } from "@/app/(dashboard)/_actions/impersonation";
-import { hasMinLevel, MANAGER, ADMIN, roleLabel } from "@/lib/roles";
+import { hasMinLevel, MANAGER, ADMIN, BUILDER, roleLabel } from "@/lib/roles";
 import { NavItemPending } from "@/components/nav-item-pending";
 import { InstallAppButton } from "@/components/install-app-button";
 
@@ -95,6 +95,8 @@ export function AppSidebar() {
   const canImpersonate = hasMinLevel(realRole, ADMIN);
   const canTuneAgents = hasMinLevel(effectiveRole, ADMIN);
   const canSeeManagement = hasMinLevel(effectiveRole, MANAGER);
+  // Guests only see project navigation. Hide personal/settings/management.
+  const isGuest = !hasMinLevel(effectiveRole, BUILDER);
 
   const handleImpersonationChange = (memberId: string | null) => {
     if (!memberId) return;
@@ -112,36 +114,40 @@ export function AppSidebar() {
       className="md:!top-14 md:!h-[calc(100svh-3.5rem)]"
     >
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={pathname === "/profile"}
-                render={<Link href="/profile" />}
-                tooltip="Meu Perfil"
-                onClick={closeOnMobile}
-              >
-                <User className="h-4 w-4" />
-                <span>Meu Perfil</span>
-                <NavItemPending />
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={pathname === "/settings"}
-                render={<Link href="/settings" />}
-                tooltip="Configuracoes"
-                onClick={closeOnMobile}
-              >
-                <Settings className="h-4 w-4" />
-                <span>Configuracoes</span>
-                <NavItemPending />
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroup>
+        {!isGuest && (
+          <>
+            <SidebarGroup>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={pathname === "/profile"}
+                    render={<Link href="/profile" />}
+                    tooltip="Meu Perfil"
+                    onClick={closeOnMobile}
+                  >
+                    <User className="h-4 w-4" />
+                    <span>Meu Perfil</span>
+                    <NavItemPending />
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={pathname === "/settings"}
+                    render={<Link href="/settings" />}
+                    tooltip="Configuracoes"
+                    onClick={closeOnMobile}
+                  >
+                    <Settings className="h-4 w-4" />
+                    <span>Configuracoes</span>
+                    <NavItemPending />
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
 
-        <SidebarSeparator className="my-1" />
+            <SidebarSeparator className="my-1" />
+          </>
+        )}
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 px-5 group-data-[collapsible=icon]:!mt-0">
@@ -175,6 +181,7 @@ export function AppSidebar() {
 
         <SidebarSeparator className="my-1" />
 
+        {!isGuest && (
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 px-5 group-data-[collapsible=icon]:!mt-0">
             Gestão
@@ -206,6 +213,7 @@ export function AppSidebar() {
             })}
           </SidebarMenu>
         </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-2">
         <div className="space-y-2">

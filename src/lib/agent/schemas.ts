@@ -49,6 +49,22 @@ export const ruleSchema = z.object({
   text: z.string().min(1),
 });
 
+export const gapSchema = z.object({
+  text: z.string().min(1),
+  relatedFeature: z.string().optional(),
+});
+
+export const riskCategoryEnum = z.enum(["business", "technical"]);
+export const riskSeverityEnum = z.enum(["high", "medium", "low"]);
+
+export const riskSchema = z.object({
+  text: z.string().min(1),
+  category: riskCategoryEnum,
+  severity: riskSeverityEnum,
+  relatedFeature: z.string().optional(),
+  mitigation: z.string().optional(),
+});
+
 // ─── Derived types (UI imports these) ────────────────────
 
 export type JourneyStep = z.infer<typeof journeyStepSchema>;
@@ -56,6 +72,10 @@ export type Persona = z.infer<typeof personaSchema> & { id: string };
 export type SolutionCard = z.infer<typeof solutionSchema> & { id: string };
 export type Hypothesis = z.infer<typeof hypothesisSchema> & { id: string };
 export type PrioritizationItem = z.infer<typeof prioritizationItemSchema> & { id: string };
+export type Gap = z.infer<typeof gapSchema> & { id: string };
+export type Risk = z.infer<typeof riskSchema> & { id: string };
+export type RiskCategory = z.infer<typeof riskCategoryEnum>;
+export type RiskSeverity = z.infer<typeof riskSeverityEnum>;
 
 // ─── Schema doc generator (for prompt injection) ────────
 
@@ -78,6 +98,14 @@ const STEP_SCHEMA_DOCS: Record<string, string> = {
     'Array "solutions", cada solucao tem: id, title, howItSolves, targetPersona,',
     "keyScreens (opcional), userFlows (opcional),",
     "painPointRef (opcional), technicalNotes (opcional)",
+  ].join(" "),
+  risks_gaps: [
+    'Dois arrays paralelos:',
+    '"gaps" — itens {id, text, relatedFeature?} representam regras de negocio que ainda nao estao explicitas (ambiguidades em funcionalidades).',
+    '"risks" — itens {id, text, category, severity, relatedFeature?, mitigation?} representam o que pode dar errado no MVP.',
+    'category: "business" | "technical".',
+    'severity: "high" | "medium" | "low".',
+    'relatedFeature (opcional) referencia o id ou title de um card de brainstorm. mitigation (opcional) descreve como reduzir o risco.',
   ].join(" "),
   prioritization: [
     'Array "items", cada item tem: id, title, howItSolves, targetPersona,',

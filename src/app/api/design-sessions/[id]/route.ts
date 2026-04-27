@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionAccessApi } from "@/lib/dal";
+import { requireSessionAccessApi, requireSessionEditApi } from "@/lib/dal";
 
 export async function GET(
   _req: NextRequest,
@@ -35,7 +35,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const denied = await requireSessionAccessApi(id);
+  const denied = await requireSessionEditApi(id);
   if (denied) return denied;
   const body = await req.json();
   const { data: session, error } = await db()
@@ -53,7 +53,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const denied = await requireSessionAccessApi(id);
+  const denied = await requireSessionEditApi(id);
   if (denied) return denied;
   const { error } = await db().from("DesignSession").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

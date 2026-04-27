@@ -10,7 +10,7 @@ import {
   ArrowLeft, ExternalLink, Users, KanbanSquare, Plus,
   Lightbulb, ListTodo, Zap, Play, Trash2,
   CheckCircle2, Circle, Loader2, Eye, AlertCircle, CalendarRange,
-  FileText, Pencil, AlertTriangle, Settings, MoreVertical,
+  FileText, Pencil, AlertTriangle, Settings, MoreVertical, Battery, Shield,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -38,8 +38,10 @@ import { PageTitle } from "@/components/app-shell";
 import { ProjectWiki } from "@/components/project-wiki";
 import { SprintDialog } from "@/components/sprint-dialog";
 import { PixelBar } from "@/components/ui/pixel-bar";
-import { roleLabel } from "@/lib/roles";
+import { roleLabel, hasMinLevel, MANAGER, BUILDER } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
+import { ProjectCapacityTab } from "@/components/project-capacity-tab";
+import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import {
   PROJECT_STATUS, SPRINT_STATUS, DESIGN_SESSION_STATUS, TASK_TYPE, lookupChip,
 } from "@/lib/status-chips";
@@ -101,6 +103,9 @@ type MemberCapacity = {
   fpTotal: number;
   totalPct: number;
   isOverloaded: boolean;
+  fpAllocation: number;
+  fpAllocationOther: number;
+  fpAllocationTotal: number;
 };
 
 type ProjectMemberRow = { member: { id: string; name: string; role: string } };
@@ -123,6 +128,7 @@ type Project = {
   taskSummary: TaskSummary;
   health: ProjectHealth;
   memberCapacity: MemberCapacity[];
+  viewerRole: string | null;
 };
 
 type ClientOption = { id: string; name: string };
@@ -131,12 +137,13 @@ type MemberOption = { id: string; name: string; role: string };
 // ─── Constants ────────────────────────────────────────────
 
 const tabs = [
-  { key: "overview", label: "Overview", icon: Eye },
-  { key: "schedule", label: "Cronograma", icon: CalendarRange },
-  { key: "sprints", label: "Sprints", icon: Zap },
-  { key: "sessions", label: "Sessions", icon: Lightbulb },
-  { key: "tasks", label: "Tasks", icon: ListTodo },
-  { key: "wiki", label: "Wiki", icon: FileText },
+  { key: "overview", label: "Overview", icon: Eye, minLevel: 0 },
+  { key: "schedule", label: "Cronograma", icon: CalendarRange, minLevel: 0 },
+  { key: "sprints", label: "Sprints", icon: Zap, minLevel: 0 },
+  { key: "sessions", label: "Sessions", icon: Lightbulb, minLevel: 0 },
+  { key: "tasks", label: "Tasks", icon: ListTodo, minLevel: 0 },
+  { key: "capacity", label: "Capacity", icon: Battery, minLevel: MANAGER },
+  { key: "wiki", label: "Wiki", icon: FileText, minLevel: 0 },
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
@@ -165,6 +172,7 @@ export default function ProjectDetailPage({
 
   // ─── Edit modal state ──────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [allMembers, setAllMembers] = useState<MemberOption[]>([]);
   const [editForm, setEditForm] = useState({
@@ -300,34 +308,53 @@ export default function ProjectDetailPage({
               </Button>
             </a>
           )}
+          {hasMinLevel(project.viewerRole, MANAGER) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAccessOpen(true)}
+              title="Gerenciar acesso"
+            >
+              <Shield className="h-3.5 w-3.5 mr-1" /> Acesso
+            </Button>
+          )}
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={openSettings}>
             <Settings className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
+      <ProjectAccessSheet
+        projectId={id}
+        open={accessOpen}
+        onOpenChange={setAccessOpen}
+      />
+
+
       {/* Tabs */}
       <div className="flex gap-1 border-b overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-              activeTab === tab.key
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-            {tab.key === "tasks" && (
-              <Badge variant="secondary" className="ml-1 h-5 text-xs">{project.taskSummary.total}</Badge>
-            )}
-            {tab.key === "sessions" && project.designSessions.length > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 text-xs">{project.designSessions.length}</Badge>
-            )}
-          </button>
-        ))}
+        {tabs
+          .filter((tab) => hasMinLevel(project.viewerRole, tab.minLevel))
+          .map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
+                activeTab === tab.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+              {tab.key === "tasks" && (
+                <Badge variant="secondary" className="ml-1 h-5 text-xs">{project.taskSummary.total}</Badge>
+              )}
+              {tab.key === "sessions" && project.designSessions.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 text-xs">{project.designSessions.length}</Badge>
+              )}
+            </button>
+          ))}
       </div>
 
       {/* Tab content */}
@@ -344,7 +371,15 @@ export default function ProjectDetailPage({
         <SessionsTab project={project} onRefresh={load} />
       )}
       {activeTab === "tasks" && (
-        <TasksTab project={project} onRefresh={load} />
+        <TasksTab project={project} setProject={setProject} onRefresh={load} />
+      )}
+      {activeTab === "capacity" && hasMinLevel(project.viewerRole, MANAGER) && (
+        <ProjectCapacityTab
+          projectId={project.id}
+          memberCapacity={project.memberCapacity}
+          viewerRole={project.viewerRole}
+          onRefresh={load}
+        />
       )}
       {activeTab === "wiki" && (
         <ProjectWiki projectId={project.id} />
@@ -483,6 +518,7 @@ export default function ProjectDetailPage({
 
 function OverviewTab({ project, activeSprint }: { project: Project; activeSprint?: Sprint }) {
   const { taskSummary, health, memberCapacity } = project;
+  const showCapacityCard = hasMinLevel(project.viewerRole, BUILDER);
 
   const attentionConfig: Record<string, { label: string; color: string; bg: string }> = {
     low: { label: "Baixo", color: "text-green-400", bg: "bg-green-500/10" },
@@ -609,11 +645,12 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
 
       {/* Row 2: Capacity + Sessions */}
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* Capacity */}
+        {/* Capacity — hidden from guests (allocation data) */}
+        {showCapacityCard && (
         <Card className="lg:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm text-muted-foreground flex items-center gap-1">
-              <Users className="h-3.5 w-3.5" /> Capacity do Squad
+              <Users className="h-3.5 w-3.5" /> Capacity do projeto
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -622,7 +659,7 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
             ) : (
               <div className="space-y-3">
                 {memberCapacity.map((m) => {
-                  const pct = m.fpCapacity > 0 ? m.fpThisProject / m.fpCapacity : 0;
+                  const pct = m.fpCapacity > 0 ? m.fpAllocation / m.fpCapacity : 0;
                   return (
                     <div key={m.id} className="flex items-center gap-3">
                       <div className="flex items-center gap-2 w-40 shrink-0">
@@ -647,7 +684,7 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
                         />
                       </div>
                       <span className="text-xs font-medium tabular-nums w-16 text-right shrink-0">
-                        {m.fpThisProject} FP
+                        {m.fpAllocation} FP
                       </span>
                     </div>
                   );
@@ -656,6 +693,7 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Design Sessions */}
         <Card>
@@ -782,7 +820,15 @@ function SessionsTab({ project, onRefresh }: { project: Project; onRefresh: () =
 
 // ─── Tasks Tab ────────────────────────────────────────────
 
-function TasksTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
+function TasksTab({
+  project,
+  setProject,
+  onRefresh,
+}: {
+  project: Project;
+  setProject: React.Dispatch<React.SetStateAction<Project | null>>;
+  onRefresh: () => void;
+}) {
   const [filter, setFilter] = useState<string>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetTaskId, setSheetTaskId] = useState<string | null>(null);
@@ -797,23 +843,50 @@ function TasksTab({ project, onRefresh }: { project: Project; onRefresh: () => v
     role: pm.member.role,
   }));
 
+  const patchTask = (taskId: string, patch: Partial<Task>) => {
+    setProject((prev) =>
+      prev
+        ? { ...prev, tasks: prev.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)) }
+        : prev
+    );
+  };
+
   const handleStatusChange = async (taskId: string, status: string) => {
-    await fetch(`/api/tasks/${taskId}`, {
+    patchTask(taskId, { status });
+    const res = await fetch(`/api/tasks/${taskId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    onRefresh();
+    if (!res.ok) onRefresh();
   };
 
   const handleAssigneeChange = async (taskId: string, memberId: string | null) => {
+    const member = memberId ? members.find((m) => m.id === memberId) : null;
+    patchTask(taskId, {
+      assignments: member ? [{ member: { id: member.id, name: member.name } }] : [],
+    });
     const assigneeIds = memberId ? [{ memberId }] : [];
-    await fetch(`/api/tasks/${taskId}`, {
+    const res = await fetch(`/api/tasks/${taskId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ assigneeIds }),
     });
-    onRefresh();
+    if (!res.ok) onRefresh();
+  };
+
+  const handleSprintChange = async (taskId: string, sprintId: string | null) => {
+    const sprint = sprintId ? project.sprints.find((s) => s.id === sprintId) : null;
+    patchTask(taskId, {
+      sprintId,
+      sprint: sprint ? { name: sprint.name } : null,
+    });
+    const res = await fetch(`/api/tasks/${taskId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sprintId }),
+    });
+    if (!res.ok) onRefresh();
   };
 
   const handleDelete = async (taskId: string) => {
@@ -854,9 +927,11 @@ function TasksTab({ project, onRefresh }: { project: Project; onRefresh: () => v
       <TaskList
         tasks={filtered}
         members={members}
+        sprints={project.sprints.map((s) => ({ id: s.id, name: s.name }))}
         onOpenDetail={(id) => { setSheetTaskId(id); setSheetOpen(true); }}
         onStatusChange={handleStatusChange}
         onAssigneeChange={handleAssigneeChange}
+        onSprintChange={handleSprintChange}
         onDelete={handleDelete}
         showSprint
       />

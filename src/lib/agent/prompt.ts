@@ -55,6 +55,7 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
   - painPointRef: qual dor da jornada AS-IS esta funcionalidade resolve
   - technicalNotes: APIs, integracoes ou migracoes necessarias
   Pense como product designer + tech lead: referencie as jornadas das personas. Antes de criar os cards, consulte personas_journeys com get_step_data para obter os nomes exatos das personas e suas dores — use esses nomes no targetPersona
+- **risks_gaps**: depois do brainstorm, levante (1) gaps — ambiguidades de regra de negocio que precisam de decisao explicita; (2) risks — o que pode dar errado no MVP, com category (business|technical), severity (high|medium|low) e mitigation quando severity=high. Use add_item com arrayKey "gaps" ou "risks"
 - **hypotheses**: crie hipoteses de validacao com indicador, meta e evidencia
 - **technical_specs**: stack, integrations, rules, performance (se houver info tecnica)
 
@@ -94,7 +95,7 @@ Se o usuario pedir para alterar uma task de outra session, responda:
 ### PASSO 1: Mapa Funcional (apresente ANTES de criar tasks)
 Produza um mapa funcional em markdown para validacao do usuario.
 
-1. Use get_step_data para ler "prioritization", "brainstorm" e "technical_specs"
+1. Use get_step_data para ler "prioritization", "brainstorm", "risks_gaps" e "technical_specs". Lacunas viram criterios de aceite explicitos nas tasks; riscos high viram notas de "Risco" nas tasks afetadas e podem motivar tasks adicionais (mitigation, validacao, prototipo)
 2. Use list_project_tasks para ver o que outras sessions deste projeto ja criaram —
    se alguma funcionalidade MVP ja tem tasks equivalentes em outra session, mencione
    no mapa ("Modulo X ja tem tasks criadas na session Y — sugiro nao duplicar")
@@ -444,6 +445,60 @@ Voce esta ajudando a gerar e refinar cards de funcionalidades.
 `
       : "";
 
+  const risksGapsSection =
+    currentStepKey === "risks_gaps"
+      ? `
+## Modo Riscos & Lacunas
+Voce esta ajudando a mapear o que ainda nao esta claro nas regras de negocio (lacunas) e o que pode dar errado no MVP (riscos). Esse step roda DEPOIS do brainstorm e ANTES da priorizacao — risco e clareza sao criterios pra cortar escopo.
+
+### Antes de qualquer coisa:
+1. Use get_step_data para ler "brainstorm" — voce precisa saber as funcionalidades atuais pra detectar ambiguidades
+2. Tambem leia "personas_journeys" e "product_vision" pra entender o contexto
+
+### Estrutura do step:
+Dois arrays paralelos no stepKey "risks_gaps":
+- **gaps**: items {id, text, relatedFeature?} — ambiguidades em regras de negocio que precisam de decisao explicita antes de virar task
+- **risks**: items {id, text, category, severity, relatedFeature?, mitigation?} — o que pode dar errado
+  - category: "business" (impacto em adesao, fit, regulacao, processo) ou "technical" (integracao, performance, dados, prazo)
+  - severity: "high" (mata MVP), "medium" (atrasa/reduz qualidade), "low" (incomoda mas contornavel)
+  - relatedFeature (opcional): id de uma solucao do brainstorm
+  - mitigation (opcional): plano B ou estrategia para reduzir o risco
+
+### Como gerar bons items:
+
+#### Lacunas (gaps)
+Para cada funcionalidade do brainstorm, pergunte: "se eu fosse implementar isso amanha, o que precisaria perguntar?". Procure por:
+- Verbos vagos: "aprovar", "validar", "notificar" — quem? quando? como? sincrono?
+- Estados ausentes: o que acontece em erro? em concorrencia? offline?
+- Permissoes: quem pode fazer X? quem ve Y?
+- Edge cases: limite de quantidade, tamanho, frequencia
+- Integracoes: o que acontece se o servico externo cair?
+- Fluxos de excecao: rejeicao, cancelamento, reversao
+
+NAO inclua aqui restricoes tecnicas ja decididas — isso vai pra technical_specs.
+
+#### Riscos (risks)
+Olhe alem do feature individual. Riscos comuns:
+- **Negocio**: usuario nao adota, regulacao muda, parceiro recua, escopo cresce, prazo apertado
+- **Tecnico**: integracao incerta, performance em escala, dados ausentes, complexidade subestimada, dependencia critica
+
+Severity calibre por impacto no MVP:
+- **high**: se acontecer, MVP nao lanca / nao funciona / sera rejeitado
+- **medium**: atrasa o lancamento, reduz qualidade, exige replanejamento
+- **low**: gera retrabalho mas nao trava o ciclo
+
+### Quando o usuario adicionar um item vago:
+- Lacuna vaga ("nao esta claro o login") → pergunte: "qual parte? auth provider, multi-tenant, sessao, recuperacao de senha?"
+- Risco sem severidade real ("pode ter bug") → bug nao e risco, e default. Pressione: "qual cenario especifico te preocupa?"
+
+### Regra de qualidade:
+Cada risk com severity=high DEVE ter um campo mitigation preenchido — se nao, questione: "se for alto e nao tiver plano B, isso e um veto, nao um risco. Quer reformular?"
+
+### Ao preencher:
+Use add_item com stepKey "risks_gaps" e arrayKey "gaps" ou "risks". Para vincular a uma feature, leia o id do brainstorm com get_step_data e passe em relatedFeature.
+`
+      : "";
+
   const prioritizationSection =
     currentStepKey === "prioritization"
       ? `
@@ -531,7 +586,7 @@ ${JSON.stringify(currentStepData, null, 2)}
 
 ${generateSchemaDocsForPrompt()}
 
-${preWorkSection}${briefingSection}${productVisionSection}${scopeDefinitionSection}${personasSection}${brainstormSection}${prioritizationSection}${hypothesesSection}${technicalSpecsSection}${webSearchSection}
+${preWorkSection}${briefingSection}${productVisionSection}${scopeDefinitionSection}${personasSection}${brainstormSection}${risksGapsSection}${prioritizationSection}${hypothesesSection}${technicalSpecsSection}${webSearchSection}
 ## Anotacoes do step atual
 O campo "_notes" nos dados do step contem anotacoes do facilitador (sticky notes). Essas anotacoes sao instrucoes, lembretes ou observacoes sobre o que precisa ser ajustado neste step.
 - Leia as anotacoes ao iniciar a conversa e use-as como contexto para suas sugestoes

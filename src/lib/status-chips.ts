@@ -27,10 +27,18 @@ function defineRegistry<T extends Record<string, ChipDescriptor>>(r: T): T {
 // ─── Meeting ─────────────────────────────────────────────
 
 export const MEETING_STATUS = defineRegistry({
-  scheduled:   { label: "Agendada",     tone: "blue" },
-  in_progress: { label: "Em andamento", tone: "amber" },
-  done:        { label: "Concluída",    tone: "green" },
+  scheduled: { label: "Agendada",  tone: "blue"  },
+  done:      { label: "Concluída", tone: "green" },
 });
+
+// Status is derived from the meeting's calendar day: meetings whose day already
+// passed are "done", today/future are "scheduled". The DB column still exists
+// but is ignored at the UI layer.
+export function meetingStatusFromDate(dateString: string): "scheduled" | "done" {
+  const meetingDay = new Date(dateString).toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  return meetingDay < today ? "done" : "scheduled";
+}
 
 export const MEETING_TYPE = defineRegistry({
   daily:          { label: "Daily",          tone: "cyan" },

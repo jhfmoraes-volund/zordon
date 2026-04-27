@@ -63,6 +63,21 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // Guests can only navigate inside the project surface and design sessions.
+  // Anywhere else (members, squads, ops, profile, etc.) redirects to /projects.
+  if (user && user.app_metadata?.role === "guest" && !isApi) {
+    const guestAllowed =
+      pathname === "/" ||
+      pathname.startsWith("/projects") ||
+      pathname.startsWith("/design-sessions") ||
+      pathname.startsWith("/auth/");
+    if (!guestAllowed) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/projects";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Inject validated user identity into request headers so downstream code
   // (layouts, pages, route handlers) can skip the Supabase HTTP call.
   if (user) {

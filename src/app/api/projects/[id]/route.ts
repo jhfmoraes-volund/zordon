@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { ACTIVE_STATUSES } from "@/lib/function-points";
 import { getUser } from "@/lib/dal";
 
@@ -138,17 +139,33 @@ export async function GET(
   const allMemberIds = projectMembers.map((pm: any) => pm.member.id);
 
   let fpByMember = new Map<string, number>();
+  let allocationOtherByMember = new Map<string, number>();
   if (allMemberIds.length > 0) {
-    const { data: allAssignments } = await supabase
-      .from("TaskAssignment")
-      .select("memberId, task:Task!inner(functionPoints, status)")
-      .in("memberId", allMemberIds)
-      .in("task.status", [...ACTIVE_STATUSES]);
+    const [assignmentsRes, allocationsRes] = await Promise.all([
+      supabase
+        .from("TaskAssignment")
+        .select("memberId, task:Task!inner(functionPoints, status)")
+        .in("memberId", allMemberIds)
+        .in("task.status", [...ACTIVE_STATUSES]),
+      supabase
+        .from("ProjectMember")
+        .select("memberId, fpAllocation, projectId")
+        .in("memberId", allMemberIds)
+        .neq("projectId", id),
+    ]);
 
-    for (const a of (allAssignments ?? []) as any[]) {
+    for (const a of (assignmentsRes.data ?? []) as any[]) {
       if (!a.memberId) continue;
       const fp = a.task.functionPoints ?? 0;
       fpByMember.set(a.memberId, (fpByMember.get(a.memberId) ?? 0) + fp);
+    }
+    for (const a of (allocationsRes.data ?? []) as any[]) {
+      if (!a.memberId) continue;
+      const fp = a.fpAllocation ?? 0;
+      allocationOtherByMember.set(
+        a.memberId,
+        (allocationOtherByMember.get(a.memberId) ?? 0) + fp,
+      );
     }
   }
 
@@ -166,6 +183,10 @@ export async function GET(
     const totalPct = member.fpCapacity > 0 ? fpTotal / member.fpCapacity : 0;
     const isOverloaded = totalPct > 0.85;
 
+    const fpAllocation = pm.fpAllocation ?? 0;
+    const fpAllocationOther = allocationOtherByMember.get(member.id) ?? 0;
+    const fpAllocationTotal = fpAllocation + fpAllocationOther;
+
     return {
       id: member.id,
       name: member.name,
@@ -176,6 +197,9 @@ export async function GET(
       fpTotal,
       totalPct,
       isOverloaded,
+      fpAllocation,
+      fpAllocationOther,
+      fpAllocationTotal,
     };
   });
 
@@ -189,6 +213,9 @@ export async function GET(
       `${overloadedMembers.length} membro${overloadedMembers.length > 1 ? "s" : ""} com carga acima de 85%`
     );
   }
+
+  const h = await headers();
+  const viewerRole = h.get("x-user-role");
 
   return NextResponse.json({
     ...project,
@@ -210,6 +237,7 @@ export async function GET(
       overdueCount: overdueTasks.length,
     },
     memberCapacity: members,
+    viewerRole,
   });
 }
 

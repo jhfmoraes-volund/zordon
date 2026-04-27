@@ -20,6 +20,7 @@ const stepKeySchema = z
     "scope_definition",
     "personas_journeys",
     "brainstorm",
+    "risks_gaps",
     "prioritization",
     "technical_specs",
     "hypotheses",

@@ -5,6 +5,7 @@
  *   3 — Admin:   full access, can impersonate.
  *   2 — Manager: full read/write access to management routes, cannot impersonate.
  *   1 — Builder: restricted to Profile, Projects, Clients, Workflow.
+ *   0 — Guest:   external read-only user; project access via ProjectAccess.
  *
  * For authorization, prefer `hasMinLevel(role, MANAGER)` over hardcoding
  * role names like `["head-ops", "ceo"]`.
@@ -18,10 +19,12 @@ export const ROLE_LEVELS = {
   pm: 2,
   "principal-engineer": 1,
   "product-builder": 1,
+  guest: 0,
 } as const;
 
 export type Role = keyof typeof ROLE_LEVELS;
 
+export const GUEST = 0;
 export const BUILDER = 1;
 export const MANAGER = 2;
 export const ADMIN = 3;
@@ -32,6 +35,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   pm: "PM",
   "principal-engineer": "Principal Engineer",
   "product-builder": "Product Builder",
+  guest: "Guest",
 };
 
 /** All role keys in display order. */

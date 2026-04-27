@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { canTransition } from "@/lib/task-status";
 import { getUser, requireProjectMemberApi } from "@/lib/dal";
 
 const TASK_SELECT = `
@@ -61,16 +60,6 @@ export async function PUT(
 
   const denied = await requireProjectMemberApi(current.projectId);
   if (denied) return denied;
-
-  // Validate status transition
-  if (data.status && data.status !== current.status) {
-    if (!canTransition(current.status, data.status)) {
-      return NextResponse.json(
-        { error: `Invalid status transition: ${current.status} → ${data.status}` },
-        { status: 400 }
-      );
-    }
-  }
 
   // Handle assignment updates
   if (assigneeIds !== undefined) {

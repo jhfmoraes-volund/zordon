@@ -28,17 +28,28 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Wand2, Copy, Gauge, Sparkles, MoreVertical } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Wand2, Copy, Gauge, Sparkles, MoreVertical, icons as lucideIcons, Star } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import {
   hasMinLevel, ADMIN,
   ROLES, ROLE_LABELS, roleLabel,
   SPECIALTIES, SPECIALTY_LABELS, specialtyLabel,
-  type Role, type Specialty,
 } from "@/lib/roles";
 import { SkillProfileSheet } from "@/components/skill-assessment/skill-profile-sheet";
-import { PixelBar, pixelTone } from "@/components/ui/pixel-bar";
+import { PixelBar, pixelTone, PixelHud } from "@/components/ui/pixel-bar";
+import {
+  TOWERS,
+  computeScore,
+  derivePrimaryTowers,
+  isFullstack,
+  scoreLabel,
+  towerLabel,
+  type MemberSkillRow,
+  type SubskillMap,
+  type Tower,
+  type TowerKey,
+} from "@/lib/memberSkills";
 
 function generatePassword(length = 14): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -60,6 +71,14 @@ type Member = {
   fpCapacity: number;
   /** Soma de FP em uso nas sprints que rodam na semana atual. */
   fpUsedWeek: number;
+  /** Skill rows from the member self-assessment, one per tower. */
+  skills: MemberSkillRow[];
+  /** Highest-scoring tower (≥10). Null if no assessment. */
+  primaryTower: TowerKey | null;
+  /** Second-highest tower with score ≥50. Null otherwise. */
+  secondaryTower: TowerKey | null;
+  /** Frontend ≥70 AND Backend ≥70. */
+  fullstack: boolean;
 };
 
 const roleDetails: Record<string, {
@@ -134,79 +153,6 @@ const roleDetails: Record<string, {
   },
 };
 
-const specialtyDetails: Record<string, {
-  label: string;
-  summary: string;
-  responsibilities: string[];
-}> = {
-  "ux-ui": {
-    label: "UX / UI",
-    summary: "Traduz problemas em fluxos, jornadas e interfaces claras.",
-    responsibilities: [
-      "Define a estrutura de interacao (prototipos, navegacao e arquitetura de telas)",
-      "Garante que o produto seja compreensivel sem necessidade de instrucoes",
-      "Trabalha com hipoteses de comportamento do usuario (Jobs to Be Done, heuristicas)",
-      "Aplica boas praticas de reutilizacao de componentes e consistencia visual",
-      "Atua fortemente na validacao inicial (descoberta e testes rapidos)",
-      "Se preocupa em manter a aplicacao otimizada do ponto de vista de performance percebida",
-    ],
-  },
-  backend: {
-    label: "Backend",
-    summary: "Profundo conhecimento em Supabase e suas tecnologias associadas.",
-    responsibilities: [
-      "Responsavel por estruturar e garantir a funcionalidade do sistema de Auth",
-      "Domina boas praticas para desenvolvimento de APIs, considerando limitacoes tecnicas e trade-offs de arquitetura",
-      "Responsavel por garantir que funcoes server-side estejam corretamente configuradas (triggers, cron jobs, etc.)",
-      "Atua na otimizacao de edge functions, buscando eficiencia e desempenho",
-      "Gerencia a camada inicial de seguranca server-side, incluindo RLS (Row-Level Security) e gerenciamento de secrets",
-    ],
-  },
-  qa: {
-    label: "QA",
-    summary: "Definicao e execucao de estrategias de teste (funcional, regressao, integracao e end-to-end).",
-    responsibilities: [
-      "Validacao de regras de negocio e fluxos criticos garantindo aderencia aos requisitos definidos",
-      "Automacao de testes sempre que possivel (E2E, APIs e componentes criticos) para ganho de escala",
-      "Identificacao, documentacao e priorizacao de bugs com clareza de impacto para o time",
-    ],
-  },
-  infra: {
-    label: "Infra",
-    summary: "Responsavel por estruturar e manter ambientes (dev, staging e producao).",
-    responsibilities: [
-      "Define e implementa processos de deploy e CI/CD",
-      "Garante escalabilidade, disponibilidade e resiliencia da aplicacao",
-      "Monitora performance, erros e comportamento do sistema (observabilidade)",
-      "Atua na gestao de infraestrutura em cloud (custos, recursos, otimizacao)",
-      "Define padroes de arquitetura (serverless, containers, etc.)",
-      "Cria mecanismos de rollback, backup e recuperacao de falhas",
-    ],
-  },
-  security: {
-    label: "Security",
-    summary: "Mapeamento de superficie de ataque (APIs, endpoints, auth, edge functions, infra exposta).",
-    responsibilities: [
-      "Testes de vulnerabilidades em autenticacao e autorizacao (ex: bypass de auth, falhas em RLS, privilege escalation)",
-      "Exploracao de falhas em APIs e backend (injecoes, exposicao de dados, validacao insuficiente)",
-      "Testes em client-side (frontend) (XSS, armazenamento inseguro, vazamento de tokens)",
-      "Simulacao de ataques reais (pentest manual + automatizado) cobrindo OWASP Top 10",
-      "Reporte e priorizacao de riscos com recomendacoes claras de correcao (impacto vs esforco)",
-    ],
-  },
-  fullstack: {
-    label: "Fullstack",
-    summary: "Atua em frontend e backend conforme demanda. Coringa do squad que desbloqueia gargalos onde necessario.",
-    responsibilities: [
-      "Implementar features end-to-end (API + UI)",
-      "Desbloquear gargalos — assume tasks de UI ou backend conforme necessidade",
-      "Setup de projeto, infra e CI/CD",
-      "Definir arquitetura e padroes de codigo",
-      "Apoiar outros builders em duvidas tecnicas",
-    ],
-  },
-};
-
 function MemberCardMobile({
   m,
   isAdmin,
@@ -269,9 +215,15 @@ function MemberCardMobile({
         <h3 className="font-medium text-base leading-tight truncate">{m.name}</h3>
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="outline" className="text-[10px]">{roleLabel(m.role)}</Badge>
-          {m.specialty && (
+          {m.primaryTower && (
             <Badge variant="secondary" className="text-[10px]">
-              {specialtyLabel(m.specialty)}
+              {towerLabel(m.primaryTower)}
+            </Badge>
+          )}
+          {m.fullstack && (
+            <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border border-amber-500/30 hover:bg-amber-500/15">
+              <Star className="h-2.5 w-2.5 mr-1 fill-current" />
+              Fullstack
             </Badge>
           )}
           {m.isExternal && (
@@ -326,13 +278,16 @@ export default function MembersPage() {
     const today = new Date().toISOString().slice(0, 10);
 
     // Sprints rodando hoje → membros que participam delas → soma de fp_used.
-    const [membersRes, activeSprintsRes] = await Promise.all([
+    const [membersRes, activeSprintsRes, skillsRes] = await Promise.all([
       supabase.from("Member").select("*").order("name"),
       supabase
         .from("Sprint")
         .select("id")
         .lte("startDate", today)
         .gte("endDate", today),
+      supabase
+        .from("MemberSkill")
+        .select("memberId, towerKey, score, subskills, cases"),
     ]);
 
     const activeSprintIds = (activeSprintsRes.data ?? []).map((s) => s.id);
@@ -352,17 +307,47 @@ export default function MembersPage() {
       weekLoadMap.set(r.memberId, (weekLoadMap.get(r.memberId) ?? 0) + (r.fp_used ?? 0));
     }
 
-    const merged: Member[] = (membersRes.data ?? []).map((m: Record<string, unknown>) => ({
-      id: m.id as string,
-      name: m.name as string,
-      email: (m.email as string) ?? null,
-      role: m.role as string,
-      specialty: (m.specialty as string) ?? null,
-      githubUsername: (m.githubUsername as string) ?? null,
-      isExternal: (m.isExternal as boolean) ?? false,
-      fpCapacity: (m.fpCapacity as number) ?? 0,
-      fpUsedWeek: weekLoadMap.get(m.id as string) ?? 0,
-    }));
+    // Group skills by memberId. Lazy-compute score client-side when missing
+    // (legacy rows may have subskills but null score until the GET endpoint runs).
+    const skillsByMember = new Map<string, MemberSkillRow[]>();
+    for (const row of (skillsRes.data ?? []) as Array<{
+      memberId: string;
+      towerKey: string;
+      score: number | null;
+      subskills: unknown;
+      cases: string | null;
+    }>) {
+      const subs = (row.subskills ?? {}) as SubskillMap;
+      const tower = TOWERS.find((t) => t.key === row.towerKey);
+      let score = row.score;
+      if ((score === null || score === undefined) && tower) {
+        score = computeScore(subs, tower.subskills.length);
+      }
+      const list = skillsByMember.get(row.memberId) ?? [];
+      list.push({ towerKey: row.towerKey, score, subskills: subs, cases: row.cases });
+      skillsByMember.set(row.memberId, list);
+    }
+
+    const merged: Member[] = (membersRes.data ?? []).map((m: Record<string, unknown>) => {
+      const id = m.id as string;
+      const skills = skillsByMember.get(id) ?? [];
+      const { primary, secondary } = derivePrimaryTowers(skills);
+      return {
+        id,
+        name: m.name as string,
+        email: (m.email as string) ?? null,
+        role: m.role as string,
+        specialty: (m.specialty as string) ?? null,
+        githubUsername: (m.githubUsername as string) ?? null,
+        isExternal: (m.isExternal as boolean) ?? false,
+        fpCapacity: (m.fpCapacity as number) ?? 0,
+        fpUsedWeek: weekLoadMap.get(id) ?? 0,
+        skills,
+        primaryTower: primary,
+        secondaryTower: secondary,
+        fullstack: isFullstack(skills),
+      };
+    });
 
     setMembers(merged);
   }, []);
@@ -494,11 +479,21 @@ export default function MembersPage() {
                     <Badge variant="outline">{roleLabel(m.role)}</Badge>
                   </TableCell>
                   <TableCell>
-                    {m.specialty && (
-                      <Badge variant="secondary" className="text-xs">
-                        {specialtyLabel(m.specialty)}
-                      </Badge>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {m.primaryTower ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {towerLabel(m.primaryTower)}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/60">—</span>
+                      )}
+                      {m.fullstack && (
+                        <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border border-amber-500/30 hover:bg-amber-500/15">
+                          <Star className="h-2.5 w-2.5 mr-1 fill-current" />
+                          Fullstack
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {(() => {
@@ -579,18 +574,25 @@ export default function MembersPage() {
         </div>
       </div>
 
-      {/* ─── Especialidades ─── */}
+      {/* ─── Torres de especialidade ─── */}
       <div>
-        <h2 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-          <Shield className="h-4 w-4" /> Especialidades
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+            <Sparkles className="h-4 w-4" /> Torres de especialidade
+          </h2>
+          <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wide hidden md:inline">
+            Vem do Perfil de skills
+          </span>
+        </div>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(specialtyDetails).map(([key, spec]) => {
-            const count = members.filter((m) => m.specialty === key).length;
-            return (
-              <DetailCard key={key} label={spec.label} summary={spec.summary} responsibilities={spec.responsibilities} count={count} />
-            );
-          })}
+          {TOWERS.map((tower) => (
+            <TowerCard
+              key={tower.key}
+              tower={tower}
+              members={members}
+              onOpenSkills={(id) => setSkillSheetMemberId(id)}
+            />
+          ))}
         </div>
       </div>
 
@@ -674,37 +676,38 @@ export default function MembersPage() {
                 Membro externo <span className="text-muted-foreground font-normal">(cedido por outra empresa, ex: Extreme Group)</span>
               </Label>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Role</Label>
-                <Select value={form.role} onValueChange={(v) => v && setForm({ ...form, role: v })}>
-                  <SelectTrigger>
-                    <SelectValue>
-                      {(value: string | null) => roleLabel(value)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Especialidade</Label>
-                <Select value={form.specialty} onValueChange={(v) => v && setForm({ ...form, specialty: v })}>
-                  <SelectTrigger>
-                    <SelectValue>
-                      {(value: string | null) => specialtyLabel(value)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SPECIALTIES.map((s) => (
-                      <SelectItem key={s} value={s}>{SPECIALTY_LABELS[s]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid gap-2">
+              <Label>Role</Label>
+              <Select value={form.role} onValueChange={(v) => v && setForm({ ...form, role: v })}>
+                <SelectTrigger>
+                  <SelectValue>
+                    {(value: string | null) => roleLabel(value)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                A especialidade do membro é definida pelo Perfil de skills (auto-avaliação por torres).
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Label>Especialidade declarada <span className="text-muted-foreground font-normal text-[10px]">(legacy — preenchido no onboarding)</span></Label>
+              <Select value={form.specialty} onValueChange={(v) => v && setForm({ ...form, specialty: v })}>
+                <SelectTrigger>
+                  <SelectValue>
+                    {(value: string | null) => specialtyLabel(value)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {SPECIALTIES.map((s) => (
+                    <SelectItem key={s} value={s}>{SPECIALTY_LABELS[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
@@ -794,6 +797,153 @@ function DetailCard({
               <span className="text-xs font-medium">{extra}</span>
             </div>
           )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+// ─── Tower Card (assessment-driven specialty cards) ──────────
+
+type TowerRanked = { member: Member; score: number; isPrimary: boolean; refCount: number };
+
+function TowerCard({
+  tower,
+  members,
+  onOpenSkills,
+}: {
+  tower: Tower;
+  members: Member[];
+  onOpenSkills: (memberId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const Icon = (lucideIcons as Record<string, React.ComponentType<{ className?: string }>>)[tower.icon];
+
+  const ranked: TowerRanked[] = members
+    .map((m) => {
+      const row = m.skills.find((s) => s.towerKey === tower.key);
+      const score = row?.score ?? 0;
+      const refCount = row
+        ? Object.values(row.subskills ?? {}).filter((v) => v === "ref").length
+        : 0;
+      return { member: m, score, isPrimary: m.primaryTower === tower.key, refCount };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const atuantes = ranked.filter((x) => x.score >= 50);
+  const referencias = ranked.filter((x) => x.score >= 85);
+
+  return (
+    <Card
+      className="cursor-pointer hover:ring-foreground/10 transition-all"
+      onClick={() => setExpanded(!expanded)}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-sm flex items-center gap-2 min-w-0">
+            {Icon && <Icon className="h-4 w-4 text-foreground shrink-0" />}
+            <span className="truncate">{tower.label}</span>
+          </CardTitle>
+          <div className="flex items-center gap-2 shrink-0">
+            {atuantes.length > 0 && (
+              <Badge variant="secondary" className="text-[10px]">
+                {atuantes.length} atuante{atuantes.length > 1 ? "s" : ""}
+              </Badge>
+            )}
+            {referencias.length > 0 && (
+              <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border border-amber-500/30 hover:bg-amber-500/15">
+                <Star className="h-2.5 w-2.5 mr-1 fill-current" />
+                {referencias.length}
+              </Badge>
+            )}
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">{tower.summary}</p>
+      </CardHeader>
+
+      {expanded && (
+        <CardContent className="pt-0 space-y-4">
+          {/* Subskills */}
+          <div>
+            <PixelHud size="xs" tone="muted">Subhabilidades</PixelHud>
+            <ul className="mt-1.5 grid gap-1">
+              {tower.subskills.map((sub) => (
+                <li
+                  key={sub.key}
+                  className="text-xs text-muted-foreground flex items-start gap-1.5"
+                >
+                  <span className="text-muted-foreground/50 mt-0.5">•</span>
+                  <span>{sub.label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Members atuantes na torre */}
+          <div>
+            <PixelHud size="xs" tone="muted">Quem atua</PixelHud>
+            {ranked.length === 0 ? (
+              <p className="text-xs text-muted-foreground/70 italic mt-1.5">
+                Nenhum membro avaliado nessa torre ainda.
+              </p>
+            ) : (
+              <ul className="mt-1.5 space-y-0.5">
+                {ranked.map(({ member, score, isPrimary, refCount }) => {
+                  const tone = pixelTone(score, "skill");
+                  return (
+                    <li key={member.id}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenSkills(member.id);
+                        }}
+                        className="w-full grid items-center gap-2 py-1 px-1.5 rounded hover:bg-muted/50 text-left"
+                        style={{ gridTemplateColumns: "1fr auto auto" }}
+                      >
+                        <span className="text-xs truncate flex items-center gap-1.5">
+                          {isPrimary && (
+                            <Star
+                              className="h-2.5 w-2.5 fill-amber-500 text-amber-500 shrink-0"
+                              aria-label="Torre primária"
+                            />
+                          )}
+                          <span className="truncate">{member.name}</span>
+                          {refCount > 0 && (
+                            <span
+                              className="inline-flex items-center text-[9px] font-mono tabular-nums text-amber-600"
+                              title={`Referência em ${refCount} subhabilidade${refCount > 1 ? "s" : ""}`}
+                            >
+                              ref·{refCount}
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className="font-sans font-semibold text-[9px] tracking-[0.12em] uppercase leading-none"
+                          style={{ color: tone.fg }}
+                        >
+                          {scoreLabel(score)}
+                        </span>
+                        <span
+                          className="font-mono text-xs tabular-nums leading-none w-7 text-right"
+                          style={{ color: tone.fg }}
+                        >
+                          {score}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </CardContent>
       )}
     </Card>

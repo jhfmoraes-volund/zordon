@@ -119,8 +119,7 @@ export async function PUT(
   const { id } = await params;
   const body = await req.json();
 
-  const patch: { status?: string; notes?: string | null; title?: string | null } = {};
-  if (body.status !== undefined) patch.status = body.status;
+  const patch: { notes?: string | null; title?: string | null } = {};
   if (body.notes !== undefined) patch.notes = body.notes;
   if (body.title !== undefined) patch.title = body.title;
 

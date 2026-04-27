@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getAllocatedProjectIds,
+  getAccessibleProjectIds,
   getRealRole,
-  requireProjectMemberApi,
+  requireProjectEditSessionsApi,
 } from "@/lib/dal";
 import { hasMinLevel, MANAGER } from "@/lib/roles";
 
@@ -21,9 +21,9 @@ export async function GET() {
     .select("*, project:Project(name, client:Client(name))")
     .order("createdAt", { ascending: false });
   if (!isManager) {
-    const allocated = await getAllocatedProjectIds();
-    if (allocated.length === 0) return NextResponse.json([]);
-    sessionQuery = sessionQuery.in("projectId", allocated);
+    const accessible = await getAccessibleProjectIds();
+    if (accessible.length === 0) return NextResponse.json([]);
+    sessionQuery = sessionQuery.in("projectId", accessible);
   }
 
   const [sessionsRes, countsRes] = await Promise.all([
@@ -48,10 +48,10 @@ export async function POST(req: NextRequest) {
   if (!body.projectId) {
     return NextResponse.json({ error: "projectId required" }, { status: 400 });
   }
-  const denied = await requireProjectMemberApi(body.projectId);
+  const denied = await requireProjectEditSessionsApi(body.projectId);
   if (denied) return denied;
 
-  const totalSteps = body.type === "inception" ? 9 : 5;
+  const totalSteps = body.type === "inception" ? 10 : 5;
 
   const { data: session, error } = await db()
     .from("DesignSession")

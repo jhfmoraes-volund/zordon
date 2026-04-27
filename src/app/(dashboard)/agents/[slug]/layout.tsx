@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Bot } from "lucide-react";
+import { AlphaIcon } from "@/components/icons/alpha-icon";
+import { VitorIcon } from "@/components/icons/vitor-icon";
+import { cn } from "@/lib/utils";
 
 type AgentHead = {
   id: string;
@@ -12,6 +15,34 @@ type AgentHead = {
   description: string | null;
   modelId: string;
 };
+
+function AgentTile({ slug }: { slug: string }) {
+  const isAlpha = slug === "ops" || slug === "alpha";
+  const isVitor = slug === "design-session" || slug === "vitor";
+
+  if (!isAlpha && !isVitor) {
+    return (
+      <div className="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Bot className="h-6 w-6" />
+      </div>
+    );
+  }
+
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-md",
+        "bg-[oklch(0.10_0_0)]",
+        isAlpha
+          ? "text-primary shadow-[inset_0_0_0_1px_oklch(0.637_0.237_22/0.30),0_0_14px_-4px_oklch(0.637_0.237_22/0.22)] bg-[linear-gradient(180deg,oklch(0.16_0.06_22/0.5),oklch(0.10_0_0)),repeating-linear-gradient(0deg,transparent_0_3px,oklch(0.637_0.237_22/0.05)_3px_4px)]"
+          : "text-[oklch(0.74_0.18_55)] shadow-[inset_0_0_0_1px_oklch(0.74_0.18_55/0.30),0_0_14px_-4px_oklch(0.74_0.18_55/0.22)] bg-[linear-gradient(180deg,oklch(0.16_0.06_55/0.5),oklch(0.10_0_0)),repeating-linear-gradient(0deg,transparent_0_3px,oklch(0.74_0.18_55/0.05)_3px_4px)]",
+      )}
+    >
+      {isAlpha ? <AlphaIcon size={26} /> : <VitorIcon size={26} />}
+    </span>
+  );
+}
 
 export default function AgentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -45,9 +76,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           Agentes
         </Link>
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Bot className="h-6 w-6" />
-          </div>
+          <AgentTile slug={slug} />
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-bold">{agent?.name ?? slug}</h1>
             {agent?.description && (

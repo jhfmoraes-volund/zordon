@@ -66,15 +66,18 @@ export const workflowSections: WorkflowSection[] = [
           {
             title: "Inception",
             badge: "Projeto novo",
-            summary: "Primeira session do projeto. 7 steps sequenciais que mapeiam do problema a solucao.",
+            summary: "Primeira session do projeto. 10 steps sequenciais que mapeiam do problema a solucao.",
             details: [
+              "Pre-Trabalho — upload de docs e pre-preenchimento com IA",
               "Visao do Produto — problema, quem sofre, metricas de sucesso",
+              "E / Nao E / Faz / Nao Faz — fronteiras de identidade do produto",
               "Personas & Jornadas — AS-IS (como vive hoje) → TO-BE (como sera)",
               "Brainstorm — solution cards livres, sem filtro",
+              "Riscos & Lacunas — ambiguidades de regra de negocio + riscos do MVP",
               "Priorizacao — classificar em MVP / Next / Out",
-              "Sequenciamento — organizar MVP em fases/releases",
               "Specs Tecnicas — stack, integracoes, constraints",
-              "Briefing — consolidacao automatica de todos os steps",
+              "Hipoteses & Metricas — o que precisamos validar",
+              "Briefing — consolidacao automatica + geracao de tasks",
             ],
           },
           {
