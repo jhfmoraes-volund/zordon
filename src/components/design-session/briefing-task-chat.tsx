@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/ui/markdown";
@@ -113,9 +114,44 @@ export function BriefingTaskChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
+  // Virtualizer pra renderizar so mensagens visiveis
+  const showAnalyzing =
+    isStreaming &&
+    messages.length > 0 &&
+    messages[messages.length - 1].role === "user";
+  const itemCount = messages.length + (showAnalyzing ? 1 : 0);
+  const stickToBottomRef = useRef(true);
+
+  const virtualizer = useVirtualizer({
+    count: itemCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 140,
+    overscan: 4,
+    measureElement:
+      typeof window !== "undefined" && navigator.userAgent.indexOf("Firefox") === -1
+        ? (el) => el?.getBoundingClientRect().height
+        : undefined,
+  });
+
   useEffect(() => {
-    scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
-  }, [messages, isStreaming]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottomRef.current = distFromBottom < 80;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (itemCount === 0) return;
+    if (!stickToBottomRef.current) return;
+    virtualizer.scrollToIndex(itemCount - 1, { align: "end" });
+  }, [itemCount, virtualizer, messages]);
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
 
   const handleSend = () => {
     if (!inputText.trim() || isStreaming) return;
@@ -142,24 +178,41 @@ export function BriefingTaskChat({
 
         <div
           ref={scrollRef}
-          className="h-full overflow-y-auto space-y-4 px-4 py-6 scroll-smooth"
+          className="h-full overflow-y-auto scroll-smooth"
         >
-          {messages.map((msg, idx) => (
-            <MessageBubble key={`${msg.id}-${idx}`} message={msg} />
-          ))}
+          <div
+            className="relative w-full"
+            style={{ height: `${totalSize}px` }}
+          >
+            {virtualItems.map((virtualItem) => {
+              const idx = virtualItem.index;
+              const isAnalyzingItem = showAnalyzing && idx === messages.length;
+              const msg = !isAnalyzingItem ? messages[idx] : null;
 
-          {isStreaming &&
-            messages.length > 0 &&
-            messages[messages.length - 1].role === "user" && (
-              <div className="flex justify-start">
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/[5%] px-2.5 py-1">
-                  <Sparkles className="h-3 w-3 text-primary animate-pulse" />
-                  <span className="shimmer-text text-xs font-medium">
-                    Analisando briefing...
-                  </span>
+              return (
+                <div
+                  key={virtualItem.key}
+                  ref={virtualizer.measureElement}
+                  data-index={idx}
+                  className="absolute left-0 right-0 px-4 pb-4"
+                  style={{ transform: `translateY(${virtualItem.start}px)` }}
+                >
+                  {isAnalyzingItem ? (
+                    <div className="flex justify-start">
+                      <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/[5%] px-2.5 py-1">
+                        <Sparkles className="h-3 w-3 text-primary animate-pulse" />
+                        <span className="shimmer-text text-xs font-medium">
+                          Analisando briefing...
+                        </span>
+                      </div>
+                    </div>
+                  ) : msg ? (
+                    <MessageBubble message={msg} />
+                  ) : null}
                 </div>
-              </div>
-            )}
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -239,7 +292,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
                     : "bg-muted rounded-tl-sm"
                 }`}
               >
-                <Markdown>{part.text}</Markdown>
+                <Markdown maxChars={10000}>{part.text}</Markdown>
               </div>
             );
           }

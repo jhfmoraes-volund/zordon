@@ -22,6 +22,7 @@
     "@openrouter/ai-sdk-provider": "^2.8.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.2",
+    "@tanstack/react-virtual": "^3.13.24",
     "@tavily/core": "^0.7.2",
     "@tiptap/extension-link": "^3.22.4",
     "@tiptap/extension-placeholder": "^3.22.4",

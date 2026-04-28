@@ -145,7 +145,7 @@ export function AlphaChatPanel() {
           >
             {msg.parts?.map((part, i) => {
               if (part.type === "text") {
-                return <Markdown key={i}>{part.text}</Markdown>;
+                return <Markdown key={i} maxChars={10000}>{part.text}</Markdown>;
               }
               if (part.type.startsWith("tool-")) {
                 const toolPart = part as {

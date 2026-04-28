@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useLayoutEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,17 +34,52 @@ function AIChatContent({
 }: ChatContentProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const stickToBottomRef = useRef(true);
 
+  // Empty state precisa ocupar toda a altura quando nao ha mensagem
+  const showEmpty = messages.length === 0 && !isLoading;
+  const showThinking = isLoading && messages[messages.length - 1]?.role !== "assistant";
+
+  // Virtualizer: 1 item por mensagem + 1 opcional pro indicador "Pensando..."
+  const itemCount = messages.length + (showThinking ? 1 : 0);
+
+  const virtualizer = useVirtualizer({
+    count: itemCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 120, // estimativa inicial — auto-mede depois
+    overscan: 4,
+    measureElement:
+      typeof window !== "undefined" && navigator.userAgent.indexOf("Firefox") === -1
+        ? (el) => el?.getBoundingClientRect().height
+        : undefined,
+  });
+
+  // Detecta se usuario rolou pra cima — desativa stick-to-bottom
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isLoading]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottomRef.current = distFromBottom < 80;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Scroll-to-bottom durante streaming/novas mensagens — só se usuario nao rolou pra cima
+  useLayoutEffect(() => {
+    if (itemCount === 0) return;
+    if (!stickToBottomRef.current) return;
+    virtualizer.scrollToIndex(itemCount - 1, { align: "end" });
+  }, [itemCount, virtualizer, messages]);
 
   useEffect(() => {
     const t = setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 100);
     return () => clearTimeout(t);
   }, []);
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
 
   return (
     <>
@@ -67,25 +103,44 @@ function AIChatContent({
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 space-y-5 overflow-y-auto overscroll-contain p-4">
-        {messages.length === 0 && !isLoading && (
-          <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
+        {showEmpty ? (
+          <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground p-4">
             <VitorIcon className="mb-3 h-10 w-10 text-[oklch(0.74_0.18_55)]/40" strokeWidth={1.75} />
             <p className="text-sm font-medium">Como posso ajudar?</p>
             <p className="mt-1 max-w-[250px] text-xs">
               Posso preencher campos, criar cards, sugerir melhorias e analisar a sessao.
             </p>
           </div>
-        )}
+        ) : (
+          <div
+            className="relative w-full p-4"
+            style={{ height: `${totalSize}px` }}
+          >
+            {virtualItems.map((virtualItem) => {
+              const idx = virtualItem.index;
+              const isThinkingItem = showThinking && idx === messages.length;
+              const msg = !isThinkingItem ? messages[idx] : null;
 
-        {messages.map((msg, idx) => (
-          <MessageBubble key={`${msg.id}-${idx}`} message={msg} />
-        ))}
-
-        {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-xs">Pensando...</span>
+              return (
+                <div
+                  key={virtualItem.key}
+                  ref={virtualizer.measureElement}
+                  data-index={idx}
+                  className="absolute left-0 right-0 px-4 pb-5"
+                  style={{ transform: `translateY(${virtualItem.start}px)` }}
+                >
+                  {isThinkingItem ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-xs">Pensando...</span>
+                    </div>
+                  ) : msg ? (
+                    <MessageBubble message={msg} />
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -181,7 +236,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
               : "px-4 py-3 bg-muted rounded-tl-sm"
           }`}
         >
-          <Markdown>{textContent}</Markdown>
+          <Markdown maxChars={10000}>{textContent}</Markdown>
         </div>
 
         {toolParts.length > 0 && (
