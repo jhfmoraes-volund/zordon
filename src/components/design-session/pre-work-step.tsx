@@ -269,7 +269,7 @@ export function PreWorkStep({
                     Solte os arquivos aqui
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    PDF, DOCX, TXT, MD
+                    PDF, DOCX, TXT, MD, HTML
                   </p>
                 </div>
               </div>
@@ -358,7 +358,7 @@ export function PreWorkStep({
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".pdf,.docx,.txt,.md"
+            accept=".pdf,.docx,.txt,.md,.html,.htm"
             className="hidden"
             onChange={(e) => {
               if (e.target.files) uploadFiles(e.target.files);

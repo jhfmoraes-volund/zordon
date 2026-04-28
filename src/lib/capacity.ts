@@ -22,6 +22,7 @@ export const ROLE_BASE: Record<Role, number> = {
   "pm": 35,
   "head-ops": 0, // strategic, doesn't carry tasks
   "ceo": 0,
+  "cro": 0, // strategic, revenue-focused, doesn't carry tasks
   "guest": 0, // external, never carries tasks
 };
 

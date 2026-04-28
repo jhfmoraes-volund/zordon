@@ -151,6 +151,19 @@ const roleDetails: Record<string, {
     ],
     suggestedCapacity: "N/A (estrategico, nao executa tasks)",
   },
+  cro: {
+    label: "CRO",
+    summary: "Lider comercial e de receita. Responsavel por crescimento, novos clientes e relacionamento com a base ativa.",
+    responsibilities: [
+      "Definir e executar a estrategia comercial e de receita",
+      "Prospectar e fechar novos clientes",
+      "Gerir o relacionamento e expansao da base ativa",
+      "Acompanhar pipeline, forecast e metas de receita",
+      "Representar a empresa em negociacoes e parcerias estrategicas",
+      "Alinhar com CEO e Head Ops sobre capacidade e priorizacao comercial",
+    ],
+    suggestedCapacity: "N/A (estrategico, nao executa tasks)",
+  },
 };
 
 function MemberCardMobile({

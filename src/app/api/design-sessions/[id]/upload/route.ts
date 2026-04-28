@@ -43,6 +43,15 @@ export async function POST(
       const mammoth = await import("mammoth");
       const result = await mammoth.extractRawText({ buffer });
       text = result.value;
+    } else if (
+      file.type === "text/html" ||
+      file.name.endsWith(".html") ||
+      file.name.endsWith(".htm")
+    ) {
+      const { parse } = await import("node-html-parser");
+      const root = parse(buffer.toString("utf-8"));
+      root.querySelectorAll("script, style, noscript").forEach((el) => el.remove());
+      text = root.text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
     } else {
       // TXT, MD, etc
       text = buffer.toString("utf-8");

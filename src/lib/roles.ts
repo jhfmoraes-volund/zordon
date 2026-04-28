@@ -15,6 +15,7 @@
 
 export const ROLE_LEVELS = {
   ceo: 3,
+  cro: 3,
   "head-ops": 3,
   pm: 2,
   "principal-engineer": 1,
@@ -31,6 +32,7 @@ export const ADMIN = 3;
 
 export const ROLE_LABELS: Record<Role, string> = {
   ceo: "CEO",
+  cro: "CRO",
   "head-ops": "Head Ops",
   pm: "PM",
   "principal-engineer": "Principal Engineer",
@@ -101,5 +103,5 @@ export function roleNamesAtLevel(minLevel: number): string[] {
     .map(([role]) => role);
 }
 
-/** Convenience: all role names at ADMIN level (head-ops, ceo). */
+/** Convenience: all role names at ADMIN level (ceo, cro, head-ops). */
 export const ADMIN_ROLE_NAMES = roleNamesAtLevel(ADMIN);
