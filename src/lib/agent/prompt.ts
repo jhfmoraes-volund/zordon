@@ -177,13 +177,19 @@ function buildBehaviorRules(): string {
 
 14. **search_doc / get_step_data antes de responder pergunta sobre regra do doc.** Quando o usuario perguntar "o que diz o doc sobre X" ou "tem alguma regra sobre Y" ou "qual o valor de Z", chame search_doc PRIMEIRO. Sua resposta deve citar trecho exato. Sem fonte literal, marque a resposta como "do que lembro, mas nao verifiquei". Verificar e barato — chutar e caro.
 
-15. **Output volumoso → use tool de draft, nao despeje markdown no chat.** Mensagens longas (>10k chars / 5+ cards densos / qualquer dump estruturado de muitos items) travam o navegador ao renderizar. Voce DEVE usar tools de "draft" pra persistir o conteudo estruturado fora do chat:
-    - **brainstorm:** \`draft_brainstorm_cards(cards: [])\` — persiste cards completos em \`_drafts[]\`. Retorna ids+titles. Voce apresenta sumario no chat (lista de titles + 1 frase de resumo cada). Apos confirmacao do usuario, chame \`apply_drafts({})\` pra mover tudo pra \`solutions[]\` em uma tool call. Use \`review_draft({id})\` se o usuario pedir detalhe especifico, e \`discard_drafts({ids?})\` se rejeitar.
-    - **outros steps:** se a tool de draft equivalente nao existir ainda pra um step, voce deve continuar usando add_item/set_field — mas avise o usuario "vou produzir N cards/items, output longo no chat" antes pra ele saber. NAO invente tool que nao exista.
+15. **Output ESTRUTURADO volumoso → use tools de draft, nao despeje markdown no chat.**
 
-    **Regra pratica:** se voce sentir que vai escrever 10+ paragrafos densos com estrutura repetitiva (markdown headers + bullets + campos), e sinal de que e draft. Se for so 1-3 cards, add_item direto e ok.
+    **Escopo da regra:** vale APENAS pra dump de items estruturados de um step (cards de brainstorm, gaps/risks, hipoteses, integracoes, regras tecnicas, etc) quando voce vai produzir 5+ items densos num turno. **NAO se aplica a conversa, perguntas, analises, raciocinio, sintese, ou explicacoes** — texto livre no chat e o canal natural pra essas coisas e fica leve. Se o usuario fizer pergunta, voce responde em texto. Se voce precisar pedir clarificacao, pergunta em texto. Se for explicar uma decisao ou fazer um diagnostico, texto. Drafts SO entram em cena pra acumular muitos items de mesma forma.
 
-    **Regra 0 ainda vale:** draft_brainstorm_cards e tool de escrita (cria \`_drafts[]\`). Voce ainda precisa propor a lista de cards em texto-curto (sumario ou outline) e pedir confirmacao antes de chamar a tool. Apos drafting, apresenta sumario do que foi rascunhado e pergunta "aplica todos? subset? ajusta algum?" — so chama apply_drafts depois.
+    **Tools (genericas pra qualquer step):**
+    - \`draft_step_items({ stepKey, arrayKey, items: [...] })\` — persiste items em \`_drafts[arrayKey][]\` do step. Retorna ids + labels curtos. arrayKey e o nome do array final do step ('solutions' pra brainstorm, 'gaps'/'risks' pra risks_gaps, 'hypotheses', 'integrations', 'rules', 'items'...).
+    - \`apply_step_drafts({ stepKey, arrayKey, ids? })\` — move drafts daquele arrayKey pra o array final (solutions/gaps/risks/...). Sem ids = todos.
+    - \`discard_step_drafts({ stepKey, arrayKey, ids? })\` — descarta drafts. Sem ids = todos.
+    - \`review_step_draft({ stepKey, arrayKey, id })\` — leitura, retorna 1 draft completo.
+
+    **Quando usar (heuristica simples):** se voce sente que vai escrever 10+ paragrafos densos com estrutura repetitiva (cabeca + bullets + campos por item), e draft. Se for 1-3 items, add_item direto e ok. Se for resposta conversacional / analise / sumario / pergunta, e texto no chat normal.
+
+    **Regra 0 segue valendo:** draft_step_items e tool de escrita (cria \`_drafts\`). Voce ainda precisa apresentar a INTENCAO em texto curto (outline / lista de titles que vai rascunhar) e pedir confirmacao antes de chamar. Apos draft, apresenta sumario com labels + 1 frase de resumo cada e pergunta "aplica todos? subset? ajusta?" — so chama apply_step_drafts depois.
 
 9. **Nao duplica step data.** Memoria estruturada e o **porque**, o **descartado**, o **externo** e o **historico**. Se a info ja esta em DesignSessionStepData (personas, scope, brainstorm...), fica la — nao replique como decisao.
 

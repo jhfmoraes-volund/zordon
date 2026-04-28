@@ -28,11 +28,11 @@ import {
 import { createMvpCheckTool } from "./tools/mvp-check";
 import { createSearchDocTool } from "./tools/search-doc";
 import {
-  createDraftBrainstormCardsTool,
-  createReviewDraftTool,
-  createApplyDraftsTool,
-  createDiscardDraftsTool,
-} from "./tools/brainstorm-drafts";
+  createDraftStepItemsTool,
+  createReviewStepDraftTool,
+  createApplyStepDraftsTool,
+  createDiscardStepDraftsTool,
+} from "./tools/step-drafts";
 import type { Capabilities } from "./types";
 
 const genId = () => Math.random().toString(36).slice(2, 9);
@@ -73,13 +73,13 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
   });
 
   tools.search_doc = createSearchDocTool(sessionId);
-  tools.review_draft = createReviewDraftTool(sessionId);
+  tools.review_step_draft = createReviewStepDraftTool(sessionId);
 
-  // Drafts (write tools — sujeitas a Regra 0)
+  // Drafts genéricos pra qualquer step (write tools — sujeitas a Regra 0)
   if (capabilities?.writeTools !== false) {
-    tools.draft_brainstorm_cards = createDraftBrainstormCardsTool(sessionId);
-    tools.apply_drafts = createApplyDraftsTool(sessionId);
-    tools.discard_drafts = createDiscardDraftsTool(sessionId);
+    tools.draft_step_items = createDraftStepItemsTool(sessionId);
+    tools.apply_step_drafts = createApplyStepDraftsTool(sessionId);
+    tools.discard_step_drafts = createDiscardStepDraftsTool(sessionId);
   }
 
   // Write tools
