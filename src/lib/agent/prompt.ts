@@ -1,4 +1,4 @@
-import { getSteps } from "@/lib/design-session-steps";
+import { getStepsForSession } from "@/lib/design-session-steps";
 import { generateSchemaDocsForPrompt } from "./schemas";
 import type {
   ActiveDecision,
@@ -10,6 +10,7 @@ import type {
 interface PromptInput {
   sessionTitle: string;
   sessionType: string;
+  selectedSteps?: string[] | null;
   currentStepKey: string;
   sessionContext: string;
   currentStepData: Record<string, unknown>;
@@ -111,6 +112,18 @@ function buildBehaviorRules(): string {
   return `
 ## Comportamentos Obrigatorios (memoria)
 
+0. **Contrato de preenchimento — UM step por turno, com confirmacao.**
+   Voce NUNCA preenche mais de um step por turno. Antes de tocar QUALQUER dado da sessao:
+   a. Confirme com o usuario qual step quer trabalhar agora (use a lista de "Steps DESTA sessao" acima).
+   b. Proponha em texto o que pretende preencher — bullets curtos, decisoes destacadas. NAO chame tools de escrita ainda.
+   c. Pergunte explicitamente: "Posso aplicar?"
+   d. So execute set_field/add_item/update_item DEPOIS de confirmacao explicita ("ok", "vai", "manda", "aplica", "pode").
+   e. Apos aplicar UM step, PARE. Resuma em 3-5 bullets o que foi feito e pergunte: "Quer ajustar algo, ou seguimos pro proximo step?". NAO encadeie steps em silencio.
+
+   Excecao: tools de leitura (get_step_data, list_*, read_session_memory) podem ser chamadas livremente — nao alteram dados.
+
+   Esta regra vale pra TODAS as sessoes (inception, super, ci). Nao tem "modo turbo" — usuario pediu pra "preencher tudo" significa "preenche um por vez COM confirmacao a cada um", nao "dispara tudo de uma vez".
+
 1. **Le estruturado antes de propor.** Antes de qualquer sugestao substancial sobre scope/persona/feature, considere as Decisoes Ativas e Perguntas Abertas listadas acima. Se a sugestao depende de algo aberto ha > 7 dias, levante a pergunta antes de chutar.
 
 2. **Cita confidence + ref em sugestoes substanciais.** Termine com uma das tres:
@@ -160,6 +173,7 @@ function buildBehaviorRules(): string {
 export function buildSystemPrompt({
   sessionTitle,
   sessionType,
+  selectedSteps,
   currentStepKey,
   sessionContext,
   currentStepData,
@@ -170,11 +184,17 @@ export function buildSystemPrompt({
   projectMemoryMd,
   sessionIndex,
 }: PromptInput): string {
-  const steps = getSteps(sessionType);
+  const steps = getStepsForSession({ type: sessionType, selectedSteps: selectedSteps ?? null });
   const currentStep = steps.find((s) => s.key === currentStepKey);
   const stepListText = steps
     .map((s) => `  ${s.index}. ${s.title} (${s.key})`)
     .join("\n");
+  const stepKeysSet = new Set(steps.map((s) => s.key));
+
+  const fillOrder = steps
+    .filter((s) => s.key !== "pre_work" && s.key !== "briefing")
+    .map((s) => s.key)
+    .join(" -> ");
 
   const preWorkSection =
     currentStepKey === "pre_work"
@@ -188,16 +208,12 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
 3. Faca perguntas de clarificacao quando algo estiver vago ou ambiguo
 4. ${hasWebSearch ? "Use web_search para benchmark, pesquisa de mercado e analise de concorrentes quando relevante" : ""}
 5. **NUNCA preencha steps automaticamente por iniciativa propria.** Apenas converse, entenda o projeto, levante duvidas, proponha. So preencha quando o usuario clicar no botao "PREENCHER" OU disser explicitamente algo equivalente: "preenche tudo", "pode preencher", "vai la", "preenche pra mim".
-6. **Mesmo com autorizacao, preencha STEP-A-STEP, nao tudo de uma vez.** Apos preencher cada step:
-   a. Resuma em bullets curtos o que foi preenchido (3-7 bullets)
-   b. Destaque DECISOES que precisam de confirmacao (ex: "escolhi Camila como persona principal porque tem a dor mais critica — concorda?")
-   c. Pergunte explicitamente: "Quer ajustar algo antes de avancar pro proximo step?"
-   d. SO avance pro proximo step quando o usuario confirmar ou pedir pra seguir. Nao encadeie steps em silencio.
+6. **Mesmo com autorizacao, siga a Regra 0 (UM step por turno, com confirmacao)**. Repassando o essencial: proponha em texto, pergunte "Posso aplicar?", aplique UM step, pare e pergunte se segue.
 
-   Ordem topologica de preenchimento (respeitar dependencias semanticas):
-   product_vision -> scope_definition -> personas_journeys -> brainstorm -> risks_gaps -> prioritization -> hypotheses -> technical_specs
+   Ordem topologica de preenchimento desta sessao (respeitar dependencias semanticas, somente steps presentes):
+   ${fillOrder || "(sessao sem steps intermediarios)"}
 
-### O que preencher (somente quando o usuario pedir):
+### O que preencher (somente quando o usuario pedir, e SOMENTE se o step existir nesta sessao):
 - **product_vision**: problem, whoSuffers, consequences, successVision, impactMetrics
 - **scope_definition**: arrays "is", "isNot", "does", "doesNot" (cada item {id, text}). Items curtos e afirmativos. Use add_item com arrayKey correspondente.
 - **personas_journeys**: crie personas com asIsSteps e toBeSteps
@@ -805,16 +821,75 @@ Use set_field para campos texto (stack, performance, notes). Use add_item para i
   });
   const behaviorRules = buildBehaviorRules();
 
+  // Mapa step.key -> secao de instrucoes. Cada secao ja se auto-protege com
+  // a checagem de currentStepKey la em cima — quando o step nao e o atual, a
+  // string e vazia. Aqui filtramos por presenca na sessao pra economizar
+  // tokens e impedir que Vitor leia instrucoes de step ausente.
+  const sectionByStep: Record<string, string> = {
+    pre_work: preWorkSection,
+    product_vision: productVisionSection,
+    scope_definition: scopeDefinitionSection,
+    personas_journeys: personasSection,
+    brainstorm: brainstormSection,
+    risks_gaps: risksGapsSection,
+    prioritization: prioritizationSection,
+    hypotheses: hypothesesSection,
+    technical_specs: technicalSpecsSection,
+    briefing: briefingSection,
+  };
+
+  // Pra inception/CI mantem ordem antiga (preWork, briefing, productVision...)
+  // pra preservar prompt byte-identico nesses tipos. Pra super, segue ordem
+  // dos steps escolhidos pelo usuario.
+  const FIXED_ORDER_LEGACY = [
+    "pre_work",
+    "briefing",
+    "product_vision",
+    "scope_definition",
+    "personas_journeys",
+    "brainstorm",
+    "risks_gaps",
+    "prioritization",
+    "hypotheses",
+    "technical_specs",
+  ];
+  const sectionOrder =
+    sessionType === "super" ? steps.map((s) => s.key) : FIXED_ORDER_LEGACY;
+  const activeSections = sectionOrder
+    .filter((key) => stepKeysSet.has(key))
+    .map((key) => sectionByStep[key])
+    .filter(Boolean)
+    .join("");
+
+  const typeLabel =
+    sessionType === "inception"
+      ? "Inception (novo produto)"
+      : sessionType === "super"
+        ? `Super Session (steps customizados: ${steps.map((s) => s.key).join(", ")})`
+        : "Continuous Improvement";
+
+  // Bloco de escopo fechado (B.1) — primeiro de tudo, antes de qualquer "modo".
+  // Lista os steps DESTA sessao e instrui Vitor a nao tocar em nada fora dela.
+  const scopeBlock = `
+## Steps DESTA sessao (escopo fechado)
+Esta sessao tem EXATAMENTE estes ${steps.length} steps, nesta ordem:
+${stepListText}
+
+Regras de escopo:
+- NAO mencione, NAO sugira, NAO tente preencher steps fora desta lista.
+- Se o usuario pedir algo que pertenceria a um step ausente (ex: "vamos definir personas" quando personas_journeys nao esta na lista), responda: "Esta sessao nao tem o step de [X]. Quer registrar como gap pra revisitar (add_open_question) ou seguir sem?"
+- Se identificar um gap relevante (usuario falou de persona mas a sessao nao tem o step de persona), registre via add_open_question — NAO improvise um preenchimento fantasma em outro step.
+- Tools de get_step_data so devem ser chamadas em keys da lista acima. Chamar com key fora da lista retorna vazio e polui o contexto.
+`;
+
   return `Voce e Vitor, o assistente de design de produto do Volund. Voce ajuda equipes a conduzir Design Sessions de forma estruturada e inteligente.
 
 ## Sessao atual
 - **Titulo:** ${sessionTitle}
-- **Tipo:** ${sessionType === "inception" ? "Inception (novo produto)" : "Continuous Improvement"}
+- **Tipo:** ${typeLabel}
 - **Step atual:** ${currentStep?.title || currentStepKey} (${currentStepKey})
-${projectMemorySection}${memorySection}
+${scopeBlock}${projectMemorySection}${memorySection}
 ${behaviorRules}
-## Steps do wizard
-${stepListText}
 
 ## Dados completos da sessao
 ${sessionContext || "Nenhum dado preenchido ainda."}
@@ -826,7 +901,7 @@ ${JSON.stringify(currentStepData, null, 2)}
 
 ${generateSchemaDocsForPrompt()}
 
-${preWorkSection}${briefingSection}${productVisionSection}${scopeDefinitionSection}${personasSection}${brainstormSection}${risksGapsSection}${prioritizationSection}${hypothesesSection}${technicalSpecsSection}${webSearchSection}
+${activeSections}${webSearchSection}
 ## Anotacoes do step atual
 O campo "_notes" nos dados do step contem anotacoes do facilitador (sticky notes). Essas anotacoes sao instrucoes, lembretes ou observacoes sobre o que precisa ser ajustado neste step.
 - Leia as anotacoes ao iniciar a conversa e use-as como contexto para suas sugestoes

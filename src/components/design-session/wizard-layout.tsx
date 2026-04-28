@@ -52,7 +52,11 @@ export function WizardLayout({
   const isLast = currentStep === steps.length - 1;
 
   const typeLabel =
-    sessionType === "inception" ? "Inception" : "Continuous Improvement";
+    sessionType === "inception"
+      ? "Inception"
+      : sessionType === "super"
+        ? "Super Session"
+        : "Continuous Improvement";
 
   const chat = useDesignSessionChat();
   const chatLoading = chat.status === "streaming" || chat.status === "submitted";

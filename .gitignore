@@ -54,3 +54,7 @@ next-env.d.ts
 
 # supabase local
 /supabase/.temp/
+
+# session inputs (confidential client docs, local-only)
+/zelar-inputs/
+/*-inputs/

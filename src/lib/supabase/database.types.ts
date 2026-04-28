@@ -619,6 +619,7 @@ export type Database = {
           memoryVersion: number
           projectId: string
           scheduledAt: string | null
+          selectedSteps: string[] | null
           status: string
           title: string
           totalSteps: number
@@ -639,6 +640,7 @@ export type Database = {
           memoryVersion?: number
           projectId: string
           scheduledAt?: string | null
+          selectedSteps?: string[] | null
           status?: string
           title: string
           totalSteps?: number
@@ -659,6 +661,7 @@ export type Database = {
           memoryVersion?: number
           projectId?: string
           scheduledAt?: string | null
+          selectedSteps?: string[] | null
           status?: string
           title?: string
           totalSteps?: number

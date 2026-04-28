@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
-import { getSteps, StepDef } from "@/lib/design-session-steps";
+import { getStepsForSession, StepDef } from "@/lib/design-session-steps";
 import type { Note } from "@/components/design-session/sticky-note";
 import { DesignSessionProvider } from "@/contexts/design-session-context";
 
@@ -30,6 +30,7 @@ type Session = {
   currentStep: number;
   projectId: string;
   project: { name: string };
+  selectedSteps: string[] | null;
 };
 
 export default function StepPage({
@@ -48,7 +49,7 @@ export default function StepPage({
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  const steps = session ? getSteps(session.type) : [];
+  const steps = session ? getStepsForSession(session) : [];
   const currentStepDef = steps[stepIndex] as StepDef | undefined;
 
   // Load session

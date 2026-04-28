@@ -42,6 +42,7 @@ import { roleLabel, hasMinLevel, MANAGER, BUILDER } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ProjectCapacityTab } from "@/components/project-capacity-tab";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
+import { SuperSessionModal } from "@/components/design-session/super-session-modal";
 import {
   PROJECT_STATUS, SPRINT_STATUS, DESIGN_SESSION_STATUS, TASK_TYPE, lookupChip,
 } from "@/lib/status-chips";
@@ -713,7 +714,11 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
                       <div>
                         <p className="text-sm font-medium">{s.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {s.type === "inception" ? "Inception" : "Melhoria Continua"}
+                          {s.type === "inception"
+                            ? "Inception"
+                            : s.type === "super"
+                              ? "Super Session"
+                              : "Melhoria Continua"}
                         </p>
                       </div>
                       <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} />
@@ -733,10 +738,12 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
 
 function SessionsTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
   const router = useRouter();
+  const [superOpen, setSuperOpen] = useState(false);
 
   const typeLabels: Record<string, string> = {
     inception: "Inception",
     continuous_improvement: "Melhoria Continua",
+    super: "Super Session",
   };
 
   const createSession = async (type: string) => {
@@ -761,14 +768,24 @@ function SessionsTab({ project, onRefresh }: { project: Project; onRefresh: () =
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <Button size="sm" onClick={() => createSession("inception")}>
           <Plus className="h-4 w-4 mr-1" /> Inception
         </Button>
         <Button size="sm" variant="outline" onClick={() => createSession("continuous_improvement")}>
           <Plus className="h-4 w-4 mr-1" /> Melhoria Continua
         </Button>
+        <Button size="sm" variant="outline" onClick={() => setSuperOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" /> Super Session
+        </Button>
       </div>
+      <SuperSessionModal
+        projectId={project.id}
+        projectName={project.name}
+        open={superOpen}
+        onOpenChange={setSuperOpen}
+        onCreated={onRefresh}
+      />
 
       {project.designSessions.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">

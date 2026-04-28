@@ -6,6 +6,7 @@ import {
   requireProjectEditSessionsApi,
 } from "@/lib/dal";
 import { hasMinLevel, MANAGER } from "@/lib/roles";
+import { validateSuperSteps } from "@/lib/design-session-steps";
 
 export async function GET() {
   const role = await getRealRole();
@@ -51,11 +52,29 @@ export async function POST(req: NextRequest) {
   const denied = await requireProjectEditSessionsApi(body.projectId);
   if (denied) return denied;
 
-  const totalSteps = body.type === "inception" ? 10 : 5;
+  let selectedSteps: string[] | null = null;
+  let totalSteps: number;
+
+  if (body.type === "super") {
+    const validated = validateSuperSteps(body.selectedSteps);
+    if (!validated.ok) {
+      return NextResponse.json({ error: validated.error }, { status: 400 });
+    }
+    selectedSteps = validated.normalized;
+    totalSteps = validated.normalized.length;
+  } else {
+    totalSteps = body.type === "inception" ? 10 : 5;
+  }
 
   const { data: session, error } = await db()
     .from("DesignSession")
-    .insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), ...body, totalSteps })
+    .insert({
+      id: crypto.randomUUID(),
+      updatedAt: new Date().toISOString(),
+      ...body,
+      totalSteps,
+      selectedSteps,
+    })
     .select("*, project:Project(name)")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

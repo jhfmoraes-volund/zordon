@@ -16,7 +16,7 @@ export const vitorAgent: AgentDefinition = {
 
     const { data: session } = await db()
       .from("DesignSession")
-      .select("title, type, projectId")
+      .select("title, type, projectId, selectedSteps")
       .eq("id", sessionId)
       .single();
 
@@ -70,6 +70,7 @@ export const vitorAgent: AgentDefinition = {
       projectId: session.projectId,
       sessionTitle: session.title,
       sessionType: session.type,
+      selectedSteps: (session as { selectedSteps?: string[] | null }).selectedSteps ?? null,
       currentStepKey,
       sessionContext,
       currentStepData,
@@ -86,6 +87,7 @@ export const vitorAgent: AgentDefinition = {
     return buildSystemPrompt({
       sessionTitle: agentContext.sessionTitle as string,
       sessionType: agentContext.sessionType as string,
+      selectedSteps: agentContext.selectedSteps as string[] | null,
       currentStepKey: agentContext.currentStepKey as string,
       sessionContext: agentContext.sessionContext as string,
       currentStepData: agentContext.currentStepData as Record<string, unknown>,
