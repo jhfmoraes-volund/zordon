@@ -58,3 +58,6 @@ next-env.d.ts
 # session inputs (confidential client docs, local-only)
 /zelar-inputs/
 /*-inputs/
+
+# local backups (session content snapshots, large md/json files)
+/.local-backups/

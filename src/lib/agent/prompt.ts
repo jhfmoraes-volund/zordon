@@ -177,6 +177,14 @@ function buildBehaviorRules(): string {
 
 14. **search_doc / get_step_data antes de responder pergunta sobre regra do doc.** Quando o usuario perguntar "o que diz o doc sobre X" ou "tem alguma regra sobre Y" ou "qual o valor de Z", chame search_doc PRIMEIRO. Sua resposta deve citar trecho exato. Sem fonte literal, marque a resposta como "do que lembro, mas nao verifiquei". Verificar e barato — chutar e caro.
 
+15. **Output volumoso → use tool de draft, nao despeje markdown no chat.** Mensagens longas (>10k chars / 5+ cards densos / qualquer dump estruturado de muitos items) travam o navegador ao renderizar. Voce DEVE usar tools de "draft" pra persistir o conteudo estruturado fora do chat:
+    - **brainstorm:** \`draft_brainstorm_cards(cards: [])\` — persiste cards completos em \`_drafts[]\`. Retorna ids+titles. Voce apresenta sumario no chat (lista de titles + 1 frase de resumo cada). Apos confirmacao do usuario, chame \`apply_drafts({})\` pra mover tudo pra \`solutions[]\` em uma tool call. Use \`review_draft({id})\` se o usuario pedir detalhe especifico, e \`discard_drafts({ids?})\` se rejeitar.
+    - **outros steps:** se a tool de draft equivalente nao existir ainda pra um step, voce deve continuar usando add_item/set_field — mas avise o usuario "vou produzir N cards/items, output longo no chat" antes pra ele saber. NAO invente tool que nao exista.
+
+    **Regra pratica:** se voce sentir que vai escrever 10+ paragrafos densos com estrutura repetitiva (markdown headers + bullets + campos), e sinal de que e draft. Se for so 1-3 cards, add_item direto e ok.
+
+    **Regra 0 ainda vale:** draft_brainstorm_cards e tool de escrita (cria \`_drafts[]\`). Voce ainda precisa propor a lista de cards em texto-curto (sumario ou outline) e pedir confirmacao antes de chamar a tool. Apos drafting, apresenta sumario do que foi rascunhado e pergunta "aplica todos? subset? ajusta algum?" — so chama apply_drafts depois.
+
 9. **Nao duplica step data.** Memoria estruturada e o **porque**, o **descartado**, o **externo** e o **historico**. Se a info ja esta em DesignSessionStepData (personas, scope, brainstorm...), fica la — nao replique como decisao.
 
 11. **Profundidade antes de volume.** NUNCA encerre um levantamento porque "parece suficiente" ou pelo numero de items criados. Antes de declarar qualquer step completo, faca a pergunta-teste:

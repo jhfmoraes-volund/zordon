@@ -27,6 +27,12 @@ import {
 } from "./tools/memory";
 import { createMvpCheckTool } from "./tools/mvp-check";
 import { createSearchDocTool } from "./tools/search-doc";
+import {
+  createDraftBrainstormCardsTool,
+  createReviewDraftTool,
+  createApplyDraftsTool,
+  createDiscardDraftsTool,
+} from "./tools/brainstorm-drafts";
 import type { Capabilities } from "./types";
 
 const genId = () => Math.random().toString(36).slice(2, 9);
@@ -67,6 +73,14 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
   });
 
   tools.search_doc = createSearchDocTool(sessionId);
+  tools.review_draft = createReviewDraftTool(sessionId);
+
+  // Drafts (write tools — sujeitas a Regra 0)
+  if (capabilities?.writeTools !== false) {
+    tools.draft_brainstorm_cards = createDraftBrainstormCardsTool(sessionId);
+    tools.apply_drafts = createApplyDraftsTool(sessionId);
+    tools.discard_drafts = createDiscardDraftsTool(sessionId);
+  }
 
   // Write tools
   if (capabilities?.writeTools !== false) {
