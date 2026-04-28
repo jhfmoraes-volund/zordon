@@ -1,7 +1,20 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import {
+  Sparkles,
+  KanbanSquare,
+  CalendarRange,
+  Target,
+  Bot,
+} from "lucide-react";
+
+const PILLARS = [
+  { icon: KanbanSquare, label: "Tasks com FP, status e owner" },
+  { icon: CalendarRange, label: "Sprints semanais com capacity" },
+  { icon: Target, label: "Skills, PDI e ciclos de evolução" },
+  { icon: Bot, label: "Vitor e Alpha — agentes que ajudam" },
+] as const;
 
 export function WelcomeStep({ memberName }: { memberName: string }) {
   const firstName = memberName.split(" ")[0] ?? memberName;
@@ -23,25 +36,28 @@ export function WelcomeStep({ memberName }: { memberName: string }) {
           Olá, {firstName}.
         </h1>
         <p className="text-base leading-relaxed text-muted-foreground">
-          Você acabou de entrar no AgentOps — o sistema interno que orquestra
-          squads, sprints e os agentes que tocam o trabalho do dia a dia. São
-          três passos rápidos pra calibrar seu perfil antes de começar.
+          Esse é o <span className="font-semibold text-foreground">Zordon</span>
+          {" "}— o sistema interno que orquestra squads, sprints, evolução
+          técnica e os agentes que tocam a operação. Um tour rápido pra você
+          ver o que tem por aqui.
         </p>
       </div>
 
-      <ul className="space-y-2 text-sm text-muted-foreground">
-        <li className="flex items-center gap-2">
-          <span className="size-1.5 rounded-full bg-primary" />
-          Especialidade, senioridade e GitHub
-        </li>
-        <li className="flex items-center gap-2">
-          <span className="size-1.5 rounded-full bg-primary" />
-          Capacidade semanal de entrega
-        </li>
-        <li className="flex items-center gap-2">
-          <span className="size-1.5 rounded-full bg-primary" />
-          Tour rápido e você tá dentro
-        </li>
+      <ul className="hidden space-y-2 lg:block">
+        {PILLARS.map((p, i) => (
+          <motion.li
+            key={p.label}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.25 + i * 0.08, ease: "easeOut" }}
+            className="flex items-center gap-3 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5"
+          >
+            <div className="rounded-md bg-primary/10 p-1.5 text-primary">
+              <p.icon className="size-4" />
+            </div>
+            <span className="text-sm">{p.label}</span>
+          </motion.li>
+        ))}
       </ul>
     </div>
   );

@@ -10,7 +10,7 @@ const SQUADS = [
 
 export function WelcomeScene() {
   return (
-    <div className="relative flex h-full w-full items-center justify-center p-10">
+    <div className="relative flex h-full w-full items-center justify-center p-4 sm:p-10">
       {/* Backdrop blur radial */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -66,9 +66,9 @@ export function WelcomeScene() {
           }}
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         >
-          <div className="flex size-20 items-center justify-center rounded-full border border-primary/30 bg-background/80 shadow-2xl backdrop-blur">
+          <div className="flex size-24 items-center justify-center rounded-full border border-primary/30 bg-background/80 shadow-2xl backdrop-blur">
             <span className="font-display text-xl font-bold tracking-tight">
-              ops
+              zordon
             </span>
           </div>
         </motion.div>

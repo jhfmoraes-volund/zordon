@@ -20,12 +20,6 @@ export default async function OnboardingPage() {
       member={{
         id: member.id,
         name: member.name,
-        role: member.role,
-        specialty: member.specialty,
-        seniority: member.seniority,
-        githubUsername: member.githubUsername,
-        fpCapacity: member.fpCapacity,
-        dedicationPercent: member.dedicationPercent,
       }}
     />
   );
