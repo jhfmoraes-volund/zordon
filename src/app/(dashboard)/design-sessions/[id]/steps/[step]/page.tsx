@@ -1070,6 +1070,9 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
                           {featureLabel(g.relatedFeature) && (
                             <span className="text-muted-foreground"> — ref: {featureLabel(g.relatedFeature)}</span>
                           )}
+                          {g.mitigation && (
+                            <span className="block pl-4 text-muted-foreground">Mitigacao: {g.mitigation}</span>
+                          )}
                         </li>
                       ))}
                     </ul>

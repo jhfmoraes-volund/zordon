@@ -26,6 +26,7 @@ import {
   createCompactSessionToProjectTool,
 } from "./tools/memory";
 import { createMvpCheckTool } from "./tools/mvp-check";
+import { createSearchDocTool } from "./tools/search-doc";
 import type { Capabilities } from "./types";
 
 const genId = () => Math.random().toString(36).slice(2, 9);
@@ -64,6 +65,8 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
       return { stepKey, data };
     },
   });
+
+  tools.search_doc = createSearchDocTool(sessionId);
 
   // Write tools
   if (capabilities?.writeTools !== false) {

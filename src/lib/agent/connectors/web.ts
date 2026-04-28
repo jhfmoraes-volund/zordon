@@ -15,7 +15,7 @@ import type { Capabilities } from "../types";
  * Full access: read + write tools, generous step budget.
  */
 const WEB_CAPABILITIES: Capabilities = {
-  maxSteps: 30,
+  maxSteps: 60,
   writeTools: true,
   readTools: true,
   webSearch: true,

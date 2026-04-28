@@ -99,6 +99,16 @@ function GapColumn({
   onDelete: (id: string) => void;
 }) {
   const [text, setText] = useState("");
+  const [expandedMitigations, setExpandedMitigations] = useState<Set<string>>(new Set());
+
+  const toggleMitigation = (id: string, expand: boolean) => {
+    setExpandedMitigations((prev) => {
+      const next = new Set(prev);
+      if (expand) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
 
   const handleAdd = () => {
     const t = text.trim();
@@ -182,6 +192,36 @@ function GapColumn({
                 features={features}
                 onChange={(value) => onUpdate(gap.id, { relatedFeature: value })}
               />
+
+              {(() => {
+                const hasContent = !!gap.mitigation?.trim();
+                const isExpanded = expandedMitigations.has(gap.id);
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => toggleMitigation(gap.id, !isExpanded)}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                    >
+                      {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      {hasContent ? "Mitigacao" : "Adicionar mitigacao"}
+                      {hasContent && !isExpanded && (
+                        <span className="ml-1 h-1.5 w-1.5 rounded-full bg-yellow-500 inline-block" />
+                      )}
+                    </button>
+                    {isExpanded && (
+                      <Textarea
+                        value={gap.mitigation ?? ""}
+                        onChange={(e) => onUpdate(gap.id, { mitigation: e.target.value })}
+                        rows={2}
+                        className="text-xs"
+                        placeholder="Como destravar enquanto a decisao formal nao sai? (default temporario, stakeholder, prototipo)"
+                        autoFocus={!hasContent}
+                      />
+                    )}
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         ))}
