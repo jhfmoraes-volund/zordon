@@ -136,7 +136,7 @@ export default function MeetingDetailPage({
     sourceReviewId: "",
   });
   const [collapsedPms, setCollapsedPms] = useState<Set<string>>(new Set());
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
 
   const load = () => {
     fetch(`/api/meetings/${id}`).then((r) => r.json()).then((data) => {
@@ -234,7 +234,7 @@ export default function MeetingDetailPage({
   };
 
   const toggleProject = (reviewId: string) => {
-    setCollapsedProjects((prev) => {
+    setExpandedProjects((prev) => {
       const next = new Set(prev);
       if (next.has(reviewId)) next.delete(reviewId);
       else next.add(reviewId);
@@ -248,9 +248,10 @@ export default function MeetingDetailPage({
   const toggleAll = () => {
     if (allCollapsed) {
       setCollapsedPms(new Set());
-      setCollapsedProjects(new Set());
+      setExpandedProjects(new Set(meeting.projectReviews.map((r) => r.id)));
     } else {
       setCollapsedPms(new Set(allPmIds));
+      setExpandedProjects(new Set());
     }
   };
 
@@ -381,7 +382,7 @@ export default function MeetingDetailPage({
                       <ReviewCard
                         key={review.id}
                         review={review}
-                        collapsed={collapsedProjects.has(review.id)}
+                        collapsed={!expandedProjects.has(review.id)}
                         onToggle={() => toggleProject(review.id)}
                         onUpdate={(data) => updateReview(review.id, data)}
                       />

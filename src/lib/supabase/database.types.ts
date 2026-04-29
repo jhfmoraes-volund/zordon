@@ -958,6 +958,76 @@ export type Database = {
           },
         ]
       }
+      DesignSessionTranscript: {
+        Row: {
+          actionItems: Json
+          fullText: string
+          id: string
+          importedAt: string
+          importedByMemberId: string | null
+          meetingEnd: string
+          meetingStart: string
+          meetingTitle: string
+          participants: Json
+          projectId: string
+          roamTranscriptId: string
+          sessionId: string
+          summary: string | null
+        }
+        Insert: {
+          actionItems?: Json
+          fullText: string
+          id?: string
+          importedAt?: string
+          importedByMemberId?: string | null
+          meetingEnd: string
+          meetingStart: string
+          meetingTitle: string
+          participants?: Json
+          projectId: string
+          roamTranscriptId: string
+          sessionId: string
+          summary?: string | null
+        }
+        Update: {
+          actionItems?: Json
+          fullText?: string
+          id?: string
+          importedAt?: string
+          importedByMemberId?: string | null
+          meetingEnd?: string
+          meetingStart?: string
+          meetingTitle?: string
+          participants?: Json
+          projectId?: string
+          roamTranscriptId?: string
+          sessionId?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionTranscript_importedByMemberId_fkey"
+            columns: ["importedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscript_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscript_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignSessionStepData: {
         Row: {
           data: Json
