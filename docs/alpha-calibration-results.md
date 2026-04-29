@@ -343,7 +343,85 @@ Regras:
 | #4 Bug filtro `participant` no Roam | ⏳ pendente |
 | #5 Task vs Todo sem regra | ⏳ pendente |
 | #6 Sem `update_task_title/description` | ⏳ pendente |
+| Tipos de reunião + propose_task_action | ✅ corrigido (ver Fase 3) |
 | Regra 0 / citação numérica / drafts | ⏳ pendente (Fase 2-3 do runbook original) |
+
+---
+
+## Fase 3 — Tipos de Reunião + Propostas (MeetingTaskAction)
+
+Pedido do PM: Alpha precisa distinguir `pm_review` / `daily` / `super_planning` / `general`. Em qualquer reunião que aceite Tasks (pm_review/daily/super_planning), Alpha **propõe** mudanças via `MeetingTaskAction` (decision=pending) em vez de executar direto. PM aprova pela UI, sistema aplica em batch (já existe).
+
+### Implementação — A: Context
+
+**Edits:** [src/lib/agent/agents/alpha/context.ts](src/lib/agent/agents/alpha/context.ts) — `buildMeetingBlock` virou dispatcher por `Meeting.type`:
+
+- Puxa `type`, `title`, `sprintId`, `notes`, attendees (com Member), projectLinks (com Project) e MeetingTaskAction pendentes em todos os casos.
+- Renderização específica por tipo:
+  - **pm_review** — reviews por PM (mantém comportamento) + ações pendentes.
+  - **daily** — sprint atual + tasks de cada projeto vinculado + ações pendentes.
+  - **super_planning** — sprint-objeto (`Meeting.sprintId`) + tasks da sprint + backlog do projeto + notes (transcrição) + ações pendentes.
+  - **general** — só attendees + projectLinks + notes + ações pendentes (sem suporte a Task).
+- Cada bloco indica o fluxo permitido em texto (parte do prompt vê isso).
+
+### Implementação — C: Tools novas
+
+**Edits:** [src/lib/agent/agents/alpha/tools.ts](src/lib/agent/agents/alpha/tools.ts) — 3 tools:
+
+- **`list_meeting_actions`** (read, sempre): lista MeetingTaskAction da reunião com filtro por decision/type. Default mostra pending.
+- **`propose_task_action`** (write, dentro de `if(writeTools)`): cria MeetingTaskAction(decision=pending, source=ai). Aceita type=create/update/delete/move/review, valida consistência (create exige projectName; outros exigem taskReference; move exige targetSprintName), resolve FKs por nome.
+- **`discard_meeting_action`** (write): DELETE em proposta ainda em pending+pending. Bloqueia se já foi decidida/aplicada.
+
+### Implementação — B: Prompt
+
+**Edits:** [src/lib/agent/agents/alpha/prompt.ts](src/lib/agent/agents/alpha/prompt.ts):
+
+- Bloco "Tools — Propostas de Task em reunião" listando as 3 tools.
+- Substituída seção "Replanejamento em lote" por **"Tipos de Reunião — fluxos por type (REGRA DURA)"** com:
+  - Princípio geral: dentro de reunião, NUNCA chamar tools de execução direta de Task. Toda mudança vira proposta.
+  - Bloco por tipo (`pm_review`, `daily`, `super_planning`, `general`) com tools permitidas + fluxo.
+  - Bloco "fora de reunião" liberando execução direta normal.
+- Refinada seção Weekly PM pra usar `propose_task_action` quando há mudança em Task.
+
+### Validação
+
+**Setup:** criadas 2 reuniões fictícias no DB (daily + super_planning vinculada ao Sprint 4 Zordon com transcrição em `notes`). Limpas após o teste.
+
+**Cenário 1 — Daily, "Khevin reportou bug do login, precisa de task":**
+
+| | Output |
+|---|---|
+| Tool chamada | ✅ `propose_task_action({type:"create", projectName:"Zordon", payload:{title, description, scope:"small", complexity:"medium", type:"bugfix", priority:8, assigneeNames:["Khevin Carlos"]}, reasoning, confidence:0.85})` |
+| Texto | *"Estamos em contexto de **daily** — então a task precisa virar uma **proposta** via propose_task_action, não criação direta."* |
+| Resultado | MeetingTaskAction registrada (decision=pending, source=ai). Verificado no DB. |
+| Bônus | Citou capacidade de Khevin (50 FP livres) usando bateria do contexto. |
+
+**Cenário 2 — Daily, "o que já foi proposto?":**
+
+| | Output |
+|---|---|
+| Tool chamada | ✅ `list_meeting_actions({decision:"all"})` |
+| Texto | tabela limpa com tipo, projeto, FP estimado, prioridade, assignee, decisão, confiança, motivo |
+
+**Cenário 3 — Fora de reunião, "cria task pro Khevin":**
+
+| | Output |
+|---|---|
+| Tool chamada | ✅ `create_task` (execução direta) — TASK-278 criada de verdade |
+| Resultado | Comportamento esperado: fora de reunião, tools de execução direta seguem disponíveis |
+
+**Cenário 4 — Super_planning, "olhando a transcrição e o backlog, o que trazer pro Sprint 4?":**
+
+| | Output |
+|---|---|
+| Tools chamadas | ✅ `load_heuristic("replanejamento-reuniao")`, `load_heuristic("sprint-composicao")`, `get_recent_meetings`, `get_sprint_capacity` |
+| Comportamento | **Nenhum write executado.** Apresentou análise estruturada (capacidade, notas → tasks, mix vs total) + 3 perguntas de alinhamento antes de propor. |
+| Citações | usou `Meeting.notes` (transcrição) injetada no contexto, baseline da bateria, dados da sprint focada |
+
+**Síntese:** ✅ todos os cenários passaram. O contraste daily↔fora-de-reunião confirma o gating semântico via prompt — Alpha distingue corretamente.
+
+### Limpeza
+Pós-teste: deletadas 2 Meetings fictícias (cascade limpou MeetingTaskAction/Link/Attendee), TaskAssignment e TASK-278.
 
 ---
 

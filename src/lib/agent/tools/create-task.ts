@@ -8,7 +8,7 @@ import { suggestFunctionPoints } from "@/lib/function-points";
  * The tool creates both a DesignSessionItem and a Task in the database,
  * calculates function points automatically, and returns the result.
  */
-export function createTaskTool(sessionId: string, projectId: string) {
+export function createTaskTool(sessionId: string, projectId: string, createdById?: string) {
   return tool({
     description:
       "Cria uma task técnica no backlog do projeto. Cada task deve ser um BRIEF AUTOSSUFICIENTE: um LLM em sessão futura, sem acesso a esta design session, deve conseguir ler a task e executar sozinho. Use markdown rico em description e notes (ver PASSO 3 do system prompt). A tool calcula Function Points automaticamente.",
@@ -111,6 +111,8 @@ export function createTaskTool(sessionId: string, projectId: string) {
           dependencies: dependsOn?.length
             ? JSON.stringify(dependsOn)
             : null,
+          createdById: createdById ?? null,
+          createdByAgent: true,
           updatedAt: new Date().toISOString(),
         })
         .select("id, title, functionPoints")

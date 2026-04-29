@@ -15,6 +15,8 @@ export interface Capabilities {
   createTasks?: boolean;
   /** Project ID for task creation (required when createTasks is true) */
   projectId?: string;
+  /** Member id of the human who triggered the run — credited as task creator. */
+  memberId?: string;
   /** Composio integration settings */
   composio?: {
     userId: string;

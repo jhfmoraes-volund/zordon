@@ -45,8 +45,9 @@ import { ProjectCapacityTab } from "@/components/project-capacity-tab";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { SuperSessionModal } from "@/components/design-session/super-session-modal";
 import {
-  PROJECT_STATUS, SPRINT_STATUS, DESIGN_SESSION_STATUS, TASK_TYPE, lookupChip,
+  PROJECT_STATUS, SPRINT_STATUS, DESIGN_SESSION_STATUS, TASK_TYPE, TASK_STATUS, lookupChip,
 } from "@/lib/status-chips";
+import { FilterBar, type FilterDef } from "@/components/filter-bar";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -910,19 +911,58 @@ function TasksTab({
   setProject: React.Dispatch<React.SetStateAction<Project | null>>;
   onRefresh: () => void;
 }) {
-  const [filter, setFilter] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetTaskId, setSheetTaskId] = useState<string | null>(null);
-
-  const filtered = filter === "all"
-    ? project.tasks
-    : project.tasks.filter((t) => t.status === filter);
 
   const members = project.projectMembers.map((pm) => ({
     id: pm.member.id,
     name: pm.member.name,
     role: pm.member.role,
   }));
+
+  const filtered = project.tasks.filter((t) => {
+    if (filterType && t.type !== filterType) return false;
+    if (filterStatus && t.status !== filterStatus) return false;
+    if (filterAssignee !== null) {
+      if (filterAssignee === "__unassigned__") {
+        if (t.assignments.length > 0) return false;
+      } else {
+        const has = t.assignments.some((a) => a.member?.id === filterAssignee);
+        if (!has) return false;
+      }
+    }
+    return true;
+  });
+
+  const filterDefs: FilterDef[] = [
+    {
+      key: "type",
+      label: "Tipo",
+      value: filterType,
+      onChange: setFilterType,
+      options: Object.entries(TASK_TYPE).map(([value, { label }]) => ({ value, label })),
+    },
+    {
+      key: "status",
+      label: "Status",
+      value: filterStatus,
+      onChange: setFilterStatus,
+      options: Object.entries(TASK_STATUS).map(([value, { label }]) => ({ value, label })),
+    },
+    {
+      key: "assignee",
+      label: "Atribuído a",
+      value: filterAssignee,
+      onChange: setFilterAssignee,
+      options: [
+        { value: "__unassigned__", label: "Sem atribuição" },
+        ...members.map((m) => ({ value: m.id, label: m.name })),
+      ],
+    },
+  ];
 
   const patchTask = (taskId: string, patch: Partial<Task>) => {
     setProject((prev) =>
@@ -978,26 +1018,11 @@ function TasksTab({
   return (
     <div className="space-y-4">
       {/* Header: filters + create */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex gap-1 flex-wrap">
-          {["all", "backlog", "todo", "in_progress", "review", "done"].map((s) => (
-            <Button
-              key={s}
-              variant={filter === s ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setFilter(s)}
-            >
-              {s === "all" ? "Todas" : s}
-              <Badge variant="secondary" className="ml-1 h-4 text-xs">
-                {s === "all" ? project.tasks.length : project.tasks.filter((t) => t.status === s).length}
-              </Badge>
-            </Button>
-          ))}
-        </div>
+      <div className="flex items-start justify-between gap-4">
+        <FilterBar filters={filterDefs} className="flex-1" />
         <Button
           size="sm"
-          className="h-7 text-xs shrink-0"
+          className="h-8 text-xs shrink-0"
           onClick={() => { setSheetTaskId(null); setSheetOpen(true); }}
         >
           <Plus className="h-3.5 w-3.5 mr-1" />

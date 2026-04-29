@@ -68,6 +68,7 @@ export const vitorAgent: AgentDefinition = {
     return {
       sessionId,
       projectId: session.projectId,
+      memberId: req.memberId ?? undefined,
       sessionTitle: session.title,
       sessionType: session.type,
       selectedSteps: (session as { selectedSteps?: string[] | null }).selectedSteps ?? null,
@@ -104,6 +105,7 @@ export const vitorAgent: AgentDefinition = {
     return assembleTools(agentContext.sessionId as string, {
       ...capabilities,
       projectId: (agentContext.projectId as string) ?? capabilities.projectId,
+      memberId: (agentContext.memberId as string | undefined) ?? capabilities.memberId,
     });
   },
 };

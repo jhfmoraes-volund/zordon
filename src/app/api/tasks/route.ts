@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { suggestFunctionPoints } from "@/lib/function-points";
-import { getUser, requireProjectMemberApi } from "@/lib/dal";
+import { getCurrentMember, getUser, requireProjectMemberApi } from "@/lib/dal";
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -60,6 +60,10 @@ export async function POST(req: NextRequest) {
   }
   const denied = await requireProjectMemberApi(data.projectId);
   if (denied) return denied;
+
+  const currentMember = await getCurrentMember();
+  data.createdById = currentMember?.id ?? null;
+  data.createdByAgent = false;
 
   const supabase = db();
 

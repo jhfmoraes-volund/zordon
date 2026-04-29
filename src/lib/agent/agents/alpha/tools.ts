@@ -483,6 +483,8 @@ export function assembleAlphaTools(
             status: "backlog",
             projectId: resolvedProjectId,
             sprintId: resolvedSprintId || null,
+            createdById: currentMemberId ?? null,
+            createdByAgent: true,
             updatedAt: new Date().toISOString(),
           })
           .select("id, reference, title, functionPoints")
@@ -1118,6 +1120,58 @@ export function assembleAlphaTools(
     },
   });
 
+  tools.list_meeting_actions = tool({
+    description:
+      "Lista MeetingTaskAction (propostas de mudança em Tasks discutidas em reunião). Use pra ver o que já foi proposto numa daily/super_planning/pm_review e evitar duplicar sugestões. Retorna por padrão só ações com decision='pending'.",
+    inputSchema: z.object({
+      meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
+      decision: z.enum(["pending", "approved", "rejected", "all"]).default("pending").describe("Filtrar por decision (default: pending)"),
+      type: z.enum(["create", "update", "delete", "move", "review"]).optional().describe("Filtrar por tipo de ação"),
+    }),
+    execute: async ({ meetingId, decision, type }) => {
+      const targetId = meetingId || activeMeetingId;
+      if (!targetId) return { error: "Nenhuma reunião no contexto. Informe meetingId." };
+
+      let query = supabase
+        .from("MeetingTaskAction")
+        .select(`
+          id, type, decision, execution, source, taskId, targetSprintId, payload,
+          aiReasoning, aiConfidence, reviewReasons, reviewNote, createdAt,
+          project:Project(name),
+          task:Task(reference, title),
+          targetSprint:Sprint!MeetingTaskAction_targetSprintId_fkey(name)
+        `)
+        .eq("meetingId", targetId)
+        .order("createdAt", { ascending: true });
+
+      if (decision !== "all") query = query.eq("decision", decision);
+      if (type) query = query.eq("type", type);
+
+      const { data, error } = await query;
+      if (error) return { error: `Erro ao listar ações: ${error.message}` };
+
+      const actions = (data || []).map((a) => ({
+        id: a.id,
+        type: a.type,
+        decision: a.decision,
+        execution: a.execution,
+        source: a.source,
+        project: (a.project as { name: string } | null)?.name ?? null,
+        task: a.task
+          ? `[${(a.task as { reference: string | null }).reference ?? "?"}] ${(a.task as { title: string }).title}`
+          : null,
+        targetSprint: (a.targetSprint as { name: string } | null)?.name ?? null,
+        payload: a.payload,
+        aiReasoning: a.aiReasoning,
+        aiConfidence: a.aiConfidence,
+        reviewReasons: a.reviewReasons,
+        reviewNote: a.reviewNote,
+      }));
+
+      return { meetingId: targetId, count: actions.length, actions };
+    },
+  });
+
   if (capabilities.writeTools) {
     tools.update_meeting_review = tool({
       description:
@@ -1242,6 +1296,164 @@ export function assembleAlphaTools(
           source,
           linkedToProject: projectName && sourceReviewId ? projectName : null,
         };
+      },
+    });
+
+    tools.propose_task_action = tool({
+      description:
+        "Propõe uma mudança em Task no contexto de uma reunião — NÃO executa, só registra como proposta pendente em MeetingTaskAction. O PM aprova/edita/rejeita pela UI da reunião e o sistema aplica em batch. Use SEMPRE em vez de create_task/update_task_*/move_task_to_sprint quando houver reunião ativa do tipo daily, super_planning ou pm_review.",
+      inputSchema: z.object({
+        meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
+        type: z.enum(["create", "update", "delete", "move", "review"]).describe(
+          "create=task nova; update=editar campos; delete=tirar do sprint; move=mudar de sprint; review=marcar pra discutir"
+        ),
+        projectName: z.string().optional().describe("Nome parcial do projeto (obrigatório pra type=create; pra outros tipos vem da task)"),
+        taskReference: z.string().optional().describe("Referência da task (ex: TASK-042) — obrigatória pra update/delete/move/review"),
+        targetSprintName: z.string().optional().describe("Nome parcial do sprint destino (obrigatório pra type=move)"),
+        payload: z.record(z.string(), z.unknown()).optional().describe(
+          "Campos da ação. Pra create: { title, description?, scope, complexity, type, priority?, status?, assigneeNames? }. Pra update: campos a mudar. Pra review: ignorado (use reviewReasons/reviewNote)."
+        ),
+        reasoning: z.string().min(1).describe("1-2 frases em pt-BR explicando o porquê da proposta"),
+        confidence: z.number().min(0).max(1).default(0.7).describe("0..1, sua confiança na proposta. <0.5 considere usar type=review."),
+        reviewReasons: z.array(z.enum([
+          "scope", "acceptance_criteria", "dependencies", "estimate", "assignee", "other",
+        ])).optional().describe("Pra type=review: o que precisa ser discutido"),
+        reviewNote: z.string().optional().describe("Pra type=review: nota livre"),
+      }),
+      execute: async (args) => {
+        const {
+          meetingId, type, projectName, taskReference, targetSprintName,
+          payload, reasoning, confidence, reviewReasons, reviewNote,
+        } = args;
+
+        const targetMeetingId = meetingId || activeMeetingId;
+        if (!targetMeetingId) {
+          return { error: "Nenhuma reunião no contexto. Esta tool só funciona dentro de uma reunião." };
+        }
+
+        // Validar consistência
+        if (type === "create" && taskReference) {
+          return { error: "type=create não aceita taskReference (a task ainda não existe)." };
+        }
+        if (type !== "create" && !taskReference) {
+          return { error: `type=${type} exige taskReference da task afetada.` };
+        }
+        if (type === "move" && !targetSprintName) {
+          return { error: "type=move exige targetSprintName." };
+        }
+
+        // Resolver projectId + taskId
+        let resolvedProjectId: string | null = null;
+        let resolvedTaskId: string | null = null;
+
+        if (taskReference) {
+          const { data: task } = await supabase
+            .from("Task")
+            .select("id, projectId, title")
+            .eq("reference", taskReference)
+            .maybeSingle();
+          if (!task) return { error: `Task "${taskReference}" não encontrada.` };
+          resolvedTaskId = task.id;
+          resolvedProjectId = task.projectId;
+        }
+
+        if (type === "create") {
+          if (!projectName) {
+            return { error: "type=create exige projectName pra resolver o projeto." };
+          }
+          const { data: project } = await supabase
+            .from("Project")
+            .select("id, name")
+            .ilike("name", `%${projectName}%`)
+            .limit(1)
+            .maybeSingle();
+          if (!project) return { error: `Projeto "${projectName}" não encontrado.` };
+          resolvedProjectId = project.id;
+        }
+
+        if (!resolvedProjectId) {
+          return { error: "Não foi possível determinar projectId da proposta." };
+        }
+
+        // Resolver targetSprintId pra move
+        let resolvedTargetSprintId: string | null = null;
+        if (type === "move" && targetSprintName) {
+          const { data: sprint } = await supabase
+            .from("Sprint")
+            .select("id, name, projectId")
+            .ilike("name", `%${targetSprintName}%`)
+            .eq("projectId", resolvedProjectId)
+            .limit(1)
+            .maybeSingle();
+          if (!sprint) {
+            return { error: `Sprint "${targetSprintName}" não encontrado no projeto da task.` };
+          }
+          resolvedTargetSprintId = sprint.id;
+        }
+
+        const insertPayload = {
+          id: crypto.randomUUID(),
+          meetingId: targetMeetingId,
+          projectId: resolvedProjectId,
+          type,
+          taskId: resolvedTaskId,
+          targetSprintId: resolvedTargetSprintId,
+          payload: (payload ?? {}) as never,
+          decision: "pending" as const,
+          execution: "pending" as const,
+          source: "ai" as const,
+          aiReasoning: reasoning,
+          aiConfidence: confidence,
+          reviewReasons: reviewReasons ?? null,
+          reviewNote: reviewNote ?? null,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const { data: created, error } = await supabase
+          .from("MeetingTaskAction")
+          .insert(insertPayload)
+          .select("id, type, decision, execution")
+          .single();
+
+        if (error) return { error: `Erro ao registrar proposta: ${error.message}` };
+
+        return {
+          proposed: true,
+          actionId: created.id,
+          type: created.type,
+          decision: created.decision,
+          note: "Proposta registrada — PM decide via UI da reunião.",
+        };
+      },
+    });
+
+    tools.discard_meeting_action = tool({
+      description:
+        "Descarta uma proposta de MeetingTaskAction que ainda está pending (decision=pending, execution=pending). Use quando você quiser refazer uma sugestão ou o PM pediu pra remover. Não funciona em propostas já decididas/aplicadas — pra essas, peça ao PM pra rejeitar/desfazer pela UI.",
+      inputSchema: z.object({
+        actionId: z.string().describe("ID da MeetingTaskAction a descartar"),
+      }),
+      execute: async ({ actionId }) => {
+        const { data: existing } = await supabase
+          .from("MeetingTaskAction")
+          .select("id, decision, execution, type")
+          .eq("id", actionId)
+          .maybeSingle();
+
+        if (!existing) return { error: `Proposta "${actionId}" não encontrada.` };
+        if (existing.decision !== "pending" || existing.execution !== "pending") {
+          return {
+            error: `Proposta já decidida/aplicada (decision=${existing.decision}, execution=${existing.execution}). Não dá pra descartar via Alpha.`,
+          };
+        }
+
+        const { error } = await supabase
+          .from("MeetingTaskAction")
+          .delete()
+          .eq("id", actionId);
+        if (error) return { error: `Erro ao descartar: ${error.message}` };
+
+        return { discarded: true, actionId, type: existing.type };
       },
     });
   }

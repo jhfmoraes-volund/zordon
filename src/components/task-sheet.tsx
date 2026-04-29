@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database.types";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/contexts/auth-context";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,9 @@ type Task = {
   notes: string | null;
   projectId: string;
   sprintId: string | null;
+  createdById: string | null;
+  createdByAgent: boolean;
+  createdBy?: { id: string; name: string } | null;
   project?: { name: string };
   sprint?: { name: string } | null;
   assignments: { member: { id: string; name: string } | null }[];
@@ -128,6 +132,7 @@ function TaskSheetBody({
   const [phase, setPhase] = useState<"loading" | "ready">("loading");
   // Track whether this is a new task that hasn't been persisted yet
   const [isLocalDraft, setIsLocalDraft] = useState(false);
+  const auth = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -149,7 +154,7 @@ function TaskSheetBody({
         // Edit mode: load existing task
         const { data } = await supabase
           .from("Task")
-          .select("*, project:Project(name), sprint:Sprint(name), assignments:TaskAssignment(*, member:Member(id, name)), iterations:TaskIteration(id, number, type, trigger, resultSummary, success)")
+          .select("*, project:Project(name), sprint:Sprint(name), createdBy:Member!Task_createdById_fkey(id, name), assignments:TaskAssignment(*, member:Member(id, name)), iterations:TaskIteration(id, number, type, trigger, resultSummary, success)")
           .eq("id", taskId)
           .single();
         if (cancelled) return;
@@ -185,6 +190,9 @@ function TaskSheetBody({
         notes: null,
         projectId: projectId ?? "",
         sprintId: createDefaults?.sprintId ?? null,
+        createdById: auth.member?.id ?? null,
+        createdByAgent: false,
+        createdBy: auth.member ? { id: auth.member.id, name: auth.member.name } : null,
         assignments: [],
       });
       setIsLocalDraft(true);
@@ -229,8 +237,10 @@ function TaskSheetBody({
           dependencies: merged.dependencies as string[] | null,
           acceptanceCriteria: (merged.acceptanceCriteria as string) || null,
           notes: (merged.notes as string) || null,
+          createdById: auth.member?.id ?? null,
+          createdByAgent: false,
         })
-        .select("*, project:Project(name), sprint:Sprint(name), assignments:TaskAssignment(*, member:Member(id, name))")
+        .select("*, project:Project(name), sprint:Sprint(name), createdBy:Member!Task_createdById_fkey(id, name), assignments:TaskAssignment(*, member:Member(id, name))")
         .single();
 
       if (error || !created) {
@@ -249,7 +259,7 @@ function TaskSheetBody({
       onChange?.();
       return created as unknown as Task;
     },
-    [task, onChange]
+    [task, onChange, auth.member]
   );
 
   const save = useCallback(
@@ -403,11 +413,17 @@ function TaskSheetEditor({
     <>
       {/* ── Header ── */}
       <div className="shrink-0 border-b px-6 pt-6 pb-4 space-y-4">
-        {/* Ref */}
-        <div>
+        {/* Ref + creator */}
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
             {task.reference ?? "Rascunho"}
           </span>
+          {task.createdBy && (
+            <span className="text-xs text-muted-foreground">
+              Criada por {task.createdBy.name}
+              {task.createdByAgent ? " via Alpha" : ""}
+            </span>
+          )}
         </div>
 
         {/* Title */}

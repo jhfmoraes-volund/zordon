@@ -101,6 +101,8 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
     dueDate: (p.dueDate as string) ?? null,
     projectId: action.projectId,
     sprintId: (p.sprintId as string | null) ?? null,
+    createdById: action.decidedById,
+    createdByAgent: action.source === "ai",
     updatedAt: new Date().toISOString(),
   });
   if (insErr) throw new Error(`Insert task failed: ${insErr.message}`);

@@ -2310,6 +2310,8 @@ export type Database = {
           billable: boolean
           complexity: string
           createdAt: string
+          createdByAgent: boolean
+          createdById: string | null
           dependencies: Json | null
           description: string | null
           designSessionId: string | null
@@ -2338,6 +2340,8 @@ export type Database = {
           billable?: boolean
           complexity?: string
           createdAt?: string
+          createdByAgent?: boolean
+          createdById?: string | null
           dependencies?: Json | null
           description?: string | null
           designSessionId?: string | null
@@ -2366,6 +2370,8 @@ export type Database = {
           billable?: boolean
           complexity?: string
           createdAt?: string
+          createdByAgent?: boolean
+          createdById?: string | null
           dependencies?: Json | null
           description?: string | null
           designSessionId?: string | null
@@ -2390,6 +2396,34 @@ export type Database = {
           updatedAt?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "Task_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Task_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Task_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Task_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "Task_projectId_fkey"
             columns: ["projectId"]

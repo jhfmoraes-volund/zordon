@@ -640,7 +640,47 @@ async function buildSprintFocus(
   return { block, projectId: sprint.projectId ?? null };
 }
 
-// ─── Meeting block (existing) ────────────────────────────────────
+// ─── Meeting block (dispatcher por tipo) ─────────────────────────
+
+const MEETING_TYPE_LABELS: Record<string, string> = {
+  pm_review: "Reunião com PMs (Weekly PM)",
+  general: "Reunião geral",
+  daily: "Daily",
+  super_planning: "Super Planning",
+};
+
+type MeetingRow = {
+  id: string;
+  date: string;
+  type: string | null;
+  title: string | null;
+  notes: string | null;
+  sprintId: string | null;
+  attendees: Array<{
+    role: string | null;
+    externalName: string | null;
+    externalRole: string | null;
+    member: { id: string; name: string } | null;
+  }> | null;
+  projectLinks: Array<{
+    projectId: string;
+    project: { id: string; name: string } | null;
+  }> | null;
+};
+
+type PendingAction = {
+  id: string;
+  type: string;
+  source: string;
+  taskId: string | null;
+  targetSprintId: string | null;
+  payload: unknown;
+  aiReasoning: string | null;
+  aiConfidence: number | null;
+  project: { name: string } | null;
+  task: { reference: string | null; title: string } | null;
+  targetSprint: { name: string } | null;
+};
 
 async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
   if (!meetingId) return null;
@@ -648,55 +688,301 @@ async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
 
   const { data: meeting } = await supabase
     .from("Meeting")
-    .select("id, date")
+    .select(`
+      id, date, type, title, notes, sprintId,
+      attendees:MeetingAttendee(role, externalName, externalRole, member:Member(id, name)),
+      projectLinks:MeetingProjectLink(projectId, project:Project(id, name))
+    `)
     .eq("id", meetingId)
     .maybeSingle();
   if (!meeting) return null;
 
+  const m = meeting as unknown as MeetingRow;
+  const meetingType = m.type ?? "pm_review";
+
+  const { data: pendingRaw } = await supabase
+    .from("MeetingTaskAction")
+    .select(`
+      id, type, source, taskId, targetSprintId, payload,
+      aiReasoning, aiConfidence,
+      project:Project(name),
+      task:Task(reference, title),
+      targetSprint:Sprint!MeetingTaskAction_targetSprintId_fkey(name)
+    `)
+    .eq("meetingId", meetingId)
+    .eq("decision", "pending")
+    .order("createdAt", { ascending: true });
+
+  const pending = ((pendingRaw || []) as unknown) as PendingAction[];
+  const pendingBlock = renderPendingActions(pending);
+
+  switch (meetingType) {
+    case "daily":
+      return await renderDailyMeeting(m, pendingBlock);
+    case "super_planning":
+      return await renderSuperPlanningMeeting(m, pendingBlock);
+    case "general":
+      return renderGeneralMeeting(m, pendingBlock);
+    case "pm_review":
+    default:
+      return await renderPmReviewMeeting(m, pendingBlock);
+  }
+}
+
+function renderMeetingHeader(m: MeetingRow): string {
+  const type = m.type ?? "pm_review";
+  const label = MEETING_TYPE_LABELS[type] ?? type;
+  return [
+    `## Reunião ativa: ${label}${m.title ? ` — ${m.title}` : ""}`,
+    `- **ID:** ${m.id}`,
+    `- **Data:** ${m.date}`,
+    `- **Tipo:** \`${type}\``,
+  ].join("\n");
+}
+
+function renderAttendees(m: MeetingRow): string {
+  const list = m.attendees || [];
+  if (list.length === 0) return "_Sem participantes registrados._";
+  const parts = list.map((a) => {
+    if (a.member) return `${a.member.name}${a.role ? ` (${a.role})` : ""}`;
+    return `${a.externalName ?? "?"}${a.externalRole ? ` (${a.externalRole}, externo)` : " (externo)"}`;
+  });
+  return `**Participantes:** ${parts.join(", ")}`;
+}
+
+function renderProjectLinks(m: MeetingRow): string {
+  const list = m.projectLinks || [];
+  if (list.length === 0) return "_Sem projetos vinculados._";
+  const names = list.map((l) => l.project?.name).filter(Boolean);
+  return `**Projetos vinculados:** ${names.join(", ")}`;
+}
+
+function renderNotes(m: MeetingRow): string {
+  const notes = (m.notes ?? "").trim();
+  if (!notes) return "_Sem notas/transcrição registradas no Zordon._";
+  const trimmed = notes.length > 2500 ? `${notes.slice(0, 2500)}…[truncado, ${notes.length - 2500} chars]` : notes;
+  return ["**Notas/transcrição (Meeting.notes):**", trimmed].join("\n");
+}
+
+function renderPendingActions(actions: PendingAction[]): string {
+  if (actions.length === 0) return "_Nenhuma ação proposta pendente._";
+  const lines: string[] = [`### Ações pendentes (${actions.length}) — já propostas, aguardando decisão do PM`];
+  for (const a of actions) {
+    const project = a.project?.name ?? "?";
+    const task = a.task ? `[${a.task.reference ?? "?"}] ${a.task.title}` : "(nova task)";
+    const target = a.targetSprint?.name ? ` → ${a.targetSprint.name}` : "";
+    const src = a.source === "ai" ? "🤖" : "👤";
+    const reason = a.aiReasoning ? ` — ${a.aiReasoning}` : "";
+    lines.push(`- ${src} **${a.type}** · ${task}${target} · projeto: ${project}${reason}`);
+  }
+  return lines.join("\n");
+}
+
+async function renderPmReviewMeeting(m: MeetingRow, pendingBlock: string): Promise<string> {
+  const supabase = db();
   const { data: reviews } = await supabase
     .from("MeetingProjectReview")
     .select("id, nextSteps, sprintHealth, attentionPoints, additionalNotes, order, project:Project(id, name), member:Member(id, name)")
-    .eq("meetingId", meetingId)
+    .eq("meetingId", m.id)
     .order("order", { ascending: true });
 
   const reviewList = reviews || [];
-
   const byPm = new Map<string, { pmName: string; items: typeof reviewList }>();
   for (const r of reviewList) {
-    const pm = (r.member as { id: string; name: string } | null);
+    const pm = r.member as { id: string; name: string } | null;
     if (!pm) continue;
     const bucket = byPm.get(pm.id) || { pmName: pm.name, items: [] };
     bucket.items.push(r);
     byPm.set(pm.id, bucket);
   }
 
-  const lines: string[] = [
-    `## Reunião ativa: ${meeting.date}`,
-    `- **ID:** ${meeting.id}`,
-    `- Use \`get_meeting_reviews\` para detalhes e \`update_meeting_review\` para preencher os campos de cada projeto.`,
-    "",
-    `### Revisões por PM (${reviewList.length} projeto(s))`,
-  ];
-
+  const reviewLines: string[] = [];
   if (byPm.size === 0) {
-    lines.push("Nenhuma revisão cadastrada (nenhum projeto ativo com PM).");
-    return lines.join("\n");
-  }
-
-  for (const { pmName, items } of byPm.values()) {
-    lines.push(`**${pmName}** — ${items.length} projeto(s):`);
-    for (const r of items) {
-      const proj = (r.project as { name: string } | null)?.name || "?";
-      const filled: string[] = [];
-      if (r.nextSteps) filled.push("nextSteps");
-      if (r.attentionPoints) filled.push("attentionPoints");
-      if (r.additionalNotes) filled.push("additionalNotes");
-      const status = filled.length === 0 ? "vazio" : filled.join(", ");
-      lines.push(`  - ${proj} | health: ${r.sprintHealth} | preenchido: ${status}`);
+    reviewLines.push("_Nenhuma revisão cadastrada._");
+  } else {
+    for (const { pmName, items } of byPm.values()) {
+      reviewLines.push(`**${pmName}** — ${items.length} projeto(s):`);
+      for (const r of items) {
+        const proj = (r.project as { name: string } | null)?.name || "?";
+        const filled: string[] = [];
+        if (r.nextSteps) filled.push("nextSteps");
+        if (r.attentionPoints) filled.push("attentionPoints");
+        if (r.additionalNotes) filled.push("additionalNotes");
+        const status = filled.length === 0 ? "vazio" : filled.join(", ");
+        reviewLines.push(`  - ${proj} | health: ${r.sprintHealth} | preenchido: ${status}`);
+      }
     }
   }
 
-  return lines.join("\n");
+  return [
+    renderMeetingHeader(m),
+    "",
+    renderAttendees(m),
+    renderProjectLinks(m),
+    "",
+    "**Fluxo da reunião:** preencher revisões via `update_meeting_review`. Mudanças em Task → `propose_task_action` (NUNCA execução direta dentro de reunião). Ações operacionais → `create_todo`.",
+    "",
+    `### Revisões por PM (${reviewList.length} projeto(s))`,
+    ...reviewLines,
+    "",
+    pendingBlock,
+  ].join("\n");
+}
+
+async function renderDailyMeeting(m: MeetingRow, pendingBlock: string): Promise<string> {
+  const supabase = db();
+  const links = m.projectLinks || [];
+
+  const projectBlocks: string[] = [];
+  for (const link of links) {
+    if (!link.projectId) continue;
+    const projName = link.project?.name ?? "?";
+
+    const { data: sprint } = await supabase
+      .from("Sprint")
+      .select("id, name, status, startDate, endDate")
+      .eq("projectId", link.projectId)
+      .neq("status", "done")
+      .order("startDate", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    projectBlocks.push(`### Projeto: ${projName}`);
+    if (!sprint) {
+      projectBlocks.push("_Sem sprint ativa/planning._");
+      continue;
+    }
+    projectBlocks.push(`Sprint atual: **${sprint.name}** (${sprint.status}) | ${sprint.startDate} → ${sprint.endDate}`);
+
+    const { data: tasks } = await supabase
+      .from("Task")
+      .select("reference, title, status, type, functionPoints, priority, assignments:TaskAssignment(member:Member(name))")
+      .eq("sprintId", sprint.id)
+      .neq("status", "draft")
+      .order("priority", { ascending: false })
+      .limit(30);
+
+    const taskList = tasks || [];
+    if (taskList.length === 0) {
+      projectBlocks.push("_Sem tasks na sprint._");
+    } else {
+      for (const t of taskList) {
+        const assignees = ((t.assignments as Array<{ member: { name: string } | null }> | null) || [])
+          .map((x) => x.member?.name).filter(Boolean).join(", ") || "sem atribuição";
+        projectBlocks.push(`- [${t.reference}] ${t.title} | ${t.status} | ${t.functionPoints ?? "?"}FP | ${assignees}`);
+      }
+    }
+    projectBlocks.push("");
+  }
+
+  return [
+    renderMeetingHeader(m),
+    "",
+    renderAttendees(m),
+    renderProjectLinks(m),
+    "",
+    "**Fluxo da Daily:** ler estado da sprint atual de cada projeto vinculado. Propor mudanças em Task via `propose_task_action` (criar/mover/atualizar/marcar pra review). Ações operacionais → `create_todo`. **NUNCA** chame tools de execução direta de Task (create_task, move_task_to_sprint, update_task_*, assign_task) durante a reunião.",
+    "",
+    renderNotes(m),
+    "",
+    "### Estado por projeto",
+    ...projectBlocks,
+    pendingBlock,
+  ].join("\n");
+}
+
+async function renderSuperPlanningMeeting(m: MeetingRow, pendingBlock: string): Promise<string> {
+  const supabase = db();
+  const sprintId = m.sprintId;
+  let projectId: string | null = null;
+
+  let sprintBlock = "_Sem sprint-objeto vinculada (Meeting.sprintId está nulo)._";
+  if (sprintId) {
+    const { data: sprint } = await supabase
+      .from("Sprint")
+      .select("id, name, status, startDate, endDate, projectId, project:Project(id, name)")
+      .eq("id", sprintId)
+      .maybeSingle();
+
+    if (sprint) {
+      projectId = sprint.projectId;
+      const projName = (sprint.project as { name: string } | null)?.name ?? "?";
+
+      const { data: tasks } = await supabase
+        .from("Task")
+        .select("reference, title, status, type, scope, complexity, functionPoints, priority, assignments:TaskAssignment(member:Member(name))")
+        .eq("sprintId", sprint.id)
+        .neq("status", "draft")
+        .order("priority", { ascending: false });
+
+      const taskList = tasks || [];
+      const taskLines = taskList.length === 0
+        ? ["_Sem tasks na sprint ainda — vai ser planejada agora._"]
+        : taskList.map((t) => {
+            const assignees = ((t.assignments as Array<{ member: { name: string } | null }> | null) || [])
+              .map((x) => x.member?.name).filter(Boolean).join(", ") || "sem atribuição";
+            return `- [${t.reference}] ${t.title} | ${t.status} | ${t.scope}/${t.complexity} | ${t.functionPoints ?? "?"}FP | ${assignees}`;
+          });
+
+      sprintBlock = [
+        `### Sprint-objeto: ${sprint.name} (Projeto ${projName})`,
+        `- ID: ${sprint.id} | Status: ${sprint.status} | Período: ${sprint.startDate} → ${sprint.endDate}`,
+        "",
+        `**Tasks atualmente na sprint (${taskList.length}):**`,
+        ...taskLines,
+      ].join("\n");
+    }
+  }
+
+  let backlogBlock = "_Backlog não disponível (sem sprint-objeto vinculada)._";
+  if (projectId) {
+    const { data: backlog } = await supabase
+      .from("Task")
+      .select("reference, title, type, scope, complexity, functionPoints, priority")
+      .eq("projectId", projectId)
+      .is("sprintId", null)
+      .neq("status", "draft")
+      .order("priority", { ascending: false })
+      .limit(40);
+
+    const list = backlog || [];
+    const lines = list.length === 0
+      ? ["_Backlog vazio._"]
+      : list.map((t) => `- [${t.reference}] ${t.title} | ${t.type} | ${t.scope}/${t.complexity} | ${t.functionPoints ?? "?"}FP | prio ${t.priority}`);
+    backlogBlock = [`### Backlog do projeto (top ${list.length})`, ...lines].join("\n");
+  }
+
+  return [
+    renderMeetingHeader(m),
+    "",
+    renderAttendees(m),
+    renderProjectLinks(m),
+    "",
+    "**Fluxo da Super Planning:** ler transcrição/notas + estado da sprint-objeto + backlog do projeto. Propor reorganização (criar / mover / atualizar / marcar pra review) via `propose_task_action`. Ações operacionais → `create_todo`. **NUNCA** chame tools de execução direta de Task durante a reunião — toda mudança vira proposta pra o PM aprovar e o sistema aplicar em batch.",
+    "",
+    renderNotes(m),
+    "",
+    sprintBlock,
+    "",
+    backlogBlock,
+    "",
+    pendingBlock,
+  ].join("\n");
+}
+
+function renderGeneralMeeting(m: MeetingRow, pendingBlock: string): string {
+  return [
+    renderMeetingHeader(m),
+    "",
+    renderAttendees(m),
+    renderProjectLinks(m),
+    "",
+    "**Fluxo da reunião geral:** registro livre. Use `create_todo` pra ações operacionais. **Tasks NÃO são tratadas neste tipo de reunião** — não chame tools de Task (nem execução direta nem `propose_task_action`).",
+    "",
+    renderNotes(m),
+    "",
+    pendingBlock,
+  ].join("\n");
 }
 
 // ─── Renderers ───────────────────────────────────────────────────

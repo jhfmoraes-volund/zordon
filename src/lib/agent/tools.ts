@@ -176,7 +176,7 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
 
   // Task creation & management (briefing step)
   if (capabilities?.createTasks && capabilities?.projectId) {
-    tools.create_task = createTaskTool(sessionId, capabilities.projectId);
+    tools.create_task = createTaskTool(sessionId, capabilities.projectId, capabilities.memberId);
     tools.list_tasks = listSessionTasksTool(sessionId);
     tools.list_project_tasks = listProjectTasksTool(sessionId, capabilities.projectId);
     tools.update_task = updateTaskTool(sessionId);

@@ -28,6 +28,8 @@ import { TaskSheet } from "@/components/task-sheet";
 import { TaskList } from "@/components/task-list";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PageTitle } from "@/components/app-shell";
+import { FilterBar, type FilterDef } from "@/components/filter-bar";
+import { TASK_STATUS, TASK_TYPE } from "@/lib/status-chips";
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -143,6 +145,11 @@ export default function SprintBoardPage({
 
   // Project members for list view assignment
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+
+  // Filtros (topo da página)
+  const [filterType, setFilterType] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -267,12 +274,51 @@ export default function SprintBoardPage({
     }
   };
 
-  const columnTasks = (status: string) => tasks.filter((t) => t.status === status);
+  // ─── Filtros ───────────────────────────────────────────
 
-  const getColumnTasks = (status: string) => {
-    const baseTasks = columnTasks(status);
-    return baseTasks;
-  };
+  const filteredTasks = tasks.filter((t) => {
+    if (filterType && t.type !== filterType) return false;
+    if (filterStatus && t.status !== filterStatus) return false;
+    if (filterAssignee !== null) {
+      if (filterAssignee === "__unassigned__") {
+        if (t.assignments.length > 0) return false;
+      } else {
+        const has = t.assignments.some((a) => a.member?.id === filterAssignee);
+        if (!has) return false;
+      }
+    }
+    return true;
+  });
+
+  const filterDefs: FilterDef[] = [
+    {
+      key: "type",
+      label: "Tipo",
+      value: filterType,
+      onChange: setFilterType,
+      options: Object.entries(TASK_TYPE).map(([value, { label }]) => ({ value, label })),
+    },
+    {
+      key: "status",
+      label: "Status",
+      value: filterStatus,
+      onChange: setFilterStatus,
+      options: Object.entries(TASK_STATUS).map(([value, { label }]) => ({ value, label })),
+    },
+    {
+      key: "assignee",
+      label: "Atribuído a",
+      value: filterAssignee,
+      onChange: setFilterAssignee,
+      options: [
+        { value: "__unassigned__", label: "Sem atribuição" },
+        ...projectMembers.map((m) => ({ value: m.id, label: m.name })),
+      ],
+    },
+  ];
+
+  const getColumnTasks = (status: string) =>
+    filteredTasks.filter((t) => t.status === status);
 
   const totalFp = tasks
     .filter((t) => t.status === "done")
@@ -330,6 +376,9 @@ export default function SprintBoardPage({
         </div>
       </div>
 
+      {/* Filters */}
+      <FilterBar filters={filterDefs} />
+
       {/* Board View */}
       {viewMode === "board" && (
         <DndContext
@@ -379,7 +428,7 @@ export default function SprintBoardPage({
       {/* List View */}
       {viewMode === "list" && (
         <TaskList
-          tasks={tasks}
+          tasks={filteredTasks}
           members={projectMembers}
           onOpenDetail={openDetail}
           onStatusChange={handleStatusChange}
