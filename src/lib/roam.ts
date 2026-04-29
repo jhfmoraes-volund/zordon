@@ -129,6 +129,12 @@ export class RoamClient {
     since?: string;
     until?: string;
     max?: number;
+    /**
+     * Optional client-side filter applied INSIDE the pagination loop, so `max`
+     * counts only matching transcripts. Without this, a post-loop filter would
+     * drop matches that fell outside the first page of items in range.
+     */
+    participantFilter?: (participantNames: string[]) => boolean;
   } = {}): Promise<RoamTranscriptListItem[]> {
     const max = opts.max ?? 50;
     const sinceTime = opts.since ? new Date(opts.since).getTime() : -Infinity;
@@ -141,6 +147,10 @@ export class RoamClient {
         const ts = new Date(t.start).getTime();
         if (ts < sinceTime) return out;
         if (ts > untilTime) continue;
+        if (opts.participantFilter) {
+          const names = t.participants.map((p) => p.name);
+          if (!opts.participantFilter(names)) continue;
+        }
         out.push(t);
         if (out.length >= max) return out;
       }

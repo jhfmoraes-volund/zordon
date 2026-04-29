@@ -364,6 +364,112 @@ export function assembleAlphaTools(
     },
   });
 
+  tools.get_allocated_project_members = tool({
+    description:
+      "Lista o squad de um projeto: PM (Project.pmId) + ProjectMembers (com fpAllocation). Faz UNION dos dois — funciona mesmo quando o PM não tem entrada explícita em ProjectMember (caso comum hoje no banco). Use pra saber 'quem está no projeto X', preparar attendees de uma reunião, ou analisar carga.",
+    inputSchema: z.object({
+      projectName: z.string().describe("Nome parcial do projeto (case-insensitive)"),
+    }),
+    execute: async ({ projectName }) => {
+      const { data: project } = await supabase
+        .from("Project")
+        .select("id, name, status, pmId, pm:Member!Project_pmId_fkey(id, name, role, fpCapacity)")
+        .ilike("name", `%${projectName}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (!project) return { error: `Projeto "${projectName}" não encontrado.` };
+
+      const { data: pmRows } = await supabase
+        .from("ProjectMember")
+        .select("memberId, fpAllocation, member:Member(id, name, role, fpCapacity, isExternal, dedicationPercent)")
+        .eq("projectId", project.id);
+
+      type Mb = { id: string; name: string; role: string; fpCapacity: number };
+      const pm = (project.pm as Mb | null) ?? null;
+      const explicitRows = (pmRows || []) as Array<{
+        memberId: string;
+        fpAllocation: number;
+        member: (Mb & { isExternal: boolean; dedicationPercent: number }) | null;
+      }>;
+
+      type Out = {
+        memberId: string;
+        name: string;
+        role: string;
+        fpCapacity: number;
+        fpAllocation: number | null;
+        isPM: boolean;
+        isExternal: boolean | null;
+        dedicationPercent: number | null;
+        source: "project_pm" | "project_member" | "both";
+      };
+
+      const byId = new Map<string, Out>();
+
+      // 1) PM (Project.pmId)
+      if (pm) {
+        byId.set(pm.id, {
+          memberId: pm.id,
+          name: pm.name,
+          role: pm.role,
+          fpCapacity: pm.fpCapacity,
+          fpAllocation: null,
+          isPM: true,
+          isExternal: null,
+          dedicationPercent: null,
+          source: "project_pm",
+        });
+      }
+
+      // 2) ProjectMembers — merge ou cria
+      for (const row of explicitRows) {
+        const m = row.member;
+        if (!m) continue;
+        const existing = byId.get(m.id);
+        if (existing) {
+          existing.fpAllocation = row.fpAllocation;
+          existing.isExternal = m.isExternal;
+          existing.dedicationPercent = m.dedicationPercent;
+          existing.source = "both";
+        } else {
+          byId.set(m.id, {
+            memberId: m.id,
+            name: m.name,
+            role: m.role,
+            fpCapacity: m.fpCapacity,
+            fpAllocation: row.fpAllocation,
+            isPM: false,
+            isExternal: m.isExternal,
+            dedicationPercent: m.dedicationPercent,
+            source: "project_member",
+          });
+        }
+      }
+
+      const members = Array.from(byId.values()).sort((a, b) => {
+        if (a.isPM !== b.isPM) return a.isPM ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      const orphanPM = pm && !explicitRows.some((r) => r.memberId === pm.id);
+
+      return {
+        project: {
+          id: project.id,
+          name: project.name,
+          status: project.status,
+          pmName: pm?.name ?? null,
+        },
+        members,
+        count: members.length,
+        ...(orphanPM
+          ? { warning: `PM ${pm.name} não está em ProjectMember (órfão). Tool usou UNION pra incluí-lo mesmo assim.` }
+          : {}),
+      };
+    },
+  });
+
   tools.load_heuristic = tool({
     description:
       "Carrega o corpo completo de uma heurística/playbook cadastrado (regra de negócio, checklist, framework). Use quando o índice de heurísticas no contexto mostrar uma que bate com o problema atual.",
@@ -638,6 +744,79 @@ export function assembleAlphaTools(
           task: { reference: taskReference, title: task.title },
           from: { scope: task.scope, complexity: task.complexity, fp: task.functionPoints },
           to: { scope, complexity, fp: newFP },
+        };
+      },
+    });
+
+    tools.update_task_title = tool({
+      description:
+        "Renomeia uma task existente. Use quando o título não reflete mais o escopo ou ficou ambíguo. Não mexe em outros campos.",
+      inputSchema: z.object({
+        taskReference: z.string().describe("Referência da task (ex: TASK-042)"),
+        newTitle: z.string().min(1).describe("Novo título — curto, acionável, em pt-BR"),
+      }),
+      execute: async ({ taskReference, newTitle }) => {
+        const { data: task } = await supabase
+          .from("Task")
+          .select("id, title")
+          .eq("reference", taskReference)
+          .maybeSingle();
+
+        if (!task) return { error: `Task "${taskReference}" não encontrada.` };
+        if (task.title === newTitle) {
+          return { error: `Título já é "${newTitle}" — nada a alterar.` };
+        }
+
+        const { error } = await supabase
+          .from("Task")
+          .update({ title: newTitle, updatedAt: new Date().toISOString() })
+          .eq("id", task.id);
+
+        if (error) return { error: `Erro ao atualizar título: ${error.message}` };
+
+        return {
+          updated: true,
+          task: { reference: taskReference },
+          from: task.title,
+          to: newTitle,
+        };
+      },
+    });
+
+    tools.update_task_description = tool({
+      description:
+        "Atualiza ou substitui a descrição de uma task. A descrição é o detalhamento do que entregar e por que. Use também pra adicionar contexto que faltava. Passar string vazia limpa o campo.",
+      inputSchema: z.object({
+        taskReference: z.string().describe("Referência da task (ex: TASK-042)"),
+        newDescription: z.string().describe("Nova descrição. Use string vazia pra limpar."),
+      }),
+      execute: async ({ taskReference, newDescription }) => {
+        const { data: task } = await supabase
+          .from("Task")
+          .select("id, title, description")
+          .eq("reference", taskReference)
+          .maybeSingle();
+
+        if (!task) return { error: `Task "${taskReference}" não encontrada.` };
+
+        const value = newDescription.trim() === "" ? null : newDescription;
+        if (task.description === value) {
+          return { error: "Descrição já está com esse valor — nada a alterar." };
+        }
+
+        const { error } = await supabase
+          .from("Task")
+          .update({ description: value, updatedAt: new Date().toISOString() })
+          .eq("id", task.id);
+
+        if (error) return { error: `Erro ao atualizar descrição: ${error.message}` };
+
+        const previewLen = (s: string | null) => s ? `${s.length} chars` : "vazio";
+        return {
+          updated: true,
+          task: { reference: taskReference, title: task.title },
+          from: previewLen(task.description),
+          to: previewLen(value),
         };
       },
     });
@@ -976,10 +1155,14 @@ export function assembleAlphaTools(
       if (roamToken) {
         try {
           const roam = new RoamClient(roamToken);
+          const needle = participant?.toLowerCase();
           const transcripts = await roam.listTranscriptsInRange({
             since: since.toISOString(),
             until: until ? until.toISOString() : undefined,
             max: 50,
+            participantFilter: needle
+              ? (names) => names.some((n) => n.toLowerCase().includes(needle))
+              : undefined,
           });
           roamTranscripts = transcripts.map((t) => ({
             id: t.id,
@@ -987,12 +1170,6 @@ export function assembleAlphaTools(
             title: t.eventName || "Sem título",
             participants: t.participants.map((p) => p.name),
           }));
-          if (participant) {
-            const needle = participant.toLowerCase();
-            roamTranscripts = roamTranscripts.filter((t) =>
-              t.participants.some((p) => p.toLowerCase().includes(needle))
-            );
-          }
         } catch (err) {
           roamError = (err as Error).message;
         }
@@ -1173,6 +1350,196 @@ export function assembleAlphaTools(
   });
 
   if (capabilities.writeTools) {
+    tools.create_meeting = tool({
+      description:
+        "Cria uma reunião nova (Meeting) com a estrutura adequada ao tipo: pm_review (com reviews por PM), daily, super_planning (vincula sprint ativa), general. Resolve nomes de projetos/PMs/participantes em IDs. Carrega automaticamente Todos pendentes da última reunião. NÃO use durante uma reunião ativa — só em conversa solta ou via instrução clara do PM.",
+      inputSchema: z.object({
+        type: z.enum(["pm_review", "general", "daily", "super_planning"]).describe("Tipo da reunião"),
+        date: z.string().describe("Data e hora em ISO (YYYY-MM-DD ou YYYY-MM-DDTHH:mm). Use a data corrente do bloco '## Hoje' como referência pra interpretar 'hoje', 'amanhã', 'essa quinta'."),
+        title: z.string().optional().describe("Título opcional"),
+        projectNames: z.array(z.string()).optional().describe("Nomes parciais dos projetos vinculados. daily exige ≥1; super_planning exige exatamente 1; pm_review opcional (filtra PMs); general opcional"),
+        pmNames: z.array(z.string()).optional().describe("Apenas pra pm_review: nomes dos PMs cujos projetos viram reviews. Sem isso, agrega todos PMs com projeto ativo."),
+        attendeeNames: z.array(z.string()).optional().describe("Nomes parciais de Members participantes (explícitos). Mergeados com auto-derive sem duplicar."),
+        attendeesFromProjects: z.boolean().optional().describe("Se true, deriva attendees automaticamente do squad dos projetos vinculados (PM + ProjectMembers). Default: true em daily/super_planning/general; false em pm_review (convenção: pm_review é só PMs entre si). Sempre mergeia com attendeeNames sem duplicar."),
+        notes: z.string().optional().describe("Notas/transcrição (opcional)"),
+      }),
+      execute: async (args) => {
+        const { type, date, title, projectNames, pmNames, attendeeNames, attendeesFromProjects, notes } = args;
+        const autoDeriveDefault = type === "daily" || type === "super_planning" || type === "general";
+        const autoDerive = attendeesFromProjects ?? autoDeriveDefault;
+
+        // Resolve projects
+        const projectIds: string[] = [];
+        if (projectNames && projectNames.length > 0) {
+          for (const name of projectNames) {
+            const { data: p } = await supabase
+              .from("Project")
+              .select("id, name")
+              .ilike("name", `%${name}%`)
+              .limit(1)
+              .maybeSingle();
+            if (!p) return { error: `Projeto "${name}" não encontrado.` };
+            projectIds.push(p.id);
+          }
+        }
+
+        // Validações por tipo
+        if (type === "daily" && projectIds.length === 0) {
+          return { error: "Daily exige ao menos um projeto. Passe projectNames." };
+        }
+
+        let resolvedSprintId: string | null = null;
+        if (type === "super_planning") {
+          if (projectIds.length !== 1) {
+            return { error: "Super Planning exige exatamente 1 projeto em projectNames." };
+          }
+          const { data: activeSprint } = await supabase
+            .from("Sprint")
+            .select("id, name")
+            .eq("projectId", projectIds[0])
+            .eq("status", "active")
+            .maybeSingle();
+          if (!activeSprint) {
+            return { error: "Projeto sem sprint ativa — crie ou ative uma sprint antes de marcar a Super Planning." };
+          }
+          resolvedSprintId = activeSprint.id;
+        }
+
+        // Resolve PMs (pm_review only) → reviews
+        const pmIds: string[] = [];
+        let reviews: Array<{ projectId: string; memberId: string; order: number }> = [];
+        if (type === "pm_review") {
+          if (pmNames && pmNames.length > 0) {
+            for (const name of pmNames) {
+              const { data: m } = await supabase
+                .from("Member")
+                .select("id, name")
+                .ilike("name", `%${name}%`)
+                .limit(1)
+                .maybeSingle();
+              if (!m) return { error: `PM "${name}" não encontrado.` };
+              pmIds.push(m.id);
+            }
+          }
+
+          let pmQuery = supabase
+            .from("Project")
+            .select("id, pmId")
+            .eq("status", "active")
+            .not("pmId", "is", null);
+          if (pmIds.length > 0) pmQuery = pmQuery.in("pmId", pmIds);
+          const { data: projects } = await pmQuery;
+          reviews = (projects ?? []).map((p, i) => ({
+            projectId: p.id,
+            memberId: p.pmId!,
+            order: i,
+          }));
+        }
+
+        // Resolve attendees (members) — usa Map pra deduplicar por memberId
+        const attendeeMap = new Map<string, { memberId: string; role?: string | null }>();
+
+        // 1) Explícitos (attendeeNames)
+        if (attendeeNames && attendeeNames.length > 0) {
+          for (const name of attendeeNames) {
+            const { data: m } = await supabase
+              .from("Member")
+              .select("id, name")
+              .ilike("name", `%${name}%`)
+              .limit(1)
+              .maybeSingle();
+            if (!m) return { error: `Membro "${name}" não encontrado.` };
+            attendeeMap.set(m.id, { memberId: m.id });
+          }
+        }
+
+        // 2) Auto-derive do squad dos projetos vinculados
+        // (UNION de Project.pmId + ProjectMember). Não roda pra pm_review por default.
+        if (autoDerive && projectIds.length > 0) {
+          const { data: projects } = await supabase
+            .from("Project")
+            .select("id, pmId")
+            .in("id", projectIds);
+          const { data: pmRows } = await supabase
+            .from("ProjectMember")
+            .select("memberId")
+            .in("projectId", projectIds);
+
+          for (const p of projects || []) {
+            if (p.pmId && !attendeeMap.has(p.pmId)) {
+              attendeeMap.set(p.pmId, { memberId: p.pmId, role: "pm" });
+            }
+          }
+          for (const r of pmRows || []) {
+            if (!attendeeMap.has(r.memberId)) {
+              attendeeMap.set(r.memberId, { memberId: r.memberId });
+            }
+          }
+        }
+
+        // 3) Default pra pm_review: PMs explícitos viram attendees com role 'pm'
+        if (type === "pm_review" && pmIds.length > 0) {
+          for (const id of pmIds) {
+            if (!attendeeMap.has(id)) attendeeMap.set(id, { memberId: id, role: "pm" });
+          }
+        }
+
+        const attendees = Array.from(attendeeMap.values());
+
+        // Carry-over (espelha rota /api/meetings)
+        const { data: lastMeeting } = await supabase
+          .from("Meeting")
+          .select("id")
+          .lt("date", new Date().toISOString())
+          .order("date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        let carryActions: Array<{ description: string; assigneeId: string; dueDate: string | null }> = [];
+        if (lastMeeting) {
+          const { data: pendingActions } = await supabase
+            .from("Todo")
+            .select("description, assigneeId, dueDate")
+            .eq("meetingId", lastMeeting.id)
+            .in("status", ["todo", "doing"]);
+          carryActions = (pendingActions ?? []).map((a) => ({
+            description: a.description,
+            assigneeId: a.assigneeId,
+            dueDate: a.dueDate,
+          }));
+        }
+
+        const { data: meetingId, error } = await supabase.rpc(
+          "create_meeting_with_reviews",
+          {
+            p_date: new Date(date).toISOString(),
+            p_reviews: reviews as never,
+            p_carry_actions: carryActions as never,
+            p_type: type,
+            p_title: title ?? null,
+            p_attendees: attendees as never,
+            p_project_ids: projectIds as never,
+            p_notes: notes ?? null,
+            p_sprint_id: resolvedSprintId,
+          },
+        );
+        if (error) return { error: `Erro ao criar reunião: ${error.message}` };
+
+        return {
+          created: true,
+          meetingId,
+          type,
+          date,
+          title: title ?? null,
+          projectCount: projectIds.length,
+          reviewCount: reviews.length,
+          attendeeCount: attendees.length,
+          carryOverCount: carryActions.length,
+          sprintId: resolvedSprintId,
+        };
+      },
+    });
+
     tools.update_meeting_review = tool({
       description:
         "Atualiza (parcialmente) os campos de uma revisão de projeto numa reunião. Busca a revisão pelo nome do projeto dentro da reunião. Só passe os campos que quiser mudar — os omitidos são preservados.",

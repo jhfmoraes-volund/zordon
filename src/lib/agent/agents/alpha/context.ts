@@ -782,11 +782,83 @@ async function renderPmReviewMeeting(m: MeetingRow, pendingBlock: string): Promi
   const supabase = db();
   const { data: reviews } = await supabase
     .from("MeetingProjectReview")
-    .select("id, nextSteps, sprintHealth, attentionPoints, additionalNotes, order, project:Project(id, name), member:Member(id, name)")
+    .select("id, nextSteps, sprintHealth, attentionPoints, additionalNotes, order, project:Project(id, name, pmId), member:Member(id, name)")
     .eq("meetingId", m.id)
     .order("order", { ascending: true });
 
   const reviewList = reviews || [];
+  const projectIds = Array.from(
+    new Set(
+      reviewList
+        .map((r) => (r.project as { id: string } | null)?.id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  // Squad (PM + ProjectMembers) por projeto, em uma query batch
+  const squadByProject = new Map<string, Array<{
+    name: string;
+    role: string;
+    fpAllocation: number | null;
+    isPM: boolean;
+  }>>();
+  if (projectIds.length > 0) {
+    const { data: pmRows } = await supabase
+      .from("ProjectMember")
+      .select("projectId, fpAllocation, member:Member(id, name, role)")
+      .in("projectId", projectIds);
+
+    type Mb = { id: string; name: string; role: string };
+    type SquadRow = { name: string; role: string; fpAllocation: number | null; isPM: boolean };
+
+    const pmIdByProject = new Map<string, string | null>();
+    for (const r of reviewList) {
+      const proj = r.project as { id: string; pmId: string | null } | null;
+      if (proj?.id) pmIdByProject.set(proj.id, proj.pmId);
+    }
+
+    for (const projectId of projectIds) {
+      const byMemberId = new Map<string, SquadRow>();
+      const ownerPmId = pmIdByProject.get(projectId) ?? null;
+
+      for (const row of (pmRows || []) as Array<{
+        projectId: string;
+        fpAllocation: number;
+        member: Mb | null;
+      }>) {
+        if (row.projectId !== projectId || !row.member) continue;
+        byMemberId.set(row.member.id, {
+          name: row.member.name,
+          role: row.member.role,
+          fpAllocation: row.fpAllocation,
+          isPM: ownerPmId === row.member.id,
+        });
+      }
+
+      // PM órfão (não está em ProjectMember): incluir mesmo assim com fpAllocation=null
+      if (ownerPmId && !byMemberId.has(ownerPmId)) {
+        const review = reviewList.find(
+          (r) => (r.member as Mb | null)?.id === ownerPmId,
+        );
+        const pmMember = review?.member as Mb | null;
+        if (pmMember) {
+          byMemberId.set(pmMember.id, {
+            name: pmMember.name,
+            role: "(PM)",
+            fpAllocation: null,
+            isPM: true,
+          });
+        }
+      }
+
+      const sorted = Array.from(byMemberId.values()).sort((a, b) => {
+        if (a.isPM !== b.isPM) return a.isPM ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      squadByProject.set(projectId, sorted);
+    }
+  }
+
   const byPm = new Map<string, { pmName: string; items: typeof reviewList }>();
   for (const r of reviewList) {
     const pm = r.member as { id: string; name: string } | null;
@@ -803,13 +875,25 @@ async function renderPmReviewMeeting(m: MeetingRow, pendingBlock: string): Promi
     for (const { pmName, items } of byPm.values()) {
       reviewLines.push(`**${pmName}** — ${items.length} projeto(s):`);
       for (const r of items) {
-        const proj = (r.project as { name: string } | null)?.name || "?";
+        const proj = r.project as { id: string; name: string } | null;
+        const projName = proj?.name || "?";
         const filled: string[] = [];
         if (r.nextSteps) filled.push("nextSteps");
         if (r.attentionPoints) filled.push("attentionPoints");
         if (r.additionalNotes) filled.push("additionalNotes");
         const status = filled.length === 0 ? "vazio" : filled.join(", ");
-        reviewLines.push(`  - ${proj} | health: ${r.sprintHealth} | preenchido: ${status}`);
+        reviewLines.push(`  - ${projName} | health: ${r.sprintHealth} | preenchido: ${status}`);
+
+        // Squad do projeto (info de contexto, NÃO attendees da reunião)
+        const squad = proj?.id ? squadByProject.get(proj.id) : null;
+        if (squad && squad.length > 0) {
+          const tags = squad.map((s) => {
+            const fp = s.fpAllocation === null ? "—" : `${s.fpAllocation}FP`;
+            const pm = s.isPM ? " (PM)" : "";
+            return `${s.name}${pm}: ${fp}`;
+          });
+          reviewLines.push(`    squad: ${tags.join(" · ")}`);
+        }
       }
     }
   }

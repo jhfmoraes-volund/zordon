@@ -425,6 +425,134 @@ Pós-teste: deletadas 2 Meetings fictícias (cascade limpou MeetingTaskAction/Li
 
 ---
 
+## Fase 4 — Resíduos da avaliação prévia
+
+### Fix 4 — Vocabulário Task ≠ Todo (prompt)
+
+**Edits:** [src/lib/agent/agents/alpha/prompt.ts](src/lib/agent/agents/alpha/prompt.ts) — bloco "## Vocabulário básico — Task ≠ Todo" entre "Awareness de rota" e "Suas ferramentas". Define os dois conceitos, dá heurística de escolha + exemplos práticos.
+
+**Validação — "preciso registrar duas coisas: 1) lembrar de marcar 1:1 com khevin amanhã, 2) implementar a tela de configurações do projeto. cria pra mim?":**
+
+| Item | Categorização | Tool |
+|---|---|---|
+| 1. Marcar 1:1 com Khevin amanhã | ✅ Todo | `create_todo({dueDate: "2026-04-30", ...})` |
+| 2. Implementar tela de configurações | ✅ Task | `create_task({type: "feature", scope: "medium", complexity: "medium", ...})` → 10 FP |
+
+Bônus: Alpha resolveu "amanhã" como `2026-04-30` usando o bloco `## Hoje` (Fix 1).
+
+**Decisão:** ✅ resolvido.
+
+---
+
+### Fix 5 — `update_task_title` e `update_task_description`
+
+**Edits:** [src/lib/agent/agents/alpha/tools.ts](src/lib/agent/agents/alpha/tools.ts) — 2 tools novas após `update_task_estimate`:
+
+- `update_task_title({taskReference, newTitle})` — bloqueia se o título é o mesmo.
+- `update_task_description({taskReference, newDescription})` — string vazia limpa; bloqueia se igual.
+
+Listadas em [src/lib/agent/agents/alpha/prompt.ts](src/lib/agent/agents/alpha/prompt.ts) na seção "Escrita — Tasks" e adicionadas à blocklist do "Princípio geral" da seção Tipos de Reunião (não podem ser usadas dentro de reunião — toda mudança em Task vira proposta).
+
+**Decisão:** ✅ resolvido. Não validei via cenário pra evitar criar TASK fake só pra renomear.
+
+---
+
+### Fix 6 — Bug filtro `participant` no Roam
+
+**Diagnóstico:** API do Roam não filtra por participante; é client-side. `listTranscriptsInRange` aplicava o filtro DEPOIS do loop, então perdia matches mais antigos quando havia 50+ transcrições no período.
+
+**Edits:**
+- [src/lib/roam.ts](src/lib/roam.ts) — `listTranscriptsInRange` aceita `participantFilter?: (names: string[]) => boolean`. Agora `max` conta só matches.
+- [src/lib/agent/agents/alpha/tools.ts](src/lib/agent/agents/alpha/tools.ts) — `get_recent_meetings` passa `participantFilter` quando o usuário fornece `participant`. Removido o filter pós-loop.
+
+**Validação — "me lista todas as transcrições do Roam com Mayara nos últimos 30 dias":**
+
+| Antes | Agora |
+|---|---|
+| 7 transcrições (days=14, filter pós-loop) | **12 transcrições** (days=30, filter dentro do loop) |
+| corte arbitrário no top-50 do range | paginou até 01/04 (28 dias atrás), max=50 só conta matches |
+
+**Decisão:** ✅ resolvido.
+
+---
+
+### Fix 7 — Tool `create_meeting`
+
+**Lacuna identificada:** Alpha não tinha tool pra criar reuniões. A infra backend existia (`POST /api/meetings`, RPC `create_meeting_with_reviews`) mas o agente não conseguia disparar.
+
+**Edits:**
+- [src/lib/agent/agents/alpha/tools.ts](src/lib/agent/agents/alpha/tools.ts) — tool `create_meeting` adicionada no bloco `if (writeTools)` da seção Meeting. Aceita `type`, `date`, `title`, `projectNames`, `pmNames`, `attendeeNames`, `notes`. Resolve nomes em IDs, valida regras por tipo (daily exige projeto, super_planning exige 1+sprint ativa, pm_review auto-deriva reviews), faz carry-over de Todos pendentes da última reunião e chama a RPC `create_meeting_with_reviews`. Espelha exatamente as regras de `POST /api/meetings`.
+- [src/lib/agent/agents/alpha/prompt.ts](src/lib/agent/agents/alpha/prompt.ts) — listada em "Tools — Atas (Zordon)" com instrução **"use SEMPRE Regra 0: proponha tipo + data + projetos + participantes em texto e peça confirmação antes de criar"**.
+
+**Validação — "agenda uma daily do Zordon pra amanhã às 10h, com Khevin, Davi e eu":**
+
+| Turno | Comportamento |
+|---|---|
+| 1 (proposta) | Alpha **não criou** — apresentou *"Daily – Zordon · 📅 2026-04-30 às 10h · 👥 Khevin Carlos, Davi Moura + você · 🔗 Zordon · Crio assim?"*. **0 tool calls.** Resolveu "amanhã" via Fix 1. |
+| 2 ("ok manda") | `create_meeting({type:"daily", date:"2026-04-30T10:00", projectNames:["Zordon"], attendeeNames:["Khevin Carlos","Davi Moura"]})` → meetingId retornado, carry-over zerado, 2 attendees. |
+
+**⚠️ Observação:** Alpha não incluiu o próprio João como attendee — disse "+ você" no proposal mas só passou os 2 outros nomes pra tool. Não é bug crítico (carry-over preencheria via Roam), mas vale considerar uma regra futura "se o usuário diz 'eu', incluir `currentMemberId` em attendees".
+
+**Decisão:** ✅ resolvido. Reunião criada via tool, Regra 0 respeitada espontaneamente.
+
+---
+
+### Fix 8 — Squad de projeto + auto-derive de attendees em reuniões
+
+**Problema:** Em daily/super_planning/general, Alpha não tinha como saber quem é o squad do projeto vinculado. Tinha que pedir ao PM listar manualmente. Em pm_review (1:1 Head ↔ PM), o squad sumia totalmente do contexto.
+
+**Brecha estrutural identificada:** Todos os 9 PMs do banco estão **órfãos** — `Project.pmId` aponta pro Member mas nenhum PM tem entrada em `ProjectMember`. Modelo permite mas a prática quebrou. Não há trigger.
+
+**Edits:**
+
+- [src/lib/agent/agents/alpha/tools.ts](src/lib/agent/agents/alpha/tools.ts) — nova tool `get_allocated_project_members({projectName})` que faz UNION de `Project.pmId` + `ProjectMember[]`, retornando `{members: [{name, role, fpCapacity, fpAllocation, isPM, source}]}`. Marca PM órfão com warning explícito.
+- [src/lib/agent/agents/alpha/context.ts](src/lib/agent/agents/alpha/context.ts) — `renderPmReviewMeeting` enriquecida: pra cada review/projeto, lista o squad em uma linha compacta (`squad: Brenda (PM): — · Davi: 50FP · João: 54FP`). Squad como **info de contexto**, não como attendee — respeita convenção de "pm_review = só PMs entre si".
+- [src/lib/agent/agents/alpha/tools.ts](src/lib/agent/agents/alpha/tools.ts) — `create_meeting` ganhou param `attendeesFromProjects: boolean`:
+  - Default `true` em daily/super_planning/general → puxa PM + ProjectMembers do(s) projeto(s) vinculado(s) automaticamente.
+  - Default `false` em pm_review → mantém convenção de "PMs entre si".
+  - Sempre **mergeia com `attendeeNames` explícitos sem duplicar** (Map por memberId).
+- [src/lib/agent/agents/alpha/prompt.ts](src/lib/agent/agents/alpha/prompt.ts) — listada `get_allocated_project_members` em "Leitura"; entry de `create_meeting` reescrita explicando o auto-derive por tipo + regra "use sempre Regra 0: liste em texto quem vai ser convidado antes de criar".
+
+**Validação — Cenário 1: "agenda uma daily do Zordon pra amanhã 10h. Quem vai entrar?":**
+
+| Turno | Comportamento |
+|---|---|
+| 1 | Alpha chamou `get_allocated_project_members({projectName: "Zordon"})`, listou em tabela: Brenda (PM, —), Davi (50 FP), João (54 FP). Pediu confirmação. **0 escritas.** |
+| 2 ("manda") | `create_meeting({type:"daily", date:"2026-04-30T10:00", projectNames:["Zordon"]})` — sem `attendeeNames` (confiou no auto-derive). Resultado: `attendeeCount: 3`. DB confirmou: Brenda (role=pm), Davi, João. |
+
+**Validação — Cenário 2: "me dá um panorama: pra cada projeto dessa weekly, quem é o PM e quem está alocado":**
+
+Numa pm_review existente (Brenda revisando 3 projetos), Alpha chamou `get_allocated_project_members` em paralelo pros 3, cruzou os dados e:
+- Detectou overcommit autônomo do João (Zordon 54 + Zelar 50 = 104/100 FP).
+- Flagou Brenda como PM órfão nos 3 projetos.
+- Fechou perguntando "aprofunda algum ou já partimos pro preenchimento da ata?" — alinhamento perfeito com convenção pm_review.
+
+**Decisão:** ✅ resolvido. Auto-derive funciona, contexto enriquecido funciona, PM órfão tratado pela UNION sem migration de DB.
+
+**Pendente futuro (camada B do plano):** backfill de PM em ProjectMember + trigger pra evitar regredir. Anotado pra discussão separada.
+
+---
+
+## Status final da calibragem
+
+| Item | Status |
+|---|---|
+| #1 Tools mapeadas | ℹ️ documentado |
+| #2 Confusão Roam ↔ Zordon | ✅ corrigido |
+| #3 Não sabe data atual | ✅ corrigido |
+| #4 Bug filtro `participant` no Roam | ✅ corrigido |
+| #5 Task vs Todo sem regra | ✅ corrigido |
+| #6 Sem `update_task_title/description` | ✅ corrigido |
+| Tipos de reunião + propose_task_action | ✅ corrigido |
+| **Sem create_meeting** | ✅ corrigido (Fix 7) |
+| Regra 0 geral / citação numérica / drafts | ⏳ pendente (Fase 2-3 do runbook original) |
+| Auto-incluir current member em attendees | 📝 melhoria futura |
+| `require_approval_for` referenciando tools inexistentes | ⏳ pendente (cosmético) |
+
+Todos os pontos críticos da avaliação prévia + tipos de reunião + criação de reunião estão resolvidos. Próximas fases candidatas: Regra 0 universal (multi-tool batches fora de reunião), citação numérica formal, drafts genéricos.
+
+---
+
 ## Pendente — Cenários de escrita (4, 5, 9, 10)
 
 Todos tocam DB de produção. Aguardando confirmação do PM antes de rodar:
