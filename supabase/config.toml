@@ -1,0 +1,4 @@
+project_id = "ugvqlmapqlobigkjboae"
+
+[functions.export-design-session]
+verify_jwt = true

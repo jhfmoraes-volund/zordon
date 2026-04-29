@@ -706,6 +706,82 @@ export type Database = {
           },
         ]
       }
+      DesignSessionExportLog: {
+        Row: {
+          byteSize: number
+          createdAt: string
+          format: string
+          id: string
+          memberId: string | null
+          sessionId: string
+          stepCount: number
+          userId: string
+        }
+        Insert: {
+          byteSize: number
+          createdAt?: string
+          format?: string
+          id?: string
+          memberId?: string | null
+          sessionId: string
+          stepCount: number
+          userId: string
+        }
+        Update: {
+          byteSize?: number
+          createdAt?: string
+          format?: string
+          id?: string
+          memberId?: string | null
+          sessionId?: string
+          stepCount?: number
+          userId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionExportLog_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionExportLog_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionExportLog_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionExportLog_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionExportLog_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionExportLog_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignSessionItem: {
         Row: {
           aiGenerated: boolean

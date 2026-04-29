@@ -100,6 +100,8 @@ export async function buildOpsContext(
   const localBlock = route ? `## Local atual\nUsuário está em: ${routeLabel(route)}` : "";
 
   const sprintContext = [
+    renderToday(),
+    "",
     renderParams(config),
     "",
     renderFpMatrix(config.fp_matrix),
@@ -698,6 +700,18 @@ async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
 }
 
 // ─── Renderers ───────────────────────────────────────────────────
+
+function renderToday(): string {
+  const now = new Date();
+  const iso = now.toISOString().split("T")[0];
+  const weekday = now.toLocaleDateString("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" });
+  const dateBR = now.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" });
+  return [
+    "## Hoje",
+    `Data atual: **${iso}** — ${weekday}, ${dateBR}.`,
+    "Use sempre essa data como âncora ao interpretar referências relativas (\"hoje\", \"ontem\", \"essa segunda\", \"semana passada\", \"30/06\" sem ano, etc). Nunca chute o ano por inferência — use o ano corrente acima.",
+  ].join("\n");
+}
 
 function renderParams(config: AlphaConfig): string {
   return [

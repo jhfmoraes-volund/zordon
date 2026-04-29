@@ -11,6 +11,7 @@ import {
   Lightbulb, ListTodo, Zap, Play, Trash2,
   CheckCircle2, Circle, Loader2, Eye, AlertCircle, CalendarRange,
   FileText, Pencil, AlertTriangle, Settings, MoreVertical, Battery, Shield,
+  Download,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -739,6 +740,8 @@ function OverviewTab({ project, activeSprint }: { project: Project; activeSprint
 function SessionsTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
   const router = useRouter();
   const [superOpen, setSuperOpen] = useState(false);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const isManager = hasMinLevel(project.viewerRole, MANAGER);
 
   const typeLabels: Record<string, string> = {
     inception: "Inception",
@@ -764,6 +767,46 @@ function SessionsTab({ project, onRefresh }: { project: Project; onRefresh: () =
     if (!confirm("Remover esta session?")) return;
     await fetch(`/api/design-sessions/${id}`, { method: "DELETE" });
     onRefresh();
+  };
+
+  const exportJson = async (id: string) => {
+    setExportingId(id);
+    try {
+      const supabase = createClient();
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      if (!authSession) {
+        alert("Sessão expirada. Faça login novamente.");
+        return;
+      }
+
+      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/export-design-session`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authSession.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sessionId: id }),
+      });
+
+      if (!res.ok) {
+        alert(`Erro ao exportar: ${await res.text()}`);
+        return;
+      }
+
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const filename = cd.match(/filename="([^"]+)"/)?.[1] ?? `session-${id}.json`;
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    } finally {
+      setExportingId(null);
+    }
   };
 
   return (
@@ -821,9 +864,30 @@ function SessionsTab({ project, onRefresh }: { project: Project; onRefresh: () =
                         <Play className="h-3.5 w-3.5" />
                       </Button>
                     </Link>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(s.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </Button>
+                        }
+                      />
+                      <DropdownMenuContent align="end">
+                        {isManager && (
+                          <DropdownMenuItem
+                            onClick={() => exportJson(s.id)}
+                            disabled={exportingId === s.id}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {exportingId === s.id ? "Exportando…" : "Exportar JSON"}
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem variant="destructive" onClick={() => remove(s.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </CardContent>
