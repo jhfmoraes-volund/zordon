@@ -50,7 +50,7 @@ Resultado: ninguém confia no número, e o PM não consegue defender alocação 
 | 5 | **Filtro de status padronizado: `≠ backlog`** | Mesma regra em view, APIs, dashboard, widgets |
 | 6 | **Capacity = 5 dias úteis (seg–sex), exibido na referência seg–dom** | `fpCapacity` representa esforço útil; widget mostra seg→dom só pra contexto |
 | 7 | **`OPEN_STATUSES` central inclui `changes_requested`** | Hoje TS tem 3 status, SQL tem 4 — divergência. SQL é fonte de verdade |
-| 8 | **Conceito E (FP-com-prazo) ganha nome próprio: `fpDue`** | Mantém o widget útil sem confundir com `fpPlanned` |
+| 8 | **Dashboard `team-capacity-widget` vira sprint-based** | Substitui o bucketing por `dueDate` + `fpCapacity/2`. Mostra `fpPlanned` vs `fpContract` vs `fpCapacity` — PM bate olho e detecta overcommit na hora |
 | 9 | **Agente Alpha fora de escopo desta V2** | 8+ pontos de leitura; tratar em plano dedicado depois que vocabulário estabilizar |
 
 ---
@@ -64,11 +64,10 @@ Resultado: ninguém confia no número, e o PM não consegue defender alocação 
 | **Planejado da sprint** | `fpPlanned` | `sprint_member_capacity.fp_planned` | `done + todo + in_progress + review + changes_requested` | sprint |
 | **Em aberto** | `fpOpen` | `sprint_member_capacity.fp_open` | `todo + in_progress + review + changes_requested` | sprint |
 | **Entregue** | `fpDone` | `sprint_member_capacity.fp_done` | `done` | sprint |
-| **Com prazo na janela** | `fpDue` | `Task.dueDate` agregado em JS | `OPEN_STATUSES` (i.e. ≠ `done` e ≠ `backlog`) | data |
 
 **Invariantes:**
 - `fpPlanned = fpDone + fpOpen` (sempre, por construção da view)
-- `fpDue` ⊥ `fpPlanned` — eixos diferentes (data vs sprint), comparáveis mas independentes
+- Quando um membro tem várias sprints ativas na mesma semana, **soma**: `fpPlanned_semana = Σ fpPlanned_sprint` (idem `fpDone`, `fpOpen`)
 
 **Override de sprint:** `SprintMember.fpAllocation` continua sobrescrevendo `ProjectMember.fpAllocation` quando presente — via `COALESCE`.
 
@@ -127,21 +126,34 @@ SPRINT 1 — ZORDON (27/abr → 01/mai · active · 5 dias úteis)
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.4 Dashboard "Capacity do Time" — explicitando o conceito E
+### 4.4 Dashboard "Capacity do Time" — saúde da operação
 
 ```
-┌─ Capacity do Time ─────────────────────────────────────────────┐
-│ FP com prazo nesta e próxima semana (dueDate) vs 50 FP/semana  │
+┌─ Capacity do Time — Sprint atual ─────────────────────────────┐
+│ Planejado vs contrato vs capacity. Bate o olho e vê overcommit.│
 │                                                                 │
-│ João Moraes                                                     │
-│  Vence essa semana    ███████████████░░░░  42 / 50 FP (3 tasks) │
-│  Vence próx semana    ████░░░░░░░░░░░░░░    8 / 50 FP (1 task)  │
+│ João Moraes                              231 / 100 FP   2.3× ⚠️ │
+│ ████████████████████████████████  ▓189 ▒42                     │
+│ contrato 104 (Zordon 54 · Zelar 50) → +127 FP acima            │
+│                                                                 │
+│ Outro Membro                              45 / 100 FP   0.45× ✓│
+│ ███████░░░░░░░░░░░░░░░░░░░░░░░░  ▓20 ▒25                       │
+│ contrato 60 → sobra 15 FP                                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Diferenças vs widget de `/profile`:
-- Label "vence" em vez de "esta semana" (deixa o conceito E explícito)
-- Subtítulo do card cita "(dueDate)" pra distinguir de bucketing por sprint
+**Leituras:**
+- Numerador = `Σ fpPlanned` das sprints ativas que o membro participa essa semana
+- Denominador = `fpCapacity` (não `fpCapacity / 2`)
+- Multiplicador = `fpPlanned / fpCapacity` — `>1` vermelho, entre `fpContract/fpCapacity` e `1` amarelo, `≤fpContract/fpCapacity` verde
+- Sub-barra `▓ fpDone · ▒ fpOpen` (mesma divisão do `/profile`)
+- Linha de contrato compara `fpContract` vs `fpPlanned` — sinaliza `+N acima` ou `sobra N`
+
+**O que mudou vs hoje:**
+- Bucketing era por `task.dueDate`; agora é por **sprint ativa** (igual ao `/profile`)
+- Capacity era `fpCapacity / 2` (resíduo de sprint quinzenal); agora é `fpCapacity` direto
+- Tasks sem `dueDate` deixam de virar caso especial — ou estão numa sprint (contam) ou em backlog (não contam)
+- Detector de overload/idle (linhas 271–286 do dashboard) usa o mesmo numerador unificado
 
 ---
 
@@ -259,7 +271,7 @@ Todos os pontos do app que tocam capacity hoje, com a ação no plano:
 | `src/components/member-battery.tsx` | A+B | Adicionar prop `done` para barra empilhada (▓ done + ▒ open) |
 | `src/components/weekly-allocation.tsx` | C (`fpUsed`) | Trocar numerador → `fpPlanned`; sub-barra `fpDone/fpOpen` |
 | `src/components/capacity-widget.tsx` | A+B | Sem mudança estrutural; revisar labels |
-| `src/components/team-capacity-widget.tsx` | **E (dueDate)** | Renomear props/labels: `fpThisWeek` → `fpDueThisWeek`, label "Vence essa semana" |
+| `src/components/team-capacity-widget.tsx` | dueDate-based + capacity/2 | **Refator pra sprint-based**: props viram `fpPlanned/fpDone/fpOpen/fpContract/fpCapacity`; remove `/2`; mostra contrato inline (mockup 4.4) |
 | `src/components/project-capacity-tab.tsx` | misturado | Refatorar pra ler `sprint_member_capacity.fp_planned` direto da view |
 | `src/components/sprint-overview-widget.tsx` | D ambíguo | Consumir `fpPlanned` da `/api/sprints` (após fix backend) |
 | `src/components/ui/pixel-bar.tsx` | agnóstico | Sem mudança |
@@ -374,25 +386,41 @@ Quando `done` definido: barra com 2 cores (sólida pra `done`, clara pra `commit
 - Antes: usa `bucket.totalUsed` como métrica primária
 - Depois: usa `bucket.totalPlanned`; mostra `totalDone`/`totalOpen` na sub-barra
 
-### 8.4 `src/components/team-capacity-widget.tsx` (conceito E)
+### 8.4 `src/components/team-capacity-widget.tsx` — sprint-based
 
-Renomear pra deixar explícito que é por `dueDate`, não por sprint:
+Refatora pra alinhar com o resto do app:
 
 ```ts
 export type TeamCapacityMember = {
-  // ...
-  fpDueThisWeek: number;     // antes: fpThisWeek
-  fpDueNextWeek: number;     // antes: fpNextWeek
-  dueThisWeek: number;       // contagem (mantém)
-  dueNextWeek: number;
+  id: string;
+  name: string;
+  role: string;
+  squads: string[];
+  // sprint-based (soma das sprints ativas dessa semana):
+  fpCapacity: number;     // sem /2
+  fpContract: number;     // novo — soma de ProjectMember.fpAllocation dos projetos onde tem sprint ativa
+  fpPlanned: number;      // novo — Σ fp_planned das sprints ativas
+  fpDone: number;         // novo
+  fpOpen: number;         // novo
+  activeSprints: { id: string; name: string; projectName: string }[];
 };
 ```
 
-Labels na UI:
-- Card title: "Capacity do Time — por prazo"
-- Subtitle: "FP com prazo nesta e próxima semana (dueDate) vs capacity semanal"
-- Coluna 1: "Vence essa semana"
-- Coluna 2: "Vence próx semana"
+**Montagem dos dados** (no `src/app/(dashboard)/page.tsx`):
+- Substituir o loop atual (linhas 187–223) por uma query a `sprint_member_capacity` filtrada por sprints `active`/`planning` da semana atual
+- Agregar por `memberId` somando `fp_planned/fp_done/fp_open` e `fp_allocation` (= contrato efetivo, com override aplicado)
+- Remover `/2` do denominador (linha 78 do widget)
+
+**UI** (mockup 4.4):
+- Card title: "Capacity do Time — Sprint atual"
+- Subtitle: "Planejado vs contrato vs capacity"
+- Por membro: barra empilhada `▓fpDone ▒fpOpen` em cima de `fpCapacity`; linha de contrato + multiplicador
+
+**Detector de overload/idle** ([page.tsx:271-286](src/app/(dashboard)/page.tsx#L271-L286)):
+- Substituir `m.fpThisWeek / weeklyCapacity` por `m.fpPlanned / m.fpCapacity`
+- Threshold mantém `>0.85` overload, `<0.1` idle
+
+**Conceito `fpDue` (FP-com-prazo) deixa de existir no app.** Se voltar a fazer sentido (ex.: "tasks vencendo essa semana"), tratar como widget separado, não misturar com capacity.
 
 ### 8.5 `src/app/(dashboard)/profile/page.tsx` — `CapacityCard`
 
@@ -446,7 +474,7 @@ Espelhar mockup 4.1 (mesmo card que `/profile`).
 | 10 | `CapacityCard` em `/profile` | `src/app/(dashboard)/profile/page.tsx` | `feat(profile): unified capacity card with project breakdown` |
 | 11 | `WeeklyAllocation` + `/profile/capacity` | 2 arquivos | `feat(capacity): weekly allocation uses fp_planned with done/open split` |
 | 12 | `ProjectCapacityTab` + `/sprints/[id]` | 2 arquivos | `refactor(capacity): sprint tab reads from view, contract inline` |
-| 13 | `team-capacity-widget` — renomear pra conceito E | `src/components/team-capacity-widget.tsx` + dashboard | `refactor(dashboard): team widget uses fpDue (dueDate-based), labels explícitos` |
+| 13 | `team-capacity-widget` — refator sprint-based | `src/components/team-capacity-widget.tsx` + `src/app/(dashboard)/page.tsx` | `refactor(dashboard): team widget uses sprint-based fpPlanned vs contract vs capacity` |
 | 14 | Lista de sprints + projects detail (barras fora da tab) | `src/app/(dashboard)/sprints/page.tsx`, `src/app/(dashboard)/projects/[id]/page.tsx`, `sprint-overview-widget.tsx` | `refactor(capacity): align sprints list and project detail with fpPlanned` |
 | 15 | Lista de membros + detalhe | `src/app/(dashboard)/members/page.tsx`, `src/app/(dashboard)/members/[id]/page.tsx` | `feat(members): align list and detail with new vocabulary` |
 | 16 | Limpeza — remover `ACTIVE_STATUSES` alias, `fpUsed/totalUsed` antigos | múltiplos | `chore(capacity): remove deprecated aliases (ACTIVE_STATUSES, fpUsed)` |
@@ -468,6 +496,7 @@ Backend:
 Telas (cada uma deve mostrar `231/100 FP` pro João, com `▓189 ▒42`):
 - [ ] `/profile` widget capacity
 - [ ] `/profile/capacity` página completa
+- [ ] Dashboard "Capacity do Time" — linha do João mostra `231/100 FP · 2.3× ⚠️ · contrato 104`
 - [ ] `/sprints` lista (linha do João na Sprint 1)
 - [ ] `/sprints/c3e38650.../board` aba capacity
 - [ ] `/projects/[id]` aba schedule (membro João, Sprint 1)
@@ -475,14 +504,11 @@ Telas (cada uma deve mostrar `231/100 FP` pro João, com `▓189 ▒42`):
 - [ ] `/members` lista (linha do João)
 - [ ] `/members/[id]` detalhe do João
 
-Telas com conceito E (FP-com-prazo, número diferente):
-- [ ] Dashboard "Capacity do Time" mostra label "Vence essa semana / Vence próx semana"
-- [ ] Subtítulo do card cita "(dueDate)"
-
 Regressões:
 - [ ] Sprints 2/3/4 (planning) mostram `0 / 100 FP` (todas as tasks delas estão em backlog)
-- [ ] Dashboard team capacity inclui `changes_requested` no detector de overload/idle
-- [ ] Search global `grep -r "fpUsed\|totalUsed\|fp_used"` em `src/` retorna zero matches
+- [ ] Dashboard team-widget detector de overload usa `fpPlanned / fpCapacity` (sem `/2`) e inclui `changes_requested`
+- [ ] Tasks sem `dueDate` deixam de aparecer somadas em "esta semana" do dashboard
+- [ ] Search global `grep -r "fpUsed\|totalUsed\|fp_used\|fpThisWeek\|fpNextWeek"` em `src/` retorna zero matches
 
 Fora de escopo (validar separadamente em V3):
 - [ ] Agente Alpha — context, tools, prompt — tratado em plano dedicado
@@ -495,5 +521,5 @@ Fora de escopo (validar separadamente em V3):
 - A view `sprint_capacity_overview` já existia mas alimentava só o dashboard team. Após a migration, ela vira a fonte canônica pra QUALQUER agregação por sprint.
 - `Member.fpCapacity` continua como capacidade semanal nominal (5 dias úteis). Se futuramente quisermos modular por `dedicationPercent`, isso é trivial (`effectiveCapacity = fpCapacity * dedicationPercent / 100`).
 - Backlog **fora** da métrica é decisão consciente. Se um dia quisermos "intenção total" (planejado + backlog), adicionar `fp_intended` na view sem alterar `fp_planned`.
-- **Conceito E (`fpDue`)** continua existindo no código sem virar coluna de view — agregação simples em JS sobre `Task.dueDate`. Se virar caro, criar view `member_due_window` depois.
+- **FP-com-prazo (dueDate)** deixa de ser conceito de capacity. Se voltar a ser útil ("tasks vencendo essa semana"), criar widget separado — não misturar com saúde da operação.
 - **Agente Alpha**: a próxima onda. Inventário inicial: `src/lib/agent/agents/alpha/context.ts` (5 queries), `tools.ts` (3 queries + filtros JS), `prompt.ts` (vocabulário no system prompt). Tratar como bloco isolado.
