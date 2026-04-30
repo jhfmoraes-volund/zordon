@@ -103,6 +103,9 @@ type MemberCapacity = {
   fpAllocation: number;
   fpAllocationOther: number;
   fpAllocationTotal: number;
+  fpPlannedActiveSprints: number;
+  fpDoneActiveSprints: number;
+  fpOpenActiveSprints: number;
 };
 
 type ProjectMemberRow = { member: { id: string; name: string; role: string } };

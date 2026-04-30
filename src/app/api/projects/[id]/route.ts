@@ -137,11 +137,15 @@ export async function GET(
 
   // ─── Member capacity (multi-project) ───────────────────
   const allMemberIds = projectMembers.map((pm: any) => pm.member.id);
+  const activeSprintIds = sprints
+    .filter((s: any) => s.status === "active" || s.status === "planning")
+    .map((s: any) => s.id);
 
   let fpByMember = new Map<string, number>();
   let allocationOtherByMember = new Map<string, number>();
+  let planByMember = new Map<string, { planned: number; done: number; open: number }>();
   if (allMemberIds.length > 0) {
-    const [assignmentsRes, allocationsRes] = await Promise.all([
+    const [assignmentsRes, allocationsRes, sprintCapsRes] = await Promise.all([
       supabase
         .from("TaskAssignment")
         .select("memberId, task:Task!inner(functionPoints, status)")
@@ -152,6 +156,12 @@ export async function GET(
         .select("memberId, fpAllocation, projectId")
         .in("memberId", allMemberIds)
         .neq("projectId", id),
+      activeSprintIds.length > 0
+        ? supabase
+            .from("sprint_member_capacity")
+            .select("memberId, fp_planned, fp_done, fp_open")
+            .in("sprintId", activeSprintIds)
+        : Promise.resolve({ data: [] as any[] }),
     ]);
 
     for (const a of (assignmentsRes.data ?? []) as any[]) {
@@ -166,6 +176,21 @@ export async function GET(
         a.memberId,
         (allocationOtherByMember.get(a.memberId) ?? 0) + fp,
       );
+    }
+    for (const r of (sprintCapsRes.data ?? []) as any[]) {
+      if (!r.memberId) continue;
+      const existing = planByMember.get(r.memberId);
+      if (existing) {
+        existing.planned += r.fp_planned ?? 0;
+        existing.done += r.fp_done ?? 0;
+        existing.open += r.fp_open ?? 0;
+      } else {
+        planByMember.set(r.memberId, {
+          planned: r.fp_planned ?? 0,
+          done: r.fp_done ?? 0,
+          open: r.fp_open ?? 0,
+        });
+      }
     }
   }
 
@@ -187,6 +212,8 @@ export async function GET(
     const fpAllocationOther = allocationOtherByMember.get(member.id) ?? 0;
     const fpAllocationTotal = fpAllocation + fpAllocationOther;
 
+    const plan = planByMember.get(member.id) ?? { planned: 0, done: 0, open: 0 };
+
     return {
       id: member.id,
       name: member.name,
@@ -200,6 +227,10 @@ export async function GET(
       fpAllocation,
       fpAllocationOther,
       fpAllocationTotal,
+      // Planejado das sprints active+planning desse projeto pra esse membro
+      fpPlannedActiveSprints: plan.planned,
+      fpDoneActiveSprints: plan.done,
+      fpOpenActiveSprints: plan.open,
     };
   });
 

@@ -22,6 +22,10 @@ type MemberCapacity = {
   fpAllocation: number;
   fpAllocationOther: number;
   fpAllocationTotal: number;
+  /** Planejado nas sprints active+planning desse projeto (status ≠ backlog) */
+  fpPlannedActiveSprints: number;
+  fpDoneActiveSprints: number;
+  fpOpenActiveSprints: number;
 };
 
 // ─── Segmented PixelBar ──────────────────────────────────
@@ -285,13 +289,19 @@ function MemberCapacityRow({
         </span>
       </div>
 
-      {/* Tasks ativas */}
+      {/* Planejado nas sprints active+planning vs contrato aqui */}
       <span
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums shrink-0"
-        title="FP em tasks ativas atribuídas a esta pessoa neste projeto"
+        className="inline-flex items-center gap-1 text-xs tabular-nums shrink-0"
+        title={`Planejado nas sprints ativas (${member.fpPlannedActiveSprints} FP) vs contrato aqui (${member.fpAllocation} FP)`}
       >
-        <Zap className="h-3 w-3" />
-        {member.fpThisProject}
+        <Zap className="h-3 w-3 text-amber-500" />
+        <span className="font-mono font-semibold text-foreground">
+          {member.fpPlannedActiveSprints}
+        </span>
+        <span className="text-muted-foreground">/ {member.fpAllocation}</span>
+        <span className="text-[10px] text-muted-foreground tabular-nums">
+          ▓{member.fpDoneActiveSprints} ▒{member.fpOpenActiveSprints}
+        </span>
       </span>
 
       {/* Editor */}
