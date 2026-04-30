@@ -35,33 +35,44 @@ export async function GET(req: NextRequest) {
   const result = (sprints ?? []).map(({ tasks, ...sprint }: any) => {
     const total = tasks.length;
     const done = tasks.filter((t: any) => t.status === "done").length;
-    const totalFp = tasks.reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0);
+    // totalFp = planejado da sprint (status ≠ backlog), alinhado com fp_planned da view
+    const totalFp = tasks
+      .filter((t: any) => t.status !== "backlog")
+      .reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0);
 
-    const memberMap = new Map<string, { id: string; name: string; fpCapacity: number; fpAllocated: number }>();
+    const memberMap = new Map<string, { id: string; name: string; fpCapacity: number; fpPlanned: number }>();
     for (const task of tasks) {
+      if (task.status === "backlog") continue;
       const fp = task.functionPoints ?? 0;
       for (const a of task.assignments) {
         if (a.member) {
           const existing = memberMap.get(a.member.id);
           if (existing) {
-            existing.fpAllocated += fp;
+            existing.fpPlanned += fp;
           } else {
             memberMap.set(a.member.id, {
               id: a.member.id,
               name: a.member.name,
               fpCapacity: a.member.fpCapacity,
-              fpAllocated: fp,
+              fpPlanned: fp,
             });
           }
         }
       }
     }
 
+    // Mantém fpAllocated como alias de fpPlanned até Fase 14 limpar consumidores
+    const members = Array.from(memberMap.values()).map((m) => ({
+      ...m,
+      /** @deprecated alias de fpPlanned — removido na Fase 14 */
+      fpAllocated: m.fpPlanned,
+    }));
+
     return {
       ...sprint,
       taskStats: { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 },
       totalFp,
-      members: Array.from(memberMap.values()),
+      members,
     };
   });
 
