@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { ACTIVE_STATUSES } from "@/lib/function-points";
+import { OPEN_STATUSES } from "@/lib/function-points";
 import { getUser } from "@/lib/dal";
 
 export async function GET(
@@ -146,7 +146,7 @@ export async function GET(
         .from("TaskAssignment")
         .select("memberId, task:Task!inner(functionPoints, status)")
         .in("memberId", allMemberIds)
-        .in("task.status", [...ACTIVE_STATUSES]),
+        .in("task.status", [...OPEN_STATUSES]),
       supabase
         .from("ProjectMember")
         .select("memberId, fpAllocation, projectId")
@@ -173,7 +173,7 @@ export async function GET(
     const member = pm.member;
     const fpThisProject = tasks
       .filter((t) =>
-        [...ACTIVE_STATUSES].includes(t.status as any) &&
+        [...OPEN_STATUSES].includes(t.status as any) &&
         (t as any).assignments.some((a: any) => a.member?.id === member.id)
       )
       .reduce((s, t) => s + (t.functionPoints ?? 0), 0);

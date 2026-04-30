@@ -6,7 +6,7 @@ import {
   AlertTriangle, Clock, UserX, TrendingDown,
   AlertCircle, CheckCircle2,
 } from "lucide-react";
-import { ACTIVE_STATUSES } from "@/lib/function-points";
+import { OPEN_STATUSES } from "@/lib/function-points";
 import { WeeklyAllocation } from "@/components/weekly-allocation";
 import { TeamCapacityWidget } from "@/components/team-capacity-widget";
 import type { SprintInput } from "@/lib/weekBuckets";
@@ -190,7 +190,7 @@ export default async function OverviewPage() {
     for (const a of m.taskAssignments) {
       const sp = a.task.functionPoints ?? 0;
       const due = a.task.dueDate ? new Date(a.task.dueDate) : null;
-      const isActive = [...ACTIVE_STATUSES].includes(a.task.status as any);
+      const isActive = [...OPEN_STATUSES].includes(a.task.status as any);
 
       if (!isActive) continue;
 
@@ -206,7 +206,7 @@ export default async function OverviewPage() {
     }
 
     const totalActiveFp = m.taskAssignments
-      .filter((a: any) => [...ACTIVE_STATUSES].includes(a.task.status as any))
+      .filter((a: any) => [...OPEN_STATUSES].includes(a.task.status as any))
       .reduce((s: number, a: any) => s + (a.task.functionPoints ?? 0), 0);
 
     const squads = m.squadMemberships.map((sm: any) => sm.squad.name);
@@ -308,7 +308,7 @@ export default async function OverviewPage() {
   // ─── Stats ────────────────────────────────────────────
 
   const [activeTasksRes, doneThisWeekRes] = await Promise.all([
-    supabase.from("Task").select("*", { count: "exact", head: true }).in("status", [...ACTIVE_STATUSES]),
+    supabase.from("Task").select("*", { count: "exact", head: true }).in("status", [...OPEN_STATUSES]),
     supabase.from("Task").select("*", { count: "exact", head: true })
       .eq("status", "done")
       .gte("updatedAt", thisWeekStart.toISOString())

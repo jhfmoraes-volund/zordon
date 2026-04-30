@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { ACTIVE_STATUSES } from "@/lib/function-points";
+import { OPEN_STATUSES } from "@/lib/function-points";
 import { getUser, requireRole, ForbiddenError } from "@/lib/dal";
 import { ADMIN_ROLE_NAMES } from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -18,7 +18,7 @@ export async function GET() {
     supabase
       .from("Task")
       .select("id, functionPoints, status, sprintId, assignments:TaskAssignment(memberId)")
-      .in("status", [...ACTIVE_STATUSES]),
+      .in("status", [...OPEN_STATUSES]),
   ]);
 
   if (membersRes.error) {

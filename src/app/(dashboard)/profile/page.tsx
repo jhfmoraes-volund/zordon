@@ -31,6 +31,7 @@ import { MemberBattery, type BatterySegment } from "@/components/member-battery"
 import { PdiWidget } from "@/components/pdi-widget";
 import { TodosWidget } from "@/components/todos-widget";
 import { bucketSprintsByWeek, type SprintInput } from "@/lib/weekBuckets";
+import { OPEN_STATUSES } from "@/lib/function-points";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -97,8 +98,7 @@ export default function ProfilePage() {
   const [skillsSummary, setSkillsSummary] = useState<SkillsSummary | null>(null);
   const [capacity, setCapacity] = useState<CapacitySummary | null>(null);
 
-  const ACTIVE_STATUSES = ["todo", "in_progress", "review"];
-  const FETCH_STATUSES = [...ACTIVE_STATUSES, "backlog"];
+  const FETCH_STATUSES = [...OPEN_STATUSES, "backlog"];
 
   const fetchProfile = async (memberId: string, memberInfo: typeof member) => {
     const supabase = createClient();
@@ -121,7 +121,7 @@ export default function ProfilePage() {
 
     // FP allocated (active only)
     const fpAllocated = tasks
-      .filter((t) => ACTIVE_STATUSES.includes(t.status))
+      .filter((t) => (OPEN_STATUSES as readonly string[]).includes(t.status))
       .reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
 
     // Sprints where I have tasks

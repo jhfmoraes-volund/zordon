@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
-import { ACTIVE_STATUSES } from "@/lib/function-points";
+import { OPEN_STATUSES } from "@/lib/function-points";
 import { getCurrentMember, getUser } from "@/lib/dal";
 
 export async function GET() {
@@ -31,7 +31,7 @@ export async function GET() {
         )
       `)
       .eq("memberId", memberId)
-      .in("task.status", [...ACTIVE_STATUSES, "backlog"]),
+      .in("task.status", [...OPEN_STATUSES, "backlog"]),
     supabase
       .from("ProjectMember")
       .select("project:Project(id, name, status)")
@@ -46,7 +46,7 @@ export async function GET() {
 
   // FP allocated (active only)
   const fpAllocated = tasks
-    .filter((t: any) => [...ACTIVE_STATUSES].includes(t.status))
+    .filter((t: any) => [...OPEN_STATUSES].includes(t.status))
     .reduce((sum: number, t: any) => sum + (t.functionPoints ?? 0), 0);
 
   // Sprints where I have tasks
