@@ -21,24 +21,24 @@
 
 ## Status geral
 
-- [ ] Fase 0 — Preparação
-- [ ] Fase 1 — Migration SQL
-- [ ] Fase 2 — Regen tipos
-- [ ] Fase 3 — `OPEN_STATUSES` central
-- [ ] Fase 4 — Migrar imports de `ACTIVE_STATUSES`
-- [ ] Fase 5 — APIs de capacity (`profile`, `members/[id]`)
-- [ ] Fase 6 — API `sprints` (filtrar backlog)
-- [ ] Fase 7 — APIs `me`, `members`, `projects/[id]`, `projects/[id]/schedule`
-- [ ] Fase 8 — `weekBuckets.ts` (shape estendido)
-- [ ] Fase 9 — `MemberBattery` (prop `done`)
-- [ ] Fase 10 — `/profile` CapacityCard
-- [ ] Fase 11 — `WeeklyAllocation` + `/profile/capacity`
-- [ ] Fase 12 — `ProjectCapacityTab` + `/sprints/[id]`
-- [ ] Fase 13 — Dashboard team-widget (sprint-based)
-- [ ] Fase 14 — Lista sprints + projects detail + sprint-overview-widget
-- [ ] Fase 15 — Lista membros + detalhe membro
-- [ ] Fase 16 — Cleanup (remove aliases)
-- [ ] Fase 17 — Validação final
+- [x] Fase 0 — Preparação
+- [x] Fase 1 — Migration SQL
+- [x] Fase 2 — Regen tipos
+- [x] Fase 3 — `OPEN_STATUSES` central
+- [x] Fase 4 — Migrar imports de `ACTIVE_STATUSES`
+- [x] Fase 5 — APIs de capacity (`profile`, `members/[id]`)
+- [x] Fase 6 — API `sprints` (filtrar backlog)
+- [x] Fase 7 — APIs `me`, `members`, `projects/[id]`, `projects/[id]/schedule`
+- [x] Fase 8 — `weekBuckets.ts` (shape estendido)
+- [x] Fase 9 — `MemberBattery` (prop `done`)
+- [x] Fase 10 — `/profile` CapacityCard
+- [x] Fase 11 — `WeeklyAllocation` + `/profile/capacity`
+- [x] Fase 12 — `ProjectCapacityTab` + `/sprints/[id]`
+- [x] Fase 13 — Dashboard team-widget (sprint-based)
+- [x] Fase 14 — Lista sprints + projects detail + sprint-overview-widget
+- [x] Fase 15 — Lista membros + detalhe membro
+- [x] Fase 16 — Cleanup (remove aliases)
+- [x] Fase 17 — Validação final (backend + typecheck OK · validação visual pendente do usuário)
 
 ---
 
