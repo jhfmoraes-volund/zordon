@@ -409,19 +409,22 @@ type MeetingVisibilityCtx = {
 /**
  * Mirror of public.can_view_meeting(meetingId) — given a meeting's type,
  * its attendee memberIds, and the pmIds of any linked projects, decide
- * if the caller can see it.
+ * if the *acting* caller can see it.
  *
  *   - Admin (head-ops / ceo / cro): always.
  *   - Otherwise:
- *     - pm_review / general: caller's memberId in attendeeMemberIds.
- *     - daily / super_planning: caller's memberId in linkedProjectPmIds.
+ *     - pm_review / general: acting memberId in attendeeMemberIds.
+ *     - daily / super_planning: acting memberId in linkedProjectPmIds.
+ *
+ * Honors impersonation: admin impersonating PM Pedro will be filtered
+ * exactly like Pedro.
  */
 export async function canViewMeeting(
   ctx: MeetingVisibilityCtx,
 ): Promise<boolean> {
-  const realRole = await getRealRole();
-  if (hasMinLevel(realRole, ADMIN)) return true;
-  const memberId = await getMemberId();
+  const role = await getEffectiveRole();
+  if (hasMinLevel(role, ADMIN)) return true;
+  const memberId = await getActorMemberId();
   if (!memberId) return false;
   if (ctx.type === "pm_review" || ctx.type === "general") {
     return ctx.attendeeMemberIds.includes(memberId);
@@ -433,15 +436,15 @@ export async function canViewMeeting(
 }
 
 /**
- * Mirror of public.can_edit_meeting — admin OR creator.
+ * Mirror of public.can_edit_meeting — admin OR creator (acting).
  */
 export async function canEditMeeting(
   createdById: string | null,
 ): Promise<boolean> {
-  const realRole = await getRealRole();
-  if (hasMinLevel(realRole, ADMIN)) return true;
+  const role = await getEffectiveRole();
+  if (hasMinLevel(role, ADMIN)) return true;
   if (!createdById) return false;
-  const memberId = await getMemberId();
+  const memberId = await getActorMemberId();
   return !!memberId && memberId === createdById;
 }
 
@@ -467,8 +470,8 @@ export async function requireSessionAccessApi(
   const user = await getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const realRole = await getRealRole();
-  if (hasMinLevel(realRole, MANAGER)) return null;
+  const role = await getEffectiveRole();
+  if (hasMinLevel(role, MANAGER)) return null;
 
   const projectId = await lookupSessionProject(sessionId);
   if (!projectId) return new Response("Session not found", { status: 404 });
@@ -487,8 +490,8 @@ export async function requireSessionEditApi(
   const user = await getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const realRole = await getRealRole();
-  if (hasMinLevel(realRole, MANAGER)) return null;
+  const role = await getEffectiveRole();
+  if (hasMinLevel(role, MANAGER)) return null;
 
   const projectId = await lookupSessionProject(sessionId);
   if (!projectId) return new Response("Session not found", { status: 404 });

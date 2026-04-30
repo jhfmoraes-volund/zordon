@@ -35,7 +35,7 @@ type SprintRow = {
   fpPlanned: number;
   fpDone: number;
   fpOpen: number;
-  /** @deprecated alias de fpOpen — removido na Fase 16 */
+  /** @deprecated alias de fpOpen — removido na Fase 16 junto com SprintInput.fpUsed */
   fpUsed: number;
   hasOverride: boolean;
 };

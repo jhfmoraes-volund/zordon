@@ -69,8 +69,8 @@ type Member = {
   githubUsername: string | null;
   isExternal: boolean;
   fpCapacity: number;
-  /** Soma de FP em uso nas sprints que rodam na semana atual. */
-  fpUsedWeek: number;
+  /** Soma de FP planejados (≠ backlog) nas sprints que rodam na semana atual. */
+  fpPlannedWeek: number;
   /** Skill rows from the member self-assessment, one per tower. */
   skills: MemberSkillRow[];
   /** Highest-scoring tower (≥10). Null if no assessment. */
@@ -179,7 +179,7 @@ function MemberCardMobile({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const usage = m.fpCapacity > 0 ? m.fpUsedWeek / m.fpCapacity : 0;
+  const usage = m.fpCapacity > 0 ? m.fpPlannedWeek / m.fpCapacity : 0;
   const pct = Math.min(usage * 100, 999);
   const tone = pixelTone(pct, "load");
 
@@ -262,7 +262,7 @@ function MemberCardMobile({
               {Math.round(pct)}%
             </span>
             <span className="font-mono text-xs tabular-nums leading-none text-muted-foreground/70">
-              {m.fpUsedWeek}/{m.fpCapacity}
+              {m.fpPlannedWeek}/{m.fpCapacity}
               <span className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase ml-1">FP</span>
             </span>
           </div>
@@ -290,7 +290,7 @@ export default function MembersPage() {
     const supabase = createClient();
     const today = new Date().toISOString().slice(0, 10);
 
-    // Sprints rodando hoje → membros que participam delas → soma de fp_open.
+    // Sprints rodando hoje → membros que participam delas → soma de fp_planned.
     const [membersRes, activeSprintsRes, skillsRes] = await Promise.all([
       supabase.from("Member").select("*").order("name"),
       supabase
@@ -305,19 +305,19 @@ export default function MembersPage() {
 
     const activeSprintIds = (activeSprintsRes.data ?? []).map((s) => s.id);
 
-    type WeekLoadRow = { memberId: string; fp_open: number };
+    type WeekLoadRow = { memberId: string; fp_planned: number };
     let weekRows: WeekLoadRow[] = [];
     if (activeSprintIds.length > 0) {
       const { data } = await supabase
         .from("sprint_member_capacity")
-        .select("memberId, fp_open")
+        .select("memberId, fp_planned")
         .in("sprintId", activeSprintIds);
       weekRows = (data ?? []) as unknown as WeekLoadRow[];
     }
 
     const weekLoadMap = new Map<string, number>();
     for (const r of weekRows) {
-      weekLoadMap.set(r.memberId, (weekLoadMap.get(r.memberId) ?? 0) + (r.fp_open ?? 0));
+      weekLoadMap.set(r.memberId, (weekLoadMap.get(r.memberId) ?? 0) + (r.fp_planned ?? 0));
     }
 
     // Group skills by memberId. Lazy-compute score client-side when missing
@@ -354,7 +354,7 @@ export default function MembersPage() {
         githubUsername: (m.githubUsername as string) ?? null,
         isExternal: (m.isExternal as boolean) ?? false,
         fpCapacity: (m.fpCapacity as number) ?? 0,
-        fpUsedWeek: weekLoadMap.get(id) ?? 0,
+        fpPlannedWeek: weekLoadMap.get(id) ?? 0,
         skills,
         primaryTower: primary,
         secondaryTower: secondary,
@@ -477,7 +477,7 @@ export default function MembersPage() {
           </TableHeader>
           <TableBody>
             {members.map((m) => {
-              const usage = m.fpCapacity > 0 ? m.fpUsedWeek / m.fpCapacity : 0;
+              const usage = m.fpCapacity > 0 ? m.fpPlannedWeek / m.fpCapacity : 0;
               return (
                 <TableRow key={m.id}>
                   <TableCell className="font-medium">
@@ -523,7 +523,7 @@ export default function MembersPage() {
                               {Math.round(pct)}%
                             </span>
                             <span className="font-mono text-sm tabular-nums leading-none text-muted-foreground/70">
-                              {m.fpUsedWeek}/{m.fpCapacity}
+                              {m.fpPlannedWeek}/{m.fpCapacity}
                               <span className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase ml-1">FP</span>
                             </span>
                           </div>
