@@ -66,9 +66,13 @@ const managerOnlyNav: NavItem[] = [
   { title: "Reuniões", href: "/meetings", icon: CalendarCheck },
 ];
 
-// Admin only (head-ops, CEO) — tuning de agentes + sandbox de UI.
+// Admin only (head-ops, CEO) — tuning de agentes.
 const adminOnlyNav: NavItem[] = [
   { title: "Agentes", href: "/agents", icon: SlidersHorizontal },
+];
+
+// Manager+ (PM, head-ops, CEO) — sandbox de UI / mocks de schema.
+const managerSandboxNav: NavItem[] = [
   { title: "Sandbox", href: "/dev", icon: FlaskConical },
 ];
 
@@ -191,6 +195,7 @@ export function AppSidebar() {
               ...(canSeeManagement ? managerOnlyNav : []),
               ...sharedNav,
               ...(canTuneAgents ? adminOnlyNav : []),
+              ...(canSeeManagement ? managerSandboxNav : []),
             ].map((item) => {
               const isActive =
                 item.href === "/"

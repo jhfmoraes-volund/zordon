@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -116,26 +115,23 @@ export default function MeetingsPage() {
   const router = useRouter();
 
   const load = async () => {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("Meeting")
-      .select(`
-        *,
-        projectReviews:MeetingProjectReview(*, project:Project(name), member:Member(id, name)),
-        actionItems:Todo(*, assignee:Member!Todo_assigneeId_fkey(name)),
-        attendees:MeetingAttendee(id, role, externalName, member:Member(id, name)),
-        projectLinks:MeetingProjectLink(project:Project(id, name))
-      `)
-      .order("date", { ascending: false });
-    if (data) setMeetings(data as unknown as Meeting[]);
+    // Use API route (not direct Supabase) so impersonation/visibility filters apply.
+    // Browser-side createClient() sends the real user's JWT, which bypasses
+    // server-side impersonation context.
+    const r = await fetch("/api/meetings");
+    if (!r.ok) {
+      setMeetings([]);
+      return;
+    }
+    const data = await r.json();
+    setMeetings(data as Meeting[]);
   };
 
   useEffect(() => { load(); }, []);
 
   const remove = async (id: string) => {
     if (!confirm("Remover esta reunião?")) return;
-    const supabase = createClient();
-    await supabase.from("Meeting").delete().eq("id", id);
+    await fetch(`/api/meetings/${id}`, { method: "DELETE" });
     load();
   };
 

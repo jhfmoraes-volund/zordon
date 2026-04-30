@@ -47,6 +47,92 @@ export type Database = {
         }
         Relationships: []
       }
+      AcceptanceCriterion: {
+        Row: {
+          checkedAt: string | null
+          checkedBy: string | null
+          createdAt: string
+          id: string
+          order: number
+          taskId: string | null
+          text: string
+          updatedAt: string
+          userStoryId: string | null
+        }
+        Insert: {
+          checkedAt?: string | null
+          checkedBy?: string | null
+          createdAt?: string
+          id?: string
+          order?: number
+          taskId?: string | null
+          text: string
+          updatedAt?: string
+          userStoryId?: string | null
+        }
+        Update: {
+          checkedAt?: string | null
+          checkedBy?: string | null
+          createdAt?: string
+          id?: string
+          order?: number
+          taskId?: string | null
+          text?: string
+          updatedAt?: string
+          userStoryId?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "AcceptanceCriterion_checkedBy_fkey"
+            columns: ["checkedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AcceptanceCriterion_checkedBy_fkey"
+            columns: ["checkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AcceptanceCriterion_checkedBy_fkey"
+            columns: ["checkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AcceptanceCriterion_checkedBy_fkey"
+            columns: ["checkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AcceptanceCriterion_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "Task"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AcceptanceCriterion_userStoryId_fkey"
+            columns: ["userStoryId"]
+            isOneToOne: false
+            referencedRelation: "user_story_overview"
+            referencedColumns: ["userStoryId"]
+          },
+          {
+            foreignKeyName: "AcceptanceCriterion_userStoryId_fkey"
+            columns: ["userStoryId"]
+            isOneToOne: false
+            referencedRelation: "UserStory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       Agent: {
         Row: {
           capabilities: Json
@@ -1804,6 +1890,41 @@ export type Database = {
           },
         ]
       }
+      Module: {
+        Row: {
+          createdAt: string
+          description: string | null
+          id: string
+          name: string
+          projectId: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          description?: string | null
+          id?: string
+          name: string
+          projectId: string
+          updatedAt?: string
+        }
+        Update: {
+          createdAt?: string
+          description?: string | null
+          id?: string
+          name?: string
+          projectId?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Module_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       PDIAction: {
         Row: {
           completedAt: string | null
@@ -1864,6 +1985,7 @@ export type Database = {
         Row: {
           clientId: string
           createdAt: string
+          definitionOfDone: Json
           endDate: string | null
           githubDefaultBranch: string
           githubRepoName: string | null
@@ -1874,14 +1996,17 @@ export type Database = {
           memoryVersion: number
           name: string
           pmId: string | null
+          referenceKey: string | null
           repoUrl: string | null
           startDate: string | null
           status: string
           updatedAt: string
+          useStoryHierarchy: boolean
         }
         Insert: {
           clientId: string
           createdAt?: string
+          definitionOfDone?: Json
           endDate?: string | null
           githubDefaultBranch?: string
           githubRepoName?: string | null
@@ -1892,14 +2017,17 @@ export type Database = {
           memoryVersion?: number
           name: string
           pmId?: string | null
+          referenceKey?: string | null
           repoUrl?: string | null
           startDate?: string | null
           status?: string
           updatedAt: string
+          useStoryHierarchy?: boolean
         }
         Update: {
           clientId?: string
           createdAt?: string
+          definitionOfDone?: Json
           endDate?: string | null
           githubDefaultBranch?: string
           githubRepoName?: string | null
@@ -1910,10 +2038,12 @@ export type Database = {
           memoryVersion?: number
           name?: string
           pmId?: string | null
+          referenceKey?: string | null
           repoUrl?: string | null
           startDate?: string | null
           status?: string
           updatedAt?: string
+          useStoryHierarchy?: boolean
         }
         Relationships: [
           {
@@ -2092,6 +2222,41 @@ export type Database = {
           },
           {
             foreignKeyName: "ProjectMember_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProjectPersona: {
+        Row: {
+          createdAt: string
+          description: string | null
+          id: string
+          name: string
+          projectId: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          description?: string | null
+          id?: string
+          name: string
+          projectId: string
+          updatedAt?: string
+        }
+        Update: {
+          createdAt?: string
+          description?: string | null
+          id?: string
+          name?: string
+          projectId?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectPersona_projectId_fkey"
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
@@ -2436,6 +2601,7 @@ export type Database = {
       Task: {
         Row: {
           acceptanceCriteria: string | null
+          area: string | null
           billable: boolean
           complexity: string
           createdAt: string
@@ -2444,6 +2610,7 @@ export type Database = {
           dependencies: Json | null
           description: string | null
           designSessionId: string | null
+          doneAt: string | null
           dueDate: string | null
           functionPoints: number | null
           githubBranchName: string | null
@@ -2463,9 +2630,11 @@ export type Database = {
           title: string
           type: string
           updatedAt: string
+          userStoryId: string | null
         }
         Insert: {
           acceptanceCriteria?: string | null
+          area?: string | null
           billable?: boolean
           complexity?: string
           createdAt?: string
@@ -2474,6 +2643,7 @@ export type Database = {
           dependencies?: Json | null
           description?: string | null
           designSessionId?: string | null
+          doneAt?: string | null
           dueDate?: string | null
           functionPoints?: number | null
           githubBranchName?: string | null
@@ -2493,9 +2663,11 @@ export type Database = {
           title: string
           type?: string
           updatedAt: string
+          userStoryId?: string | null
         }
         Update: {
           acceptanceCriteria?: string | null
+          area?: string | null
           billable?: boolean
           complexity?: string
           createdAt?: string
@@ -2504,6 +2676,7 @@ export type Database = {
           dependencies?: Json | null
           description?: string | null
           designSessionId?: string | null
+          doneAt?: string | null
           dueDate?: string | null
           functionPoints?: number | null
           githubBranchName?: string | null
@@ -2523,6 +2696,7 @@ export type Database = {
           title?: string
           type?: string
           updatedAt?: string
+          userStoryId?: string | null
         }
         Relationships: [
           {
@@ -2580,6 +2754,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "sprint_member_capacity"
             referencedColumns: ["sprintId"]
+          },
+          {
+            foreignKeyName: "Task_userStoryId_fkey"
+            columns: ["userStoryId"]
+            isOneToOne: false
+            referencedRelation: "user_story_overview"
+            referencedColumns: ["userStoryId"]
+          },
+          {
+            foreignKeyName: "Task_userStoryId_fkey"
+            columns: ["userStoryId"]
+            isOneToOne: false
+            referencedRelation: "UserStory"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2825,6 +3013,168 @@ export type Database = {
           },
         ]
       }
+      UserStory: {
+        Row: {
+          acValidatedAt: string | null
+          acValidatedBy: string | null
+          createdAt: string
+          createdByAgent: boolean
+          createdById: string | null
+          designSessionId: string | null
+          designSessionItemId: string | null
+          id: string
+          moduleId: string | null
+          personaId: string | null
+          projectId: string
+          proposedModuleName: string | null
+          reference: string
+          refinementStatus: string
+          soThat: string | null
+          title: string
+          updatedAt: string
+          want: string
+        }
+        Insert: {
+          acValidatedAt?: string | null
+          acValidatedBy?: string | null
+          createdAt?: string
+          createdByAgent?: boolean
+          createdById?: string | null
+          designSessionId?: string | null
+          designSessionItemId?: string | null
+          id?: string
+          moduleId?: string | null
+          personaId?: string | null
+          projectId: string
+          proposedModuleName?: string | null
+          reference: string
+          refinementStatus?: string
+          soThat?: string | null
+          title: string
+          updatedAt?: string
+          want: string
+        }
+        Update: {
+          acValidatedAt?: string | null
+          acValidatedBy?: string | null
+          createdAt?: string
+          createdByAgent?: boolean
+          createdById?: string | null
+          designSessionId?: string | null
+          designSessionItemId?: string | null
+          id?: string
+          moduleId?: string | null
+          personaId?: string | null
+          projectId?: string
+          proposedModuleName?: string | null
+          reference?: string
+          refinementStatus?: string
+          soThat?: string | null
+          title?: string
+          updatedAt?: string
+          want?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "UserStory_acValidatedBy_fkey"
+            columns: ["acValidatedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_acValidatedBy_fkey"
+            columns: ["acValidatedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_acValidatedBy_fkey"
+            columns: ["acValidatedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_acValidatedBy_fkey"
+            columns: ["acValidatedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_designSessionItemId_fkey"
+            columns: ["designSessionItemId"]
+            isOneToOne: false
+            referencedRelation: "DesignSessionItem"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_moduleId_fkey"
+            columns: ["moduleId"]
+            isOneToOne: false
+            referencedRelation: "Module"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_personaId_fkey"
+            columns: ["personaId"]
+            isOneToOne: false
+            referencedRelation: "ProjectPersona"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       client_summary: {
@@ -3041,6 +3391,38 @@ export type Database = {
           },
         ]
       }
+      user_story_overview: {
+        Row: {
+          acValidatedAt: string | null
+          computedStatus: string | null
+          doneFunctionPoints: number | null
+          doneTasks: number | null
+          moduleId: string | null
+          projectId: string | null
+          reference: string | null
+          refinementStatus: string | null
+          title: string | null
+          totalFunctionPoints: number | null
+          totalTasks: number | null
+          userStoryId: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "UserStory_moduleId_fkey"
+            columns: ["moduleId"]
+            isOneToOne: false
+            referencedRelation: "Module"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "UserStory_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       can_access_session: { Args: { p_session_id: string }; Returns: boolean }
@@ -3102,6 +3484,10 @@ export type Database = {
       is_allocated_to: { Args: { p_project_id: string }; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
       next_task_reference: { Args: never; Returns: string }
+      next_user_story_reference: {
+        Args: { p_project_id: string }
+        Returns: string
+      }
       set_member_integration: {
         Args: {
           p_member_id: string

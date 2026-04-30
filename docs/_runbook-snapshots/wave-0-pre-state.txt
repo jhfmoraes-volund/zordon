@@ -1,0 +1,173 @@
+=== Wave 0 pre-state ===
+Date: 2026-04-30T19:08:44Z
+
+=== \d Project ===
+                                     Table "public.Project"
+       Column        |              Type              | Collation | Nullable |      Default      
+---------------------+--------------------------------+-----------+----------+-------------------
+ id                  | text                           |           | not null | 
+ name                | text                           |           | not null | 
+ repoUrl             | text                           |           |          | 
+ startDate           | timestamp(3) without time zone |           |          | 
+ endDate             | timestamp(3) without time zone |           |          | 
+ status              | text                           |           | not null | 'active'::text
+ createdAt           | timestamp(3) without time zone |           | not null | CURRENT_TIMESTAMP
+ updatedAt           | timestamp(3) without time zone |           | not null | 
+ githubRepoOwner     | text                           |           |          | 
+ githubRepoName      | text                           |           |          | 
+ githubDefaultBranch | text                           |           | not null | 'main'::text
+ clientId            | text                           |           | not null | 
+ pmId                | text                           |           |          | 
+ memoryMd            | text                           |           |          | 
+ memoryUpdatedAt     | timestamp with time zone       |           |          | 
+ memoryVersion       | integer                        |           | not null | 0
+Indexes:
+    "Project_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "Project_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    "Project_pmId_fkey" FOREIGN KEY ("pmId") REFERENCES "Member"(id) ON UPDATE CASCADE ON DELETE SET NULL
+Referenced by:
+    TABLE ""DesignDecision"" CONSTRAINT "DesignDecision_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON DELETE CASCADE
+    TABLE ""DesignOpenQuestion"" CONSTRAINT "DesignOpenQuestion_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON DELETE CASCADE
+    TABLE ""DesignSessionResearch"" CONSTRAINT "DesignSessionResearch_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON DELETE CASCADE
+    TABLE ""DesignSessionTranscript"" CONSTRAINT "DesignSessionTranscript_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON DELETE CASCADE
+    TABLE ""DesignSession"" CONSTRAINT "DesignSession_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE ""MeetingProjectLink"" CONSTRAINT "MeetingProjectLink_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON DELETE CASCADE
+    TABLE ""MeetingProjectReview"" CONSTRAINT "MeetingProjectReview_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE ""MeetingTaskAction"" CONSTRAINT "MeetingTaskAction_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON DELETE CASCADE
+    TABLE ""ProjectAccess"" CONSTRAINT "ProjectAccess_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON DELETE CASCADE
+    TABLE ""ProjectBusinessContext"" CONSTRAINT "ProjectBusinessContext_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON DELETE CASCADE
+    TABLE ""ProjectMember"" CONSTRAINT "ProjectMember_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE ""ProjectSquad"" CONSTRAINT "ProjectSquad_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE ""ProjectWikiSection"" CONSTRAINT "ProjectWikiSection_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE ""Sprint"" CONSTRAINT "Sprint_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE ""Task"" CONSTRAINT "Task_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+Policies:
+    POLICY "authenticated_delete" FOR DELETE
+      TO authenticated
+      USING (true)
+    POLICY "authenticated_insert" FOR INSERT
+      TO authenticated
+      WITH CHECK (true)
+    POLICY "authenticated_update" FOR UPDATE
+      TO authenticated
+      USING (true)
+    POLICY "manager_or_viewer_select" FOR SELECT
+      TO authenticated
+      USING ((is_manager() OR can_view_project(id)))
+
+
+=== \d Task ===
+                                      Table "public.Task"
+       Column       |              Type              | Collation | Nullable |      Default      
+--------------------+--------------------------------+-----------+----------+-------------------
+ id                 | text                           |           | not null | 
+ title              | text                           |           | not null | 
+ description        | text                           |           |          | 
+ reference          | text                           |           |          | 
+ status             | text                           |           | not null | 'backlog'::text
+ complexity         | text                           |           | not null | 'medium'::text
+ scope              | text                           |           | not null | 'small'::text
+ priority           | integer                        |           | not null | 0
+ functionPoints     | integer                        |           |          | 
+ type               | text                           |           | not null | 'feature'::text
+ dependencies       | jsonb                          |           |          | 
+ dueDate            | timestamp(3) without time zone |           |          | 
+ githubIssueNumber  | integer                        |           |          | 
+ githubBranchName   | text                           |           |          | 
+ githubPrNumber     | integer                        |           |          | 
+ githubPrUrl        | text                           |           |          | 
+ mergeAttempts      | integer                        |           | not null | 0
+ lastMergeError     | text                           |           |          | 
+ acceptanceCriteria | text                           |           |          | 
+ notes              | text                           |           |          | 
+ designSessionId    | text                           |           |          | 
+ projectId          | text                           |           | not null | 
+ sprintId           | text                           |           |          | 
+ createdAt          | timestamp(3) without time zone |           | not null | CURRENT_TIMESTAMP
+ updatedAt          | timestamp(3) without time zone |           | not null | 
+ billable           | boolean                        |           | not null | true
+ createdById        | text                           |           |          | 
+ createdByAgent     | boolean                        |           | not null | false
+Indexes:
+    "Task_pkey" PRIMARY KEY, btree (id)
+    "Task_createdById_idx" btree ("createdById")
+    "Task_projectId_idx" btree ("projectId")
+    "Task_projectId_status_idx" btree ("projectId", status)
+    "Task_reference_key" UNIQUE, btree (reference)
+    "Task_sprintId_idx" btree ("sprintId")
+    "Task_sprintId_status_idx" btree ("sprintId", status)
+    "Task_status_dueDate_idx" btree (status, "dueDate")
+    "Task_status_idx" btree (status)
+Foreign-key constraints:
+    "Task_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "Member"(id) ON DELETE SET NULL
+    "Task_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    "Task_sprintId_fkey" FOREIGN KEY ("sprintId") REFERENCES "Sprint"(id) ON UPDATE CASCADE ON DELETE SET NULL
+Referenced by:
+    TABLE ""MeetingTaskAction"" CONSTRAINT "MeetingTaskAction_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"(id) ON UPDATE CASCADE ON DELETE SET NULL
+    TABLE ""TaskAssignment"" CONSTRAINT "TaskAssignment_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE ""TaskIteration"" CONSTRAINT "TaskIteration_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"(id) ON UPDATE CASCADE ON DELETE CASCADE
+Policies:
+    POLICY "manager_or_editor_delete" FOR DELETE
+      TO authenticated
+      USING ((is_manager() OR can_edit_tasks("projectId")))
+    POLICY "manager_or_editor_insert" FOR INSERT
+      TO authenticated
+      WITH CHECK ((is_manager() OR can_edit_tasks("projectId")))
+    POLICY "manager_or_editor_update" FOR UPDATE
+      TO authenticated
+      USING ((is_manager() OR can_edit_tasks("projectId")))
+    POLICY "manager_or_viewer_select" FOR SELECT
+      TO authenticated
+      USING ((is_manager() OR can_view_project("projectId")))
+
+
+=== \d Sprint ===
+                                       Table "public.Sprint"
+         Column         |              Type              | Collation | Nullable |      Default      
+------------------------+--------------------------------+-----------+----------+-------------------
+ id                     | text                           |           | not null | 
+ name                   | text                           |           | not null | 
+ startDate              | timestamp(3) without time zone |           | not null | 
+ endDate                | timestamp(3) without time zone |           | not null | 
+ status                 | text                           |           | not null | 'planning'::text
+ projectId              | text                           |           | not null | 
+ deployedToStagingAt    | timestamp(3) without time zone |           |          | 
+ deployedToProductionAt | timestamp(3) without time zone |           |          | 
+ createdAt              | timestamp(3) without time zone |           | not null | CURRENT_TIMESTAMP
+ updatedAt              | timestamp(3) without time zone |           | not null | 
+Indexes:
+    "Sprint_pkey" PRIMARY KEY, btree (id)
+    "Sprint_projectId_idx" btree ("projectId")
+    "Sprint_projectId_name_key" UNIQUE CONSTRAINT, btree ("projectId", name)
+    "Sprint_projectId_status_idx" btree ("projectId", status)
+    "Sprint_status_idx" btree (status)
+Foreign-key constraints:
+    "Sprint_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"(id) ON UPDATE CASCADE ON DELETE CASCADE
+Referenced by:
+    TABLE ""MeetingTaskAction"" CONSTRAINT "MeetingTaskAction_targetSprintId_fkey" FOREIGN KEY ("targetSprintId") REFERENCES "Sprint"(id) ON UPDATE CASCADE ON DELETE SET NULL
+    TABLE ""Meeting"" CONSTRAINT "Meeting_sprintId_fkey" FOREIGN KEY ("sprintId") REFERENCES "Sprint"(id) ON UPDATE CASCADE ON DELETE SET NULL
+    TABLE ""SprintDeploy"" CONSTRAINT "SprintDeploy_sprintId_fkey" FOREIGN KEY ("sprintId") REFERENCES "Sprint"(id) ON UPDATE CASCADE ON DELETE CASCADE
+    TABLE ""SprintMember"" CONSTRAINT "SprintMember_sprintId_fkey" FOREIGN KEY ("sprintId") REFERENCES "Sprint"(id) ON DELETE CASCADE
+    TABLE ""Task"" CONSTRAINT "Task_sprintId_fkey" FOREIGN KEY ("sprintId") REFERENCES "Sprint"(id) ON UPDATE CASCADE ON DELETE SET NULL
+Policies:
+    POLICY "authenticated_delete" FOR DELETE
+      TO authenticated
+      USING (true)
+    POLICY "authenticated_insert" FOR INSERT
+      TO authenticated
+      WITH CHECK (true)
+    POLICY "authenticated_update" FOR UPDATE
+      TO authenticated
+      USING (true)
+    POLICY "manager_or_viewer_select" FOR SELECT
+      TO authenticated
+      USING ((is_manager() OR can_view_project("projectId")))
+
+
+=== Counts ===
+ projects | tasks | sprints 
+----------+-------+---------
+       10 |   174 |      10
+(1 row)
+

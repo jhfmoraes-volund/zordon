@@ -1,11 +1,11 @@
 import { requireMinLevel } from "@/lib/dal";
-import { ADMIN } from "@/lib/roles";
+import { MANAGER } from "@/lib/roles";
 
 export default async function DevLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireMinLevel(ADMIN, { redirectTo: "/projects" });
+  await requireMinLevel(MANAGER, { redirectTo: "/projects" });
   return children;
 }

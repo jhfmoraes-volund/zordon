@@ -1,0 +1,82 @@
+=== Wave 1+2 post-state ===
+Date: 2026-04-30T19:12:26Z
+
+=== New tables ===
+         List of relations
+ Schema |  Name  | Type  |  Owner   
+--------+--------+-------+----------
+ public | Module | table | postgres
+(1 row)
+
+\dt: extra argument ""ProjectPersona"" ignored
+\dt: extra argument ""UserStory"" ignored
+\dt: extra argument ""AcceptanceCriterion"" ignored
+
+=== RLS enabled? ===
+      tablename      | rowsecurity 
+---------------------+-------------
+ AcceptanceCriterion | t
+ Module              | t
+ ProjectPersona      | t
+ UserStory           | t
+(4 rows)
+
+
+=== Policies ===
+      tablename      |   policyname   |  cmd   
+---------------------+----------------+--------
+ AcceptanceCriterion | ac_write       | ALL
+ AcceptanceCriterion | ac_select      | SELECT
+ Module              | module_write   | ALL
+ Module              | module_select  | SELECT
+ ProjectPersona      | persona_write  | ALL
+ ProjectPersona      | persona_select | SELECT
+ UserStory           | story_delete   | DELETE
+ UserStory           | story_insert   | INSERT
+ UserStory           | story_select   | SELECT
+ UserStory           | story_update   | UPDATE
+(10 rows)
+
+
+=== Functions ===
+                       List of functions
+ Schema | Name | Result data type | Argument data types | Type 
+--------+------+------------------+---------------------+------
+(0 rows)
+
+
+=== View ===
+                        View "public.user_story_overview"
+       Column        |           Type           | Collation | Nullable | Default 
+---------------------+--------------------------+-----------+----------+---------
+ userStoryId         | text                     |           |          | 
+ projectId           | text                     |           |          | 
+ moduleId            | text                     |           |          | 
+ reference           | text                     |           |          | 
+ title               | text                     |           |          | 
+ refinementStatus    | text                     |           |          | 
+ acValidatedAt       | timestamp with time zone |           |          | 
+ totalTasks          | bigint                   |           |          | 
+ doneTasks           | bigint                   |           |          | 
+ totalFunctionPoints | bigint                   |           |          | 
+ doneFunctionPoints  | bigint                   |           |          | 
+ computedStatus      | text                     |           |          | 
+
+
+=== Project new columns ===
+            id             | referenceKey | useStoryHierarchy | definitionOfDone 
+---------------------------+--------------+-------------------+------------------
+ cmnxp972d0003p3rpzobz5evg |              | f                 | []
+ cmnxpazww0008p3rpg3zz124k |              | f                 | []
+ cmnz4kjce000lp3rp6k627btf |              | f                 | []
+(3 rows)
+
+
+=== Task new columns ===
+                  id                  | userStoryId | area | doneAt 
+--------------------------------------+-------------+------+--------
+ 9df3c51b-91b2-4fc7-94aa-f9cc1c8b365a |             |      | 
+ d46be173-b7ec-4ba7-b1bd-9c3ab99eccb8 |             |      | 
+ 28d547d9-ec12-4c69-b9b2-7155b81b8823 |             |      | 
+(3 rows)
+

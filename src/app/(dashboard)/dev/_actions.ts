@@ -4,16 +4,16 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCurrentMember, getRealRole } from "@/lib/dal";
-import { hasMinLevel, ADMIN } from "@/lib/roles";
+import { hasMinLevel, MANAGER } from "@/lib/roles";
 
 /**
  * Zera o onboardedAt do membro atual e manda pra /onboarding pra testar
- * o flow do começo. Restrito a admins (mesmo gate do sandbox layout).
+ * o flow do começo. Restrito a manager+ (mesmo gate do sandbox layout).
  */
 export async function resetOwnOnboarding() {
   const realRole = await getRealRole();
-  if (!hasMinLevel(realRole, ADMIN)) {
-    throw new Error("Forbidden — apenas admins");
+  if (!hasMinLevel(realRole, MANAGER)) {
+    throw new Error("Forbidden — apenas manager+");
   }
 
   const me = await getCurrentMember();

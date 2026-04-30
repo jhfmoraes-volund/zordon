@@ -1,4 +1,5 @@
-import { Sparkles } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, Sparkles } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -25,7 +26,7 @@ export default async function DevSandboxPage() {
         </div>
         <p className="text-sm text-muted-foreground">
           Espaço para visualizar componentes em isolamento. Acesso restrito a
-          Head Ops e CEO.
+          PM, Head Ops e CEO.
         </p>
       </header>
 
@@ -64,6 +65,39 @@ export default async function DevSandboxPage() {
                 Refazer onboarding
               </Button>
             </form>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">Mocks de schema</h2>
+          <p className="text-sm text-muted-foreground">
+            Visualizações de planos em discussão antes de virar migration.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="size-4 text-primary" />
+              Story Hierarchy V2
+            </CardTitle>
+            <CardDescription>
+              Module → UserStory → Task com AC como entidade, persona
+              estruturada, refinement status e computed status. Mock estático,
+              não toca o banco.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              size="lg"
+              variant="outline"
+              render={<Link href="/dev/stories" />}
+            >
+              <BookOpen />
+              Abrir mock
+            </Button>
           </CardContent>
         </Card>
       </section>
