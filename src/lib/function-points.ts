@@ -35,9 +35,13 @@ export function isFpMatrix(value: unknown): value is FpMatrix {
   return true;
 }
 
-/** Active statuses that count toward capacity allocation */
-export const ACTIVE_STATUSES = [
+/** Open statuses — tasks que contam como carga em aberto (excl. done e backlog). */
+export const OPEN_STATUSES = [
   "todo",
   "in_progress",
   "review",
+  "changes_requested",
 ] as const;
+
+/** @deprecated use OPEN_STATUSES — será removido na Fase 16 */
+export const ACTIVE_STATUSES = OPEN_STATUSES;
