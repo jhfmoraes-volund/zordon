@@ -16,7 +16,7 @@ type SprintMember = {
   id: string;
   name: string;
   fpCapacity: number;
-  fpAllocated: number;
+  fpPlanned: number;
 };
 
 type Sprint = {
@@ -67,17 +67,21 @@ export default function SprintsPage() {
         const total = tasks.length;
         const done = tasks.filter((t: any) => t.status === "done").length;
         const percent = total > 0 ? Math.round((done / total) * 100) : 0;
-        const totalFp = tasks.reduce((sum: number, t: any) => sum + (t.functionPoints || 0), 0);
+        // totalFp = planejado da sprint (≠ backlog)
+        const totalFp = tasks
+          .filter((t: any) => t.status !== "backlog")
+          .reduce((sum: number, t: any) => sum + (t.functionPoints || 0), 0);
 
         const memberMap = new Map<string, SprintMember>();
         for (const t of tasks) {
+          if (t.status === "backlog") continue;
           for (const a of t.assignments ?? []) {
             const m = a.member;
             if (!m) continue;
             if (!memberMap.has(m.id)) {
-              memberMap.set(m.id, { id: m.id, name: m.name, fpCapacity: m.fpCapacity || 0, fpAllocated: 0 });
+              memberMap.set(m.id, { id: m.id, name: m.name, fpCapacity: m.fpCapacity || 0, fpPlanned: 0 });
             }
-            memberMap.get(m.id)!.fpAllocated += t.functionPoints || 0;
+            memberMap.get(m.id)!.fpPlanned += t.functionPoints || 0;
           }
         }
 
@@ -259,7 +263,7 @@ export default function SprintsPage() {
                               Capacity
                             </p>
                             {s.members.map((m) => {
-                              const pct = m.fpCapacity > 0 ? m.fpAllocated / m.fpCapacity : 0;
+                              const pct = m.fpCapacity > 0 ? m.fpPlanned / m.fpCapacity : 0;
                               return (
                                 <div key={m.id} className="flex items-center gap-2">
                                   <span className="text-xs w-28 truncate">{m.name}</span>
@@ -270,7 +274,7 @@ export default function SprintsPage() {
                                     />
                                   </div>
                                   <span className="text-[10px] tabular-nums text-muted-foreground w-14 text-right">
-                                    {m.fpAllocated}/{m.fpCapacity}
+                                    {m.fpPlanned}/{m.fpCapacity}
                                   </span>
                                   <span className="text-[10px] tabular-nums font-medium w-8 text-right">
                                     {Math.round(pct * 100)}%

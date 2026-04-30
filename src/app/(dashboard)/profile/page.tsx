@@ -66,7 +66,7 @@ type MeProject = {
 
 type MeData = {
   member: { id: string; name: string; role: string; fpCapacity: number };
-  fpAllocated: number;
+  fpOpen: number;
   tasks: MeTask[];
   sprints: MeSprint[];
   projects: MeProject[];
@@ -130,8 +130,8 @@ export default function ProfilePage() {
       .filter((t) => FETCH_STATUSES.includes(t.status));
     const projects = (allocationsRes.data ?? []).map((pa: { project: MeProject }) => pa.project);
 
-    // FP allocated (active only)
-    const fpAllocated = tasks
+    // FP em aberto (open statuses)
+    const fpOpen = tasks
       .filter((t) => (OPEN_STATUSES as readonly string[]).includes(t.status))
       .reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
 
@@ -158,7 +158,7 @@ export default function ProfilePage() {
 
     return {
       member: { id: memberId, name: memberInfo!.name, role: memberInfo!.role, fpCapacity: memberInfo!.fpCapacity },
-      fpAllocated,
+      fpOpen,
       tasks,
       sprints: Array.from(sprintMap.values()),
       projects,

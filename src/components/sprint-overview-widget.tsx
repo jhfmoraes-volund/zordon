@@ -12,7 +12,7 @@ type SprintMember = {
   id: string;
   name: string;
   fpCapacity: number;
-  fpAllocated: number;
+  fpPlanned: number;
 };
 
 type SprintData = {
@@ -128,7 +128,7 @@ function SprintRow({ sprint: s }: { sprint: SprintData }) {
       {expanded && s.members.length > 0 && (
         <div className="border-t border-foreground/5 px-4 py-2.5 space-y-1.5">
           {s.members.map((m) => {
-            const pct = m.fpCapacity > 0 ? (m.fpAllocated / m.fpCapacity) * 100 : 0;
+            const pct = m.fpCapacity > 0 ? (m.fpPlanned / m.fpCapacity) * 100 : 0;
             return (
               <div key={m.id} className="flex items-center gap-2">
                 <span className="text-xs w-28 truncate">{m.name}</span>
@@ -136,7 +136,7 @@ function SprintRow({ sprint: s }: { sprint: SprintData }) {
                   <PixelBar score={Math.min(pct, 100)} cells={14} height={8} variant="load" />
                 </div>
                 <span className="font-mono text-[10px] tabular-nums text-muted-foreground w-14 text-right leading-none">
-                  {m.fpAllocated}/{m.fpCapacity}
+                  {m.fpPlanned}/{m.fpCapacity}
                 </span>
                 <span className="font-mono text-[10px] tabular-nums font-medium w-8 text-right leading-none">
                   {Math.round(pct)}%

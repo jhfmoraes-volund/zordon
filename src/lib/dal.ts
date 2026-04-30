@@ -215,6 +215,14 @@ export async function withAuth<T extends Response>(
 // Visibility (and edit permission) is sourced from ProjectAccess,
 // the single source of truth. ProjectMember now exclusively models
 // FP allocation; it's no longer a visibility gate.
+//
+// Impersonation note:
+//   - getMemberId / verifySession / getRealRole → REAL user.
+//     Use for admin-only gates (e.g., requireMinLevelApi) so admins
+//     can stop impersonating + reach admin routes.
+//   - getActorMemberId / getActorUserId / getEffectiveRole → IMPERSONATED
+//     when applicable, otherwise real. Use for visibility / data fetching
+//     so admins see exactly what the impersonated member sees.
 // ═══════════════════════════════════════════════════════════
 
 /**
@@ -226,6 +234,29 @@ export const getMemberId = cache(async (): Promise<string | null> => {
   const h = await headers();
   const id = h.get("x-member-id");
   return id && id.length > 0 ? id : null;
+});
+
+/**
+ * Member.id of the *acting* user, honoring impersonation.
+ *   - Admin impersonating: impersonated Member.id
+ *   - Otherwise: real user's Member.id (same as getMemberId)
+ */
+export const getActorMemberId = cache(async (): Promise<string | null> => {
+  const member = await getCurrentMember();
+  if (member?._impersonatedBy) return member.id;
+  return getMemberId();
+});
+
+/**
+ * auth.users.id of the *acting* user, honoring impersonation.
+ *   - Admin impersonating: impersonated Member.userId
+ *   - Otherwise: real auth user id
+ */
+export const getActorUserId = cache(async (): Promise<string | null> => {
+  const member = await getCurrentMember();
+  if (member?._impersonatedBy && member.userId) return member.userId;
+  const user = await getUser();
+  return user?.id ?? null;
 });
 
 type ProjectAccessRole =
@@ -240,12 +271,12 @@ type ProjectAccessRole =
  */
 export const getProjectAccessList = cache(
   async (): Promise<{ projectId: string; role: ProjectAccessRole }[]> => {
-    const user = await getUser();
-    if (!user) return [];
+    const userId = await getActorUserId();
+    if (!userId) return [];
     const { data } = await db()
       .from("ProjectAccess")
       .select("projectId, role")
-      .eq("userId", user.id);
+      .eq("userId", userId);
     return (data ?? []) as { projectId: string; role: ProjectAccessRole }[];
   },
 );
@@ -257,38 +288,41 @@ export const getAccessibleProjectIds = cache(async (): Promise<string[]> => {
 });
 
 /**
- * True iff the current user can VIEW the project:
- *   - Manager (PM / head-ops / CEO): always yes
+ * True iff the *acting* user can VIEW the project:
+ *   - Manager (PM / head-ops / CEO / CRO): always yes
  *   - Anyone else: needs a ProjectAccess row (any role)
+ *
+ * Honors impersonation: admin impersonating a builder will be filtered
+ * exactly like the impersonated member.
  */
 export async function canViewProject(projectId: string): Promise<boolean> {
-  const realRole = await getRealRole();
-  if (hasMinLevel(realRole, MANAGER)) return true;
+  const role = await getEffectiveRole();
+  if (hasMinLevel(role, MANAGER)) return true;
   const ids = await getAccessibleProjectIds();
   return ids.includes(projectId);
 }
 
 /**
- * True iff the current user can EDIT TASKS in the project:
+ * True iff the *acting* user can EDIT TASKS in the project:
  *   - Manager: yes
  *   - Builder/guest: needs ProjectAccess.role IN (contributor, lead)
  */
 export async function canEditTasks(projectId: string): Promise<boolean> {
-  const realRole = await getRealRole();
-  if (hasMinLevel(realRole, MANAGER)) return true;
+  const role = await getEffectiveRole();
+  if (hasMinLevel(role, MANAGER)) return true;
   const list = await getProjectAccessList();
   const row = list.find((r) => r.projectId === projectId);
   return row?.role === "contributor" || row?.role === "lead";
 }
 
 /**
- * True iff the current user can EDIT DESIGN SESSIONS in the project:
+ * True iff the *acting* user can EDIT DESIGN SESSIONS in the project:
  *   - Manager: yes
  *   - Builder/guest: needs ProjectAccess.role IN (session_participant, contributor, lead)
  */
 export async function canEditSessions(projectId: string): Promise<boolean> {
-  const realRole = await getRealRole();
-  if (hasMinLevel(realRole, MANAGER)) return true;
+  const role = await getEffectiveRole();
+  if (hasMinLevel(role, MANAGER)) return true;
   const list = await getProjectAccessList();
   const row = list.find((r) => r.projectId === projectId);
   return (
