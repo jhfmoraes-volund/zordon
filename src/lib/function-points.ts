@@ -42,6 +42,3 @@ export const OPEN_STATUSES = [
   "review",
   "changes_requested",
 ] as const;
-
-/** @deprecated use OPEN_STATUSES — será removido na Fase 16 */
-export const ACTIVE_STATUSES = OPEN_STATUSES;

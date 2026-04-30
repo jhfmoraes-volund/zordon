@@ -78,8 +78,6 @@ export async function GET() {
       fpCapacity: member.fpCapacity,
     },
     fpOpen,
-    /** @deprecated alias de fpOpen — removido na Fase 16 */
-    fpAllocated: fpOpen,
     tasks,
     sprints: Array.from(sprintMap.values()),
     projects,

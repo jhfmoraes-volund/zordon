@@ -148,7 +148,6 @@ export default async function OverviewPage() {
 
   const teamSprints: SprintInput[] = (sprintsRes.data ?? []).map((s: any) => {
     const cap = capByspring.get(s.id);
-    const fpOpen = Number(cap?.open) || 0;
     return {
       sprintId: s.id,
       sprintName: s.name,
@@ -160,8 +159,7 @@ export default async function OverviewPage() {
       fpAllocation: Number(cap?.capacity) || 0,
       fpPlanned: Number(cap?.planned) || 0,
       fpDone: Number(cap?.done) || 0,
-      fpOpen,
-      fpUsed: fpOpen,
+      fpOpen: Number(cap?.open) || 0,
       hasOverride: false,
     };
   });

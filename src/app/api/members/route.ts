@@ -42,8 +42,6 @@ export async function GET() {
       ...m,
       _count: { squadMemberships: m.squad_count, taskAssignments: m.active_task_count },
       fpOpen,
-      /** @deprecated alias de fpOpen — removido na Fase 16 */
-      fpAllocated: fpOpen,
     };
   });
 

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { ACTIVE_STATUSES, FP_MATRIX_DEFAULT, type FpMatrix } from "@/lib/function-points";
+import { OPEN_STATUSES, FP_MATRIX_DEFAULT, type FpMatrix } from "@/lib/function-points";
 import {
   loadAgentConfig,
   loadAgentHeuristicsIndex,
@@ -293,7 +293,7 @@ async function buildGlobalContext(
   }
 
   const unassigned = taskList.filter(
-    (t) => ACTIVE_STATUSES.includes(t.status as typeof ACTIVE_STATUSES[number]) &&
+    (t) => OPEN_STATUSES.includes(t.status as typeof OPEN_STATUSES[number]) &&
       !(t.assignments as Array<unknown> | null | undefined)?.length,
   );
   if (unassigned.length > 0) {
@@ -302,7 +302,7 @@ async function buildGlobalContext(
 
   const now = new Date();
   const overdue = taskList.filter(
-    (t) => ACTIVE_STATUSES.includes(t.status as typeof ACTIVE_STATUSES[number])
+    (t) => OPEN_STATUSES.includes(t.status as typeof OPEN_STATUSES[number])
       && t.dueDate && new Date(t.dueDate as string) < now,
   );
   if (overdue.length > 0) {
@@ -591,7 +591,7 @@ async function buildSprintFocus(
     }
   }
   const unassigned = taskList.filter(
-    (t) => ACTIVE_STATUSES.includes(t.status as typeof ACTIVE_STATUSES[number])
+    (t) => OPEN_STATUSES.includes(t.status as typeof OPEN_STATUSES[number])
       && !((t.assignments as Array<unknown> | null) ?? []).length,
   );
   if (unassigned.length > 0) {
@@ -599,7 +599,7 @@ async function buildSprintFocus(
   }
   const now = new Date();
   const overdue = taskList.filter(
-    (t) => ACTIVE_STATUSES.includes(t.status as typeof ACTIVE_STATUSES[number])
+    (t) => OPEN_STATUSES.includes(t.status as typeof OPEN_STATUSES[number])
       && t.dueDate && new Date(t.dueDate as string) < now,
   );
   if (overdue.length > 0) {

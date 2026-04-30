@@ -11,7 +11,7 @@ import { MANAGER } from "@/lib/roles";
  *   - commitment (bateria agregada: capacity / committed / remaining)
  *   - projects (ProjectMember.fpAllocation por projeto)
  *   - sprints (todos os sprints dos projetos do membro, com allocation efetiva,
- *              fp_used, flag de override)
+ *              fp_planned/fp_done/fp_open, flag de override)
  *
  * O cliente aplica filtros (período, projeto, status). Escala até ~200 sprints/membro.
  */
@@ -95,8 +95,6 @@ export async function GET(
         fpPlanned: Number(sc.fp_planned) || 0,
         fpDone: Number(sc.fp_done) || 0,
         fpOpen: Number(sc.fp_open) || 0,
-        /** @deprecated alias de fpOpen — mantido até Fases 11/15 limparem consumidores */
-        fpUsed: Number(sc.fp_open) || 0,
         hasOverride: Boolean(sc.has_sprint_override),
       };
     })

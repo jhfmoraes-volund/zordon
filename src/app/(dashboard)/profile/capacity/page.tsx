@@ -23,8 +23,6 @@ type SprintRow = {
   fpPlanned: number;
   fpDone: number;
   fpOpen: number;
-  /** @deprecated alias de fpOpen — removido na Fase 16 */
-  fpUsed: number;
   hasOverride: boolean;
 };
 type Payload = {

@@ -1,7 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { suggestFunctionPoints, ACTIVE_STATUSES } from "@/lib/function-points";
+import { suggestFunctionPoints, OPEN_STATUSES } from "@/lib/function-points";
 import { TASK_STATUSES, TASK_TYPES, SCOPES, COMPLEXITIES } from "@/lib/task-constants";
 import { RoamClient, cuesToText } from "@/lib/roam";
 import { loadAgentHeuristic, loadFpMatrix } from "../../config";
@@ -234,7 +234,7 @@ export function assembleAlphaTools(
 
         const taskList = tasks || [];
         const activeTasks = taskList.filter((t) =>
-          ACTIVE_STATUSES.includes(t.status as typeof ACTIVE_STATUSES[number])
+          OPEN_STATUSES.includes(t.status as typeof OPEN_STATUSES[number])
         );
 
         const unassigned = activeTasks.filter(

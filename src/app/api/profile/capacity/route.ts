@@ -76,8 +76,6 @@ export async function GET() {
         fpPlanned: Number(sc.fp_planned) || 0,
         fpDone: Number(sc.fp_done) || 0,
         fpOpen: Number(sc.fp_open) || 0,
-        /** @deprecated alias de fpOpen — mantido até Fases 11/15 limparem consumidores */
-        fpUsed: Number(sc.fp_open) || 0,
         hasOverride: Boolean(sc.has_sprint_override),
       };
     })

@@ -61,18 +61,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Mantém fpAllocated como alias de fpPlanned até Fase 14 limpar consumidores
-    const members = Array.from(memberMap.values()).map((m) => ({
-      ...m,
-      /** @deprecated alias de fpPlanned — removido na Fase 14 */
-      fpAllocated: m.fpPlanned,
-    }));
-
     return {
       ...sprint,
       taskStats: { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 },
       totalFp,
-      members,
+      members: Array.from(memberMap.values()),
     };
   });
 
