@@ -20,12 +20,15 @@ export type BatterySegment = {
 export function MemberBattery({
   capacity,
   committed,
+  done,
   breakdown,
   size = "md",
   showNumbers = true,
 }: {
   capacity: number;
   committed: number;
+  /** Quanto do committed já foi entregue (▓ done dentro da bateria). */
+  done?: number;
   breakdown?: BatterySegment[];
   size?: "sm" | "md";
   showNumbers?: boolean;
@@ -33,14 +36,27 @@ export function MemberBattery({
   const safeCapacity = Math.max(capacity, 1);
   const overcommit = committed > capacity;
   const usagePct = (committed / safeCapacity) * 100;
+  const donePct = done !== undefined ? (Math.min(done, committed) / safeCapacity) * 100 : 0;
   const tone = pixelTone(usagePct, "load");
 
   const cells = size === "sm" ? 16 : 24;
   const height = size === "sm" ? 10 : 14;
+  const showStacked = done !== undefined && done > 0 && committed > 0;
 
   return (
     <div className="w-full space-y-1.5">
-      <PixelBar score={usagePct} cells={cells} height={height} variant="load" />
+      {showStacked ? (
+        <div className="relative">
+          {/* Camada 1: barra clara representando o committed total */}
+          <PixelBar score={usagePct} cells={cells} height={height} variant="load" />
+          {/* Camada 2: barra sólida representando done dentro do committed */}
+          <div className="absolute inset-0 pointer-events-none" style={{ width: `${Math.min(donePct, 100)}%` }}>
+            <PixelBar score={100} cells={Math.max(1, Math.round(cells * (Math.min(donePct, 100) / 100)))} height={height} variant="skill" />
+          </div>
+        </div>
+      ) : (
+        <PixelBar score={usagePct} cells={cells} height={height} variant="load" />
+      )}
 
       {showNumbers && (
         <div className="flex items-center justify-between leading-none">
