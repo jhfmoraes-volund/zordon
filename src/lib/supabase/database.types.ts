@@ -958,6 +958,48 @@ export type Database = {
           },
         ]
       }
+      DesignSessionStepData: {
+        Row: {
+          data: Json
+          id: string
+          sessionId: string
+          stepIndex: number
+          stepKey: string
+          updatedAt: string
+        }
+        Insert: {
+          data?: Json
+          id: string
+          sessionId: string
+          stepIndex: number
+          stepKey: string
+          updatedAt: string
+        }
+        Update: {
+          data?: Json
+          id?: string
+          sessionId?: string
+          stepIndex?: number
+          stepKey?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionStepData_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionStepData_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignSessionTranscript: {
         Row: {
           actionItems: Json
@@ -1013,10 +1055,38 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "DesignSessionTranscript_importedByMemberId_fkey"
+            columns: ["importedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscript_importedByMemberId_fkey"
+            columns: ["importedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscript_importedByMemberId_fkey"
+            columns: ["importedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "DesignSessionTranscript_projectId_fkey"
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscript_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
             referencedColumns: ["id"]
           },
           {
@@ -1028,51 +1098,10 @@ export type Database = {
           },
         ]
       }
-      DesignSessionStepData: {
-        Row: {
-          data: Json
-          id: string
-          sessionId: string
-          stepIndex: number
-          stepKey: string
-          updatedAt: string
-        }
-        Insert: {
-          data?: Json
-          id: string
-          sessionId: string
-          stepIndex: number
-          stepKey: string
-          updatedAt: string
-        }
-        Update: {
-          data?: Json
-          id?: string
-          sessionId?: string
-          stepIndex?: number
-          stepKey?: string
-          updatedAt?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "DesignSessionStepData_sessionId_fkey"
-            columns: ["sessionId"]
-            isOneToOne: false
-            referencedRelation: "design_session_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionStepData_sessionId_fkey"
-            columns: ["sessionId"]
-            isOneToOne: false
-            referencedRelation: "DesignSession"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       Meeting: {
         Row: {
           createdAt: string
+          createdById: string | null
           date: string
           id: string
           notes: string | null
@@ -1083,6 +1112,7 @@ export type Database = {
         }
         Insert: {
           createdAt?: string
+          createdById?: string | null
           date: string
           id: string
           notes?: string | null
@@ -1093,6 +1123,7 @@ export type Database = {
         }
         Update: {
           createdAt?: string
+          createdById?: string | null
           date?: string
           id?: string
           notes?: string | null
@@ -1102,6 +1133,34 @@ export type Database = {
           updatedAt?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "Meeting_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Meeting_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Meeting_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Meeting_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "Meeting_sprintId_fkey"
             columns: ["sprintId"]
@@ -2982,9 +3041,11 @@ export type Database = {
     }
     Functions: {
       can_access_session: { Args: { p_session_id: string }; Returns: boolean }
+      can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_edit_session: { Args: { p_session_id: string }; Returns: boolean }
       can_edit_sessions: { Args: { p_project_id: string }; Returns: boolean }
       can_edit_tasks: { Args: { p_project_id: string }; Returns: boolean }
+      can_view_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_view_project: { Args: { p_project_id: string }; Returns: boolean }
       create_meeting_with_reviews:
         | {

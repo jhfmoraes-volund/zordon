@@ -143,6 +143,7 @@ export default function ProjectsPage() {
     name: "", repoUrl: "", startDate: "", endDate: "",    status: "active", clientId: "", pmId: "",
     githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
     memberIds: [] as string[],
+    ongoing: false,
   });
 
   const load = async () => {
@@ -193,6 +194,7 @@ export default function ProjectsPage() {
       name: "", repoUrl: "", startDate: "", endDate: "",      status: "active", clientId: "", pmId: "",
       githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
       memberIds: [],
+      ongoing: false,
     });
     setOpen(true);
   };
@@ -212,6 +214,7 @@ export default function ProjectsPage() {
       githubRepoName: p.githubRepoName || "",
       githubDefaultBranch: p.githubDefaultBranch || "main",
       memberIds: p.projectMembers.map((pm) => pm.member.id),
+      ongoing: !p.startDate && !p.endDate,
     });
     setOpen(true);
   };
@@ -221,8 +224,8 @@ export default function ProjectsPage() {
     const projectData = {
       name: form.name,
       repoUrl: form.repoUrl || null,
-      startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
-      endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
+      startDate: form.ongoing || !form.startDate ? null : new Date(form.startDate).toISOString(),
+      endDate: form.ongoing || !form.endDate ? null : new Date(form.endDate).toISOString(),
       status: form.status,
       clientId: form.clientId,
       pmId: form.pmId || null,
@@ -482,15 +485,35 @@ export default function ProjectsPage() {
                 <Input value={form.githubDefaultBranch} onChange={(e) => setForm({ ...form, githubDefaultBranch: e.target.value })} placeholder="main" />
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Data Início</Label>
-                <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Data Fim</Label>
-                <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
-              </div>
+            <div className="grid gap-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-input"
+                  checked={form.ongoing}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      ongoing: e.target.checked,
+                      startDate: e.target.checked ? "" : form.startDate,
+                      endDate: e.target.checked ? "" : form.endDate,
+                    })
+                  }
+                />
+                Projeto em andamento (sem prazo definido)
+              </label>
+              {!form.ongoing && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Data Início</Label>
+                    <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Data Fim</Label>
+                    <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                  </div>
+                </div>
+              )}
             </div>
 <div className="grid gap-2">
               <Label>Status</Label>

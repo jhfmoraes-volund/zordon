@@ -10,6 +10,10 @@ import { Markdown } from "@/components/ui/markdown";
 import { VitorBadge } from "./vitor-badge";
 import { ToolCallCard } from "./tool-call-card";
 import {
+  RoamTranscriptModal,
+  type ImportedTranscript,
+} from "./roam-transcript-modal";
+import {
   Loader2,
   Bot,
   User,
@@ -19,6 +23,7 @@ import {
   X,
   Square,
   Sparkles,
+  Mic,
 } from "lucide-react";
 
 type UploadedFile = {
@@ -59,6 +64,8 @@ export function PreWorkStep({
   const [isDragging, setIsDragging] = useState(false);
   const [inputText, setInputText] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [roamModalOpen, setRoamModalOpen] = useState(false);
+  const [transcripts, setTranscripts] = useState<ImportedTranscript[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -153,6 +160,34 @@ export function PreWorkStep({
     };
   }, [sessionId, setMessages]);
 
+  // Load imported Roam transcripts on mount
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/design-sessions/${sessionId}/roam-transcripts`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled || !json) return;
+        setTranscripts((json.imported as ImportedTranscript[]) ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  const handleRemoveTranscript = useCallback(
+    async (transcriptId: string) => {
+      const prev = transcripts;
+      setTranscripts((cur) => cur.filter((t) => t.id !== transcriptId));
+      const res = await fetch(
+        `/api/design-sessions/${sessionId}/roam-transcripts/${transcriptId}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) setTranscripts(prev);
+    },
+    [sessionId, transcripts],
+  );
+
   // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
@@ -239,6 +274,33 @@ export function PreWorkStep({
     <div className="max-w-2xl mx-auto flex flex-col h-[calc(100vh-200px)]">
       {/* Chat container */}
       <div className="surface flex-1 flex flex-col overflow-hidden">
+        {/* Imported Roam transcripts */}
+        {transcripts.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 py-2 border-b border-border/50">
+            {transcripts.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs bg-muted/40"
+                title={t.summary || t.meetingTitle}
+              >
+                <Mic className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="font-medium truncate max-w-[180px]">
+                  {t.meetingTitle}
+                </span>
+                <span className="text-muted-foreground">
+                  · {new Date(t.meetingStart).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                </span>
+                <button
+                  onClick={() => handleRemoveTranscript(t.id)}
+                  aria-label="Remover transcricao"
+                >
+                  <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Scroll area with fade edges */}
         <div className="relative flex-1 min-h-0">
           {/* Top fade */}
@@ -354,6 +416,16 @@ export function PreWorkStep({
           >
             <Paperclip className="h-4 w-4" />
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0"
+            onClick={() => setRoamModalOpen(true)}
+            disabled={isStreaming}
+            title="Importar reuniao do Roam"
+          >
+            <Mic className="h-4 w-4" />
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -402,6 +474,13 @@ export function PreWorkStep({
           )}
         </div>
       </div>
+
+      <RoamTranscriptModal
+        sessionId={sessionId}
+        open={roamModalOpen}
+        onOpenChange={setRoamModalOpen}
+        onImported={(t) => setTranscripts((cur) => [t, ...cur])}
+      />
     </div>
   );
 }

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/responsive-dialog";
 import {
   ArrowLeft, Plus, Trash2, CheckCircle2, Circle, Clock,
-  ChevronDown, ChevronRight, ChevronsUpDown,
+  ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink,
 } from "lucide-react";
 import { TaskActionWidget } from "@/components/meetings/task-action-widget";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -649,11 +649,19 @@ function ReviewCard({
           <button onClick={onToggle} className="text-muted-foreground hover:text-foreground transition-colors">
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
-          <Link
-            href={`/projects/${review.projectId}`}
-            className="font-medium hover:underline"
+          <button
+            onClick={onToggle}
+            className="font-medium text-left hover:text-muted-foreground transition-colors"
           >
             {review.project.name}
+          </button>
+          <Link
+            href={`/projects/${review.projectId}`}
+            aria-label="Abrir projeto"
+            title="Abrir projeto"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
           </Link>
           <Badge variant="outline" className="text-xs">
             {review.project.status}

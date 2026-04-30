@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi } from "@/lib/dal";
+import { requireMinLevelApi, getMemberId, canViewMeeting } from "@/lib/dal";
 import { MANAGER } from "@/lib/roles";
 
 const MEETING_SELECT = `
@@ -31,12 +31,49 @@ export async function GET() {
   const denied = await requireMinLevelApi(MANAGER);
   if (denied) return denied;
 
-  const { data: meetings, error } = await db()
+  const supabase = db();
+  const { data: meetings, error } = await supabase
     .from("Meeting")
     .select(MEETING_SELECT)
     .order("date", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(meetings);
+
+  // db() bypasses RLS, so filter by visibility here. Admin sees all; PMs see
+  // only meetings they attended (pm_review/general) or where they're PM of
+  // a linked project (daily/super_planning).
+  const linkedProjectIds = Array.from(
+    new Set(
+      ((meetings ?? []) as { projectLinks?: { projectId: string }[] }[])
+        .flatMap((m) => m.projectLinks ?? [])
+        .map((l) => l.projectId),
+    ),
+  );
+  const projectPmMap = new Map<string, string | null>();
+  if (linkedProjectIds.length > 0) {
+    const { data: projects } = await supabase
+      .from("Project")
+      .select("id, pmId")
+      .in("id", linkedProjectIds);
+    for (const p of projects ?? []) projectPmMap.set(p.id, p.pmId ?? null);
+  }
+
+  const visible: typeof meetings = [];
+  for (const m of meetings ?? []) {
+    const attendeeMemberIds = ((m as { attendees?: { memberId: string | null }[] }).attendees ?? [])
+      .map((a) => a.memberId)
+      .filter((x): x is string => !!x);
+    const linkedProjectPmIds = ((m as { projectLinks?: { projectId: string }[] }).projectLinks ?? [])
+      .map((l) => projectPmMap.get(l.projectId) ?? null)
+      .filter((x): x is string => !!x);
+    const ok = await canViewMeeting({
+      type: (m as { type: string }).type,
+      attendeeMemberIds,
+      linkedProjectPmIds,
+    });
+    if (ok) visible.push(m);
+  }
+
+  return NextResponse.json(visible);
 }
 
 export async function POST(req: NextRequest) {
@@ -167,6 +204,17 @@ export async function POST(req: NextRequest) {
       }
     );
     if (rpcError) throw rpcError;
+
+    // Stamp createdById so RLS pode permitir UPDATE/DELETE futuro pelo PM autor.
+    // RPC roda como service_role e não tem contexto do caller; fazemos o
+    // update aqui com o member do request.
+    const memberId = await getMemberId();
+    if (memberId) {
+      await supabase
+        .from("Meeting")
+        .update({ createdById: memberId })
+        .eq("id", meetingId as unknown as string);
+    }
 
     const { data: full } = await supabase
       .from("Meeting")

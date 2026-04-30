@@ -1,6 +1,10 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi } from "@/lib/dal";
+import {
+  requireMinLevelApi,
+  canViewMeeting,
+  canEditMeeting,
+} from "@/lib/dal";
 import { MANAGER } from "@/lib/roles";
 
 const MEETING_SELECT = `
@@ -95,6 +99,35 @@ export async function GET(
 
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // db() bypasses RLS — apply meeting visibility rule here.
+  const m = meeting as {
+    type: string;
+    attendees?: { memberId: string | null }[];
+    projectLinks?: { projectId: string }[];
+  };
+  const attendeeMemberIds = (m.attendees ?? [])
+    .map((a) => a.memberId)
+    .filter((x): x is string => !!x);
+  const linkedProjectIds = (m.projectLinks ?? []).map((l) => l.projectId);
+  const linkedProjectPmIds: string[] = [];
+  if (linkedProjectIds.length > 0) {
+    const { data: projects } = await supabase
+      .from("Project")
+      .select("pmId")
+      .in("id", linkedProjectIds);
+    for (const p of projects ?? []) {
+      if (p.pmId) linkedProjectPmIds.push(p.pmId);
+    }
+  }
+  const visible = await canViewMeeting({
+    type: m.type,
+    attendeeMemberIds,
+    linkedProjectPmIds,
+  });
+  if (!visible) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   if ((meeting as { projectReviews?: { order: number }[] }).projectReviews) {
     (meeting as { projectReviews: { order: number }[] }).projectReviews.sort(
       (a, b) => a.order - b.order
@@ -109,14 +142,29 @@ export async function GET(
   return NextResponse.json(meeting);
 }
 
+async function gateEdit(meetingId: string): Promise<Response | null> {
+  const denied = await requireMinLevelApi(MANAGER);
+  if (denied) return denied;
+  const { data: m } = await db()
+    .from("Meeting")
+    .select("createdById")
+    .eq("id", meetingId)
+    .maybeSingle();
+  if (!m) return new Response("Not found", { status: 404 });
+  if (await canEditMeeting(m.createdById)) return null;
+  return new Response("Forbidden — only the creator or an admin can modify", {
+    status: 403,
+  });
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id } = await params;
+  const denied = await gateEdit(id);
   if (denied) return denied;
 
-  const { id } = await params;
   const body = await req.json();
 
   const patch: { notes?: string | null; title?: string | null } = {};
@@ -138,10 +186,10 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id } = await params;
+  const denied = await gateEdit(id);
   if (denied) return denied;
 
-  const { id } = await params;
   const { error } = await db().from("Meeting").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

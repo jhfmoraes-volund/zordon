@@ -21,14 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogFooter,
-  ResponsiveDialogBody,
-} from "@/components/ui/responsive-dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -169,6 +163,7 @@ export default function ProjectDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const isMobile = useIsMobile();
   const [project, setProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const router = useRouter();
@@ -183,6 +178,7 @@ export default function ProjectDetailPage({
     status: "active", clientId: "", pmId: "",
     githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
     memberIds: [] as string[],
+    ongoing: false,
   });
 
   const load = () =>
@@ -211,6 +207,7 @@ export default function ProjectDetailPage({
       githubRepoName: project.githubRepoName || "",
       githubDefaultBranch: project.githubDefaultBranch || "main",
       memberIds: project.projectMembers.map((pm) => pm.member.id),
+      ongoing: !project.startDate && !project.endDate,
     });
     setEditOpen(true);
   };
@@ -220,8 +217,8 @@ export default function ProjectDetailPage({
     const projectData = {
       name: editForm.name,
       repoUrl: editForm.repoUrl || null,
-      startDate: editForm.startDate ? new Date(editForm.startDate).toISOString() : null,
-      endDate: editForm.endDate ? new Date(editForm.endDate).toISOString() : null,
+      startDate: editForm.ongoing || !editForm.startDate ? null : new Date(editForm.startDate).toISOString(),
+      endDate: editForm.ongoing || !editForm.endDate ? null : new Date(editForm.endDate).toISOString(),
       status: editForm.status,
       clientId: editForm.clientId,
       pmId: editForm.pmId || null,
@@ -388,13 +385,26 @@ export default function ProjectDetailPage({
         <ProjectWiki projectId={project.id} />
       )}
 
-      {/* Edit Project Dialog */}
-      <ResponsiveDialog open={editOpen} onOpenChange={setEditOpen}>
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>Editar Projeto</ResponsiveDialogTitle>
-          </ResponsiveDialogHeader>
-          <ResponsiveDialogBody className="grid gap-4 py-4 md:max-h-[70vh] md:overflow-y-auto md:pr-2">
+      {/* Edit Project Sheet */}
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent
+          side={isMobile ? "bottom" : "right"}
+          className={
+            isMobile
+              ? "h-[90dvh] max-h-[90dvh] gap-0 rounded-t-xl p-0 flex flex-col"
+              : "w-full sm:max-w-xl gap-0 p-0 flex flex-col"
+          }
+        >
+          {isMobile && (
+            <div
+              aria-hidden="true"
+              className="absolute top-2 left-1/2 -translate-x-1/2 h-1.5 w-12 rounded-full bg-muted z-10"
+            />
+          )}
+          <div className="shrink-0 border-b px-6 pt-6 pb-4">
+            <h2 className="font-heading text-base font-medium">Editar Projeto</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-4 grid gap-4">
             <div className="grid gap-2">
               <Label>Cliente</Label>
               <Select value={editForm.clientId} onValueChange={(v) => v && setEditForm({ ...editForm, clientId: v })}>
@@ -483,15 +493,35 @@ export default function ProjectDetailPage({
                 <Input value={editForm.githubDefaultBranch} onChange={(e) => setEditForm({ ...editForm, githubDefaultBranch: e.target.value })} placeholder="main" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Data Início</Label>
-                <Input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Data Fim</Label>
-                <Input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
-              </div>
+            <div className="grid gap-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-input"
+                  checked={editForm.ongoing}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      ongoing: e.target.checked,
+                      startDate: e.target.checked ? "" : editForm.startDate,
+                      endDate: e.target.checked ? "" : editForm.endDate,
+                    })
+                  }
+                />
+                Projeto em andamento (sem prazo definido)
+              </label>
+              {!editForm.ongoing && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Data Início</Label>
+                    <Input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Data Fim</Label>
+                    <Input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="grid gap-2">
               <Label>Status</Label>
@@ -505,13 +535,13 @@ export default function ProjectDetailPage({
                 </SelectContent>
               </Select>
             </div>
-          </ResponsiveDialogBody>
-          <ResponsiveDialogFooter>
+          </div>
+          <div className="shrink-0 sticky bottom-0 border-t bg-popover px-6 py-3 pb-safe flex items-center justify-end gap-2">
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
             <Button onClick={saveSettings} disabled={!editForm.name || !editForm.clientId}>Salvar</Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      </ResponsiveDialog>
+          </div>
+        </SheetContent>
+      </Sheet>
 
     </div>
   );

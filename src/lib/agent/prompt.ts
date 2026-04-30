@@ -5,6 +5,7 @@ import type {
   OpenQuestion,
   BusinessContext,
   SessionIndexEntry,
+  TranscriptContextItem,
 } from "./agents/vitor";
 
 interface PromptInput {
@@ -20,6 +21,7 @@ interface PromptInput {
   businessContext?: BusinessContext | null;
   projectMemoryMd?: string | null;
   sessionIndex?: SessionIndexEntry[];
+  transcripts?: TranscriptContextItem[];
 }
 
 function buildProjectMemorySection(input: PromptInput): string {
@@ -216,6 +218,39 @@ function buildBehaviorRules(): string {
  * Builds the system prompt for the design session agent.
  * Provides full context: session data, current step, step schema, and behavior rules.
  */
+function buildTranscriptsBlock(transcripts: TranscriptContextItem[]): string {
+  if (!transcripts?.length) return "";
+
+  const blocks = transcripts
+    .map((t) => {
+      const start = new Date(t.meetingStart);
+      const date = `${String(start.getDate()).padStart(2, "0")}/${String(start.getMonth() + 1).padStart(2, "0")} ${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+      const people = t.participants.map((p) => p.name).join(", ") || "(sem participantes)";
+      const actions =
+        t.actionItems
+          .map((a) => `- ${a.title}${a.description ? `: ${a.description}` : ""}`)
+          .join("\n") || "(nenhum)";
+
+      return `### ${t.meetingTitle} — ${date}
+Participantes: ${people}
+Resumo: ${t.summary ?? "(sem resumo)"}
+Action items:
+${actions}
+
+<transcript id="${t.id}">
+${t.fullText}
+</transcript>`;
+    })
+    .join("\n\n---\n\n");
+
+  return `
+## Transcricoes de reunioes importadas
+Voce tem acesso a ${transcripts.length} transcricao(oes) de reuniao(oes) reais sobre este projeto. Use como contexto adicional quando o usuario perguntar algo factual sobre o que foi discutido.
+
+${blocks}
+`;
+}
+
 export function buildSystemPrompt({
   sessionTitle,
   sessionType,
@@ -229,6 +264,7 @@ export function buildSystemPrompt({
   businessContext,
   projectMemoryMd,
   sessionIndex,
+  transcripts,
 }: PromptInput): string {
   const steps = getStepsForSession({ type: sessionType, selectedSteps: selectedSteps ?? null });
   const currentStep = steps.find((s) => s.key === currentStepKey);
@@ -246,6 +282,7 @@ export function buildSystemPrompt({
     currentStepKey === "pre_work"
       ? `
 ## Modo Pre-Trabalho
+${buildTranscriptsBlock(transcripts ?? [])}
 Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario e pre-preencher os proximos steps.
 
 ### Como agir:

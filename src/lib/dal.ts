@@ -359,6 +359,58 @@ export async function requireProjectEditSessionsApi(
 /** @deprecated Tasks-mutation guard. Use {@link requireProjectEditTasksApi}. */
 export const requireProjectMemberApi = requireProjectEditTasksApi;
 
+// ═══════════════════════════════════════════════════════════
+// Meeting visibility (mirror of can_view_meeting RLS in DB)
+//
+// API routes use db() = service_role, which bypasses RLS, so
+// these helpers re-implement the rule for app-layer filtering.
+// ═══════════════════════════════════════════════════════════
+
+type MeetingVisibilityCtx = {
+  type: string;
+  attendeeMemberIds: string[];
+  linkedProjectPmIds: string[];
+};
+
+/**
+ * Mirror of public.can_view_meeting(meetingId) — given a meeting's type,
+ * its attendee memberIds, and the pmIds of any linked projects, decide
+ * if the caller can see it.
+ *
+ *   - Admin (head-ops / ceo / cro): always.
+ *   - Otherwise:
+ *     - pm_review / general: caller's memberId in attendeeMemberIds.
+ *     - daily / super_planning: caller's memberId in linkedProjectPmIds.
+ */
+export async function canViewMeeting(
+  ctx: MeetingVisibilityCtx,
+): Promise<boolean> {
+  const realRole = await getRealRole();
+  if (hasMinLevel(realRole, ADMIN)) return true;
+  const memberId = await getMemberId();
+  if (!memberId) return false;
+  if (ctx.type === "pm_review" || ctx.type === "general") {
+    return ctx.attendeeMemberIds.includes(memberId);
+  }
+  if (ctx.type === "daily" || ctx.type === "super_planning") {
+    return ctx.linkedProjectPmIds.includes(memberId);
+  }
+  return false;
+}
+
+/**
+ * Mirror of public.can_edit_meeting — admin OR creator.
+ */
+export async function canEditMeeting(
+  createdById: string | null,
+): Promise<boolean> {
+  const realRole = await getRealRole();
+  if (hasMinLevel(realRole, ADMIN)) return true;
+  if (!createdById) return false;
+  const memberId = await getMemberId();
+  return !!memberId && memberId === createdById;
+}
+
 async function lookupSessionProject(
   sessionId: string,
 ): Promise<string | null> {

@@ -30,6 +30,7 @@ export const vitorAgent: AgentDefinition = {
       businessContext,
       project,
       sessionIndex,
+      transcripts,
     ] = await Promise.all([
       buildSessionContext(sessionId),
       getStepData(sessionId, currentStepKey),
@@ -63,6 +64,13 @@ export const vitorAgent: AgentDefinition = {
         .neq("status", "draft")
         .order("updatedAt", { ascending: false })
         .limit(10),
+      db()
+        .from("DesignSessionTranscript")
+        .select(
+          "id, meetingTitle, meetingStart, meetingEnd, participants, summary, actionItems, fullText",
+        )
+        .eq("sessionId", sessionId)
+        .order("meetingStart", { ascending: false }),
     ]);
 
     return {
@@ -81,6 +89,7 @@ export const vitorAgent: AgentDefinition = {
       projectMemoryMd: project.data?.memoryMd ?? null,
       projectMemoryVersion: project.data?.memoryVersion ?? 0,
       sessionIndex: sessionIndex.data ?? [],
+      transcripts: transcripts.data ?? [],
     };
   },
 
@@ -98,6 +107,7 @@ export const vitorAgent: AgentDefinition = {
       businessContext: agentContext.businessContext as BusinessContext | null,
       projectMemoryMd: agentContext.projectMemoryMd as string | null,
       sessionIndex: agentContext.sessionIndex as SessionIndexEntry[],
+      transcripts: agentContext.transcripts as TranscriptContextItem[],
     });
   },
 
@@ -145,4 +155,15 @@ export interface SessionIndexEntry {
   status: string;
   memoryAbstract: string | null;
   updatedAt: string;
+}
+
+export interface TranscriptContextItem {
+  id: string;
+  meetingTitle: string;
+  meetingStart: string;
+  meetingEnd: string;
+  participants: { name: string; email?: string }[];
+  summary: string | null;
+  actionItems: { title: string; description: string }[];
+  fullText: string;
 }
