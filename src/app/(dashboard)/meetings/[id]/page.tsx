@@ -126,6 +126,7 @@ export default function MeetingDetailPage({
 }) {
   const { id } = use(params);
   const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [loadError, setLoadError] = useState<"forbidden" | "notfound" | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [notes, setNotes] = useState("");
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
@@ -138,17 +139,61 @@ export default function MeetingDetailPage({
   const [collapsedPms, setCollapsedPms] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
 
-  const load = () => {
-    fetch(`/api/meetings/${id}`).then((r) => r.json()).then((data) => {
-      setMeeting(data);
-      setNotes(data.notes || "");
-    });
+  const load = async () => {
+    const r = await fetch(`/api/meetings/${id}`);
+    if (r.status === 403) {
+      setLoadError("forbidden");
+      setMeeting(null);
+      return;
+    }
+    if (r.status === 404) {
+      setLoadError("notfound");
+      setMeeting(null);
+      return;
+    }
+    if (!r.ok) {
+      setLoadError("forbidden");
+      setMeeting(null);
+      return;
+    }
+    const data = await r.json();
+    setLoadError(null);
+    setMeeting(data);
+    setNotes(data.notes || "");
   };
 
   useEffect(() => {
     load();
     fetch("/api/members").then((r) => r.json()).then(setMembers);
   }, [id]);
+
+  if (loadError === "forbidden") {
+    return (
+      <div className="p-6 space-y-4">
+        <div className="text-sm text-muted-foreground">
+          Você não tem acesso a esta reunião.
+        </div>
+        <Link href="/meetings">
+          <Button variant="outline" size="sm">
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Voltar para reuniões
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (loadError === "notfound") {
+    return (
+      <div className="p-6 space-y-4">
+        <div className="text-sm text-muted-foreground">Reunião não encontrada.</div>
+        <Link href="/meetings">
+          <Button variant="outline" size="sm">
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Voltar para reuniões
+          </Button>
+        </Link>
+      </div>
+    );
+  }
 
   if (!meeting) {
     return <div className="p-6 text-muted-foreground">Carregando...</div>;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { MemberBattery, type BatterySegment } from "@/components/member-battery";
 import { CapacityWidget } from "@/components/capacity-widget";
 import { WeeklyAllocation } from "@/components/weekly-allocation";
+import { PixelBar, PixelDot, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
 import { roleLabel } from "@/lib/roles";
+import { bucketSprintsByWeek } from "@/lib/weekBuckets";
 import type { Seniority } from "@/lib/capacity";
 
 type Member = {
@@ -83,6 +85,34 @@ export default function MemberCapacityPage() {
     }
   };
 
+  // Agrega planejado/done/open por projeto na semana corrente (sprints da semana).
+  // Hooks precisam ficar antes dos returns condicionais; useMemo lida com data null.
+  const weekByProject = useMemo(() => {
+    if (!data) return new Map<string, { fpPlanned: number; fpDone: number; fpOpen: number; activeSprints: { id: string; name: string; status: string }[] }>();
+    const buckets = bucketSprintsByWeek(data.sprints, { weeks: 1, includePast: false });
+    const current = buckets[0];
+    const map = new Map<string, { fpPlanned: number; fpDone: number; fpOpen: number; activeSprints: { id: string; name: string; status: string }[] }>();
+    for (const row of current?.sprints ?? []) {
+      const existing = map.get(row.projectId);
+      if (existing) {
+        existing.fpPlanned += row.fpPlannedWeek;
+        existing.fpDone += row.fpDoneWeek;
+        existing.fpOpen += row.fpOpenWeek;
+        if (!existing.activeSprints.find((s) => s.id === row.sprintId)) {
+          existing.activeSprints.push({ id: row.sprintId, name: row.sprintName, status: row.sprintStatus });
+        }
+      } else {
+        map.set(row.projectId, {
+          fpPlanned: row.fpPlannedWeek,
+          fpDone: row.fpDoneWeek,
+          fpOpen: row.fpOpenWeek,
+          activeSprints: [{ id: row.sprintId, name: row.sprintName, status: row.sprintStatus }],
+        });
+      }
+    }
+    return map;
+  }, [data]);
+
   if (error) return <p className="p-6 text-sm text-red-600">{error}</p>;
   if (!data) return <p className="p-6 text-sm text-muted-foreground">Carregando…</p>;
 
@@ -92,6 +122,9 @@ export default function MemberCapacityPage() {
     value: p.fpAllocation,
   }));
   const projectsForFilter = projects.map((p) => ({ id: p.projectId, name: p.projectName }));
+
+  // Total da semana entregue (pra empilhar na bateria total)
+  const weekDoneTotal = Array.from(weekByProject.values()).reduce((acc, w) => acc + w.fpDone, 0);
 
   return (
     <div className="space-y-6">
@@ -122,37 +155,96 @@ export default function MemberCapacityPage() {
             <MemberBattery
               capacity={commitment.capacity}
               committed={commitment.committed}
+              done={weekDoneTotal}
               breakdown={batterySegments}
+              mode="capacity"
               size="md"
             />
             {projects.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sem alocações em projetos ainda.</p>
             ) : (
-              <div className="space-y-2">
-                {projects.map((p) => (
-                  <div key={p.projectId} className="flex items-center gap-3 text-sm">
-                    <span className="flex-1 truncate">{p.projectName}</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={500}
-                      defaultValue={p.fpAllocation}
-                      disabled={savingProject === p.projectId}
-                      onBlur={(e) => {
-                        const next = Number(e.target.value);
-                        if (!Number.isNaN(next) && next !== p.fpAllocation) {
-                          saveProjectAllocation(p.projectId, next);
-                        }
-                      }}
-                      className="w-20 h-7 text-right"
-                    />
-                    <span className="text-xs text-muted-foreground w-14">FP/sprint</span>
-                  </div>
-                ))}
+              <div className="space-y-3 pt-1">
+                <PixelHud size="xs" tone="muted">
+                  utilização do contrato — sprints rodando essa semana
+                </PixelHud>
+                {projects.map((p) => {
+                  const week = weekByProject.get(p.projectId) ?? { fpPlanned: 0, fpDone: 0, fpOpen: 0, activeSprints: [] };
+                  const ratio = p.fpAllocation > 0 ? week.fpPlanned / p.fpAllocation : 0;
+                  const overContract = p.fpAllocation > 0 && week.fpPlanned > p.fpAllocation;
+                  const idle = week.fpPlanned === 0 && p.fpAllocation > 0;
+                  const projectTone = pixelTone(ratio * 100, "load");
+                  return (
+                    <div key={p.projectId} className="space-y-1.5 surface-inset p-2.5">
+                      {/* Linha 1: nome + planejado/contrato + flag + input */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate flex-1">{p.projectName}</span>
+                        {overContract ? (
+                          <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
+                            ⚠️ {ratio.toFixed(2)}×
+                          </PixelHud>
+                        ) : idle ? (
+                          <PixelHud size="xs" tone="muted">💤 ocioso</PixelHud>
+                        ) : (
+                          <PixelHud size="xs" style={{ color: "oklch(0.82 0.18 145)" }}>✓ ok</PixelHud>
+                        )}
+                        <Input
+                          type="number"
+                          min={0}
+                          max={500}
+                          defaultValue={p.fpAllocation}
+                          disabled={savingProject === p.projectId}
+                          onBlur={(e) => {
+                            const next = Number(e.target.value);
+                            if (!Number.isNaN(next) && next !== p.fpAllocation) {
+                              saveProjectAllocation(p.projectId, next);
+                            }
+                          }}
+                          className="w-16 h-7 text-right text-xs"
+                        />
+                        <span className="text-[10px] text-muted-foreground w-12 leading-tight">FP/sprint</span>
+                      </div>
+
+                      {/* Linha 2: barra utilização do contrato */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <PixelBar
+                            score={Math.min(ratio * 100, 100)}
+                            cells={20}
+                            height={6}
+                            variant="load"
+                          />
+                        </div>
+                        <span className="font-mono text-[10px] tabular-nums leading-none w-20 text-right">
+                          <span style={{ color: projectTone.fg }}>{week.fpPlanned}</span>
+                          <span className="text-muted-foreground"> / {p.fpAllocation}</span>
+                        </span>
+                      </div>
+
+                      {/* Linha 3: ▮done ▮open + sprints da semana */}
+                      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1">
+                            <PixelDot variant="done" size={6} />
+                            <span className="font-mono tabular-nums">{week.fpDone} entregue</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <PixelDot variant="open" size={6} />
+                            <span className="font-mono tabular-nums">{week.fpOpen} em aberto</span>
+                          </span>
+                        </span>
+                        <span className="truncate text-right">
+                          {week.activeSprints.length > 0
+                            ? week.activeSprints.map((s) => `${s.name} (${s.status})`).join(" · ")
+                            : "sem sprint essa semana"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
             <p className="text-xs text-muted-foreground">
-              Editar aqui afeta <strong>todos os sprints</strong> do projeto. Pra um sprint específico, use override abaixo.
+              Editar contrato afeta <strong>todos os sprints</strong> do projeto. Pra um sprint específico, use override abaixo.
             </p>
           </CardContent>
         </Card>

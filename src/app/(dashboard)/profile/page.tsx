@@ -572,7 +572,7 @@ function CapacityCard({ summary }: { summary: CapacitySummary | null }) {
                       <PixelBar
                         score={Math.min(ratio * 100, 100)}
                         cells={20}
-                        height={6}
+                        height={8}
                         variant="load"
                       />
                       {(p.fpDone > 0 || p.fpOpen > 0) && (

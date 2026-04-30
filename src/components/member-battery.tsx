@@ -24,6 +24,7 @@ export function MemberBattery({
   breakdown,
   size = "md",
   showNumbers = true,
+  mode = "load",
 }: {
   capacity: number;
   committed: number;
@@ -32,12 +33,22 @@ export function MemberBattery({
   breakdown?: BatterySegment[];
   size?: "sm" | "md";
   showNumbers?: boolean;
+  /**
+   * - "load" (default): cheio é alarme (vermelho 100% / overcommit). Use pra carga semanal.
+   * - "capacity": cheio é ideal (verde MAX em ==capacity, vermelho só pra >capacity). Use pra contrato.
+   */
+  mode?: "load" | "capacity";
 }) {
   const safeCapacity = Math.max(capacity, 1);
   const overcommit = committed > capacity;
+  const isFullExact = mode === "capacity" && committed === capacity && capacity > 0;
   const usagePct = (committed / safeCapacity) * 100;
   const donePct = done !== undefined ? (Math.min(done, committed) / safeCapacity) * 100 : 0;
-  const tone = pixelTone(usagePct, "load");
+  // No mode capacity, ==capacity vira "skill MAX" (verde). Outros casos seguem load tone.
+  const tone = isFullExact
+    ? pixelTone(100, "skill")
+    : pixelTone(usagePct, "load");
+  const barVariant: "load" | "skill" = isFullExact ? "skill" : "load";
 
   const cells = size === "sm" ? 16 : 24;
   const height = size === "sm" ? 10 : 14;
@@ -48,14 +59,14 @@ export function MemberBattery({
       {showStacked ? (
         <div className="relative">
           {/* Camada 1: barra clara representando o committed total */}
-          <PixelBar score={usagePct} cells={cells} height={height} variant="load" />
+          <PixelBar score={Math.min(usagePct, 100)} cells={cells} height={height} variant={barVariant} />
           {/* Camada 2: barra sólida representando done dentro do committed */}
           <div className="absolute inset-0 pointer-events-none" style={{ width: `${Math.min(donePct, 100)}%` }}>
             <PixelBar score={100} cells={Math.max(1, Math.round(cells * (Math.min(donePct, 100) / 100)))} height={height} variant="skill" />
           </div>
         </div>
       ) : (
-        <PixelBar score={usagePct} cells={cells} height={height} variant="load" />
+        <PixelBar score={Math.min(usagePct, 100)} cells={cells} height={height} variant={barVariant} />
       )}
 
       {showNumbers && (
