@@ -5,25 +5,20 @@ import { Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { roleLabel } from "@/lib/roles";
+import { MemberBattery } from "@/components/member-battery";
 
 export type TeamCapacityMember = {
   id: string;
   name: string;
   role: string;
-  fpCapacity: number;
-  fpThisWeek: number;
-  fpNextWeek: number;
-  dueThisWeek: number;
-  dueNextWeek: number;
   squads: string[];
+  fpCapacity: number;
+  fpContract: number;
+  fpPlanned: number;
+  fpDone: number;
+  fpOpen: number;
+  activeSprints: { id: string; name: string; projectName: string }[];
 };
-
-function usageColor(pct: number) {
-  if (pct <= 0.5) return "bg-green-500";
-  if (pct <= 0.7) return "bg-blue-500";
-  if (pct <= 0.85) return "bg-yellow-500";
-  return "bg-red-500";
-}
 
 export function TeamCapacityWidget({
   members,
@@ -63,23 +58,24 @@ export function TeamCapacityWidget({
       <CardHeader className="pb-3">
         <CardTitle className="text-sm flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" />
-          Capacity do Time
+          Capacity do Time — Sprint atual
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          FP com prazo nesta e proxima semana vs capacity semanal (capacity sprint / 2)
+          Planejado vs contrato vs capacity. Bate o olho e vê overcommit.
         </p>
       </CardHeader>
       <CardContent>
         <div
           ref={scrollRef}
-          className="flex gap-3 overflow-x-auto pt-1.5 pb-3 -mx-3 px-3 scroll-px-3 snap-x snap-mandatory scrollbar-none md:block md:space-y-4 md:overflow-visible md:m-0 md:p-0 md:pb-0 md:pt-0 md:scroll-p-0"
+          className="flex gap-3 overflow-x-auto pt-1.5 pb-3 -mx-3 px-3 scroll-px-3 snap-x snap-mandatory scrollbar-none md:block md:space-y-3 md:overflow-visible md:m-0 md:p-0 md:pb-0 md:pt-0 md:scroll-p-0"
         >
           {members.map((m) => {
-            const weeklyCapacity = Math.round(m.fpCapacity / 2);
-            const thisWeekPct =
-              weeklyCapacity > 0 ? m.fpThisWeek / weeklyCapacity : 0;
-            const nextWeekPct =
-              weeklyCapacity > 0 ? m.fpNextWeek / weeklyCapacity : 0;
+            const multiplier = m.fpCapacity > 0 ? m.fpPlanned / m.fpCapacity : 0;
+            const overcommit = m.fpPlanned > m.fpCapacity;
+            const overContract = m.fpContract > 0 && m.fpPlanned > m.fpContract;
+            const idle = m.fpPlanned === 0 && m.fpContract > 0;
+            const contractDelta = m.fpPlanned - m.fpContract;
+            const contractRatio = m.fpCapacity > 0 ? m.fpContract / m.fpCapacity : 0;
 
             return (
               <div
@@ -87,7 +83,7 @@ export function TeamCapacityWidget({
                 data-snap-item
                 className="surface-inset p-3 min-w-full shrink-0 snap-start snap-always md:min-w-0"
               >
-                {/* Member header */}
+                {/* Member header + multiplicador */}
                 <div className="flex items-center justify-between mb-3 gap-2">
                   <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     <span className="text-sm font-medium">{m.name}</span>
@@ -100,61 +96,60 @@ export function TeamCapacityWidget({
                       </Badge>
                     ))}
                   </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {weeklyCapacity} FP/sprint
+                  <span className="text-xs tabular-nums shrink-0 flex items-center gap-1.5">
+                    <span>
+                      <span className="font-mono font-semibold">{m.fpPlanned}</span>
+                      <span className="text-muted-foreground">/{m.fpCapacity} FP</span>
+                    </span>
+                    {m.fpCapacity > 0 && (
+                      <span
+                        className={`font-mono font-semibold ${
+                          overcommit
+                            ? "text-red-400"
+                            : multiplier > contractRatio
+                            ? "text-amber-500"
+                            : "text-green-500"
+                        }`}
+                      >
+                        {multiplier.toFixed(2)}×
+                      </span>
+                    )}
+                    {overcommit && <span>⚠️</span>}
                   </span>
                 </div>
 
-                {/* Two-week bars */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* This week */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                        Esta semana
-                      </span>
-                      <span className="text-xs font-medium tabular-nums">
-                        {m.fpThisWeek}/{weeklyCapacity} FP
-                        {m.dueThisWeek > 0 && (
-                          <span className="text-muted-foreground">
-                            {" "}
-                            ({m.dueThisWeek} tasks)
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${usageColor(thisWeekPct)}`}
-                        style={{ width: `${Math.min(thisWeekPct * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
+                {/* Bateria empilhada (▓ done + ▒ open dentro de capacity) */}
+                <MemberBattery
+                  capacity={m.fpCapacity}
+                  committed={m.fpPlanned}
+                  done={m.fpDone}
+                  showNumbers={false}
+                  size="sm"
+                />
 
-                  {/* Next week */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                        Prox semana
-                      </span>
-                      <span className="text-xs font-medium tabular-nums">
-                        {m.fpNextWeek}/{weeklyCapacity} FP
-                        {m.dueNextWeek > 0 && (
-                          <span className="text-muted-foreground">
-                            {" "}
-                            ({m.dueNextWeek} tasks)
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${usageColor(nextWeekPct)}`}
-                        style={{ width: `${Math.min(nextWeekPct * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
+                {/* Linha de contrato + flag */}
+                <div className="flex items-center justify-between mt-2 gap-2 text-[11px]">
+                  <span className="text-muted-foreground tabular-nums">
+                    contrato {m.fpContract}
+                    {overContract ? (
+                      <span className="text-amber-500"> → +{contractDelta} FP acima</span>
+                    ) : idle ? (
+                      <span className="text-muted-foreground"> → 💤 ocioso</span>
+                    ) : m.fpContract > 0 ? (
+                      <span className="text-muted-foreground"> → sobra {Math.max(m.fpContract - m.fpPlanned, 0)} FP</span>
+                    ) : null}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">
+                    ▓{m.fpDone} ▒{m.fpOpen}
+                  </span>
                 </div>
+
+                {/* Sprints ativas */}
+                {m.activeSprints.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-1.5 truncate">
+                    {m.activeSprints.map((s) => `${s.projectName} ${s.name}`).join(" · ")}
+                  </p>
+                )}
               </div>
             );
           })}

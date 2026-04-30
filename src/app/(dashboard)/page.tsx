@@ -179,50 +179,97 @@ export default async function OverviewPage() {
     name: p.name,
   }));
 
-  // ─── Compute capacity per member per week ─────────────
+  // ─── Compute capacity per member (sprint-based) ───────
+  // Sprint-based: agrega fp_planned/done/open das sprints active+planning
+  // que SE SOBREPÕEM com a semana atual (sprints semanais → 1 sprint = 1 semana).
 
-  type WeekCapacity = {
-    fpThisWeek: number;
-    fpNextWeek: number;
-    dueThisWeek: number;
-    dueNextWeek: number;
+  const sprintsThisWeek = (sprintsRes.data ?? []).filter((s: any) => {
+    const start = new Date(s.startDate);
+    const end = new Date(s.endDate);
+    return end >= thisWeekStart && start <= thisWeekEnd;
+  });
+  const sprintIdsThisWeek = sprintsThisWeek.map((s: any) => s.id);
+
+  type SprintMemberCap = {
+    sprintId: string;
+    memberId: string;
+    fp_planned: number;
+    fp_done: number;
+    fp_open: number;
+    fp_allocation: number;
   };
+  let memberCapsThisWeek: SprintMemberCap[] = [];
+  if (sprintIdsThisWeek.length > 0) {
+    const { data } = await supabase
+      .from("sprint_member_capacity")
+      .select("sprintId, memberId, fp_planned, fp_done, fp_open, fp_allocation")
+      .in("sprintId", sprintIdsThisWeek);
+    memberCapsThisWeek = (data ?? []) as unknown as SprintMemberCap[];
+  }
+
+  // Buscar contrato total (committed) por membro de member_commitment_overview
+  const { data: commitmentRows } = await supabase
+    .from("member_commitment_overview")
+    .select("id, committed");
+  const contractByMember = new Map<string, number>();
+  for (const c of (commitmentRows ?? []) as any[]) {
+    if (c.id) contractByMember.set(c.id, Number(c.committed) || 0);
+  }
+
+  // Index sprints e agregação por membro
+  const sprintMetaById = new Map<string, { id: string; name: string; projectName: string }>();
+  for (const s of sprintsThisWeek as any[]) {
+    sprintMetaById.set(s.id, {
+      id: s.id,
+      name: s.name,
+      projectName: s.project?.name ?? "?",
+    });
+  }
+
+  type MemberWeek = {
+    fpPlanned: number;
+    fpDone: number;
+    fpOpen: number;
+    activeSprints: { id: string; name: string; projectName: string }[];
+  };
+  const weekByMember = new Map<string, MemberWeek>();
+  for (const r of memberCapsThisWeek) {
+    if (!r.memberId) continue;
+    const meta = sprintMetaById.get(r.sprintId);
+    const existing = weekByMember.get(r.memberId);
+    if (existing) {
+      existing.fpPlanned += r.fp_planned ?? 0;
+      existing.fpDone += r.fp_done ?? 0;
+      existing.fpOpen += r.fp_open ?? 0;
+      if (meta && !existing.activeSprints.find((s) => s.id === meta.id)) {
+        existing.activeSprints.push(meta);
+      }
+    } else {
+      weekByMember.set(r.memberId, {
+        fpPlanned: r.fp_planned ?? 0,
+        fpDone: r.fp_done ?? 0,
+        fpOpen: r.fp_open ?? 0,
+        activeSprints: meta ? [meta] : [],
+      });
+    }
+  }
 
   const memberCapacity = members.map((m: any) => {
-    const weekCap: WeekCapacity = { fpThisWeek: 0, fpNextWeek: 0, dueThisWeek: 0, dueNextWeek: 0 };
-
-    for (const a of m.taskAssignments) {
-      const sp = a.task.functionPoints ?? 0;
-      const due = a.task.dueDate ? new Date(a.task.dueDate) : null;
-      const isActive = [...OPEN_STATUSES].includes(a.task.status as any);
-
-      if (!isActive) continue;
-
-      if (due && due >= thisWeekStart && due <= thisWeekEnd) {
-        weekCap.fpThisWeek += sp;
-        weekCap.dueThisWeek++;
-      } else if (due && due >= nextWeekStart && due <= nextWeekEnd) {
-        weekCap.fpNextWeek += sp;
-        weekCap.dueNextWeek++;
-      } else if (!due) {
-        weekCap.fpThisWeek += sp;
-      }
-    }
-
-    const totalActiveFp = m.taskAssignments
-      .filter((a: any) => [...OPEN_STATUSES].includes(a.task.status as any))
-      .reduce((s: number, a: any) => s + (a.task.functionPoints ?? 0), 0);
-
+    const week = weekByMember.get(m.id) ?? {
+      fpPlanned: 0, fpDone: 0, fpOpen: 0, activeSprints: [],
+    };
     const squads = m.squadMemberships.map((sm: any) => sm.squad.name);
-
     return {
       id: m.id,
       name: m.name,
       role: m.role,
-      fpCapacity: m.fpCapacity,
-      totalActiveFp,
       squads,
-      ...weekCap,
+      fpCapacity: m.fpCapacity ?? 0,
+      fpContract: contractByMember.get(m.id) ?? 0,
+      fpPlanned: week.fpPlanned,
+      fpDone: week.fpDone,
+      fpOpen: week.fpOpen,
+      activeSprints: week.activeSprints,
     };
   });
 
@@ -273,8 +320,7 @@ export default async function OverviewPage() {
   }
 
   const overloaded = memberCapacity.filter((m) => {
-    const weeklyCapacity = m.fpCapacity / 2;
-    return weeklyCapacity > 0 && (m.fpThisWeek / weeklyCapacity > 0.85 || m.fpNextWeek / weeklyCapacity > 0.85);
+    return m.fpCapacity > 0 && m.fpPlanned / m.fpCapacity > 0.85;
   });
   if (overloaded.length > 0) {
     attentionPoints.push({
@@ -286,8 +332,7 @@ export default async function OverviewPage() {
   }
 
   const idle = memberCapacity.filter((m) => {
-    const weeklyCapacity = m.fpCapacity / 2;
-    return weeklyCapacity > 0 && m.fpThisWeek / weeklyCapacity < 0.1 && m.fpNextWeek / weeklyCapacity < 0.1;
+    return m.fpCapacity > 0 && m.fpPlanned / m.fpCapacity < 0.1;
   });
   if (idle.length > 0) {
     attentionPoints.push({
