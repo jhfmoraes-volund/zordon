@@ -81,7 +81,9 @@ export default function ProfileCapacityPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm text-muted-foreground">Bateria por projeto</CardTitle>
+          <CardTitle className="text-sm text-muted-foreground">
+            Acordo contratual — {commitment.committed} / {commitment.capacity} FP/sem
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <MemberBattery

@@ -130,12 +130,12 @@ function WeekBlock({
   weeklyCapacity: number;
 }) {
   const [expanded, setExpanded] = useState(bucket.isCurrent);
-  // Carga real = soma de FP em tasks ativas dessa semana.
-  // Acima da capacity = sobrecarga; muito abaixo = ocioso.
+  // Numerador primário = planejado da semana (status ≠ backlog).
+  // Sub-barra mostra fpDone vs fpOpen pra burndown.
   const usagePct =
-    weeklyCapacity > 0 ? (bucket.totalUsed / weeklyCapacity) * 100 : 0;
+    weeklyCapacity > 0 ? (bucket.totalPlanned / weeklyCapacity) * 100 : 0;
   const tone = pixelTone(usagePct, "load");
-  const overcommit = bucket.totalUsed > weeklyCapacity && weeklyCapacity > 0;
+  const overcommit = bucket.totalPlanned > weeklyCapacity && weeklyCapacity > 0;
   const empty = bucket.sprints.length === 0;
 
   return (
@@ -197,15 +197,17 @@ function WeekBlock({
             </div>
           </div>
 
-          {/* FP em uso / capacity da semana */}
-          <div className="text-right shrink-0 w-20">
+          {/* FP planejado / capacity da semana (com sub-info done/open) */}
+          <div className="text-right shrink-0 w-24">
             {!empty && (
               <>
                 <p className="text-sm font-bold tabular-nums">
-                  <span style={{ color: tone.fg }}>{bucket.totalUsed}</span>
+                  <span style={{ color: tone.fg }}>{bucket.totalPlanned}</span>
                   <span className="text-muted-foreground/70"> / {weeklyCapacity}</span>
                 </p>
-                <p className="text-[10px] text-muted-foreground">FP em uso</p>
+                <p className="text-[10px] text-muted-foreground tabular-nums">
+                  ▓{bucket.totalDone} ▒{bucket.totalOpen}
+                </p>
               </>
             )}
           </div>
@@ -234,7 +236,7 @@ function WeekBlock({
             <div className="flex items-center gap-1.5 text-xs pt-1">
               <AlertTriangle className="h-3 w-3 text-amber-500" />
               <span className="text-amber-500">
-                +{bucket.totalUsed - weeklyCapacity} FP acima da capacity semanal
+                +{bucket.totalPlanned - weeklyCapacity} FP acima da capacity semanal
               </span>
             </div>
           )}
@@ -245,10 +247,9 @@ function WeekBlock({
 }
 
 function SprintRowInWeek({ row }: { row: WeekSprintRow }) {
-  // Bar = uso da alocação do membro nessa sprint
-  // (FP em tasks ativas / FP alocados ao membro pra esse projeto na sprint).
+  // Bar = planejado vs contrato (fpAllocationWeek = contrato prorrateado).
   const usagePct = row.fpAllocationWeek > 0
-    ? Math.round((row.fpUsedWeek / row.fpAllocationWeek) * 100)
+    ? Math.round((row.fpPlannedWeek / row.fpAllocationWeek) * 100)
     : 0;
   const tone = pixelTone(usagePct, "load");
 
@@ -289,13 +290,15 @@ function SprintRowInWeek({ row }: { row: WeekSprintRow }) {
           </span>
         </div>
 
-        {/* FP used / allocated */}
-        <div className="text-right shrink-0 w-16">
+        {/* FP planejado / contrato (com sub ▓done ▒open) */}
+        <div className="text-right shrink-0 w-20">
           <p className="text-sm font-bold tabular-nums">
-            <span style={{ color: tone.fg }}>{row.fpUsedWeek}</span>
+            <span style={{ color: tone.fg }}>{row.fpPlannedWeek}</span>
             <span className="text-muted-foreground/70"> / {row.fpAllocationWeek}</span>
           </p>
-          <p className="text-[10px] text-muted-foreground">FP em uso</p>
+          <p className="text-[10px] text-muted-foreground tabular-nums">
+            ▓{row.fpDoneWeek} ▒{row.fpOpenWeek}
+          </p>
         </div>
 
         <Link href={`/sprints/${row.sprintId}/board`} aria-label="Abrir board">
