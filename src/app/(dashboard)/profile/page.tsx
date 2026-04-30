@@ -27,7 +27,7 @@ import {
   type MemberSkillRow,
 } from "@/lib/memberSkills";
 import { PixelBar, pixelBarLabel, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
-import { MemberBattery, type BatterySegment } from "@/components/member-battery";
+import { MemberBattery } from "@/components/member-battery";
 import { PdiWidget } from "@/components/pdi-widget";
 import { TodosWidget } from "@/components/todos-widget";
 import { bucketSprintsByWeek, type SprintInput } from "@/lib/weekBuckets";
@@ -79,14 +79,25 @@ type SkillsSummary = {
   status: "in_progress" | "completed" | null;
 };
 
+type CapacityProject = {
+  projectId: string;
+  projectName: string;
+  fpContract: number;
+  fpPlanned: number;
+  fpDone: number;
+  fpOpen: number;
+};
+
 type CapacitySummary = {
   fpCapacity: number;
   committed: number;
   remaining: number;
-  projects: { projectId: string; projectName: string; fpAllocation: number }[];
-  /** FP em uso na semana corrente, somado de todas as sprints rateadas */
-  weekUsed: number;
-  weekActiveSprints: number;
+  /** Métrica primária da semana corrente (≠ backlog), somada das sprints. */
+  weekPlanned: number;
+  weekDone: number;
+  weekOpen: number;
+  weekActiveSprints: { id: string; name: string; projectName: string }[];
+  projects: CapacityProject[];
 };
 
 export default function ProfilePage() {
@@ -183,16 +194,60 @@ export default function ProfilePage() {
       .then((d) => {
         if (!d) return;
         const sprints: SprintInput[] = d.sprints ?? [];
-        // Pega só a semana corrente
         const buckets = bucketSprintsByWeek(sprints, { weeks: 1, includePast: false });
         const current = buckets[0];
+
+        // Agrega por projeto na semana corrente (planejado/done/open)
+        const contractByProject = new Map<string, { name: string; fpContract: number }>();
+        for (const p of (d.projects ?? []) as { projectId: string; projectName: string; fpAllocation: number }[]) {
+          contractByProject.set(p.projectId, { name: p.projectName, fpContract: p.fpAllocation });
+        }
+        const weekProjects = new Map<string, CapacityProject>();
+        for (const row of current?.sprints ?? []) {
+          const existing = weekProjects.get(row.projectId);
+          if (existing) {
+            existing.fpPlanned += row.fpPlannedWeek;
+            existing.fpDone += row.fpDoneWeek;
+            existing.fpOpen += row.fpOpenWeek;
+          } else {
+            const contract = contractByProject.get(row.projectId);
+            weekProjects.set(row.projectId, {
+              projectId: row.projectId,
+              projectName: row.projectName,
+              fpContract: contract?.fpContract ?? 0,
+              fpPlanned: row.fpPlannedWeek,
+              fpDone: row.fpDoneWeek,
+              fpOpen: row.fpOpenWeek,
+            });
+          }
+        }
+        // Adicionar projetos contratuais sem sprint ativa nessa semana (idle)
+        for (const [projectId, c] of contractByProject) {
+          if (!weekProjects.has(projectId)) {
+            weekProjects.set(projectId, {
+              projectId,
+              projectName: c.name,
+              fpContract: c.fpContract,
+              fpPlanned: 0,
+              fpDone: 0,
+              fpOpen: 0,
+            });
+          }
+        }
+
         setCapacity({
           fpCapacity: d.member.fpCapacity,
           committed: d.commitment.committed,
           remaining: d.commitment.remaining,
-          projects: d.projects ?? [],
-          weekUsed: current?.totalUsed ?? 0,
-          weekActiveSprints: current?.sprints.length ?? 0,
+          weekPlanned: current?.totalPlanned ?? 0,
+          weekDone: current?.totalDone ?? 0,
+          weekOpen: current?.totalOpen ?? 0,
+          weekActiveSprints: (current?.sprints ?? []).map((s) => ({
+            id: s.sprintId,
+            name: s.sprintName,
+            projectName: s.projectName,
+          })),
+          projects: Array.from(weekProjects.values()).sort((a, b) => b.fpPlanned - a.fpPlanned),
         });
       })
       .catch(() => {});
@@ -411,16 +466,11 @@ function CapacityCard({ summary }: { summary: CapacitySummary | null }) {
     );
   }
 
-  const { fpCapacity, committed, projects, weekUsed, weekActiveSprints } = summary;
-  const weekPct = fpCapacity > 0 ? (weekUsed / fpCapacity) * 100 : 0;
+  const { fpCapacity, weekPlanned, weekDone, weekOpen, weekActiveSprints, projects } = summary;
+  const weekPct = fpCapacity > 0 ? (weekPlanned / fpCapacity) * 100 : 0;
   const tone = pixelTone(weekPct, "load");
-  const overcommit = weekUsed > fpCapacity;
-  const idle = weekPct < 30 && weekUsed > 0;
-
-  const batterySegments: BatterySegment[] = projects.map((p) => ({
-    label: p.projectName,
-    value: p.fpAllocation,
-  }));
+  const multiplier = fpCapacity > 0 ? weekPlanned / fpCapacity : 0;
+  const overcommit = weekPlanned > fpCapacity;
 
   return (
     <Card>
@@ -438,68 +488,87 @@ function CapacityCard({ summary }: { summary: CapacitySummary | null }) {
           </Link>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Bateria */}
-          <div className="space-y-2">
-            <PixelHud size="xs" tone="muted">
-              bateria por projeto
-            </PixelHud>
-            <MemberBattery
-              capacity={fpCapacity}
-              committed={committed}
-              breakdown={batterySegments}
-              size="md"
-            />
-          </div>
-
-          {/* Esta semana */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <PixelHud size="xs" tone="muted">
-                esta semana
+      <CardContent className="space-y-4">
+        {/* Linha 1 — bateria principal: planejado vs capacity */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <PixelHud size="xs" tone="muted">esta semana</PixelHud>
+            {overcommit ? (
+              <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
+                {multiplier.toFixed(1)}× overcommit
               </PixelHud>
-              {overcommit ? (
-                <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
-                  sobrecarga
-                </PixelHud>
-              ) : idle ? (
-                <PixelHud size="xs" style={{ color: "oklch(0.82 0.18 145)" }}>
-                  ocioso
-                </PixelHud>
-              ) : weekActiveSprints === 0 ? (
-                <PixelHud size="xs" tone="muted">
-                  sem alocação
-                </PixelHud>
-              ) : null}
-            </div>
-            <PixelBar
-              score={Math.min(weekPct, 100)}
-              cells={20}
-              height={12}
-              variant="load"
-            />
-            <div className="flex items-center justify-between leading-none">
-              <span className="font-mono tabular-nums text-sm">
-                <span className="font-medium" style={{ color: tone.fg }}>
-                  {weekUsed}
-                </span>
-                <span className="text-muted-foreground"> / {fpCapacity} FP</span>
-              </span>
-              <span
-                className="font-mono tabular-nums text-sm font-semibold"
-                style={{ color: tone.fg }}
-              >
-                {Math.round(weekPct)}%
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              {weekActiveSprints > 0
-                ? `${weekActiveSprints} sprint${weekActiveSprints === 1 ? "" : "s"} ativ${weekActiveSprints === 1 ? "a" : "as"}`
-                : "Nada agendado pra essa semana"}
-            </p>
+            ) : weekPlanned === 0 ? (
+              <PixelHud size="xs" tone="muted">sem alocação</PixelHud>
+            ) : null}
+          </div>
+          <MemberBattery
+            capacity={fpCapacity}
+            committed={weekPlanned}
+            done={weekDone}
+            size="md"
+          />
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <span><span className="font-mono tabular-nums" style={{ color: tone.fg }}>▓ entregue {weekDone}</span></span>
+            <span><span className="font-mono tabular-nums">▒ em aberto {weekOpen}</span></span>
           </div>
         </div>
+
+        {/* Linha 2 — por projeto: barra individual + planejado + contrato + flag */}
+        {projects.length > 0 && (
+          <div className="space-y-2">
+            <PixelHud size="xs" tone="muted">por projeto</PixelHud>
+            <div className="space-y-2">
+              {projects.map((p) => {
+                const ratio = fpCapacity > 0 ? p.fpPlanned / fpCapacity : 0;
+                const overContract = p.fpContract > 0 && p.fpPlanned > p.fpContract;
+                const idle = p.fpPlanned === 0 && p.fpContract > 0;
+                const overMul = p.fpContract > 0 ? p.fpPlanned / p.fpContract : 0;
+                const projectTone = pixelTone(ratio * 100, "load");
+                return (
+                  <div key={p.projectId} className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium truncate flex-1">{p.projectName}</span>
+                      <span className="font-mono tabular-nums text-xs" style={{ color: projectTone.fg }}>
+                        {p.fpPlanned} FP
+                      </span>
+                      <span className="font-mono tabular-nums text-[10px] text-muted-foreground">
+                        contrato {p.fpContract}
+                      </span>
+                      {overContract ? (
+                        <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
+                          ⚠️ +{overMul.toFixed(1)}×
+                        </PixelHud>
+                      ) : idle ? (
+                        <PixelHud size="xs" tone="muted">💤 ocioso</PixelHud>
+                      ) : (
+                        <PixelHud size="xs" style={{ color: "oklch(0.82 0.18 145)" }}>✓ ok</PixelHud>
+                      )}
+                    </div>
+                    <PixelBar
+                      score={Math.min(ratio * 100, 100)}
+                      cells={20}
+                      height={6}
+                      variant="load"
+                    />
+                    {(p.fpDone > 0 || p.fpOpen > 0) && (
+                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                        <span className="font-mono tabular-nums">▓ {p.fpDone} entregue</span>
+                        <span className="font-mono tabular-nums">▒ {p.fpOpen} em aberto</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Linha 3 — contagem de sprints ativas com nomes */}
+        <p className="text-[11px] text-muted-foreground">
+          {weekActiveSprints.length > 0
+            ? `${weekActiveSprints.length} sprint${weekActiveSprints.length === 1 ? "" : "s"} ativ${weekActiveSprints.length === 1 ? "a" : "as"} · ${weekActiveSprints.map((s) => `${s.projectName} ${s.name}`).join(", ")}`
+            : "Nada agendado pra essa semana"}
+        </p>
       </CardContent>
     </Card>
   );
