@@ -8,6 +8,7 @@ import {
   FileText,
   Lightbulb,
   ListTodo,
+  Pencil,
   Settings as SettingsIcon,
   Shield,
   Zap,
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageTitle } from "@/components/app-shell";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
+import { ProjectEditSheet } from "@/components/project-edit-sheet";
 import { ProjectWiki } from "@/components/project-wiki";
 import { StatusChip } from "@/components/ui/status-chip";
 import { createClient } from "@/lib/supabase/client";
@@ -75,6 +77,15 @@ type ProjectMeta = {
   name: string;
   status: string;
   client: { name: string } | null;
+  clientId: string;
+  pmId: string | null;
+  pm: { id: string; name: string; role: string | null } | null;
+  repoUrl: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  githubRepoOwner: string | null;
+  githubRepoName: string | null;
+  githubDefaultBranch: string | null;
   referenceKey: string | null;
   definitionOfDone: string[];
   useStoryHierarchy: boolean;
@@ -158,6 +169,7 @@ export default function ProjectDetailPage({
   );
 
   const [accessOpen, setAccessOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [editingStory, setEditingStory] = useState(false);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(null);
@@ -181,7 +193,7 @@ export default function ProjectDetailPage({
     const { data } = await supabase
       .from("Project")
       .select(
-        "id, name, status, referenceKey, definitionOfDone, useStoryHierarchy, client:Client(name)",
+        "id, name, status, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, useStoryHierarchy, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role)",
       )
       .eq("id", id)
       .single();
@@ -191,6 +203,20 @@ export default function ProjectDetailPage({
       name: data.name,
       status: data.status,
       client: (data.client as { name: string } | null) ?? null,
+      clientId: data.clientId,
+      pmId: data.pmId ?? null,
+      pm:
+        (data.pm as {
+          id: string;
+          name: string;
+          role: string | null;
+        } | null) ?? null,
+      repoUrl: data.repoUrl ?? null,
+      startDate: data.startDate ?? null,
+      endDate: data.endDate ?? null,
+      githubRepoOwner: data.githubRepoOwner ?? null,
+      githubRepoName: data.githubRepoName ?? null,
+      githubDefaultBranch: data.githubDefaultBranch ?? null,
       referenceKey: data.referenceKey ?? null,
       definitionOfDone: Array.isArray(data.definitionOfDone)
         ? (data.definitionOfDone as string[])
@@ -262,28 +288,31 @@ export default function ProjectDetailPage({
       .map((pm) => pm.member)
       .filter((m) => m !== null) as RawMember[];
     setRawMembers(memberRows);
+  }, [id, supabase]);
 
+  const loadSprintMembers = useCallback(async () => {
     const sprintIds = rawSprints.map((s) => s.id);
-    if (sprintIds.length > 0) {
-      const { data: sm } = await supabase
-        .from("SprintMember")
-        .select("sprintId, memberId, fpAllocation")
-        .in("sprintId", sprintIds);
-      setRawSprintMembers((sm ?? []) as RawSprintMember[]);
-    } else {
+    if (sprintIds.length === 0) {
       setRawSprintMembers([]);
+      return;
     }
-  }, [id, supabase, rawSprints]);
+    const { data: sm } = await supabase
+      .from("SprintMember")
+      .select("sprintId, memberId, fpAllocation")
+      .in("sprintId", sprintIds);
+    setRawSprintMembers((sm ?? []) as RawSprintMember[]);
+  }, [supabase, rawSprints]);
 
   useEffect(() => {
     loadProject();
     loadStoryHierarchy();
     loadTasksAndSprints();
-  }, [loadProject, loadStoryHierarchy, loadTasksAndSprints]);
+    loadMembers();
+  }, [loadProject, loadStoryHierarchy, loadTasksAndSprints, loadMembers]);
 
   useEffect(() => {
-    if (rawSprints.length > 0) loadMembers();
-  }, [rawSprints, loadMembers]);
+    loadSprintMembers();
+  }, [loadSprintMembers]);
 
   // ─── Adapt ─────────────────────────────────────────────────────────────────
 
@@ -614,20 +643,49 @@ export default function ProjectDetailPage({
         >
           {project.status}
         </StatusChip>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setAccessOpen(true)}
-        >
-          <Shield className="size-4" />
-          Access
-        </Button>
-        <Link href="/design-sessions">
-          <Button variant="outline" size="sm">
-            <Lightbulb className="size-4" />
-            Sessions
+        {project.pm ? (
+          <span className="text-xs text-muted-foreground">
+            PM:{" "}
+            <span className="font-medium text-foreground">
+              {project.pm.name}
+            </span>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">PM: —</span>
+        )}
+        {rawMembers.length > 0 ? (
+          <span className="text-xs text-muted-foreground">
+            ·{" "}
+            <span className="font-mono tabular-nums text-foreground">
+              {rawMembers.length}
+            </span>{" "}
+            membro{rawMembers.length === 1 ? "" : "s"}
+          </span>
+        ) : null}
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="size-4" />
+            Editar projeto
           </Button>
-        </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAccessOpen(true)}
+          >
+            <Shield className="size-4" />
+            Access
+          </Button>
+          <Link href="/design-sessions">
+            <Button variant="outline" size="sm">
+              <Lightbulb className="size-4" />
+              Sessions
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -860,6 +918,33 @@ export default function ProjectDetailPage({
         open={accessOpen}
         onOpenChange={setAccessOpen}
         projectId={id}
+      />
+
+      {/* Edit project sheet (PM, members, repo, dates, status) */}
+      <ProjectEditSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        project={
+          project
+            ? {
+                id: project.id,
+                name: project.name,
+                repoUrl: project.repoUrl,
+                startDate: project.startDate,
+                endDate: project.endDate,
+                status: project.status,
+                clientId: project.clientId,
+                pmId: project.pmId,
+                githubRepoOwner: project.githubRepoOwner,
+                githubRepoName: project.githubRepoName,
+                githubDefaultBranch: project.githubDefaultBranch,
+                memberIds: rawMembers.map((m) => m.id),
+              }
+            : null
+        }
+        onSaved={async () => {
+          await Promise.all([loadProject(), loadMembers()]);
+        }}
       />
     </div>
   );
