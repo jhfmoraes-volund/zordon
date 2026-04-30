@@ -31,6 +31,7 @@ export async function GET(
   }
 
   const schedule = (sprintsRes.data ?? []).map((sprint: any) => {
+    // totalFp = planejado da sprint (status ≠ backlog), alinhado com fp_planned
     let totalFp = 0;
     let tasksDone = 0;
 
@@ -44,7 +45,7 @@ export async function GET(
 
     const tasks = sortedTasks.map((task: any) => {
       const fp = task.functionPoints ?? 0;
-      totalFp += fp;
+      if (task.status !== "backlog") totalFp += fp;
       if (task.status === "done") tasksDone++;
 
       return {

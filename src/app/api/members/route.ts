@@ -36,11 +36,16 @@ export async function GET() {
     }
   }
 
-  const result = (membersRes.data ?? []).map((m: any) => ({
-    ...m,
-    _count: { squadMemberships: m.squad_count, taskAssignments: m.active_task_count },
-    fpAllocated: fpMap[m.id] ?? 0,
-  }));
+  const result = (membersRes.data ?? []).map((m: any) => {
+    const fpOpen = fpMap[m.id] ?? 0;
+    return {
+      ...m,
+      _count: { squadMemberships: m.squad_count, taskAssignments: m.active_task_count },
+      fpOpen,
+      /** @deprecated alias de fpOpen — removido na Fase 16 */
+      fpAllocated: fpOpen,
+    };
+  });
 
   return NextResponse.json(result);
 }

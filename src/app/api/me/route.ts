@@ -44,8 +44,8 @@ export async function GET() {
   const tasks = assignmentsRes.data.map((a: any) => a.task);
   const projects = projectAllocationsRes.data.map((pa: any) => pa.project);
 
-  // FP allocated (active only)
-  const fpAllocated = tasks
+  // FP em aberto (open statuses)
+  const fpOpen = tasks
     .filter((t: any) => [...OPEN_STATUSES].includes(t.status))
     .reduce((sum: number, t: any) => sum + (t.functionPoints ?? 0), 0);
 
@@ -77,7 +77,9 @@ export async function GET() {
       role: member.role,
       fpCapacity: member.fpCapacity,
     },
-    fpAllocated,
+    fpOpen,
+    /** @deprecated alias de fpOpen — removido na Fase 16 */
+    fpAllocated: fpOpen,
     tasks,
     sprints: Array.from(sprintMap.values()),
     projects,
