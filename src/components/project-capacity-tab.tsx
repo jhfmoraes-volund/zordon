@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { MemberBattery } from "@/components/member-battery";
+import { PixelDot } from "@/components/ui/pixel-bar";
 import { roleLabel, hasMinLevel, ADMIN } from "@/lib/roles";
 import { AlertTriangle, Battery, Loader2, Lock, Zap } from "lucide-react";
 
@@ -299,8 +300,11 @@ function MemberCapacityRow({
           {member.fpPlannedActiveSprints}
         </span>
         <span className="text-muted-foreground">/ {member.fpAllocation}</span>
-        <span className="text-[10px] text-muted-foreground tabular-nums">
-          ▓{member.fpDoneActiveSprints} ▒{member.fpOpenActiveSprints}
+        <span className="text-[10px] text-muted-foreground tabular-nums inline-flex items-center gap-1">
+          <PixelDot variant="done" size={6} />
+          {member.fpDoneActiveSprints}
+          <PixelDot variant="open" size={6} />
+          {member.fpOpenActiveSprints}
         </span>
       </span>
 

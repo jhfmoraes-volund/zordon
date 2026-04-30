@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { PixelBar, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
+import { PixelBar, PixelDot, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
 import {
   bucketSprintsByWeek,
   type SprintInput,
@@ -205,8 +205,11 @@ function WeekBlock({
                   <span style={{ color: tone.fg }}>{bucket.totalPlanned}</span>
                   <span className="text-muted-foreground/70"> / {weeklyCapacity}</span>
                 </p>
-                <p className="text-[10px] text-muted-foreground tabular-nums">
-                  ▓{bucket.totalDone} ▒{bucket.totalOpen}
+                <p className="text-[10px] text-muted-foreground tabular-nums inline-flex items-center gap-1 justify-end">
+                  <PixelDot variant="done" size={6} />
+                  {bucket.totalDone}
+                  <PixelDot variant="open" size={6} />
+                  {bucket.totalOpen}
                 </p>
               </>
             )}
@@ -290,14 +293,17 @@ function SprintRowInWeek({ row }: { row: WeekSprintRow }) {
           </span>
         </div>
 
-        {/* FP planejado / contrato (com sub ▓done ▒open) */}
+        {/* FP planejado / contrato (com sub done/open) */}
         <div className="text-right shrink-0 w-20">
           <p className="text-sm font-bold tabular-nums">
             <span style={{ color: tone.fg }}>{row.fpPlannedWeek}</span>
             <span className="text-muted-foreground/70"> / {row.fpAllocationWeek}</span>
           </p>
-          <p className="text-[10px] text-muted-foreground tabular-nums">
-            ▓{row.fpDoneWeek} ▒{row.fpOpenWeek}
+          <p className="text-[10px] text-muted-foreground tabular-nums inline-flex items-center gap-1 justify-end">
+            <PixelDot variant="done" size={6} />
+            {row.fpDoneWeek}
+            <PixelDot variant="open" size={6} />
+            {row.fpOpenWeek}
           </p>
         </div>
 

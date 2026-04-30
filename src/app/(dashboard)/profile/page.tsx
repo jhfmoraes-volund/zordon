@@ -26,7 +26,7 @@ import {
   towerLabel,
   type MemberSkillRow,
 } from "@/lib/memberSkills";
-import { PixelBar, pixelBarLabel, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
+import { PixelBar, PixelDot, pixelBarLabel, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
 import { MemberBattery } from "@/components/member-battery";
 import { PdiWidget } from "@/components/pdi-widget";
 import { TodosWidget } from "@/components/todos-widget";
@@ -508,8 +508,14 @@ function CapacityCard({ summary }: { summary: CapacitySummary | null }) {
             size="md"
           />
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span><span className="font-mono tabular-nums" style={{ color: tone.fg }}>▓ entregue {weekDone}</span></span>
-            <span><span className="font-mono tabular-nums">▒ em aberto {weekOpen}</span></span>
+            <span className="inline-flex items-center gap-1.5">
+              <PixelDot variant="done" />
+              <span className="font-mono tabular-nums" style={{ color: tone.fg }}>entregue {weekDone}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <PixelDot variant="open" />
+              <span className="font-mono tabular-nums">em aberto {weekOpen}</span>
+            </span>
           </div>
         </div>
 
@@ -552,8 +558,14 @@ function CapacityCard({ summary }: { summary: CapacitySummary | null }) {
                     />
                     {(p.fpDone > 0 || p.fpOpen > 0) && (
                       <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                        <span className="font-mono tabular-nums">▓ {p.fpDone} entregue</span>
-                        <span className="font-mono tabular-nums">▒ {p.fpOpen} em aberto</span>
+                        <span className="inline-flex items-center gap-1">
+                          <PixelDot variant="done" size={6} />
+                          <span className="font-mono tabular-nums">{p.fpDone} entregue</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <PixelDot variant="open" size={6} />
+                          <span className="font-mono tabular-nums">{p.fpOpen} em aberto</span>
+                        </span>
                       </div>
                     )}
                   </div>

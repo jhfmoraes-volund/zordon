@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { roleLabel } from "@/lib/roles";
 import { MemberBattery } from "@/components/member-battery";
+import { PixelDot } from "@/components/ui/pixel-bar";
 
 export type TeamCapacityMember = {
   id: string;
@@ -139,8 +140,11 @@ export function TeamCapacityWidget({
                       <span className="text-muted-foreground"> → sobra {Math.max(m.fpContract - m.fpPlanned, 0)} FP</span>
                     ) : null}
                   </span>
-                  <span className="tabular-nums text-muted-foreground">
-                    ▓{m.fpDone} ▒{m.fpOpen}
+                  <span className="inline-flex items-center gap-1 tabular-nums text-muted-foreground">
+                    <PixelDot variant="done" />
+                    {m.fpDone}
+                    <PixelDot variant="open" />
+                    {m.fpOpen}
                   </span>
                 </div>
 

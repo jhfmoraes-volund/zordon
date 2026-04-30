@@ -88,6 +88,51 @@ export function PixelBar({ score, cells = 20, height = 12, glow = true, variant 
   );
 }
 
+/**
+ * Single arcade-style pixel cell — 1:1 swatch que combina com PixelBar.
+ * Use pra indicadores inline (▓done ▒open virou <PixelDot variant=...>).
+ *
+ *  - "done"   = cell ligada (verde sólido + glow leve)
+ *  - "open"   = cell em progresso (azul muted, glow discreto)
+ *  - "empty"  = cell apagada (placeholder)
+ */
+type PixelDotVariant = "done" | "open" | "empty";
+
+const DOT_TONES: Record<PixelDotVariant, { bar: string; glow: string }> = {
+  done:  { bar: "oklch(0.74 0.18 145)", glow: "oklch(0.74 0.18 145 / 0.55)" },
+  open:  { bar: "oklch(0.6 0.13 250)",  glow: "oklch(0.6 0.13 250 / 0.4)" },
+  empty: { bar: "oklch(1 0 0 / 0.04)",  glow: "transparent" },
+};
+
+export function PixelDot({
+  variant = "done",
+  size = 8,
+  glow = true,
+}: {
+  variant?: PixelDotVariant;
+  /** Lado do quadrado em px. Default 8 — ajustado pra ficar bom em texto pequeno. */
+  size?: number;
+  glow?: boolean;
+}) {
+  const tone = DOT_TONES[variant];
+  const isEmpty = variant === "empty";
+  return (
+    <span
+      aria-hidden
+      className="inline-block align-[-1px]"
+      style={{
+        width: size,
+        height: size,
+        background: tone.bar,
+        borderRadius: 1,
+        boxShadow: isEmpty
+          ? "inset 0 0 0 1px oklch(0 0 0 / 0.4)"
+          : `inset 0 1px 0 oklch(1 0 0 / 0.25), 0 0 ${glow ? 3 : 0}px ${tone.glow}`,
+      }}
+    />
+  );
+}
+
 /** Tone label for HUD-style score readouts (MAX / HIGH / MID / LOW / —). */
 export function pixelBarLabel(score: number | null | undefined): {
   label: string;
