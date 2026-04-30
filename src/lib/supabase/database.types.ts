@@ -541,7 +541,7 @@ export type Database = {
         Insert: {
           createdAt?: string
           email?: string | null
-          id: string
+          id?: string
           name: string
           notes?: string | null
           phone?: string | null
@@ -719,7 +719,7 @@ export type Database = {
           createdBy?: string | null
           currentStep?: number
           description?: string | null
-          id: string
+          id?: string
           memoryAbstract?: string | null
           memoryMd?: string | null
           memoryUpdatedAt?: string | null
@@ -883,7 +883,7 @@ export type Database = {
         Insert: {
           aiGenerated?: boolean
           description?: string | null
-          id: string
+          id?: string
           orderIndex?: number
           priority?: string
           sessionId: string
@@ -933,7 +933,7 @@ export type Database = {
           externalEmail?: string | null
           externalName?: string | null
           externalRole?: string | null
-          id: string
+          id?: string
           memberId?: string | null
           role?: string
           sessionId: string
@@ -1055,7 +1055,7 @@ export type Database = {
         }
         Insert: {
           data?: Json
-          id: string
+          id?: string
           sessionId: string
           stepIndex: number
           stepKey: string
@@ -1200,7 +1200,7 @@ export type Database = {
           createdAt?: string
           createdById?: string | null
           date: string
-          id: string
+          id?: string
           notes?: string | null
           sprintId?: string | null
           title?: string | null
@@ -1390,7 +1390,7 @@ export type Database = {
           additionalNotes?: string | null
           attentionPoints?: string | null
           createdAt?: string
-          id: string
+          id?: string
           meetingId: string
           memberId: string
           nextSteps?: string | null
@@ -1626,7 +1626,7 @@ export type Database = {
           email?: string | null
           fpCapacity?: number
           githubUsername?: string | null
-          id: string
+          id?: string
           isExternal?: boolean
           name: string
           onboardedAt?: string | null
@@ -2001,7 +2001,6 @@ export type Database = {
           startDate: string | null
           status: string
           updatedAt: string
-          useStoryHierarchy: boolean
         }
         Insert: {
           clientId: string
@@ -2011,7 +2010,7 @@ export type Database = {
           githubDefaultBranch?: string
           githubRepoName?: string | null
           githubRepoOwner?: string | null
-          id: string
+          id?: string
           memoryMd?: string | null
           memoryUpdatedAt?: string | null
           memoryVersion?: number
@@ -2022,7 +2021,6 @@ export type Database = {
           startDate?: string | null
           status?: string
           updatedAt: string
-          useStoryHierarchy?: boolean
         }
         Update: {
           clientId?: string
@@ -2043,7 +2041,6 @@ export type Database = {
           startDate?: string | null
           status?: string
           updatedAt?: string
-          useStoryHierarchy?: boolean
         }
         Relationships: [
           {
@@ -2180,7 +2177,7 @@ export type Database = {
         Insert: {
           createdAt?: string
           fpAllocation?: number
-          id: string
+          id?: string
           memberId: string
           projectId: string
         }
@@ -2271,7 +2268,7 @@ export type Database = {
           squadId: string
         }
         Insert: {
-          id: string
+          id?: string
           projectId: string
           squadId: string
         }
@@ -2311,7 +2308,7 @@ export type Database = {
         Insert: {
           createdAt?: string
           data?: Json
-          id: string
+          id?: string
           order?: number
           projectId: string
           sectionKey: string
@@ -2356,7 +2353,7 @@ export type Database = {
           deployedToProductionAt?: string | null
           deployedToStagingAt?: string | null
           endDate: string
-          id: string
+          id?: string
           name: string
           projectId: string
           startDate: string
@@ -2404,7 +2401,7 @@ export type Database = {
           completedAt?: string | null
           environment?: string
           errorLog?: string | null
-          id: string
+          id?: string
           sprintId: string
           startedAt?: string
           status?: string
@@ -2532,7 +2529,7 @@ export type Database = {
         }
         Insert: {
           createdAt?: string
-          id: string
+          id?: string
           name: string
           updatedAt: string
         }
@@ -2551,7 +2548,7 @@ export type Database = {
           squadId: string
         }
         Insert: {
-          id: string
+          id?: string
           memberId: string
           squadId: string
         }
@@ -2650,7 +2647,7 @@ export type Database = {
           githubIssueNumber?: number | null
           githubPrNumber?: number | null
           githubPrUrl?: string | null
-          id: string
+          id?: string
           lastMergeError?: string | null
           mergeAttempts?: number
           notes?: string | null
@@ -2782,7 +2779,7 @@ export type Database = {
         Insert: {
           createdAt?: string
           designSessionItemId?: string | null
-          id: string
+          id?: string
           memberId?: string | null
           taskId: string
         }
@@ -2861,7 +2858,7 @@ export type Database = {
           costInputTokens?: number
           costOutputTokens?: number
           errorLog?: string | null
-          id: string
+          id?: string
           number: number
           promptSent?: string | null
           resultSummary?: string | null
@@ -2918,7 +2915,7 @@ export type Database = {
           createdById: string
           description: string
           dueDate?: string | null
-          id: string
+          id?: string
           meetingId?: string | null
           resolvedAt?: string | null
           source?: string
@@ -3432,25 +3429,20 @@ export type Database = {
       can_edit_tasks: { Args: { p_project_id: string }; Returns: boolean }
       can_view_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_view_project: { Args: { p_project_id: string }; Returns: boolean }
-      create_meeting_with_reviews:
-        | {
-            Args: {
-              p_attendees?: Json
-              p_carry_actions?: Json
-              p_date: string
-              p_notes?: string
-              p_project_ids?: Json
-              p_reviews?: Json
-              p_sprint_id?: string
-              p_title?: string
-              p_type?: string
-            }
-            Returns: string
-          }
-        | {
-            Args: { p_carry_actions?: Json; p_date: string; p_reviews: Json }
-            Returns: string
-          }
+      create_meeting_with_reviews: {
+        Args: {
+          p_attendees?: Json
+          p_carry_actions?: Json
+          p_date: string
+          p_notes?: string
+          p_project_ids?: Json
+          p_reviews?: Json
+          p_sprint_id?: string
+          p_title?: string
+          p_type?: string
+        }
+        Returns: string
+      }
       delete_member_integration: {
         Args: { p_member_id: string; p_provider: string }
         Returns: undefined

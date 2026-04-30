@@ -61,3 +61,6 @@ next-env.d.ts
 
 # local backups (session content snapshots, large md/json files)
 /.local-backups/
+
+# pg_dump pre-migration backups (large, local only)
+/backups/

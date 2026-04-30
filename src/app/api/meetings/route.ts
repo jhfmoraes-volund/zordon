@@ -196,11 +196,11 @@ export async function POST(req: NextRequest) {
         p_reviews: reviews,
         p_carry_actions: carryActions,
         p_type: type,
-        p_title: title,
+        p_title: title ?? undefined,
         p_attendees: resolvedAttendees,
         p_project_ids: projectIds,
-        p_notes: notes ?? null,
-        p_sprint_id: resolvedSprintId,
+        p_notes: notes ?? undefined,
+        p_sprint_id: resolvedSprintId ?? undefined,
       }
     );
     if (rpcError) throw rpcError;

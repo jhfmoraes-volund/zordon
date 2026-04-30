@@ -1516,11 +1516,11 @@ export function assembleAlphaTools(
             p_reviews: reviews as never,
             p_carry_actions: carryActions as never,
             p_type: type,
-            p_title: title ?? null,
+            p_title: title ?? undefined,
             p_attendees: attendees as never,
             p_project_ids: projectIds as never,
-            p_notes: notes ?? null,
-            p_sprint_id: resolvedSprintId,
+            p_notes: notes ?? undefined,
+            p_sprint_id: resolvedSprintId ?? undefined,
           },
         );
         if (error) return { error: `Erro ao criar reunião: ${error.message}` };
