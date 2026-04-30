@@ -473,116 +473,129 @@ function CapacityCard({ summary }: { summary: CapacitySummary | null }) {
   const overcommit = weekPlanned > fpCapacity;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Zap className="h-4 w-4 text-primary" />
-            Capacity
-          </CardTitle>
-          <Link href="/profile/capacity">
-            <Button variant="outline" size="sm" className="h-7 text-xs">
-              Ver detalhes
-              <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
-            </Button>
-          </Link>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Linha 1 — bateria principal: planejado vs capacity */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <PixelHud size="xs" tone="muted">esta semana</PixelHud>
-            {overcommit ? (
-              <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
-                {multiplier.toFixed(1)}× overcommit
-              </PixelHud>
-            ) : weekPlanned === 0 ? (
-              <PixelHud size="xs" tone="muted">sem alocação</PixelHud>
-            ) : null}
-          </div>
-          <MemberBattery
-            capacity={fpCapacity}
-            committed={weekPlanned}
-            done={weekDone}
-            size="md"
-          />
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <PixelDot variant="done" />
-              <span className="font-mono tabular-nums" style={{ color: tone.fg }}>entregue {weekDone}</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <PixelDot variant="open" />
-              <span className="font-mono tabular-nums">em aberto {weekOpen}</span>
-            </span>
-          </div>
-        </div>
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm flex items-center gap-2 font-medium">
+          <Zap className="h-4 w-4 text-primary" />
+          Capacity
+        </h2>
+        <Link href="/profile/capacity">
+          <Button variant="outline" size="sm" className="h-7 text-xs">
+            Ver detalhes
+            <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
+        </Link>
+      </div>
 
-        {/* Linha 2 — por projeto: barra individual + planejado + contrato + flag */}
-        {projects.length > 0 && (
-          <div className="space-y-2">
-            <PixelHud size="xs" tone="muted">por projeto</PixelHud>
-            <div className="space-y-2">
-              {projects.map((p) => {
-                const ratio = fpCapacity > 0 ? p.fpPlanned / fpCapacity : 0;
-                const overContract = p.fpContract > 0 && p.fpPlanned > p.fpContract;
-                const idle = p.fpPlanned === 0 && p.fpContract > 0;
-                const overMul = p.fpContract > 0 ? p.fpPlanned / p.fpContract : 0;
-                const projectTone = pixelTone(ratio * 100, "load");
-                return (
-                  <div key={p.projectId} className="space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium truncate flex-1">{p.projectName}</span>
-                      <span className="font-mono tabular-nums text-xs" style={{ color: projectTone.fg }}>
-                        {p.fpPlanned} FP
-                      </span>
-                      <span className="font-mono tabular-nums text-[10px] text-muted-foreground">
-                        contrato {p.fpContract}
-                      </span>
-                      {overContract ? (
-                        <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
-                          ⚠️ +{overMul.toFixed(1)}×
-                        </PixelHud>
-                      ) : idle ? (
-                        <PixelHud size="xs" tone="muted">💤 ocioso</PixelHud>
-                      ) : (
-                        <PixelHud size="xs" style={{ color: "oklch(0.82 0.18 145)" }}>✓ ok</PixelHud>
+      {/* Grid 2 cols: esta semana | por projeto */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Widget 1 — Esta semana */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xs text-muted-foreground font-normal">
+                Esta semana
+              </CardTitle>
+              {overcommit ? (
+                <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
+                  {multiplier.toFixed(1)}× overcommit
+                </PixelHud>
+              ) : weekPlanned === 0 ? (
+                <PixelHud size="xs" tone="muted">sem alocação</PixelHud>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <MemberBattery
+              capacity={fpCapacity}
+              committed={weekPlanned}
+              done={weekDone}
+              size="md"
+            />
+            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <PixelDot variant="done" />
+                <span className="font-mono tabular-nums" style={{ color: tone.fg }}>entregue {weekDone}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <PixelDot variant="open" />
+                <span className="font-mono tabular-nums">em aberto {weekOpen}</span>
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground border-t border-foreground/5 pt-2">
+              {weekActiveSprints.length > 0
+                ? `${weekActiveSprints.length} sprint${weekActiveSprints.length === 1 ? "" : "s"} ativ${weekActiveSprints.length === 1 ? "a" : "as"} · ${weekActiveSprints.map((s) => `${s.projectName} ${s.name}`).join(", ")}`
+                : "Nada agendado pra essa semana"}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Widget 2 — Por projeto */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs text-muted-foreground font-normal">
+              Por projeto
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {projects.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Sem alocações em projetos.</p>
+            ) : (
+              <div className="space-y-3">
+                {projects.map((p) => {
+                  const ratio = fpCapacity > 0 ? p.fpPlanned / fpCapacity : 0;
+                  const overContract = p.fpContract > 0 && p.fpPlanned > p.fpContract;
+                  const idle = p.fpPlanned === 0 && p.fpContract > 0;
+                  const overMul = p.fpContract > 0 ? p.fpPlanned / p.fpContract : 0;
+                  const projectTone = pixelTone(ratio * 100, "load");
+                  return (
+                    <div key={p.projectId} className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium truncate flex-1">{p.projectName}</span>
+                        <span className="font-mono tabular-nums text-xs" style={{ color: projectTone.fg }}>
+                          {p.fpPlanned} FP
+                        </span>
+                        <span className="font-mono tabular-nums text-[10px] text-muted-foreground">
+                          contrato {p.fpContract}
+                        </span>
+                        {overContract ? (
+                          <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>
+                            ⚠️ +{overMul.toFixed(1)}×
+                          </PixelHud>
+                        ) : idle ? (
+                          <PixelHud size="xs" tone="muted">💤 ocioso</PixelHud>
+                        ) : (
+                          <PixelHud size="xs" style={{ color: "oklch(0.82 0.18 145)" }}>✓ ok</PixelHud>
+                        )}
+                      </div>
+                      <PixelBar
+                        score={Math.min(ratio * 100, 100)}
+                        cells={20}
+                        height={6}
+                        variant="load"
+                      />
+                      {(p.fpDone > 0 || p.fpOpen > 0) && (
+                        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <PixelDot variant="done" size={6} />
+                            <span className="font-mono tabular-nums">{p.fpDone} entregue</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <PixelDot variant="open" size={6} />
+                            <span className="font-mono tabular-nums">{p.fpOpen} em aberto</span>
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <PixelBar
-                      score={Math.min(ratio * 100, 100)}
-                      cells={20}
-                      height={6}
-                      variant="load"
-                    />
-                    {(p.fpDone > 0 || p.fpOpen > 0) && (
-                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <PixelDot variant="done" size={6} />
-                          <span className="font-mono tabular-nums">{p.fpDone} entregue</span>
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <PixelDot variant="open" size={6} />
-                          <span className="font-mono tabular-nums">{p.fpOpen} em aberto</span>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Linha 3 — contagem de sprints ativas com nomes */}
-        <p className="text-[11px] text-muted-foreground">
-          {weekActiveSprints.length > 0
-            ? `${weekActiveSprints.length} sprint${weekActiveSprints.length === 1 ? "" : "s"} ativ${weekActiveSprints.length === 1 ? "a" : "as"} · ${weekActiveSprints.map((s) => `${s.projectName} ${s.name}`).join(", ")}`
-            : "Nada agendado pra essa semana"}
-        </p>
-      </CardContent>
-    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
