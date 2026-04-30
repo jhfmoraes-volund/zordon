@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageTitle } from "@/components/app-shell";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { ProjectEditSheet } from "@/components/project-edit-sheet";
+import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { ProjectWiki } from "@/components/project-wiki";
 import { StatusChip } from "@/components/ui/status-chip";
 import { createClient } from "@/lib/supabase/client";
@@ -69,6 +70,7 @@ type TabKey =
   | "stories"
   | "tasks"
   | "sprints"
+  | "sessions"
   | "wiki"
   | "settings";
 
@@ -105,6 +107,7 @@ type RawTask = {
   billable: boolean | null;
   dueDate: string | null;
   doneAt: string | null;
+  notes: string | null;
   sprintId: string | null;
   userStoryId: string | null;
   projectId: string;
@@ -140,6 +143,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Eye }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "tasks", label: "Tasks", icon: ListTodo },
   { key: "sprints", label: "Sprints", icon: Zap },
+  { key: "sessions", label: "Sessions", icon: Lightbulb },
   { key: "wiki", label: "Wiki", icon: FileText },
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -279,14 +283,28 @@ export default function ProjectDetailPage({
   }, [id, supabase]);
 
   const loadMembers = useCallback(async () => {
-    const { data: pms } = await supabase
+    const { data: pms, error } = await supabase
       .from("ProjectMember")
-      .select("memberId, member:Member(id, name, role, fpCapacity)")
+      .select(
+        "memberId, member:Member!ProjectMember_memberId_fkey(id, name, role, fpCapacity)",
+      )
       .eq("projectId", id);
+    if (error) {
+      console.error("[loadMembers]", error);
+      return;
+    }
 
     const memberRows: RawMember[] = (pms ?? [])
-      .map((pm) => pm.member)
-      .filter((m) => m !== null) as RawMember[];
+      .map((pm) => {
+        const m = pm.member as
+          | RawMember
+          | RawMember[]
+          | null
+          | undefined;
+        if (!m) return null;
+        return Array.isArray(m) ? m[0] ?? null : m;
+      })
+      .filter((m): m is RawMember => m !== null);
     setRawMembers(memberRows);
   }, [id, supabase]);
 
@@ -477,6 +495,7 @@ export default function ProjectDetailPage({
       .update({
         title: updated.title,
         description: updated.description,
+        notes: updated.notes,
         status: updated.status,
         type: updated.type,
         scope: updated.scope,
@@ -485,6 +504,7 @@ export default function ProjectDetailPage({
         functionPoints: updated.functionPoints,
         billable: updated.billable,
         dueDate: updated.dueDate,
+        updatedAt: new Date().toISOString(),
       })
       .eq("id", updated.__id);
     if (error) {
@@ -679,12 +699,6 @@ export default function ProjectDetailPage({
             <Shield className="size-4" />
             Access
           </Button>
-          <Link href="/design-sessions">
-            <Button variant="outline" size="sm">
-              <Lightbulb className="size-4" />
-              Sessions
-            </Button>
-          </Link>
         </div>
       </div>
 
@@ -791,6 +805,11 @@ export default function ProjectDetailPage({
             </CardContent>
           </Card>
         )
+      ) : activeTab === "sessions" ? (
+        <ProjectSessionsTab
+          projectId={id}
+          projectName={project.name}
+        />
       ) : activeTab === "wiki" ? (
         <ProjectWiki projectId={id} />
       ) : activeTab === "settings" ? (

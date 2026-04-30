@@ -102,6 +102,7 @@ type TaskAdapterInput = {
   billable: boolean | null;
   dueDate: string | null;
   doneAt: string | null;
+  notes: string | null;
   sprintId: string | null;
   userStoryId: string | null;
   createdByAgent: boolean | null;
@@ -144,7 +145,7 @@ export function adaptTask(
     billable: row.billable ?? true,
     dueDate: row.dueDate ?? null,
     doneAt: row.doneAt ?? null,
-    notes: null,
+    notes: row.notes ?? null,
     assigneeIds,
     acceptanceCriteria: ac,
     createdByAgent: row.createdByAgent ?? false,

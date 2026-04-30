@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronRight, Pencil, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronRight, Code, FileText, Pencil, Sparkles, X } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -141,12 +141,28 @@ function TaskSheetView({
   members,
   definitionOfDone,
   onEdit,
+  onSave,
   onClose,
   onOpenStory,
 }: TaskSheetProps & { task: Task }) {
   const assignees = task.assigneeIds
     .map((id) => members.find((m) => m.id === id))
     .filter((m): m is Member => Boolean(m));
+
+  // Inline-editable description + notes. Local draft, save on blur.
+  const [descDraft, setDescDraft] = useState(task.description ?? "");
+  const [notesDraft, setNotesDraft] = useState(task.notes ?? "");
+
+  // Reset drafts when task changes (e.g. user opens a different task).
+  useEffect(() => {
+    setDescDraft(task.description ?? "");
+    setNotesDraft(task.notes ?? "");
+  }, [task.reference, task.description, task.notes]);
+
+  function persistField<K extends keyof Task>(field: K, value: Task[K]) {
+    if (value === task[field]) return;
+    onSave({ ...task, [field]: value } as Task);
+  }
 
   return (
     <>
@@ -182,9 +198,6 @@ function TaskSheetView({
                 </span>
               ) : null}
             </div>
-            {task.description ? (
-              <SheetDescription>{task.description}</SheetDescription>
-            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Button size="sm" variant="outline" onClick={onEdit}>
@@ -226,20 +239,6 @@ function TaskSheetView({
           </dl>
         </section>
 
-        {task.notes ? (
-          <>
-            <Separator />
-            <section className="space-y-2">
-              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Notas
-              </h4>
-              <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                {task.notes}
-              </p>
-            </section>
-          </>
-        ) : null}
-
         <div className="rounded-md border border-dashed bg-muted/30 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Definition of Done · projeto
@@ -250,6 +249,47 @@ function TaskSheetView({
             ))}
           </ul>
         </div>
+
+        <Separator />
+
+        {/* Inline-editable Description + Notes (saves on blur) */}
+        <section className="space-y-2">
+          <h4 className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <FileText className="size-3.5" /> Descrição
+          </h4>
+          <Textarea
+            value={descDraft}
+            onChange={(e) => setDescDraft(e.target.value)}
+            onBlur={() =>
+              persistField(
+                "description",
+                descDraft.trim() === "" ? null : descDraft,
+              )
+            }
+            placeholder="O que entregar e por quê"
+            rows={3}
+            className="text-sm"
+          />
+        </section>
+
+        <section className="space-y-2">
+          <h4 className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Code className="size-3.5" /> Notas
+          </h4>
+          <Textarea
+            value={notesDraft}
+            onChange={(e) => setNotesDraft(e.target.value)}
+            onBlur={() =>
+              persistField(
+                "notes",
+                notesDraft.trim() === "" ? null : notesDraft,
+              )
+            }
+            placeholder="Snippets, queries, referências, observações técnicas…"
+            rows={4}
+            className="font-mono text-sm"
+          />
+        </section>
       </div>
     </>
   );

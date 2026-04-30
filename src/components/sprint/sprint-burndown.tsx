@@ -137,8 +137,8 @@ export function SprintBurndown({
         <div className="space-y-3 border-t px-4 py-4">
           <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full"
-        preserveAspectRatio="none"
+        className="block h-48 w-full sm:h-56"
+        preserveAspectRatio="xMidYMid meet"
         role="img"
         aria-label={`Burndown — ${doneFP} de ${totalFP} FP entregues, ${completion.etaText}`}
       >
