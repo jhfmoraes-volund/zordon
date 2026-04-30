@@ -134,7 +134,7 @@ export default async function OverviewPage() {
       .order("startDate"),
     supabase
       .from("sprint_capacity_overview")
-      .select("sprintId, capacity, allocated"),
+      .select("sprintId, capacity, planned, done, open"),
     supabase
       .from("Project")
       .select("id, name")
@@ -148,6 +148,7 @@ export default async function OverviewPage() {
 
   const teamSprints: SprintInput[] = (sprintsRes.data ?? []).map((s: any) => {
     const cap = capByspring.get(s.id);
+    const fpOpen = Number(cap?.open) || 0;
     return {
       sprintId: s.id,
       sprintName: s.name,
@@ -157,7 +158,10 @@ export default async function OverviewPage() {
       projectId: s.projectId,
       projectName: s.project?.name ?? "?",
       fpAllocation: Number(cap?.capacity) || 0,
-      fpUsed: Number(cap?.allocated) || 0,
+      fpPlanned: Number(cap?.planned) || 0,
+      fpDone: Number(cap?.done) || 0,
+      fpOpen,
+      fpUsed: fpOpen,
       hasOverride: false,
     };
   });

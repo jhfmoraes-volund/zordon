@@ -17,6 +17,13 @@ export type SprintInput = {
   projectId: string;
   projectName: string;
   fpAllocation: number;
+  /** Status ≠ backlog. Métrica primária. */
+  fpPlanned: number;
+  /** Status = done. */
+  fpDone: number;
+  /** Status ∈ OPEN_STATUSES. */
+  fpOpen: number;
+  /** @deprecated alias de fpOpen — removido na Fase 16 */
   fpUsed: number;
   hasOverride: boolean;
 };
@@ -33,9 +40,15 @@ export type WeekSprintRow = {
   overlapDays: number;
   /** Total days of the sprint (used for ratio display). */
   sprintTotalDays: number;
-  /** Prorated FP allocation for the week. */
+  /** Prorated FP allocation (contract) for the week. */
   fpAllocationWeek: number;
-  /** Prorated FP used for the week (mirror of allocation ratio). */
+  /** Prorated FP planned (≠ backlog) for the week. */
+  fpPlannedWeek: number;
+  /** Prorated FP done for the week. */
+  fpDoneWeek: number;
+  /** Prorated FP open for the week. */
+  fpOpenWeek: number;
+  /** @deprecated alias de fpOpenWeek — removido na Fase 16 */
   fpUsedWeek: number;
   hasOverride: boolean;
 };
@@ -48,6 +61,11 @@ export type WeekBucket = {
   isFuture: boolean;
   sprints: WeekSprintRow[];
   totalAllocation: number;
+  /** Métrica primária: planejado da semana (≠ backlog). */
+  totalPlanned: number;
+  totalDone: number;
+  totalOpen: number;
+  /** @deprecated alias de totalOpen — removido na Fase 16 */
   totalUsed: number;
 };
 
@@ -148,6 +166,7 @@ export function bucketSprintsByWeek(
       if (overlap <= 0) continue;
       const sprintTotalDays = Math.max(1, diffDays(sprintStart, sprintEnd) + 1);
       const ratio = overlap / sprintTotalDays;
+      const fpOpenWeek = Math.round(s.fpOpen * ratio);
       rows.push({
         sprintId: s.sprintId,
         sprintName: s.sprintName,
@@ -159,13 +178,17 @@ export function bucketSprintsByWeek(
         overlapDays: overlap,
         sprintTotalDays,
         fpAllocationWeek: Math.round(s.fpAllocation * ratio),
-        fpUsedWeek: Math.round(s.fpUsed * ratio),
+        fpPlannedWeek: Math.round(s.fpPlanned * ratio),
+        fpDoneWeek: Math.round(s.fpDone * ratio),
+        fpOpenWeek,
+        fpUsedWeek: fpOpenWeek,
         hasOverride: s.hasOverride,
       });
     }
 
     rows.sort((a, b) => b.fpAllocationWeek - a.fpAllocationWeek);
 
+    const totalOpen = rows.reduce((acc, r) => acc + r.fpOpenWeek, 0);
     buckets.push({
       weekStart,
       weekEnd,
@@ -174,7 +197,10 @@ export function bucketSprintsByWeek(
       isFuture,
       sprints: rows,
       totalAllocation: rows.reduce((acc, r) => acc + r.fpAllocationWeek, 0),
-      totalUsed: rows.reduce((acc, r) => acc + r.fpUsedWeek, 0),
+      totalPlanned: rows.reduce((acc, r) => acc + r.fpPlannedWeek, 0),
+      totalDone: rows.reduce((acc, r) => acc + r.fpDoneWeek, 0),
+      totalOpen,
+      totalUsed: totalOpen,
     });
   }
 
