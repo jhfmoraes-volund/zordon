@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Code, FileText, Pencil, Sparkles, X } from "lucide-react";
+import { ChevronRight, Sparkles, X } from "lucide-react";
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
@@ -23,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { suggestFunctionPoints } from "@/lib/function-points";
-import { TaskStatusChip, TASK_STATUS_MAP } from "./chips";
+import { TASK_STATUS_MAP } from "./chips";
 import { AcList } from "./ac-list";
 import type {
   AC,
@@ -38,37 +37,72 @@ import type {
   TaskType,
 } from "./types";
 
+type SprintLite = {
+  id: string;
+  name: string;
+  status?: string;
+};
+
 type TaskSheetProps = {
   task: Task | null;
   stories: Story[];
   modules: Module[];
   members: Member[];
   definitionOfDone: string[];
-  editing: boolean;
+  /** @deprecated kept for prop-compat with callers; ignored. The sheet has no
+   *  view/edit toggle anymore — every field is always inline-editable. */
+  editing?: boolean;
   onClose: () => void;
-  onEdit: () => void;
-  onCancelEdit: () => void;
-  onSave: (updated: Task) => void;
+  /** @deprecated no-op. */
+  onEdit?: () => void;
+  /** @deprecated no-op. */
+  onCancelEdit?: () => void;
+  /** Persist a Task patch (called per-field, with the merged Task). */
+  onSave: (updated: Task) => void | Promise<void>;
   /** Open the parent story when breadcrumb is clicked. */
   onOpenStory?: (storyRef: string) => void;
+  /** Sprint picker support. When omitted, the row is read-only. */
+  sprints?: SprintLite[];
+  onChangeSprint?: (taskRef: string, sprintId: string | null) => void | Promise<void>;
+  /** Multi-assignee toggle. When omitted, assignees become read-only. */
+  onChangeAssignees?: (taskRef: string, memberIds: string[]) => void | Promise<void>;
 };
 
+const AREA_VALUES: { value: TaskArea; label: string }[] = [
+  { value: "front", label: "Front" },
+  { value: "back",  label: "Back"  },
+  { value: "infra", label: "Infra" },
+  { value: "ops",   label: "Ops"   },
+  { value: "mixed", label: "Mixed" },
+];
+
+const TYPE_VALUES: TaskType[] = [
+  "feature",
+  "bugfix",
+  "refactor",
+  "setup",
+  "component",
+  "seed",
+  "management",
+];
+const SCOPE_VALUES: TaskScope[] = ["micro", "small", "medium", "large"];
+const COMPLEXITY_VALUES: TaskComplexity[] = [
+  "trivial",
+  "low",
+  "medium",
+  "high",
+];
+
 export function TaskSheet(props: TaskSheetProps) {
-  const { task, editing, onClose } = props;
+  const { task, onClose } = props;
   return (
     <Sheet open={task !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         side="right"
-        className="w-full !sm:max-w-[640px] gap-0 p-0"
+        className="w-full !sm:max-w-[640px] gap-0 p-0 flex flex-col"
         showCloseButton={false}
       >
-        {task ? (
-          editing ? (
-            <TaskSheetEdit {...props} task={task} />
-          ) : (
-            <TaskSheetView {...props} task={task} />
-          )
-        ) : null}
+        {task ? <TaskSheetInner {...props} task={task} /> : null}
       </SheetContent>
     </Sheet>
   );
@@ -89,80 +123,124 @@ function Breadcrumb({
 }) {
   const story = stories.find((s) => s.reference === task.userStoryRef) ?? null;
   const mod = story ? modules.find((m) => m.id === story.moduleId) : null;
-
   return (
-    <div className="flex items-center gap-1 text-[11px]">
+    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
       {mod ? (
         <Badge variant="outline" className="font-mono text-[10px]">
           {mod.name}
         </Badge>
-      ) : story ? (
-        <Badge
-          variant="outline"
-          className="border-dashed font-mono text-[10px] text-muted-foreground"
-        >
-          sem módulo
-        </Badge>
       ) : null}
-
       {story ? (
         <>
-          <ChevronRight className="size-3 text-muted-foreground/60" />
+          <ChevronRight className="size-3" />
           <button
             type="button"
             onClick={() => onOpenStory?.(story.reference)}
-            className="inline-flex items-center gap-1 truncate text-muted-foreground hover:text-foreground hover:underline"
+            className="font-mono hover:text-foreground hover:underline"
           >
-            <span className="font-mono">{story.reference}</span>
-            <span className="truncate">— {story.title}</span>
+            {story.reference}
           </button>
-          <ChevronRight className="size-3 text-muted-foreground/60" />
         </>
-      ) : (
-        <Badge
-          variant="outline"
-          className="border-dashed text-[10px] text-muted-foreground"
-        >
-          sem story
-        </Badge>
-      )}
-
-      <span className="font-mono text-foreground">{task.reference}</span>
+      ) : null}
+      <ChevronRight className="size-3" />
+      <span className="font-mono">{task.reference}</span>
     </div>
   );
 }
 
-// ─── View mode ───────────────────────────────────────────────────────────────
+// ─── Inner: always-editable task body ────────────────────────────────────────
 
-function TaskSheetView({
+function TaskSheetInner({
   task,
   stories,
   modules,
   members,
+  sprints,
   definitionOfDone,
-  onEdit,
-  onSave,
   onClose,
+  onSave,
   onOpenStory,
+  onChangeSprint,
+  onChangeAssignees,
 }: TaskSheetProps & { task: Task }) {
-  const assignees = task.assigneeIds
-    .map((id) => members.find((m) => m.id === id))
-    .filter((m): m is Member => Boolean(m));
+  // Local drafts for text/number fields (saved on blur).
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description ?? "");
+  const [notes, setNotes] = useState(task.notes ?? "");
+  const [fp, setFp] = useState<number>(task.functionPoints);
+  const [fpManual, setFpManual] = useState(false);
 
-  // Inline-editable description + notes. Local draft, save on blur.
-  const [descDraft, setDescDraft] = useState(task.description ?? "");
-  const [notesDraft, setNotesDraft] = useState(task.notes ?? "");
-
-  // Reset drafts when task changes (e.g. user opens a different task).
+  // Reset drafts when the user opens a different task.
   useEffect(() => {
-    setDescDraft(task.description ?? "");
-    setNotesDraft(task.notes ?? "");
-  }, [task.reference, task.description, task.notes]);
+    setTitle(task.title);
+    setDescription(task.description ?? "");
+    setNotes(task.notes ?? "");
+    setFp(task.functionPoints);
+    setFpManual(false);
+  }, [task.reference, task.title, task.description, task.notes, task.functionPoints]);
 
-  function persistField<K extends keyof Task>(field: K, value: Task[K]) {
-    if (value === task[field]) return;
-    onSave({ ...task, [field]: value } as Task);
+  function persist(patch: Partial<Task>) {
+    onSave({ ...task, ...patch });
   }
+
+  /** Persist text only if changed (avoid spurious updates on blur). */
+  function persistIfChanged<K extends keyof Task>(field: K, value: Task[K]) {
+    if (value === task[field]) return;
+    persist({ [field]: value } as Partial<Task>);
+  }
+
+  // ─── AC handlers (mutation via onSave with merged AC list) ────────────────
+  function patchAC(id: string, text: string) {
+    persist({
+      acceptanceCriteria: task.acceptanceCriteria.map((ac) =>
+        ac.id === id ? { ...ac, text } : ac,
+      ),
+    });
+  }
+  function toggleAC(id: string) {
+    persist({
+      acceptanceCriteria: task.acceptanceCriteria.map((ac) =>
+        ac.id === id
+          ? {
+              ...ac,
+              checked: !ac.checked,
+              checkedBy: !ac.checked ? "Você" : undefined,
+            }
+          : ac,
+      ),
+    });
+  }
+  function removeAC(id: string) {
+    persist({
+      acceptanceCriteria: task.acceptanceCriteria.filter((ac) => ac.id !== id),
+    });
+  }
+  function addAC() {
+    const newAc: AC = {
+      id: `ac-new-${Date.now()}`,
+      text: "",
+      checked: false,
+    };
+    persist({
+      acceptanceCriteria: [...task.acceptanceCriteria, newAc],
+    });
+  }
+
+  function toggleAssignee(memberId: string) {
+    if (!onChangeAssignees) return;
+    const next = task.assigneeIds.includes(memberId)
+      ? task.assigneeIds.filter((x) => x !== memberId)
+      : [...task.assigneeIds, memberId];
+    onChangeAssignees(task.reference, next);
+  }
+
+  // Stories grouped by module for the user-story picker.
+  const storiesByModule = useMemo(() => {
+    return modules.map((m) => ({
+      module: m,
+      rows: stories.filter((s) => s.moduleId === m.id),
+    }));
+  }, [stories, modules]);
 
   return (
     <>
@@ -175,264 +253,26 @@ function TaskSheetView({
               modules={modules}
               onOpenStory={onOpenStory}
             />
-            <SheetTitle>{task.title}</SheetTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <TaskStatusChip status={task.status} />
-              {task.area ? (
-                <Badge variant="outline" className="text-[10px]">
-                  {task.area}
-                </Badge>
-              ) : null}
-              <Badge variant="outline" className="text-[10px]">
-                {task.type}
-              </Badge>
-              <Badge variant="outline" className="text-[10px]">
-                {task.scope} · {task.complexity}
-              </Badge>
-              <Badge variant="outline" className="font-mono text-[10px]">
+            <SheetTitle>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={() => persistIfChanged("title", title)}
+                className="border-0 bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
+                placeholder="Título da task"
+              />
+            </SheetTitle>
+            <div className="flex flex-wrap items-center gap-2 text-[10px]">
+              <Badge variant="outline">{task.scope} · {task.complexity}</Badge>
+              <Badge variant="outline" className="font-mono">
                 {task.functionPoints} FP
               </Badge>
               {task.createdByAgent ? (
-                <span className="ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span className="ml-auto inline-flex items-center gap-1 uppercase tracking-wider text-muted-foreground">
                   <Sparkles className="size-3" /> Alpha
                 </span>
               ) : null}
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button size="sm" variant="outline" onClick={onEdit}>
-              <Pencil className="size-3.5" />
-              Editar
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              onClick={onClose}
-              aria-label="Fechar"
-            >
-              <X />
-            </Button>
-          </div>
-        </div>
-      </SheetHeader>
-
-      <div className="flex-1 space-y-5 overflow-y-auto p-6">
-        <AcList mode="view" items={task.acceptanceCriteria} />
-
-        <Separator />
-
-        <section className="space-y-2">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Atribuição
-          </h4>
-          <dl className="grid grid-cols-2 gap-y-1 text-xs">
-            <dt className="text-muted-foreground">Assignees</dt>
-            <dd>
-              {assignees.length === 0
-                ? "—"
-                : assignees.map((m) => m.name).join(", ")}
-            </dd>
-            <dt className="text-muted-foreground">Due date</dt>
-            <dd className="font-mono">{task.dueDate ?? "—"}</dd>
-            <dt className="text-muted-foreground">Billable</dt>
-            <dd>{task.billable ? "Sim" : "Não"}</dd>
-          </dl>
-        </section>
-
-        <div className="rounded-md border border-dashed bg-muted/30 p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Definition of Done · projeto
-          </div>
-          <ul className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
-            {definitionOfDone.map((d, i) => (
-              <li key={i}>· {d}</li>
-            ))}
-          </ul>
-        </div>
-
-        <Separator />
-
-        {/* Inline-editable Description + Notes (saves on blur) */}
-        <section className="space-y-2">
-          <h4 className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <FileText className="size-3.5" /> Descrição
-          </h4>
-          <Textarea
-            value={descDraft}
-            onChange={(e) => setDescDraft(e.target.value)}
-            onBlur={() =>
-              persistField(
-                "description",
-                descDraft.trim() === "" ? null : descDraft,
-              )
-            }
-            placeholder="O que entregar e por quê"
-            rows={3}
-            className="text-sm"
-          />
-        </section>
-
-        <section className="space-y-2">
-          <h4 className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <Code className="size-3.5" /> Notas
-          </h4>
-          <Textarea
-            value={notesDraft}
-            onChange={(e) => setNotesDraft(e.target.value)}
-            onBlur={() =>
-              persistField(
-                "notes",
-                notesDraft.trim() === "" ? null : notesDraft,
-              )
-            }
-            placeholder="Snippets, queries, referências, observações técnicas…"
-            rows={4}
-            className="font-mono text-sm"
-          />
-        </section>
-      </div>
-    </>
-  );
-}
-
-// ─── Edit mode ───────────────────────────────────────────────────────────────
-
-const AREA_VALUES: { value: TaskArea; label: string }[] = [
-  { value: "front", label: "Front"  },
-  { value: "back",  label: "Back"   },
-  { value: "infra", label: "Infra"  },
-  { value: "ops",   label: "Ops"    },
-  { value: "mixed", label: "Mixed"  },
-];
-
-const TYPE_VALUES: TaskType[] = [
-  "feature",
-  "bugfix",
-  "refactor",
-  "setup",
-  "component",
-  "seed",
-  "management",
-];
-const SCOPE_VALUES: TaskScope[] = ["micro", "small", "medium", "large"];
-const COMPLEXITY_VALUES: TaskComplexity[] = [
-  "trivial",
-  "low",
-  "medium",
-  "high",
-];
-
-function TaskSheetEdit({
-  task,
-  stories,
-  modules,
-  members,
-  onCancelEdit,
-  onSave,
-  onClose,
-}: TaskSheetProps & { task: Task }) {
-  const [draft, setDraft] = useState<Task>(task);
-  /** When user changes scope/complexity, we re-suggest FP unless they manually
-   *  overrode it. Track manual override flag. */
-  const [fpManuallyEdited, setFpManuallyEdited] = useState(false);
-
-  function patch<K extends keyof Task>(key: K, value: Task[K]) {
-    setDraft((d) => ({ ...d, [key]: value }));
-  }
-
-  function patchScopeOrComplexity(
-    field: "scope" | "complexity",
-    value: TaskScope | TaskComplexity,
-  ) {
-    setDraft((d) => {
-      const next = { ...d, [field]: value } as Task;
-      if (!fpManuallyEdited) {
-        next.functionPoints = suggestFunctionPoints(next.scope, next.complexity);
-      }
-      return next;
-    });
-  }
-
-  function toggleAssignee(id: string) {
-    setDraft((d) => ({
-      ...d,
-      assigneeIds: d.assigneeIds.includes(id)
-        ? d.assigneeIds.filter((x) => x !== id)
-        : [...d.assigneeIds, id],
-    }));
-  }
-
-  // ─── AC ────────────────────────────────────────────────────────────────
-  function patchAC(id: string, text: string) {
-    setDraft((d) => ({
-      ...d,
-      acceptanceCriteria: d.acceptanceCriteria.map((ac) =>
-        ac.id === id ? { ...ac, text } : ac,
-      ),
-    }));
-  }
-  function toggleAC(id: string) {
-    setDraft((d) => ({
-      ...d,
-      acceptanceCriteria: d.acceptanceCriteria.map((ac) =>
-        ac.id === id
-          ? {
-              ...ac,
-              checked: !ac.checked,
-              checkedBy: !ac.checked ? "Você" : undefined,
-            }
-          : ac,
-      ),
-    }));
-  }
-  function removeAC(id: string) {
-    setDraft((d) => ({
-      ...d,
-      acceptanceCriteria: d.acceptanceCriteria.filter((ac) => ac.id !== id),
-    }));
-  }
-  function addAC() {
-    const newAc: AC = {
-      id: `ac-new-${Date.now()}`,
-      text: "",
-      checked: false,
-    };
-    setDraft((d) => ({
-      ...d,
-      acceptanceCriteria: [...d.acceptanceCriteria, newAc],
-    }));
-  }
-
-  // Stories filtered by current module of selected story (helps move task to
-  // another story without showing dozens unrelated). For mock simplicity we
-  // show all stories grouped by module.
-  const storiesByModule = useMemo(() => {
-    return modules.map((m) => ({
-      module: m,
-      rows: stories.filter((s) => s.moduleId === m.id),
-    }));
-  }, [stories, modules]);
-
-  return (
-    <>
-      <SheetHeader className="border-b">
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-muted-foreground">
-                {draft.reference}
-              </span>
-              <Badge
-                variant="outline"
-                className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
-              >
-                Editando
-              </Badge>
-            </div>
-            <SheetTitle>Editar task</SheetTitle>
-            <SheetDescription>
-              Alterações ficam locais até salvar.
-            </SheetDescription>
           </div>
           <Button
             size="icon-sm"
@@ -445,37 +285,58 @@ function TaskSheetEdit({
         </div>
       </SheetHeader>
 
-      <div className="flex-1 space-y-5 overflow-y-auto p-6">
-        {/* Title + description */}
-        <div className="space-y-1.5">
-          <Label htmlFor="task-title">Título</Label>
-          <Input
-            id="task-title"
-            value={draft.title}
-            onChange={(e) => patch("title", e.target.value)}
-          />
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        {/* Status + Area */}
+        <div className="grid grid-cols-2 gap-3">
+          <FieldBlock label="Status">
+            <Select
+              value={task.status}
+              onValueChange={(v) =>
+                v !== null && persist({ status: v as TaskStatus })
+              }
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(Object.keys(TASK_STATUS_MAP) as TaskStatus[]).map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {TASK_STATUS_MAP[s].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+
+          <FieldBlock label="Area">
+            <Select
+              value={task.area === null ? "__none" : task.area}
+              onValueChange={(v) => {
+                if (v === null) return;
+                persist({
+                  area: v === "__none" ? null : (v as TaskArea),
+                });
+              }}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">— sem area —</SelectItem>
+                {AREA_VALUES.map((a) => (
+                  <SelectItem key={String(a.value)} value={String(a.value)}>
+                    {a.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="task-desc">Descrição</Label>
-          <Textarea
-            id="task-desc"
-            value={draft.description ?? ""}
-            onChange={(e) =>
-              patch("description", e.target.value === "" ? null : e.target.value)
-            }
-            rows={3}
-          />
-        </div>
-
-        {/* Story link */}
-        <div className="space-y-1.5">
-          <Label>User Story</Label>
+        {/* User Story */}
+        <FieldBlock label="User Story">
           <Select
-            value={draft.userStoryRef ?? "__none"}
-            onValueChange={(v) =>
-              patch("userStoryRef", v === "__none" ? null : v)
-            }
+            value={task.userStoryRef ?? "__none"}
+            onValueChange={(v) => {
+              if (v === null) return;
+              persist({ userStoryRef: v === "__none" ? null : v });
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="Sem story" />
@@ -503,211 +364,246 @@ function TaskSheetEdit({
               )}
             </SelectContent>
           </Select>
-        </div>
+        </FieldBlock>
 
-        <Separator />
-
-        {/* Status + Area */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label>Status</Label>
+        {/* Sprint (only when callback wired) */}
+        {sprints && onChangeSprint ? (
+          <FieldBlock label="Sprint">
             <Select
-              value={draft.status}
-              onValueChange={(v) => patch("status", v as TaskStatus)}
+              value={task.sprintId ?? "__none"}
+              onValueChange={(v) => {
+                if (v === null) return;
+                onChangeSprint(
+                  task.reference,
+                  v === "__none" ? null : v,
+                );
+              }}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Sem sprint" />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(TASK_STATUS_MAP) as TaskStatus[]).map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {TASK_STATUS_MAP[s].label}
+                <SelectItem value="__none">— sem sprint —</SelectItem>
+                {sprints.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </FieldBlock>
+        ) : null}
 
-          <div className="space-y-1.5">
-            <Label>Area</Label>
+        {/* Type / Scope / Complexity / FP */}
+        <div className="grid grid-cols-3 gap-3">
+          <FieldBlock label="Tipo">
             <Select
-              value={draft.area === null ? "__none" : draft.area}
+              value={task.type}
               onValueChange={(v) =>
-                patch("area", v === "__none" ? null : (v as TaskArea))
+                v !== null && persist({ type: v as TaskType })
               }
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none">— sem area —</SelectItem>
-                {AREA_VALUES.map((a) => (
-                  <SelectItem
-                    key={String(a.value)}
-                    value={String(a.value)}
-                  >
-                    {a.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Type + Scope + Complexity */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1.5">
-            <Label>Tipo</Label>
-            <Select
-              value={draft.type}
-              onValueChange={(v) => patch("type", v as TaskType)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {TYPE_VALUES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </FieldBlock>
 
-          <div className="space-y-1.5">
-            <Label>Scope</Label>
+          <FieldBlock label="Scope">
             <Select
-              value={draft.scope}
-              onValueChange={(v) =>
-                patchScopeOrComplexity("scope", v as TaskScope)
-              }
+              value={task.scope}
+              onValueChange={(v) => {
+                if (v === null) return;
+                const next = { scope: v as TaskScope };
+                if (!fpManual) {
+                  const newFp = suggestFunctionPoints(next.scope, task.complexity);
+                  setFp(newFp);
+                  persist({ ...next, functionPoints: newFp });
+                } else {
+                  persist(next);
+                }
+              }}
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SCOPE_VALUES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </FieldBlock>
 
-          <div className="space-y-1.5">
-            <Label>Complexity</Label>
+          <FieldBlock label="Complexity">
             <Select
-              value={draft.complexity}
-              onValueChange={(v) =>
-                patchScopeOrComplexity("complexity", v as TaskComplexity)
-              }
+              value={task.complexity}
+              onValueChange={(v) => {
+                if (v === null) return;
+                const next = { complexity: v as TaskComplexity };
+                if (!fpManual) {
+                  const newFp = suggestFunctionPoints(task.scope, next.complexity);
+                  setFp(newFp);
+                  persist({ ...next, functionPoints: newFp });
+                } else {
+                  persist(next);
+                }
+              }}
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {COMPLEXITY_VALUES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </FieldBlock>
         </div>
 
-        {/* FP */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="task-fp">Function Points</Label>
-            {fpManuallyEdited ? (
-              <button
-                type="button"
-                className="text-[10px] text-primary hover:underline"
-                onClick={() => {
-                  setFpManuallyEdited(false);
-                  patch(
-                    "functionPoints",
-                    suggestFunctionPoints(draft.scope, draft.complexity),
-                  );
-                }}
-              >
-                Voltar pra sugestão da matriz
-              </button>
-            ) : (
-              <span className="text-[10px] text-muted-foreground">
-                Sugerido pela matriz {draft.scope} × {draft.complexity}
-              </span>
-            )}
-          </div>
-          <Input
-            id="task-fp"
-            type="number"
-            min={1}
-            value={draft.functionPoints}
-            onChange={(e) => {
-              setFpManuallyEdited(true);
-              patch("functionPoints", Number(e.target.value) || 1);
-            }}
-          />
+        <div className="flex items-end gap-3">
+          <FieldBlock label="Function Points" className="flex-1">
+            <Input
+              type="number"
+              min={1}
+              value={fp}
+              onChange={(e) => {
+                setFpManual(true);
+                setFp(Number(e.target.value) || 1);
+              }}
+              onBlur={() => persistIfChanged("functionPoints", fp)}
+              className="h-9"
+            />
+          </FieldBlock>
+          {fpManual ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const newFp = suggestFunctionPoints(task.scope, task.complexity);
+                setFp(newFp);
+                setFpManual(false);
+                persist({ functionPoints: newFp });
+              }}
+              className="text-[10px]"
+            >
+              Voltar pra matriz {task.scope} × {task.complexity}
+            </Button>
+          ) : (
+            <span className="pb-2 text-[10px] text-muted-foreground">
+              Sugerido pela matriz {task.scope} × {task.complexity}
+            </span>
+          )}
         </div>
 
         {/* Assignees */}
-        <div className="space-y-1.5">
-          <Label>Assignees</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {members.map((m) => {
-              const active = draft.assigneeIds.includes(m.id);
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => toggleAssignee(m.id)}
-                  className={`inline-flex h-7 items-center rounded-full border px-2.5 text-xs transition-colors ${
-                    active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
-                  }`}
-                >
-                  {m.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {onChangeAssignees ? (
+          <FieldBlock label="Assignees">
+            <div className="flex flex-wrap gap-1.5">
+              {members.map((m) => {
+                const active = task.assigneeIds.includes(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => toggleAssignee(m.id)}
+                    className={`inline-flex h-7 items-center rounded-full border px-2.5 text-xs transition-colors ${
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                    }`}
+                  >
+                    {m.name}
+                  </button>
+                );
+              })}
+              {members.length === 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  Nenhum membro alocado ao projeto.
+                </span>
+              ) : null}
+            </div>
+          </FieldBlock>
+        ) : null}
 
         <Separator />
 
         <AcList
           mode="edit"
-          items={draft.acceptanceCriteria}
+          items={task.acceptanceCriteria}
           onToggle={toggleAC}
           onChange={patchAC}
           onAdd={addAC}
           onRemove={removeAC}
         />
 
-        <div className="space-y-1.5">
-          <Label htmlFor="task-notes">Notas</Label>
+        <Separator />
+
+        {/* Description + Notes — inline, save on blur */}
+        <FieldBlock label="Descrição">
           <Textarea
-            id="task-notes"
-            value={draft.notes ?? ""}
-            onChange={(e) =>
-              patch("notes", e.target.value === "" ? null : e.target.value)
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={() =>
+              persistIfChanged(
+                "description",
+                description.trim() === "" ? null : description,
+              )
             }
+            placeholder="O que entregar e por quê"
             rows={3}
+            className="text-sm"
           />
+        </FieldBlock>
+
+        <FieldBlock label="Notas">
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={() =>
+              persistIfChanged(
+                "notes",
+                notes.trim() === "" ? null : notes,
+              )
+            }
+            placeholder="Snippets, queries, referências, observações técnicas…"
+            rows={4}
+            className="font-mono text-sm"
+          />
+        </FieldBlock>
+
+        <div className="rounded-md border border-dashed bg-muted/30 p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Definition of Done · projeto
+          </div>
+          <ul className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
+            {definitionOfDone.map((d, i) => (
+              <li key={i}>· {d}</li>
+            ))}
+          </ul>
         </div>
       </div>
-
-      <div className="flex items-center justify-end gap-2 border-t bg-muted/40 p-4">
-        <Button variant="ghost" onClick={onCancelEdit}>
-          Cancelar
-        </Button>
-        <Button onClick={() => onSave(draft)}>Salvar</Button>
-      </div>
     </>
+  );
+}
+
+// ─── Layout primitives ───────────────────────────────────────────────────────
+
+function FieldBlock({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className ?? ""}`}>
+      <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Label>
+      {children}
+    </div>
   );
 }

@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -104,16 +104,19 @@ export function StoryCreateDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Nova user story</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-xl gap-0 p-0 flex flex-col"
+      >
+        <SheetHeader className="border-b px-6 pt-6 pb-4">
+          <SheetTitle>Nova user story</SheetTitle>
+          <SheetDescription>
             Como persona, quero algo, para que tenha valor de negócio.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-4 px-6 py-4">
           <div className="space-y-1.5">
             <Label htmlFor="story-title">Título</Label>
             <Input
@@ -214,15 +217,15 @@ export function StoryCreateDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <SheetFooter className="border-t bg-popover px-6 py-3 flex flex-row items-center justify-end gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
           <Button onClick={submit} disabled={!valid || submitting}>
             {submitting ? "Criando…" : "Criar story"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -18,8 +18,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { StatusChipSelect } from "@/components/ui/status-chip-select";
+import { TASK_STATUS } from "@/lib/status-chips";
 import { TaskStatusChip } from "./chips";
-import type { Member, Module, Story, Task, TaskArea, TaskStatus } from "./types";
+import type {
+  Member,
+  Module,
+  Story,
+  Task,
+  TaskArea,
+  TaskStatus,
+} from "./types";
+
+type SprintLite = {
+  id: string;
+  name: string;
+};
 
 type TasksListProps = {
   tasks: Task[];
@@ -28,6 +42,12 @@ type TasksListProps = {
   members: Member[];
   onOpenTask: (ref: string) => void;
   onCreateTask?: () => void;
+
+  // ─── Optional inline-edit callbacks (legacy parity) ────────────────────────
+  onChangeStatus?: (taskRef: string, status: TaskStatus) => void;
+  onChangeAssignee?: (taskRef: string, memberId: string | null) => void;
+  sprints?: SprintLite[];
+  onChangeSprint?: (taskRef: string, sprintId: string | null) => void;
 };
 
 type GroupBy = "story" | "none";
@@ -43,7 +63,7 @@ const AREA_OPTIONS: { value: TaskArea | "__all"; label: string }[] = [
 ];
 
 const STATUS_OPTIONS: { value: TaskStatus | "__all"; label: string }[] = [
-  { value: "__all",      label: "Todos status" },
+  { value: "__all",       label: "Todos status" },
   { value: "todo",        label: "To do"       },
   { value: "in_progress", label: "In progress" },
   { value: "review",      label: "Review"      },
@@ -52,6 +72,12 @@ const STATUS_OPTIONS: { value: TaskStatus | "__all"; label: string }[] = [
   { value: "draft",       label: "Draft"       },
 ];
 
+const ASSIGNEE_NONE = "__none__";
+const SPRINT_NONE = "__none__";
+
+const stop = (e: React.MouseEvent | React.PointerEvent) =>
+  e.stopPropagation();
+
 export function TasksList({
   tasks,
   stories,
@@ -59,6 +85,10 @@ export function TasksList({
   members,
   onOpenTask,
   onCreateTask,
+  onChangeStatus,
+  onChangeAssignee,
+  sprints,
+  onChangeSprint,
 }: TasksListProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("story");
   const [moduleFilter, setModuleFilter] = useState<string>("__all");
@@ -79,6 +109,18 @@ export function TasksList({
       return true;
     });
   }, [tasks, stories, moduleFilter, areaFilter, statusFilter]);
+
+  const showSprint = !!(sprints && onChangeSprint);
+
+  const editing: RowEditingProps = {
+    members,
+    sprints,
+    showSprint,
+    onOpenTask,
+    onChangeStatus,
+    onChangeAssignee,
+    onChangeSprint,
+  };
 
   return (
     <div className="space-y-4">
@@ -186,16 +228,14 @@ export function TasksList({
           tasks={filtered}
           stories={stories}
           modules={modules}
-          members={members}
-          onOpenTask={onOpenTask}
+          editing={editing}
         />
       ) : (
         <FlatList
           tasks={filtered}
           stories={stories}
           modules={modules}
-          members={members}
-          onOpenTask={onOpenTask}
+          editing={editing}
         />
       )}
     </div>
@@ -204,18 +244,26 @@ export function TasksList({
 
 // ─── Grouped by story ────────────────────────────────────────────────────────
 
+type RowEditingProps = {
+  members: Member[];
+  sprints?: SprintLite[];
+  showSprint: boolean;
+  onOpenTask: (ref: string) => void;
+  onChangeStatus?: (taskRef: string, status: TaskStatus) => void;
+  onChangeAssignee?: (taskRef: string, memberId: string | null) => void;
+  onChangeSprint?: (taskRef: string, sprintId: string | null) => void;
+};
+
 function GroupedByStory({
   tasks,
   stories,
   modules,
-  members,
-  onOpenTask,
+  editing,
 }: {
   tasks: Task[];
   stories: Story[];
   modules: Module[];
-  members: Member[];
-  onOpenTask: (ref: string) => void;
+  editing: RowEditingProps;
 }) {
   const groups = useMemo(() => {
     const byStoryRef = new Map<string | "__orphan", Task[]>();
@@ -226,7 +274,8 @@ function GroupedByStory({
       byStoryRef.set(key, arr);
     }
     return Array.from(byStoryRef.entries()).map(([key, rows]) => {
-      const story = key === "__orphan" ? null : stories.find((s) => s.reference === key) ?? null;
+      const story =
+        key === "__orphan" ? null : stories.find((s) => s.reference === key) ?? null;
       const mod = story ? modules.find((m) => m.id === story.moduleId) : null;
       return { key, story, module: mod, rows };
     });
@@ -249,8 +298,7 @@ function GroupedByStory({
           storyRef={g.story?.reference ?? null}
           moduleName={g.module?.name ?? null}
           rows={g.rows}
-          members={members}
-          onOpenTask={onOpenTask}
+          editing={editing}
         />
       ))}
     </div>
@@ -262,15 +310,13 @@ function StoryGroupBlock({
   storyRef,
   moduleName,
   rows,
-  members,
-  onOpenTask,
+  editing,
 }: {
   storyTitle: string;
   storyRef: string | null;
   moduleName: string | null;
   rows: Task[];
-  members: Member[];
-  onOpenTask: (ref: string) => void;
+  editing: RowEditingProps;
 }) {
   const [open, setOpen] = useState(true);
   const totalFP = rows.reduce((acc, t) => acc + t.functionPoints, 0);
@@ -317,13 +363,7 @@ function StoryGroupBlock({
           </span>
         </span>
       </button>
-      {open ? (
-        <TasksTable
-          rows={rows}
-          members={members}
-          onOpenTask={onOpenTask}
-        />
-      ) : null}
+      {open ? <TasksTable rows={rows} editing={editing} /> : null}
     </section>
   );
 }
@@ -334,14 +374,12 @@ function FlatList({
   tasks,
   stories,
   modules,
-  members,
-  onOpenTask,
+  editing,
 }: {
   tasks: Task[];
   stories: Story[];
   modules: Module[];
-  members: Member[];
-  onOpenTask: (ref: string) => void;
+  editing: RowEditingProps;
 }) {
   if (tasks.length === 0) {
     return (
@@ -354,8 +392,7 @@ function FlatList({
     <div className="overflow-hidden rounded-xl border">
       <TasksTable
         rows={tasks}
-        members={members}
-        onOpenTask={onOpenTask}
+        editing={editing}
         storyHint={(t) => {
           const story = stories.find((s) => s.reference === t.userStoryRef);
           if (!story) return { module: null, ref: null };
@@ -370,60 +407,73 @@ function FlatList({
   );
 }
 
-// ─── Inner table ─────────────────────────────────────────────────────────────
+// ─── Inner table (matching StoriesList compact aesthetic) ────────────────────
 
 function TasksTable({
   rows,
-  members,
-  onOpenTask,
+  editing,
   storyHint,
 }: {
   rows: Task[];
-  members: Member[];
-  onOpenTask: (ref: string) => void;
-  /** When provided, render Story/Module hint column. */
+  editing: RowEditingProps;
   storyHint?: (task: Task) => { module: string | null; ref: string | null };
 }) {
-  const cols = storyHint
-    ? "grid-cols-[110px_1fr_180px_100px_140px_80px_100px]"
-    : "grid-cols-[110px_1fr_100px_140px_120px_80px]";
+  // Match StoriesList grid look. Cells are spans inside a clickable row.
+  // Cols: Ref · Title · [Story] · [Sprint] · Status · FP · Assignee
+  const layoutParts: string[] = ["110px", "1fr"];
+  if (storyHint) layoutParts.push("160px");
+  if (editing.showSprint) layoutParts.push("130px");
+  layoutParts.push("130px", "70px", "150px");
+  const cols = `grid-cols-[${layoutParts.join("_")}]`;
 
   return (
     <div>
+      {/* Header */}
       <div
         className={`grid gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${cols}`}
       >
         <span>Ref</span>
         <span>Título</span>
         {storyHint ? <span>Story</span> : null}
-        <span>Area</span>
+        {editing.showSprint ? <span>Sprint</span> : null}
         <span>Status</span>
         <span className="text-right">FP</span>
         <span className="text-right">Assignee</span>
       </div>
+
+      {/* Rows */}
       {rows.map((task, i) => {
-        const assignees = task.assigneeIds
-          .map((id) => members.find((m) => m.id === id)?.name)
-          .filter((n): n is string => Boolean(n));
         const hint = storyHint?.(task);
+        const firstAssignee = task.assigneeIds[0] ?? null;
+        const isLast = i === rows.length - 1;
+
         return (
-          <button
+          <div
             key={task.reference}
-            type="button"
-            onClick={() => onOpenTask(task.reference)}
-            className={`grid w-full items-center gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/40 ${cols} ${
-              i < rows.length - 1 ? "border-b" : ""
+            role="button"
+            tabIndex={0}
+            onClick={() => editing.onOpenTask(task.reference)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                editing.onOpenTask(task.reference);
+              }
+            }}
+            className={`grid w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${cols} ${
+              !isLast ? "border-b" : ""
             }`}
           >
-            <span className="font-mono text-muted-foreground">
+            <span className="font-mono text-xs text-muted-foreground">
               {task.reference}
             </span>
+
             <span className="flex min-w-0 items-center gap-2">
               <span className="truncate">{task.title}</span>
               {task.createdByAgent ? (
                 <Sparkles className="size-3 shrink-0 text-muted-foreground/60" />
               ) : null}
             </span>
+
             {storyHint ? (
               <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
                 {hint?.module ? (
@@ -436,27 +486,137 @@ function TasksTable({
                 </span>
               </span>
             ) : null}
-            <span>
-              {task.area ? (
-                <Badge variant="outline" className="text-[10px]">
-                  {task.area}
-                </Badge>
+
+            {editing.showSprint ? (
+              <span onClick={stop} onPointerDown={stop}>
+                <SprintCell
+                  task={task}
+                  sprints={editing.sprints!}
+                  onChangeSprint={editing.onChangeSprint!}
+                />
+              </span>
+            ) : null}
+
+            {/* Status: chip-select (legacy aesthetic) */}
+            <span onClick={stop} onPointerDown={stop}>
+              {editing.onChangeStatus ? (
+                <StatusChipSelect
+                  value={task.status}
+                  options={TASK_STATUS}
+                  onValueChange={(v) =>
+                    editing.onChangeStatus!(task.reference, v as TaskStatus)
+                  }
+                />
               ) : (
-                <span className="text-[10px] text-muted-foreground">—</span>
+                <TaskStatusChip status={task.status} />
               )}
             </span>
-            <span>
-              <TaskStatusChip status={task.status} />
-            </span>
-            <span className="text-right font-mono tabular-nums">
+
+            <span className="text-right font-mono text-xs tabular-nums">
               {task.functionPoints}
             </span>
-            <span className="truncate text-right text-[10px] text-muted-foreground">
-              {assignees.length === 0 ? "—" : assignees.join(", ")}
-            </span>
-          </button>
+
+            {/* Assignee: borderless select for compact look */}
+            {editing.onChangeAssignee ? (
+              <span onClick={stop} onPointerDown={stop}>
+                <AssigneeCell
+                  taskRef={task.reference}
+                  value={firstAssignee}
+                  members={editing.members}
+                  onChange={editing.onChangeAssignee}
+                />
+              </span>
+            ) : (
+              <span className="truncate text-right text-[11px] text-muted-foreground">
+                {task.assigneeIds.length === 0
+                  ? "—"
+                  : task.assigneeIds
+                      .map((id) => editing.members.find((m) => m.id === id)?.name)
+                      .filter(Boolean)
+                      .join(", ")}
+              </span>
+            )}
+          </div>
         );
       })}
     </div>
+  );
+}
+
+// ─── Inline editors (compact, borderless triggers) ───────────────────────────
+
+function AssigneeCell({
+  taskRef,
+  value,
+  members,
+  onChange,
+}: {
+  taskRef: string;
+  value: string | null;
+  members: Member[];
+  onChange: (ref: string, memberId: string | null) => void;
+}) {
+  return (
+    <Select
+      value={value ?? ASSIGNEE_NONE}
+      onValueChange={(v) => {
+        if (v === null) return;
+        onChange(taskRef, v === ASSIGNEE_NONE ? null : v);
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-full justify-end border-none bg-transparent p-0 text-[11px] text-muted-foreground shadow-none hover:opacity-80"
+      >
+        <SelectValue placeholder="Ninguém" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ASSIGNEE_NONE}>
+          <span className="text-muted-foreground">Ninguém</span>
+        </SelectItem>
+        {members.map((m) => (
+          <SelectItem key={m.id} value={m.id}>
+            {m.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function SprintCell({
+  task,
+  sprints,
+  onChangeSprint,
+}: {
+  task: Task;
+  sprints: SprintLite[];
+  onChangeSprint: (ref: string, sprintId: string | null) => void;
+}) {
+  return (
+    <Select
+      value={task.sprintId ?? SPRINT_NONE}
+      onValueChange={(v) => {
+        if (v === null) return;
+        onChangeSprint(task.reference, v === SPRINT_NONE ? null : v);
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-full border-none bg-transparent p-0 text-[11px] text-muted-foreground shadow-none hover:opacity-80"
+      >
+        <SelectValue placeholder="Sem sprint" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={SPRINT_NONE}>
+          <span className="text-muted-foreground">Sem sprint</span>
+        </SelectItem>
+        {sprints.map((s) => (
+          <SelectItem key={s.id} value={s.id}>
+            {s.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

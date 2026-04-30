@@ -9,6 +9,7 @@ import {
   Lightbulb,
   ListTodo,
   Pencil,
+  Plus,
   Settings as SettingsIcon,
   Shield,
   Zap,
@@ -21,6 +22,10 @@ import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { ProjectEditSheet } from "@/components/project-edit-sheet";
 import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { ProjectWiki } from "@/components/project-wiki";
+import {
+  SprintDialog,
+  type SprintFormData,
+} from "@/components/sprint-dialog";
 import { StatusChip } from "@/components/ui/status-chip";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -138,6 +143,11 @@ type RawSprintMember = {
   fpAllocation: number;
 };
 
+type RawProjectMember = {
+  memberId: string;
+  fpAllocation: number;
+};
+
 const TABS: { key: TabKey; label: string; icon: typeof Eye }[] = [
   { key: "overview", label: "Overview", icon: Eye },
   { key: "stories", label: "Stories", icon: BookOpen },
@@ -168,16 +178,19 @@ export default function ProjectDetailPage({
   const [taskAcRows, setTaskAcRows] = useState<AcceptanceCriterionRow[]>([]);
   const [rawSprints, setRawSprints] = useState<RawSprint[]>([]);
   const [rawMembers, setRawMembers] = useState<RawMember[]>([]);
+  const [rawProjectMembers, setRawProjectMembers] = useState<RawProjectMember[]>(
+    [],
+  );
   const [rawSprintMembers, setRawSprintMembers] = useState<RawSprintMember[]>(
     [],
   );
 
   const [accessOpen, setAccessOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [sprintDialogOpen, setSprintDialogOpen] = useState(false);
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [editingStory, setEditingStory] = useState(false);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(null);
-  const [editingTask, setEditingTask] = useState(false);
 
   const [moduleDialog, setModuleDialog] = useState<{
     open: boolean;
@@ -286,13 +299,19 @@ export default function ProjectDetailPage({
     const { data: pms, error } = await supabase
       .from("ProjectMember")
       .select(
-        "memberId, member:Member!ProjectMember_memberId_fkey(id, name, role, fpCapacity)",
+        "memberId, fpAllocation, member:Member!ProjectMember_memberId_fkey(id, name, role, fpCapacity)",
       )
       .eq("projectId", id);
     if (error) {
       console.error("[loadMembers]", error);
       return;
     }
+
+    const projectMemberRows: RawProjectMember[] = (pms ?? []).map((pm) => ({
+      memberId: pm.memberId,
+      fpAllocation: pm.fpAllocation ?? 0,
+    }));
+    setRawProjectMembers(projectMemberRows);
 
     const memberRows: RawMember[] = (pms ?? [])
       .map((pm) => {
@@ -361,17 +380,52 @@ export default function ProjectDetailPage({
     [rawSprints],
   );
 
+  /**
+   * Build per-(sprint × member) capacity rows.
+   *
+   * Source-of-truth cascade for `fpAllocation`:
+   *   1. SprintMember.fpAllocation  — explicit override per sprint
+   *   2. ProjectMember.fpAllocation — project-wide default
+   *   3. Member.fpCapacity          — full battery (member exists but never
+   *                                   had allocation set; assume available)
+   *
+   * Iterates over every ProjectMember × every Sprint, so the widget shows
+   * everyone allocated to the project — not just those manually written
+   * into SprintMember (which is a manual-only table with no DB trigger).
+   */
   const capacities: SprintMemberCapacity[] = useMemo(() => {
     const memberCapacityById = new Map(
       rawMembers.map((m) => [m.id, m.fpCapacity ?? 0]),
     );
-    return rawSprintMembers.map((sm) => ({
-      sprintId: sm.sprintId,
-      memberId: sm.memberId,
-      fpCapacity: memberCapacityById.get(sm.memberId) ?? 0,
-      fpAllocation: sm.fpAllocation,
-    }));
-  }, [rawSprintMembers, rawMembers]);
+    const projectAllocById = new Map(
+      rawProjectMembers.map((pm) => [pm.memberId, pm.fpAllocation]),
+    );
+    const sprintAllocByKey = new Map(
+      rawSprintMembers.map(
+        (sm) => [`${sm.sprintId}|${sm.memberId}`, sm.fpAllocation] as const,
+      ),
+    );
+
+    return rawSprints.flatMap((sprint) =>
+      rawProjectMembers.map((pm) => {
+        const fpCapacity = memberCapacityById.get(pm.memberId) ?? 0;
+        const sprintAlloc = sprintAllocByKey.get(`${sprint.id}|${pm.memberId}`);
+        const projectAlloc = projectAllocById.get(pm.memberId) ?? 0;
+        const fpAllocation =
+          sprintAlloc !== undefined && sprintAlloc > 0
+            ? sprintAlloc
+            : projectAlloc > 0
+              ? projectAlloc
+              : fpCapacity;
+        return {
+          sprintId: sprint.id,
+          memberId: pm.memberId,
+          fpCapacity,
+          fpAllocation,
+        };
+      }),
+    );
+  }, [rawSprints, rawSprintMembers, rawProjectMembers, rawMembers]);
 
   const moduleUsage = useMemo(() => {
     const acc: Record<string, number> = {};
@@ -406,6 +460,29 @@ export default function ProjectDetailPage({
     tasks.find((t) => t.reference === selectedTaskRef) ?? null;
 
   // ─── Mutators ──────────────────────────────────────────────────────────────
+
+  async function handleCreateSprint(form: SprintFormData) {
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("Sprint").insert({
+      id: crypto.randomUUID(),
+      projectId: id,
+      name: form.name,
+      startDate: new Date(form.startDate).toISOString(),
+      endDate: new Date(form.endDate).toISOString(),
+      status: form.status,
+      updatedAt: now,
+    });
+    if (error) {
+      if (error.code === "23505") {
+        alert("Já existe um sprint com esse nome neste projeto.");
+      } else {
+        alert(`Falha ao criar sprint: ${error.message}`);
+      }
+      return;
+    }
+    setSprintDialogOpen(false);
+    await loadTasksAndSprints();
+  }
 
   async function handleCreateStory(input: StoryCreateInput) {
     if (!project?.referenceKey) {
@@ -489,7 +566,95 @@ export default function ProjectDetailPage({
     await loadStoryHierarchy();
   }
 
+  /** Inline edits from the TasksList row. taskRef is the public reference;
+   *  resolve to id via current `tasks` state (adapter exposes __id). */
+  function findTaskIdByRef(ref: string): string | null {
+    return tasks.find((t) => t.reference === ref)?.__id ?? null;
+  }
+
+  async function handleInlineStatusChange(
+    taskRef: string,
+    status: AdaptedTask["status"],
+  ) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    const { error } = await supabase
+      .from("Task")
+      .update({ status, updatedAt: new Date().toISOString() })
+      .eq("id", taskId);
+    if (error) {
+      alert(`Falha ao atualizar status: ${error.message}`);
+      return;
+    }
+    await loadTasksAndSprints();
+  }
+
+  async function handleInlineSprintChange(
+    taskRef: string,
+    sprintId: string | null,
+  ) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    const { error } = await supabase
+      .from("Task")
+      .update({ sprintId, updatedAt: new Date().toISOString() })
+      .eq("id", taskId);
+    if (error) {
+      alert(`Falha ao atualizar sprint: ${error.message}`);
+      return;
+    }
+    await loadTasksAndSprints();
+  }
+
+  /** Sets a single assignee — replaces all existing TaskAssignment rows. */
+  async function handleInlineAssigneeChange(
+    taskRef: string,
+    memberId: string | null,
+  ) {
+    return handleInlineAssigneesChange(taskRef, memberId ? [memberId] : []);
+  }
+
+  /** Sets the full assignee list for a task (delete-all + insert). */
+  async function handleInlineAssigneesChange(
+    taskRef: string,
+    memberIds: string[],
+  ) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+
+    const { error: delErr } = await supabase
+      .from("TaskAssignment")
+      .delete()
+      .eq("taskId", taskId);
+    if (delErr) {
+      alert(`Falha ao limpar assignment: ${delErr.message}`);
+      return;
+    }
+
+    if (memberIds.length > 0) {
+      const { error: insErr } = await supabase.from("TaskAssignment").insert(
+        memberIds.map((memberId) => ({
+          id: crypto.randomUUID(),
+          taskId,
+          memberId,
+        })),
+      );
+      if (insErr) {
+        alert(`Falha ao atribuir: ${insErr.message}`);
+        return;
+      }
+    }
+    await loadTasksAndSprints();
+  }
+
   async function handleSaveTask(updated: AdaptedTask) {
+    const before = tasks.find((t) => t.__id === updated.__id);
+    const userStoryId =
+      updated.userStoryRef === null
+        ? null
+        : stories.find((s) => s.reference === updated.userStoryRef)?.__id ??
+          null;
+
     const { error } = await supabase
       .from("Task")
       .update({
@@ -504,6 +669,7 @@ export default function ProjectDetailPage({
         functionPoints: updated.functionPoints,
         billable: updated.billable,
         dueDate: updated.dueDate,
+        userStoryId,
         updatedAt: new Date().toISOString(),
       })
       .eq("id", updated.__id);
@@ -511,6 +677,53 @@ export default function ProjectDetailPage({
       alert(`Falha ao salvar task: ${error.message}`);
       return;
     }
+
+    // ─── AC diff ────────────────────────────────────────────────────────────
+    if (before) {
+      const beforeMap = new Map(
+        before.acceptanceCriteria.map((ac) => [ac.id, ac]),
+      );
+      const afterMap = new Map(
+        updated.acceptanceCriteria.map((ac) => [ac.id, ac]),
+      );
+
+      // Deletions
+      for (const id of beforeMap.keys()) {
+        if (!afterMap.has(id)) {
+          await fetch(`/api/tasks/${updated.__id}/acceptance/${id}`, {
+            method: "DELETE",
+          });
+        }
+      }
+
+      // Inserts + updates
+      for (const [id, after] of afterMap) {
+        if (id.startsWith("ac-new-")) {
+          await fetch(`/api/tasks/${updated.__id}/acceptance`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: after.text }),
+          });
+          continue;
+        }
+        const prev = beforeMap.get(id);
+        if (!prev) continue;
+        const textChanged = prev.text !== after.text;
+        const checkedChanged = prev.checked !== after.checked;
+        if (textChanged || checkedChanged) {
+          await fetch(`/api/tasks/${updated.__id}/acceptance/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(textChanged ? { text: after.text } : {}),
+              ...(checkedChanged ? { checked: after.checked } : {}),
+            }),
+          });
+        }
+      }
+      await loadStoryHierarchy();
+    }
+
     await loadTasksAndSprints();
   }
 
@@ -759,52 +972,62 @@ export default function ProjectDetailPage({
           stories={stories}
           modules={modules}
           members={members}
-          onOpenTask={(ref) => {
-            setSelectedTaskRef(ref);
-            setEditingTask(false);
-          }}
+          sprints={sprints}
+          onOpenTask={(ref) => setSelectedTaskRef(ref)}
           onCreateTask={() => setTaskCreateOpen(true)}
+          onChangeStatus={handleInlineStatusChange}
+          onChangeAssignee={handleInlineAssigneeChange}
+          onChangeSprint={handleInlineSprintChange}
         />
       ) : activeTab === "sprints" ? (
-        focused ? (
-          <div className="space-y-5">
-            <SprintNavigator
-              sprints={sprints}
-              currentId={focused.id}
-              activeId={activeSprintId}
-              onChange={setFocusSprintId}
-              onJumpToActive={() => setFocusSprintId(activeSprintId)}
-            />
-            <SprintTimeline
-              sprints={sprints}
-              tasks={tasks}
-              activeId={focused.id}
-              onSelect={setFocusSprintId}
-              cardWidth={170}
-            />
-            <SprintDetail
-              sprint={focused}
-              tasks={tasks}
-              stories={stories}
-              modules={modules}
-              members={members}
-              capacities={capacities}
-              onOpenTask={(ref) => {
-                setSelectedTaskRef(ref);
-                setEditingTask(false);
-              }}
-            />
+        <div className="space-y-5">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Sprints
+            </h3>
+            <Button size="sm" onClick={() => setSprintDialogOpen(true)}>
+              <Plus className="size-3.5" />
+              Novo sprint
+            </Button>
           </div>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Nenhum sprint cadastrado</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Crie o primeiro sprint pra começar a planejar.
-            </CardContent>
-          </Card>
-        )
+
+          {focused ? (
+            <>
+              <SprintNavigator
+                sprints={sprints}
+                currentId={focused.id}
+                activeId={activeSprintId}
+                onChange={setFocusSprintId}
+                onJumpToActive={() => setFocusSprintId(activeSprintId)}
+              />
+              <SprintTimeline
+                sprints={sprints}
+                tasks={tasks}
+                activeId={focused.id}
+                onSelect={setFocusSprintId}
+                cardWidth={170}
+              />
+              <SprintDetail
+                sprint={focused}
+                tasks={tasks}
+                stories={stories}
+                modules={modules}
+                members={members}
+                capacities={capacities}
+                onOpenTask={(ref) => setSelectedTaskRef(ref)}
+              />
+            </>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Nenhum sprint cadastrado</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Crie o primeiro sprint pra começar a planejar.
+              </CardContent>
+            </Card>
+          )}
+        </div>
       ) : activeTab === "sessions" ? (
         <ProjectSessionsTab
           projectId={id}
@@ -859,31 +1082,23 @@ export default function ProjectDetailPage({
           setSelectedStoryRef(null);
           setEditingStory(false);
           setSelectedTaskRef(ref);
-          setEditingTask(false);
         }}
       />
 
-      {/* Task sheet */}
+      {/* Task sheet — always inline-editable (no view/edit toggle) */}
       <TaskSheet
         task={selectedTask}
         stories={stories}
         modules={modules}
         members={members}
+        sprints={sprints}
         definitionOfDone={project.definitionOfDone}
-        editing={editingTask}
-        onClose={() => {
-          setSelectedTaskRef(null);
-          setEditingTask(false);
-        }}
-        onEdit={() => setEditingTask(true)}
-        onCancelEdit={() => setEditingTask(false)}
-        onSave={(updated) => {
-          handleSaveTask(updated as AdaptedTask);
-          setEditingTask(false);
-        }}
+        onClose={() => setSelectedTaskRef(null)}
+        onSave={(updated) => handleSaveTask(updated as AdaptedTask)}
+        onChangeSprint={handleInlineSprintChange}
+        onChangeAssignees={handleInlineAssigneesChange}
         onOpenStory={(ref) => {
           setSelectedTaskRef(null);
-          setEditingTask(false);
           setSelectedStoryRef(ref);
           setEditingStory(false);
         }}
@@ -937,6 +1152,15 @@ export default function ProjectDetailPage({
         open={accessOpen}
         onOpenChange={setAccessOpen}
         projectId={id}
+      />
+
+      {/* Sprint create dialog */}
+      <SprintDialog
+        open={sprintDialogOpen}
+        onOpenChange={setSprintDialogOpen}
+        editing={null}
+        existingSprints={rawSprints.map((s) => ({ endDate: s.endDate }))}
+        onSave={handleCreateSprint}
       />
 
       {/* Edit project sheet (PM, members, repo, dates, status) */}
