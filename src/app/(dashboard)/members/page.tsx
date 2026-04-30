@@ -290,7 +290,7 @@ export default function MembersPage() {
     const supabase = createClient();
     const today = new Date().toISOString().slice(0, 10);
 
-    // Sprints rodando hoje → membros que participam delas → soma de fp_used.
+    // Sprints rodando hoje → membros que participam delas → soma de fp_open.
     const [membersRes, activeSprintsRes, skillsRes] = await Promise.all([
       supabase.from("Member").select("*").order("name"),
       supabase
@@ -305,19 +305,19 @@ export default function MembersPage() {
 
     const activeSprintIds = (activeSprintsRes.data ?? []).map((s) => s.id);
 
-    type WeekLoadRow = { memberId: string; fp_used: number };
+    type WeekLoadRow = { memberId: string; fp_open: number };
     let weekRows: WeekLoadRow[] = [];
     if (activeSprintIds.length > 0) {
       const { data } = await supabase
         .from("sprint_member_capacity")
-        .select("memberId, fp_used")
+        .select("memberId, fp_open")
         .in("sprintId", activeSprintIds);
       weekRows = (data ?? []) as unknown as WeekLoadRow[];
     }
 
     const weekLoadMap = new Map<string, number>();
     for (const r of weekRows) {
-      weekLoadMap.set(r.memberId, (weekLoadMap.get(r.memberId) ?? 0) + (r.fp_used ?? 0));
+      weekLoadMap.set(r.memberId, (weekLoadMap.get(r.memberId) ?? 0) + (r.fp_open ?? 0));
     }
 
     // Group skills by memberId. Lazy-compute score client-side when missing

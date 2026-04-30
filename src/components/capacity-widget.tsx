@@ -49,9 +49,8 @@ export function CapacityWidget({
         role,
         seniority,
         dedicationPercent: dedication,
-        isExternal,
       }),
-    [role, seniority, dedication, isExternal],
+    [role, seniority, dedication],
   );
 
   const baseRole = ROLE_BASE[role as keyof typeof ROLE_BASE] ?? 0;
@@ -134,7 +133,7 @@ export function CapacityWidget({
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium">Senioridade</span>
           <span className="font-mono tabular-nums text-[10px] tracking-[0.08em] uppercase text-muted-foreground">
-            ×{breakdown.seniorityMult.toFixed(1)}
+            ×{breakdown.seniorityMult.toFixed(2)}
           </span>
         </div>
         <div className="grid grid-cols-4 gap-1.5">
@@ -195,16 +194,9 @@ export function CapacityWidget({
           <span className="text-foreground">{breakdown.base}</span>
           <span className="text-muted-foreground"> base</span>
           <span className="text-muted-foreground/60 mx-1">×</span>
-          <span className="text-foreground">{breakdown.seniorityMult.toFixed(1)}</span>
+          <span className="text-foreground">{breakdown.seniorityMult.toFixed(2)}</span>
           <span className="text-muted-foreground/60 mx-1">×</span>
           <span className="text-foreground">{Math.round(breakdown.dedication * 100)}%</span>
-          {breakdown.externalMult !== 1 && (
-            <>
-              <span className="text-muted-foreground/60 mx-1">×</span>
-              <span className="text-foreground">{breakdown.externalMult.toFixed(2)}</span>
-              <span className="text-muted-foreground"> ext</span>
-            </>
-          )}
           <span className="text-muted-foreground/60 mx-1">=</span>
           <span className="text-foreground font-medium">{breakdown.suggested}</span>
         </div>
@@ -224,7 +216,7 @@ export function CapacityWidget({
           <Input
             type="number"
             min={0}
-            max={500}
+            max={2000}
             value={capacity}
             onChange={(e) => setCapacity(Math.max(0, Number(e.target.value) || 0))}
             className="font-mono tabular-nums w-24"

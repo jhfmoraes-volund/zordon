@@ -271,7 +271,7 @@ async function buildGlobalContext(
   const alerts: string[] = [];
   for (const m of membersInSprint) {
     const alloc = Number(m.fp_allocation) || 0;
-    const used = Number(m.fp_used) || 0;
+    const used = Number(m.fp_open) || 0;
     if (alloc > 0 && used > alloc * config.fp_overflow_threshold) {
       const tag = m.has_sprint_override ? " (override)" : "";
       alerts.push(`⚠ Sprint: ${m.member_name} estourou alocação no projeto${tag} (${used}/${alloc} FP)`);
@@ -286,7 +286,7 @@ async function buildGlobalContext(
 
   if (capacity) {
     const cap = Number(capacity.capacity) || 0;
-    const alloc = Number(capacity.allocated) || 0;
+    const alloc = Number(capacity.open) || 0;
     if (cap > 0 && alloc > cap * config.fp_overflow_threshold) {
       alerts.push(`⚠ Sprint acima da capacidade do time: ${alloc}/${cap} FP (threshold ${Math.round(config.fp_overflow_threshold * 100)}%)`);
     }
@@ -316,8 +316,8 @@ async function buildGlobalContext(
         `- **Período:** ${activeSprint.startDate || "?"} a ${activeSprint.endDate || "?"}`,
         `- **Status:** ${activeSprint.status}`,
         `- **Capacidade do sprint:** ${capacity?.capacity ?? 0} FP (soma de alocações no projeto)`,
-        `- **Alocado:** ${capacity?.allocated ?? 0} FP (tasks ativas)`,
-        `- **Restante:** ${capacity?.remaining ?? 0} FP`,
+        `- **Em aberto:** ${capacity?.open ?? 0} FP (tasks ativas)`,
+        `- **Restante:** ${(Number(capacity?.capacity) || 0) - (Number(capacity?.open) || 0)} FP`,
       ].join("\n")
     : "## Sprint Ativo\nNenhum sprint ativo encontrado.";
 
@@ -336,7 +336,7 @@ async function buildGlobalContext(
         "## Alocação do time no sprint ativo",
         ...membersInSprint.map((m) => {
           const alloc = Number(m.fp_allocation) || 0;
-          const used = Number(m.fp_used) || 0;
+          const used = Number(m.fp_open) || 0;
           const pct = alloc > 0 ? Math.round((used / alloc) * 100) : 0;
           const tag = m.has_sprint_override ? " [override]" : "";
           return `- **${m.member_name}**${tag}: ${used}/${alloc} FP (${pct}%)`;
@@ -447,7 +447,7 @@ async function buildProjectFocus(
         .limit(15),
       supabase
         .from("sprint_member_capacity")
-        .select("member_name, fp_allocation, fp_used, has_sprint_override")
+        .select("member_name, fp_allocation, fp_open, has_sprint_override")
         .eq("sprintId", activeSprint.id),
     ]);
 
@@ -458,14 +458,14 @@ async function buildProjectFocus(
       `### Sprint atual do projeto: ${activeSprint.name}`,
       `- Período: ${activeSprint.startDate || "?"} → ${activeSprint.endDate || "?"} | status: ${activeSprint.status}`,
       cap
-        ? `- Capacidade: ${cap.capacity ?? 0} FP | Alocado: ${cap.allocated ?? 0} FP | Restante: ${cap.remaining ?? 0} FP`
+        ? `- Capacidade: ${cap.capacity ?? 0} FP | Em aberto: ${cap.open ?? 0} FP | Restante: ${(Number(cap.capacity) || 0) - (Number(cap.open) || 0)} FP`
         : "- Capacidade: sem dados",
       "",
       "**Alocação no sprint:**",
       ...(allocList.length === 0
         ? ["_Nenhum membro alocado._"]
         : allocList.map((a) => {
-            const used = Number(a.fp_used) || 0;
+            const used = Number(a.fp_open) || 0;
             const ac = Number(a.fp_allocation) || 0;
             const pct = ac > 0 ? Math.round((used / ac) * 100) : 0;
             const tag = a.has_sprint_override ? " [override]" : "";
@@ -550,7 +550,7 @@ async function buildSprintFocus(
       .maybeSingle(),
     supabase
       .from("sprint_member_capacity")
-      .select("member_name, fp_allocation, fp_used, has_sprint_override")
+      .select("member_name, fp_allocation, fp_open, has_sprint_override")
       .eq("sprintId", sprintId),
     supabase
       .from("Task")
@@ -576,7 +576,7 @@ async function buildSprintFocus(
   // Alertas específicos deste sprint
   const alerts: string[] = [];
   for (const a of allocList) {
-    const used = Number(a.fp_used) || 0;
+    const used = Number(a.fp_open) || 0;
     const ac = Number(a.fp_allocation) || 0;
     if (ac > 0 && used > ac * config.fp_overflow_threshold) {
       const tag = a.has_sprint_override ? " (override)" : "";
@@ -585,7 +585,7 @@ async function buildSprintFocus(
   }
   if (cap) {
     const c = Number(cap.capacity) || 0;
-    const al = Number(cap.allocated) || 0;
+    const al = Number(cap.open) || 0;
     if (c > 0 && al > c * config.fp_overflow_threshold) {
       alerts.push(`⚠ Sprint acima da capacidade do time: ${al}/${c} FP`);
     }
@@ -610,14 +610,14 @@ async function buildSprintFocus(
     `## Foco: Sprint ${sprint.name} (Projeto ${proj})`,
     `- ID: ${sprint.id} | Status: ${sprint.status} | Período: ${sprint.startDate || "?"} → ${sprint.endDate || "?"}`,
     cap
-      ? `- Capacidade: ${cap.capacity ?? 0} FP | Alocado: ${cap.allocated ?? 0} FP | Restante: ${cap.remaining ?? 0} FP`
+      ? `- Capacidade: ${cap.capacity ?? 0} FP | Em aberto: ${cap.open ?? 0} FP | Restante: ${(Number(cap.capacity) || 0) - (Number(cap.open) || 0)} FP`
       : "- Capacidade: sem dados",
     "",
     "**Alocação por membro:**",
     ...(allocList.length === 0
       ? ["_Nenhum membro alocado._"]
       : allocList.map((a) => {
-          const used = Number(a.fp_used) || 0;
+          const used = Number(a.fp_open) || 0;
           const ac = Number(a.fp_allocation) || 0;
           const pct = ac > 0 ? Math.round((used / ac) * 100) : 0;
           const tag = a.has_sprint_override ? " [override]" : "";

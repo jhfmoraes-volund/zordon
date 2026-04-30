@@ -31,7 +31,7 @@ export async function GET() {
       .eq("memberId", member.id),
     supabase
       .from("sprint_member_capacity")
-      .select("sprintId, projectId, fp_allocation, fp_used, has_sprint_override")
+      .select("sprintId, projectId, fp_allocation, fp_open, has_sprint_override")
       .eq("memberId", member.id),
   ]);
 
@@ -73,7 +73,7 @@ export async function GET() {
         projectId: meta.projectId,
         projectName: meta.project?.name ?? "?",
         fpAllocation: Number(sc.fp_allocation) || 0,
-        fpUsed: Number(sc.fp_used) || 0,
+        fpUsed: Number(sc.fp_open) || 0,
         hasOverride: Boolean(sc.has_sprint_override),
       };
     })

@@ -2983,9 +2983,10 @@ export type Database = {
       }
       sprint_capacity_overview: {
         Row: {
-          allocated: number | null
           capacity: number | null
-          remaining: number | null
+          done: number | null
+          open: number | null
+          planned: number | null
           sprintId: string | null
         }
         Relationships: []
@@ -2993,7 +2994,9 @@ export type Database = {
       sprint_member_capacity: {
         Row: {
           fp_allocation: number | null
-          fp_used: number | null
+          fp_done: number | null
+          fp_open: number | null
+          fp_planned: number | null
           has_sprint_override: boolean | null
           member_name: string | null
           memberId: string | null

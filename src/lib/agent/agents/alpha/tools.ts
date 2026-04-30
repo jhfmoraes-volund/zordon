@@ -143,12 +143,12 @@ export function assembleAlphaTools(
       return {
         sprintId: targetId,
         capacity: cap?.capacity ?? 0,
-        allocated: cap?.allocated ?? 0,
-        remaining: cap?.remaining ?? 0,
+        allocated: cap?.open ?? 0,
+        remaining: (cap?.capacity ?? 0) - (cap?.open ?? 0),
         members: (members || []).map((m) => ({
           name: m.member_name,
           allocation: m.fp_allocation,
-          used: m.fp_used,
+          used: m.fp_open,
           hasOverride: m.has_sprint_override,
         })),
       };
