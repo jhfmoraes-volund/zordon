@@ -44,3 +44,7 @@ export { StorySheet } from "./story-sheet";
 export { TasksList } from "./tasks-list";
 export { TaskSheet } from "./task-sheet";
 export { SettingsPanel } from "./settings-panel";
+export { StoryCreateDialog } from "./story-create-dialog";
+export type { StoryCreateInput } from "./story-create-dialog";
+export { TaskCreateDialog } from "./task-create-dialog";
+export type { TaskCreateInput } from "./task-create-dialog";
