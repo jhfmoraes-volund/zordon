@@ -69,6 +69,10 @@ import type {
   PersonaRow,
   StoryWithRelations,
 } from "@/lib/dal/story-hierarchy";
+import { toast } from "sonner";
+import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { tempId as makeTempId } from "@/lib/optimistic/reconcile";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -182,9 +186,15 @@ export default function ProjectDetailPage({
   const [rawModules, setRawModules] = useState<ModuleRow[]>([]);
   const [rawPersonas, setRawPersonas] = useState<PersonaRow[]>([]);
   const [rawStories, setRawStories] = useState<StoryWithRelations[]>([]);
-  const [rawTasks, setRawTasks] = useState<RawTask[]>([]);
+  const tasksCollection = useOptimisticCollection<RawTask>([]);
+  const rawTasks = tasksCollection.items;
+  const setRawTasks = tasksCollection.setCommitted;
+  const taskMutate = tasksCollection.mutate;
   const [projectTags, setProjectTags] = useState<TaskTag[]>([]);
-  const [taskAcRows, setTaskAcRows] = useState<AcceptanceCriterionRow[]>([]);
+  const acRowsCollection =
+    useOptimisticCollection<AcceptanceCriterionRow>([]);
+  const taskAcRows = acRowsCollection.items;
+  const setTaskAcRows = acRowsCollection.setCommitted;
   const [rawSprints, setRawSprints] = useState<RawSprint[]>([]);
   const [rawMembers, setRawMembers] = useState<RawMember[]>([]);
   const [rawProjectMembers, setRawProjectMembers] = useState<RawProjectMember[]>(
@@ -493,6 +503,7 @@ export default function ProjectDetailPage({
 
   async function handleCreateSprint(form: SprintFormData) {
     const now = new Date().toISOString();
+    setSprintDialogOpen(false);
     const { error } = await supabase.from("Sprint").insert({
       id: crypto.randomUUID(),
       projectId: id,
@@ -503,83 +514,110 @@ export default function ProjectDetailPage({
       updatedAt: now,
     });
     if (error) {
-      if (error.code === "23505") {
-        alert(
-          error.message.includes("sprint_unique_week_per_project")
+      const message =
+        error.code === "23505"
+          ? error.message.includes("sprint_unique_week_per_project")
             ? "Já existe um sprint nessa semana neste projeto."
-            : "Já existe um sprint com esse nome neste projeto.",
-        );
-      } else {
-        alert(`Falha ao criar sprint: ${error.message}`);
-      }
+            : "Já existe um sprint com esse nome neste projeto."
+          : error.message;
+      showErrorToast(new Error(message), { label: "Falha ao criar sprint" });
       return;
     }
-    setSprintDialogOpen(false);
     await loadTasksAndSprints();
   }
 
   async function handleCreateStory(input: StoryCreateInput) {
     if (!project?.referenceKey) {
-      alert(
-        "Project precisa de referenceKey antes de criar stories. Configure em Settings.",
+      showErrorToast(
+        new Error("Project precisa de referenceKey. Configure em Settings."),
+        { label: "Não é possível criar story" },
       );
       return;
     }
-    const res = await fetch(`/api/projects/${id}/stories`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: input.title,
-        want: input.want,
-        soThat: input.soThat ?? null,
-        personaId: input.personaId,
-        moduleId: input.moduleId,
-        proposedModuleName: input.proposedModuleName ?? null,
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(`Falha ao criar story: ${JSON.stringify(err)}`);
-      return;
+    try {
+      await fetchOrThrow(`/api/projects/${id}/stories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: input.title,
+          want: input.want,
+          soThat: input.soThat ?? null,
+          personaId: input.personaId,
+          moduleId: input.moduleId,
+          proposedModuleName: input.proposedModuleName ?? null,
+        }),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao criar story" });
     }
-    await loadStoryHierarchy();
   }
 
   async function handleCreateTask(input: TaskCreateInput) {
+    const tempTaskId = makeTempId("task");
     const now = new Date().toISOString();
-    const { data: refData, error: refErr } = await supabase.rpc(
-      "next_task_reference",
-    );
-    if (refErr) {
-      alert(`Falha ao gerar reference: ${refErr.message}`);
-      return;
-    }
-    const newTaskId = crypto.randomUUID();
-    const { error } = await supabase.from("Task").insert({
-      id: newTaskId,
-      projectId: id,
-      reference: (refData as unknown as string) ?? null,
+    const optimistic: RawTask = {
+      id: tempTaskId,
+      reference: "…",
       title: input.title,
       description: input.description ?? null,
+      status: input.status,
       type: input.type,
       scope: input.scope,
       complexity: input.complexity,
-      status: input.status,
-      userStoryId: input.userStoryId,
-      functionPoints: input.functionPoints,
+      functionPoints: input.functionPoints ?? null,
       billable: true,
-      updatedAt: now,
-    });
-    if (error) {
-      alert(`Falha ao criar task: ${error.message}`);
-      return;
+      dueDate: null,
+      doneAt: null,
+      notes: null,
+      sprintId: null,
+      userStoryId: input.userStoryId,
+      projectId: id,
+      createdByAgent: false,
+      assignments: [],
+      tags: [],
+      // updatedAt + createdAt aren't part of RawTask but keep server-shape generic
+    } as unknown as RawTask;
+
+    const result = await taskMutate(
+      { type: "create", entity: optimistic },
+      async (signal) => {
+        const res = await fetchOrThrow("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: id,
+            title: input.title,
+            description: input.description ?? null,
+            type: input.type,
+            scope: input.scope,
+            complexity: input.complexity,
+            status: input.status,
+            userStoryId: input.userStoryId,
+            functionPoints: input.functionPoints,
+            billable: true,
+            updatedAt: now,
+          }),
+          signal,
+        });
+        return (await res.json()) as RawTask & { id: string };
+      },
+      {
+        errorLabel: "Falha ao criar task",
+        reconcile: (prev, server) => {
+          const without = prev.filter((t) => t.id !== tempTaskId);
+          return [server, ...without];
+        },
+      },
+    );
+
+    if (result && input.tagIds.length > 0) {
+      await fetch(`/api/tasks/${result.id}/tags`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagIds: input.tagIds }),
+      }).then(() => loadTasksAndSprints());
     }
-    if (input.tagIds.length > 0) {
-      await supabase
-        .from("TaskTagAssignment")
-        .insert(input.tagIds.map((tagId) => ({ taskId: newTaskId, tagId })));
-    }
-    await loadTasksAndSprints();
   }
 
   async function handleCreateTag(name: string, tone: ChipTone): Promise<TaskTag> {
@@ -608,7 +646,9 @@ export default function ProjectDetailPage({
       body: JSON.stringify({ tagIds }),
     });
     if (!res.ok) {
-      alert("Falha ao atualizar tags");
+      showErrorToast(new Error("Falha ao atualizar tags"), {
+        label: "Tags",
+      });
       return;
     }
     await loadTasksAndSprints();
@@ -617,24 +657,24 @@ export default function ProjectDetailPage({
   async function handleSaveStory(updated: AdaptedStory) {
     const dbStory = rawStories.find((s) => s.reference === updated.reference);
     if (!dbStory) return;
-    const res = await fetch(`/api/stories/${updated.reference}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: updated.title,
-        want: updated.want,
-        soThat: updated.soThat,
-        personaId: updated.personaId,
-        moduleId: updated.moduleId,
-        proposedModuleName: updated.proposedModuleName ?? null,
-        refinementStatus: updated.refinementStatus,
-      }),
-    });
-    if (!res.ok) {
-      alert("Falha ao salvar story");
-      return;
+    try {
+      await fetchOrThrow(`/api/stories/${updated.reference}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: updated.title,
+          want: updated.want,
+          soThat: updated.soThat,
+          personaId: updated.personaId,
+          moduleId: updated.moduleId,
+          proposedModuleName: updated.proposedModuleName ?? null,
+          refinementStatus: updated.refinementStatus,
+        }),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao salvar story" });
     }
-    await loadStoryHierarchy();
   }
 
   /** Inline edits from the TasksList row. taskRef is the public reference;
@@ -649,26 +689,23 @@ export default function ProjectDetailPage({
   ) {
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
-
-    // Optimistic: update local state immediately so the chip flips with no
-    // perceived delay. Revert on failure.
-    const snapshot = rawTasks;
-    setRawTasks((cur) =>
-      cur.map((t) => (t.id === taskId ? { ...t, status } : t)),
+    await taskMutate(
+      { type: "patch", id: taskId, patch: { status } },
+      async (signal) => {
+        const res = await fetchOrThrow(`/api/tasks/${taskId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+          signal,
+        });
+        return (await res.json()) as RawTask;
+      },
+      {
+        errorLabel: "Falha ao atualizar status",
+        reconcile: (prev, server) =>
+          prev.map((t) => (t.id === taskId ? { ...t, ...server } : t)),
+      },
     );
-
-    const { error } = await supabase
-      .from("Task")
-      .update({ status, updatedAt: new Date().toISOString() })
-      .eq("id", taskId);
-    if (error) {
-      setRawTasks(snapshot);
-      alert(`Falha ao atualizar status: ${error.message}`);
-      return;
-    }
-    // Reload in background to pick up server-derived fields (e.g. doneAt)
-    // without blocking the UI.
-    void loadTasksAndSprints();
   }
 
   async function handleInlineSprintChange(
@@ -677,22 +714,23 @@ export default function ProjectDetailPage({
   ) {
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
-
-    const snapshot = rawTasks;
-    setRawTasks((cur) =>
-      cur.map((t) => (t.id === taskId ? { ...t, sprintId } : t)),
+    await taskMutate(
+      { type: "patch", id: taskId, patch: { sprintId } },
+      async (signal) => {
+        const res = await fetchOrThrow(`/api/tasks/${taskId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sprintId }),
+          signal,
+        });
+        return (await res.json()) as RawTask;
+      },
+      {
+        errorLabel: "Falha ao atualizar sprint",
+        reconcile: (prev, server) =>
+          prev.map((t) => (t.id === taskId ? { ...t, ...server } : t)),
+      },
     );
-
-    const { error } = await supabase
-      .from("Task")
-      .update({ sprintId, updatedAt: new Date().toISOString() })
-      .eq("id", taskId);
-    if (error) {
-      setRawTasks(snapshot);
-      alert(`Falha ao atualizar sprint: ${error.message}`);
-      return;
-    }
-    void loadTasksAndSprints();
   }
 
   /** Sets a single assignee — replaces all existing TaskAssignment rows. */
@@ -711,9 +749,6 @@ export default function ProjectDetailPage({
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
 
-    // Optimistic: rebuild assignments locally with the requested members so
-    // the avatar/name flips instantly.
-    const snapshot = rawTasks;
     const memberLookup = new Map(rawMembers.map((m) => [m.id, m]));
     const optimisticAssignments = memberIds
       .map((memberId) => {
@@ -722,38 +757,34 @@ export default function ProjectDetailPage({
           ? { memberId, member: { id: m.id, name: m.name } }
           : null;
       })
-      .filter((a): a is { memberId: string; member: { id: string; name: string } } => a !== null);
-    setRawTasks((cur) =>
-      cur.map((t) =>
-        t.id === taskId ? { ...t, assignments: optimisticAssignments } : t,
-      ),
-    );
-
-    const { error: delErr } = await supabase
-      .from("TaskAssignment")
-      .delete()
-      .eq("taskId", taskId);
-    if (delErr) {
-      setRawTasks(snapshot);
-      alert(`Falha ao limpar assignment: ${delErr.message}`);
-      return;
-    }
-
-    if (memberIds.length > 0) {
-      const { error: insErr } = await supabase.from("TaskAssignment").insert(
-        memberIds.map((memberId) => ({
-          id: crypto.randomUUID(),
-          taskId,
-          memberId,
-        })),
+      .filter(
+        (a): a is { memberId: string; member: { id: string; name: string } } =>
+          a !== null,
       );
-      if (insErr) {
-        setRawTasks(snapshot);
-        alert(`Falha ao atribuir: ${insErr.message}`);
-        return;
-      }
-    }
-    void loadTasksAndSprints();
+
+    await taskMutate(
+      {
+        type: "patch",
+        id: taskId,
+        patch: { assignments: optimisticAssignments } as Partial<RawTask>,
+      },
+      async (signal) => {
+        const res = await fetchOrThrow(`/api/tasks/${taskId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assigneeIds: memberIds.map((memberId) => ({ memberId })),
+          }),
+          signal,
+        });
+        return (await res.json()) as RawTask;
+      },
+      {
+        errorLabel: "Falha ao atribuir",
+        reconcile: (prev, server) =>
+          prev.map((t) => (t.id === taskId ? { ...t, ...server } : t)),
+      },
+    );
   }
 
   async function handleSaveTask(updated: AdaptedTask) {
@@ -764,75 +795,132 @@ export default function ProjectDetailPage({
         : stories.find((s) => s.reference === updated.userStoryRef)?.__id ??
           null;
 
-    const { error } = await supabase
-      .from("Task")
-      .update({
-        title: updated.title,
-        description: updated.description,
-        notes: updated.notes,
-        status: updated.status,
-        type: updated.type,
-        scope: updated.scope,
-        complexity: updated.complexity,
-        functionPoints: updated.functionPoints,
-        billable: updated.billable,
-        dueDate: updated.dueDate,
-        userStoryId,
-        updatedAt: new Date().toISOString(),
-      })
-      .eq("id", updated.__id);
-    if (error) {
-      alert(`Falha ao salvar task: ${error.message}`);
-      return;
+    const fieldsPatch: Partial<RawTask> = {
+      title: updated.title,
+      description: updated.description,
+      notes: updated.notes,
+      status: updated.status,
+      type: updated.type,
+      scope: updated.scope,
+      complexity: updated.complexity,
+      functionPoints: updated.functionPoints,
+      billable: updated.billable,
+      dueDate: updated.dueDate,
+      userStoryId,
+    };
+
+    const taskFieldsResult = await taskMutate(
+      { type: "patch", id: updated.__id, patch: fieldsPatch },
+      async (signal) => {
+        const res = await fetchOrThrow(`/api/tasks/${updated.__id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fieldsPatch),
+          signal,
+        });
+        return (await res.json()) as RawTask;
+      },
+      {
+        errorLabel: "Falha ao salvar task",
+        reconcile: (prev, server) =>
+          prev.map((t) => (t.id === updated.__id ? { ...t, ...server } : t)),
+      },
+    );
+    if (taskFieldsResult === null) return;
+
+    if (!before) return;
+
+    // ─── AC bulk diff ────────────────────────────────────────────────────────
+    const beforeMap = new Map(
+      before.acceptanceCriteria.map((ac) => [ac.id, ac]),
+    );
+    const afterMap = new Map(
+      updated.acceptanceCriteria.map((ac) => [ac.id, ac]),
+    );
+
+    const creates: { text: string; order?: number }[] = [];
+    const updates: {
+      id: string;
+      text?: string;
+      order?: number;
+      checked?: boolean;
+    }[] = [];
+    const deletes: string[] = [];
+
+    for (const id of beforeMap.keys()) {
+      if (!afterMap.has(id)) deletes.push(id);
     }
 
-    // ─── AC diff ────────────────────────────────────────────────────────────
-    if (before) {
-      const beforeMap = new Map(
-        before.acceptanceCriteria.map((ac) => [ac.id, ac]),
-      );
-      const afterMap = new Map(
-        updated.acceptanceCriteria.map((ac) => [ac.id, ac]),
-      );
-
-      // Deletions
-      for (const id of beforeMap.keys()) {
-        if (!afterMap.has(id)) {
-          await fetch(`/api/tasks/${updated.__id}/acceptance/${id}`, {
-            method: "DELETE",
-          });
-        }
-      }
-
-      // Inserts + updates
-      for (const [id, after] of afterMap) {
-        if (id.startsWith("ac-new-")) {
-          await fetch(`/api/tasks/${updated.__id}/acceptance`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: after.text }),
-          });
-          continue;
-        }
+    let order = 0;
+    for (const [id, after] of afterMap) {
+      if (id.startsWith("ac-new-")) {
+        creates.push({ text: after.text, order });
+      } else {
         const prev = beforeMap.get(id);
         if (!prev) continue;
         const textChanged = prev.text !== after.text;
         const checkedChanged = prev.checked !== after.checked;
         if (textChanged || checkedChanged) {
-          await fetch(`/api/tasks/${updated.__id}/acceptance/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...(textChanged ? { text: after.text } : {}),
-              ...(checkedChanged ? { checked: after.checked } : {}),
-            }),
+          updates.push({
+            id,
+            ...(textChanged ? { text: after.text } : {}),
+            ...(checkedChanged ? { checked: after.checked } : {}),
           });
         }
       }
-      await loadStoryHierarchy();
+      order += 1;
     }
 
-    await loadTasksAndSprints();
+    if (creates.length === 0 && updates.length === 0 && deletes.length === 0) {
+      return;
+    }
+
+    // Build optimistic snapshot of taskAcRows for this task only.
+    const acRowsSnapshot = taskAcRows.filter(
+      (r) => r.taskId === updated.__id,
+    );
+    const otherAcRows = taskAcRows.filter((r) => r.taskId !== updated.__id);
+    const optimisticForTask: AcceptanceCriterionRow[] =
+      updated.acceptanceCriteria.map((ac, idx) => {
+        const existing = beforeMap.get(ac.id);
+        return {
+          id: ac.id.startsWith("ac-new-") ? makeTempId("ac") : ac.id,
+          taskId: updated.__id,
+          userStoryId: null,
+          text: ac.text,
+          order: idx,
+          checkedAt: ac.checked
+            ? existing?.checkedAt ?? new Date().toISOString()
+            : null,
+          checkedBy: ac.checked ? existing?.checkedBy ?? null : null,
+          createdAt: existing?.checkedAt ?? new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } as AcceptanceCriterionRow;
+      });
+
+    setTaskAcRows([...otherAcRows, ...optimisticForTask]);
+
+    try {
+      const res = await fetchOrThrow(
+        `/api/tasks/${updated.__id}/acceptance/bulk`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ creates, updates, deletes }),
+        },
+      );
+      const data = (await res.json()) as { acceptance: AcceptanceCriterionRow[] };
+      setTaskAcRows((prev) => {
+        const others = prev.filter((r) => r.taskId !== updated.__id);
+        return [...others, ...(data.acceptance ?? [])];
+      });
+    } catch (e) {
+      setTaskAcRows((prev) => {
+        const others = prev.filter((r) => r.taskId !== updated.__id);
+        return [...others, ...acRowsSnapshot];
+      });
+      showErrorToast(e, { label: "Falha ao salvar critérios" });
+    }
   }
 
   async function loadTargetProjects() {
@@ -880,7 +968,7 @@ export default function ProjectDetailPage({
     });
     if (!res.ok) {
       const msg = await res.text().catch(() => "Falha ao duplicar task");
-      alert(msg);
+      showErrorToast(new Error(msg), { label: "Duplicar task" });
       return;
     }
     const created = await res.json().catch(() => null);
@@ -904,13 +992,15 @@ export default function ProjectDetailPage({
     });
     if (!res.ok) {
       const msg = await res.text().catch(() => "Falha ao clonar task");
-      alert(msg);
+      showErrorToast(new Error(msg), { label: "Clonar task" });
       return;
     }
     const data = await res.json().catch(() => null);
     const projectName = data?.targetProjectName ?? "outro projeto";
     const newRef = data?.task?.reference ?? "";
-    alert(`Clonada para ${projectName}${newRef ? ` (${newRef})` : ""}.`);
+    toast.success(
+      `Clonada para ${projectName}${newRef ? ` (${newRef})` : ""}.`,
+    );
   }
 
   async function handleDeleteTask(taskRef: string) {
@@ -919,14 +1009,21 @@ export default function ProjectDetailPage({
     if (!confirm(`Deletar task ${taskRef}? Essa ação não pode ser desfeita.`)) {
       return;
     }
-    const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "Falha ao deletar task");
-      alert(msg);
-      return;
-    }
     if (selectedTaskRef === taskRef) setSelectedTaskRef(null);
-    await loadTasksAndSprints();
+    await taskMutate(
+      { type: "delete", id: taskId },
+      async (signal) => {
+        const res = await fetchOrThrow(`/api/tasks/${taskId}`, {
+          method: "DELETE",
+          signal,
+        });
+        return (await res.json()) as { ok: true; id: string };
+      },
+      {
+        errorLabel: "Falha ao deletar task",
+        reconcile: (prev) => prev.filter((t) => t.id !== taskId),
+      },
+    );
   }
 
   function refsToIds(taskRefs: string[]): string[] {
@@ -945,36 +1042,62 @@ export default function ProjectDetailPage({
   ) {
     const taskIds = refsToIds(taskRefs);
     if (taskIds.length === 0) return;
-    const res = await fetch("/api/tasks/bulk", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ taskIds, action: "update", patch }),
-    });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "Falha ao atualizar em massa");
-      alert(msg);
-      return;
+
+    const localPatch: Partial<RawTask> = {};
+    if (patch.status !== undefined) localPatch.status = patch.status;
+    if (patch.sprintId !== undefined) localPatch.sprintId = patch.sprintId;
+    if (patch.assigneeId !== undefined) {
+      const m = patch.assigneeId
+        ? rawMembers.find((mem) => mem.id === patch.assigneeId)
+        : null;
+      localPatch.assignments = m
+        ? [{ memberId: m.id, member: { id: m.id, name: m.name } }]
+        : [];
     }
-    await loadTasksAndSprints();
+
+    await taskMutate(
+      { type: "bulkPatch", ids: taskIds, patch: localPatch },
+      async (signal) => {
+        const res = await fetchOrThrow("/api/tasks/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskIds, action: "update", patch }),
+          signal,
+        });
+        return (await res.json()) as { ids: string[] };
+      },
+      {
+        errorLabel: "Falha ao atualizar em massa",
+        reconcile: (prev) =>
+          prev.map((t) =>
+            taskIds.includes(t.id) ? { ...t, ...localPatch } : t,
+          ),
+      },
+    );
   }
 
   async function handleBulkDelete(taskRefs: string[]) {
     const taskIds = refsToIds(taskRefs);
     if (taskIds.length === 0) return;
-    const res = await fetch("/api/tasks/bulk", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ taskIds, action: "delete" }),
-    });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "Falha ao deletar em massa");
-      alert(msg);
-      return;
-    }
     if (selectedTaskRef && taskRefs.includes(selectedTaskRef)) {
       setSelectedTaskRef(null);
     }
-    await loadTasksAndSprints();
+    await taskMutate(
+      { type: "bulkDelete", ids: taskIds },
+      async (signal) => {
+        const res = await fetchOrThrow("/api/tasks/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskIds, action: "delete" }),
+          signal,
+        });
+        return (await res.json()) as { ids: string[] };
+      },
+      {
+        errorLabel: "Falha ao deletar em massa",
+        reconcile: (prev) => prev.filter((t) => !taskIds.includes(t.id)),
+      },
+    );
   }
 
   async function handleBulkDuplicate(taskRefs: string[]) {
@@ -992,7 +1115,12 @@ export default function ProjectDetailPage({
       if (!res.ok) failures += 1;
     }
     if (failures > 0) {
-      alert(`${failures} duplicação(ões) falharam de ${taskIds.length}.`);
+      showErrorToast(
+        new Error(
+          `${failures} duplicação(ões) falharam de ${taskIds.length}.`,
+        ),
+        { label: "Bulk duplicate" },
+      );
     }
     await loadTasksAndSprints();
   }
@@ -1000,164 +1128,201 @@ export default function ProjectDetailPage({
   async function handleBulkAddTag(taskRefs: string[], tagId: string) {
     const taskIds = refsToIds(taskRefs);
     if (taskIds.length === 0) return;
-    const res = await fetch("/api/tasks/bulk", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        taskIds,
-        action: "update",
-        patch: { addTagIds: [tagId] },
-      }),
-    });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "Falha ao adicionar tag");
-      alert(msg);
-      return;
-    }
-    const result = (await res.json().catch(() => null)) as
-      | { skippedDueToLimit?: string[] }
-      | null;
-    const skipped = result?.skippedDueToLimit?.length ?? 0;
-    if (skipped > 0) {
-      alert(
-        `${skipped} task${skipped > 1 ? "s" : ""} não recebe${skipped > 1 ? "ram" : "u"} a tag (limite de 10 atingido).`,
-      );
-    }
-    await loadTasksAndSprints();
+    const tag = projectTags.find((t) => t.id === tagId);
+    if (!tag) return;
+
+    const optimisticTagEntry = {
+      TaskTag: { id: tag.id, name: tag.name, tone: tag.tone ?? "" },
+    };
+
+    await taskMutate(
+      { type: "bulkPatch", ids: taskIds, patch: {} as Partial<RawTask> },
+      async (signal) => {
+        const res = await fetchOrThrow("/api/tasks/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            taskIds,
+            action: "update",
+            patch: { addTagIds: [tagId] },
+          }),
+          signal,
+        });
+        return (await res.json()) as {
+          ids: string[];
+          skippedDueToLimit?: string[];
+        };
+      },
+      {
+        errorLabel: "Falha ao adicionar tag",
+        reconcile: (prev, server) => {
+          const skipped = new Set(server.skippedDueToLimit ?? []);
+          if (skipped.size > 0) {
+            const n = skipped.size;
+            showErrorToast(
+              new Error(
+                `${n} task${n > 1 ? "s" : ""} não recebe${n > 1 ? "ram" : "u"} a tag (limite de 10).`,
+              ),
+              { label: "Limite de tags" },
+            );
+          }
+          return prev.map((t) => {
+            if (!taskIds.includes(t.id) || skipped.has(t.id)) return t;
+            const has = t.tags.some(
+              (entry) => entry.TaskTag?.id === tagId,
+            );
+            if (has) return t;
+            return { ...t, tags: [...t.tags, optimisticTagEntry] };
+          });
+        },
+      },
+    );
   }
 
   async function handleBulkRemoveTag(taskRefs: string[], tagId: string) {
     const taskIds = refsToIds(taskRefs);
     if (taskIds.length === 0) return;
-    const res = await fetch("/api/tasks/bulk", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        taskIds,
-        action: "update",
-        patch: { removeTagIds: [tagId] },
-      }),
-    });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "Falha ao remover tag");
-      alert(msg);
-      return;
-    }
-    await loadTasksAndSprints();
+    await taskMutate(
+      { type: "bulkPatch", ids: taskIds, patch: {} as Partial<RawTask> },
+      async (signal) => {
+        const res = await fetchOrThrow("/api/tasks/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            taskIds,
+            action: "update",
+            patch: { removeTagIds: [tagId] },
+          }),
+          signal,
+        });
+        return (await res.json()) as { ids: string[] };
+      },
+      {
+        errorLabel: "Falha ao remover tag",
+        reconcile: (prev) =>
+          prev.map((t) =>
+            taskIds.includes(t.id)
+              ? {
+                  ...t,
+                  tags: t.tags.filter(
+                    (entry) => entry.TaskTag?.id !== tagId,
+                  ),
+                }
+              : t,
+          ),
+      },
+    );
   }
 
   async function handleApproveProposedModule(story: AdaptedStory) {
     if (!story.proposedModuleName) return;
-    const res = await fetch(
-      `/api/stories/${story.reference}/approve-module`,
-      { method: "POST" },
-    );
-    if (!res.ok) {
-      alert("Falha ao aprovar módulo");
-      return;
+    try {
+      await fetchOrThrow(`/api/stories/${story.reference}/approve-module`, {
+        method: "POST",
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao aprovar módulo" });
     }
-    await loadStoryHierarchy();
   }
 
   async function handleValidateAc(story: AdaptedStory) {
-    const res = await fetch(
-      `/api/stories/${story.reference}/validate-ac`,
-      { method: "POST" },
-    );
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      alert(`Falha ao validar AC: ${JSON.stringify(e)}`);
-      return;
+    try {
+      await fetchOrThrow(`/api/stories/${story.reference}/validate-ac`, {
+        method: "POST",
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao validar AC" });
     }
-    await loadStoryHierarchy();
   }
 
   async function handleCreateModule(data: {
     name: string;
     description?: string;
   }) {
-    const res = await fetch(`/api/projects/${id}/modules`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      alert("Falha ao criar módulo");
-      return;
+    try {
+      await fetchOrThrow(`/api/projects/${id}/modules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao criar módulo" });
     }
-    await loadStoryHierarchy();
   }
 
   async function handleUpdateModule(
     modId: string,
     data: { name?: string; description?: string },
   ) {
-    const res = await fetch(`/api/projects/${id}/modules/${modId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      alert("Falha ao editar módulo");
-      return;
+    try {
+      await fetchOrThrow(`/api/projects/${id}/modules/${modId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao editar módulo" });
     }
-    await loadStoryHierarchy();
   }
 
   async function handleDeleteModule(modId: string) {
     if (!confirm("Deletar módulo?")) return;
-    const res = await fetch(`/api/projects/${id}/modules/${modId}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
-      alert("Falha ao deletar módulo");
-      return;
+    try {
+      await fetchOrThrow(`/api/projects/${id}/modules/${modId}`, {
+        method: "DELETE",
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao deletar módulo" });
     }
-    await loadStoryHierarchy();
   }
 
   async function handleCreatePersona(data: {
     name: string;
     description?: string;
   }) {
-    const res = await fetch(`/api/projects/${id}/personas`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      alert("Falha ao criar persona");
-      return;
+    try {
+      await fetchOrThrow(`/api/projects/${id}/personas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao criar persona" });
     }
-    await loadStoryHierarchy();
   }
 
   async function handleUpdatePersona(
     perId: string,
     data: { name?: string; description?: string },
   ) {
-    const res = await fetch(`/api/projects/${id}/personas/${perId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      alert("Falha ao editar persona");
-      return;
+    try {
+      await fetchOrThrow(`/api/projects/${id}/personas/${perId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao editar persona" });
     }
-    await loadStoryHierarchy();
   }
 
   async function handleDeletePersona(perId: string) {
     if (!confirm("Deletar persona?")) return;
-    const res = await fetch(`/api/projects/${id}/personas/${perId}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
-      alert("Falha ao deletar persona");
-      return;
+    try {
+      await fetchOrThrow(`/api/projects/${id}/personas/${perId}`, {
+        method: "DELETE",
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao deletar persona" });
     }
-    await loadStoryHierarchy();
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -1640,7 +1805,9 @@ function SettingsTab({
         .update({ referenceKey: normalized })
         .eq("id", project.id);
       if (error) {
-        alert(`Falha: ${error.message}`);
+        showErrorToast(new Error(error.message), {
+          label: "Falha ao salvar reference",
+        });
         return;
       }
       await onUpdateProject();
@@ -1658,7 +1825,9 @@ function SettingsTab({
         body: JSON.stringify({ items }),
       });
       if (!res.ok) {
-        alert("Falha ao salvar DoD");
+        showErrorToast(new Error("Falha ao salvar DoD"), {
+          label: "DoD",
+        });
         return;
       }
       await onUpdateProject();
