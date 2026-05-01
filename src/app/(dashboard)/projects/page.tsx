@@ -33,6 +33,8 @@ import { roleLabel } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
+import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { showErrorToast } from "@/lib/optimistic/toast";
 
 type ProjectMemberAlloc = {
   id: string;
@@ -134,7 +136,10 @@ function ProjectCardMobile({
 }
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const projectsCollection = useOptimisticCollection<Project>([]);
+  const projects = projectsCollection.items;
+  const setProjects = projectsCollection.setCommitted;
+  const projectMutate = projectsCollection.mutate;
   const [clients, setClients] = useState<Client[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [open, setOpen] = useState(false);
@@ -260,9 +265,19 @@ export default function ProjectsPage() {
 
   const remove = async (id: string) => {
     if (!confirm("Remover este projeto?")) return;
-    const supabase = createClient();
-    await supabase.from("Project").delete().eq("id", id);
-    load();
+    await projectMutate(
+      { type: "delete", id },
+      async () => {
+        const supabase = createClient();
+        const { error } = await supabase.from("Project").delete().eq("id", id);
+        if (error) throw new Error(error.message);
+        return { ok: true as const, id };
+      },
+      {
+        errorLabel: "Falha ao remover projeto",
+        reconcile: (prev) => prev.filter((p) => p.id !== id),
+      },
+    );
   };
 
   const toggleExpand = (id: string) => {

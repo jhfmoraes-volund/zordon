@@ -21,6 +21,7 @@ import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { getStepsForSession, StepDef } from "@/lib/design-session-steps";
 import type { Note } from "@/components/design-session/sticky-note";
 import { DesignSessionProvider } from "@/contexts/design-session-context";
+import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 
 type Session = {
   id: string;
@@ -85,12 +86,23 @@ export default function StepPage({
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
         setSaving(true);
-        await fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stepIndex, data: { ...stepDataRef.current, _notes: notesRef.current } }),
-        });
-        setSaving(false);
+        try {
+          await fetchOrThrow(
+            `/api/design-sessions/${id}/steps/${currentStepDef.key}`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                stepIndex,
+                data: { ...stepDataRef.current, _notes: notesRef.current },
+              }),
+            },
+          );
+        } catch (e) {
+          showErrorToast(e, { label: "Falha ao salvar progresso" });
+        } finally {
+          setSaving(false);
+        }
       }, 500);
     },
     [id, stepIndex, currentStepDef?.key]
@@ -140,11 +152,13 @@ export default function StepPage({
   }, [id, currentStepDef?.key]);
 
   const navigate = (targetStep: number) => {
-    fetch(`/api/design-sessions/${id}`, {
+    fetchOrThrow(`/api/design-sessions/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ currentStep: targetStep, status: "in_progress" }),
-    });
+    }).catch((e) =>
+      showErrorToast(e, { label: "Falha ao salvar progresso de step" }),
+    );
     router.push(`/design-sessions/${id}/steps/${targetStep}`);
   };
 

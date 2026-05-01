@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { fetchOrThrow } from "@/lib/optimistic/toast";
 import { PageHeader } from "@/components/page-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -275,7 +277,10 @@ function MemberCardMobile({
 export default function MembersPage() {
   const { realRole } = useAuth();
   const isAdmin = hasMinLevel(realRole, ADMIN);
-  const [members, setMembers] = useState<Member[]>([]);
+  const membersCollection = useOptimisticCollection<Member>([]);
+  const members = membersCollection.items;
+  const setMembers = membersCollection.setCommitted;
+  const memberMutate = membersCollection.mutate;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
   const [form, setForm] = useState({
@@ -432,8 +437,20 @@ export default function MembersPage() {
 
   const remove = async (id: string) => {
     if (!confirm("Remover este membro?")) return;
-    await fetch(`/api/members/${id}`, { method: "DELETE" });
-    load();
+    await memberMutate(
+      { type: "delete", id },
+      async (signal) => {
+        const res = await fetchOrThrow(`/api/members/${id}`, {
+          method: "DELETE",
+          signal,
+        });
+        return (await res.json().catch(() => ({}))) as { ok?: true };
+      },
+      {
+        errorLabel: "Falha ao remover membro",
+        reconcile: (prev) => prev.filter((m) => m.id !== id),
+      },
+    );
   };
 
   return (

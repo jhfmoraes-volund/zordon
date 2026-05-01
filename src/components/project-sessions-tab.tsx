@@ -24,6 +24,8 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { SuperSessionModal } from "@/components/design-session/super-session-modal";
 import { createClient } from "@/lib/supabase/client";
 import { DESIGN_SESSION_STATUS, lookupChip } from "@/lib/status-chips";
+import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 
 type DesignSession = {
   id: string;
@@ -55,7 +57,10 @@ export function ProjectSessionsTab({
   canManage = false,
 }: Props) {
   const router = useRouter();
-  const [sessions, setSessions] = useState<DesignSession[]>([]);
+  const sessionsCollection = useOptimisticCollection<DesignSession>([]);
+  const sessions = sessionsCollection.items;
+  const setSessions = sessionsCollection.setCommitted;
+  const sessionMutate = sessionsCollection.mutate;
   const [loading, setLoading] = useState(true);
   const [superOpen, setSuperOpen] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
@@ -78,7 +83,7 @@ export function ProjectSessionsTab({
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, setSessions]);
 
   useEffect(() => {
     load();
@@ -89,23 +94,35 @@ export function ProjectSessionsTab({
       type === "inception"
         ? `Inception ${projectName}`
         : `Melhoria ${projectName} — ${new Date().toLocaleDateString("pt-BR")}`;
-    const res = await fetch("/api/design-sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId, type, title }),
-    });
-    if (!res.ok) {
-      alert("Falha ao criar session");
-      return;
+    try {
+      const res = await fetchOrThrow("/api/design-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, type, title }),
+      });
+      const session = await res.json();
+      router.push(`/design-sessions/${session.id}/steps/0`);
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao criar session" });
     }
-    const session = await res.json();
-    router.push(`/design-sessions/${session.id}/steps/0`);
   }
 
   async function remove(id: string) {
     if (!confirm("Remover esta session?")) return;
-    await fetch(`/api/design-sessions/${id}`, { method: "DELETE" });
-    load();
+    await sessionMutate(
+      { type: "delete", id },
+      async (signal) => {
+        const res = await fetchOrThrow(`/api/design-sessions/${id}`, {
+          method: "DELETE",
+          signal,
+        });
+        return (await res.json().catch(() => ({}))) as { ok?: true };
+      },
+      {
+        errorLabel: "Falha ao remover session",
+        reconcile: (prev) => prev.filter((s) => s.id !== id),
+      },
+    );
   }
 
   async function exportJson(id: string) {
@@ -116,7 +133,9 @@ export function ProjectSessionsTab({
         data: { session: authSession },
       } = await supabase.auth.getSession();
       if (!authSession) {
-        alert("Sessão expirada. Faça login novamente.");
+        showErrorToast(new Error("Sessão expirada. Faça login novamente."), {
+          label: "Auth",
+        });
         return;
       }
       const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/export-design-session`;
@@ -129,7 +148,9 @@ export function ProjectSessionsTab({
         body: JSON.stringify({ sessionId: id }),
       });
       if (!res.ok) {
-        alert(`Erro ao exportar: ${await res.text()}`);
+        showErrorToast(new Error(await res.text()), {
+          label: "Erro ao exportar",
+        });
         return;
       }
       const cd = res.headers.get("Content-Disposition") ?? "";

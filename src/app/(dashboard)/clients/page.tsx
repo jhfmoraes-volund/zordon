@@ -24,6 +24,7 @@ import {
   ResponsiveDialogBody,
 } from "@/components/ui/responsive-dialog";
 import { Pencil, Trash2 } from "lucide-react";
+import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 
 type Client = {
   id: string;
@@ -35,7 +36,10 @@ type Client = {
 };
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>([]);
+  const clientsCollection = useOptimisticCollection<Client>([]);
+  const clients = clientsCollection.items;
+  const setClients = clientsCollection.setCommitted;
+  const clientMutate = clientsCollection.mutate;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
@@ -89,9 +93,19 @@ export default function ClientsPage() {
 
   const remove = async (id: string) => {
     if (!confirm("Remover este cliente?")) return;
-    const supabase = createClient();
-    await supabase.from("Client").delete().eq("id", id);
-    load();
+    await clientMutate(
+      { type: "delete", id },
+      async () => {
+        const supabase = createClient();
+        const { error } = await supabase.from("Client").delete().eq("id", id);
+        if (error) throw new Error(error.message);
+        return { ok: true as const, id };
+      },
+      {
+        errorLabel: "Falha ao remover cliente",
+        reconcile: (prev) => prev.filter((c) => c.id !== id),
+      },
+    );
   };
 
   return (
