@@ -1,7 +1,7 @@
 // Pure derivations for sprint computations. No side-effects, no fetching.
 
 import type { Task } from "@/components/story-hierarchy";
-import type { Sprint } from "./types";
+import type { Sprint, SprintMemberCapacity } from "./types";
 
 /**
  * Resolve "current sprint" with the agreed fallback chain:
@@ -111,6 +111,24 @@ export function deliveredFpByMember(
   const acc: Record<string, number> = {};
   for (const t of tasksOfSprint(sprintId, tasks)) {
     if (t.status !== "done") continue;
+    for (const id of t.assigneeIds) {
+      acc[id] = (acc[id] ?? 0) + t.functionPoints;
+    }
+  }
+  return acc;
+}
+
+/**
+ * Sum of "planejado" FP per memberId — tasks com status ≠ backlog (e ≠ draft,
+ * já que drafts ainda não foram aceitos pro plano). Inclui done + in-flight.
+ */
+export function plannedFpByMember(
+  sprintId: string,
+  tasks: Task[],
+): Record<string, number> {
+  const acc: Record<string, number> = {};
+  for (const t of tasksOfSprint(sprintId, tasks)) {
+    if (t.status === "backlog" || t.status === "draft") continue;
     for (const id of t.assigneeIds) {
       acc[id] = (acc[id] ?? 0) + t.functionPoints;
     }
@@ -398,4 +416,148 @@ export function projectCompletion(
     velocity,
     remaining,
   };
+}
+
+// ─── Pulse helpers — Overview tab ─────────────────────────────────────────────
+
+/**
+ * Delta entre Work% e Tempo% (em pontos percentuais).
+ * Positivo = Work adiantado vs Tempo (bom). Negativo = atrasado (ruim).
+ */
+export function workTimeDelta(
+  sprint: Sprint,
+  tasks: Task[],
+  now: Date = new Date(),
+): { workPct: number; timePct: number; deltaPp: number } {
+  const fp = sprintFP(sprint.id, tasks);
+  const workPct = fp.total > 0 ? Math.round((fp.done / fp.total) * 100) : 0;
+  const days = sprintDays(sprint, now);
+  const timePct = Math.round((days.elapsed / days.total) * 100);
+  return { workPct, timePct, deltaPp: workPct - timePct };
+}
+
+/** Mix billable + AI-generated do sprint. */
+export function sprintMix(
+  sprintId: string,
+  tasks: Task[],
+): {
+  billablePct: number;
+  billableFp: number;
+  totalFp: number;
+  aiPct: number;
+  aiTasks: number;
+  totalTasks: number;
+} {
+  const own = tasksOfSprint(sprintId, tasks);
+  const totalFp = own.reduce((acc, t) => acc + t.functionPoints, 0);
+  const billableFp = own
+    .filter((t) => t.billable)
+    .reduce((acc, t) => acc + t.functionPoints, 0);
+  const aiTasks = own.filter((t) => t.createdByAgent).length;
+  return {
+    billablePct: totalFp > 0 ? Math.round((billableFp / totalFp) * 100) : 0,
+    billableFp,
+    totalFp,
+    aiPct: own.length > 0 ? Math.round((aiTasks / own.length) * 100) : 0,
+    aiTasks,
+    totalTasks: own.length,
+  };
+}
+
+// ─── Alerts ───────────────────────────────────────────────────────────────────
+
+export type SprintAlertSeverity = "warn" | "info";
+
+export type SprintAlert = {
+  id: string;
+  severity: SprintAlertSeverity;
+  title: string;
+  detail?: string;
+  /** Optional CTA — caller decides what to do. */
+  action?: { label: string };
+};
+
+/**
+ * Alertas síncronos (sem dependência de timestamps de status).
+ *
+ *  - Sprint completo sem deploy pra produção
+ *  - Tasks done com AC unchecked (compliance)
+ *  - Tasks no plano sem assignee
+ *  - Membros over-committed (planejado > alocação)
+ */
+export function sprintAlerts(
+  sprint: Sprint,
+  tasks: Task[],
+  capacities: SprintMemberCapacity[],
+  plannedFp: Record<string, number>,
+): SprintAlert[] {
+  const alerts: SprintAlert[] = [];
+  const own = tasksOfSprint(sprint.id, tasks);
+
+  const fp = sprintFP(sprint.id, tasks);
+  const counts = sprintTaskCounts(sprint.id, tasks);
+  const isComplete =
+    sprint.status === "completed" ||
+    (counts.total > 0 && counts.done === counts.total);
+  if (isComplete && !sprint.deployedToProductionAt) {
+    alerts.push({
+      id: "deploy-gap",
+      severity: "warn",
+      title: "Deploy pendente",
+      detail: sprint.deployedToStagingAt
+        ? `Sprint completo, em staging desde ${sprint.deployedToStagingAt.slice(0, 10)} — promover pra produção.`
+        : "Sprint completo, sem deploy registrado.",
+      action: { label: "Promover" },
+    });
+  }
+
+  const doneWithoutAc = own.filter(
+    (t) =>
+      t.status === "done" &&
+      t.acceptanceCriteria.length > 0 &&
+      t.acceptanceCriteria.some((ac) => !ac.checked),
+  );
+  if (doneWithoutAc.length > 0) {
+    alerts.push({
+      id: "done-without-ac",
+      severity: "warn",
+      title: `${doneWithoutAc.length} task${doneWithoutAc.length === 1 ? "" : "s"} done sem AC completo`,
+      detail: "Compliance: marcadas como done com critérios de aceite pendentes.",
+    });
+  }
+
+  const noAssignee = own.filter(
+    (t) =>
+      t.assigneeIds.length === 0 &&
+      t.status !== "backlog" &&
+      t.status !== "draft",
+  );
+  if (noAssignee.length > 0) {
+    alerts.push({
+      id: "no-assignee",
+      severity: "info",
+      title: `${noAssignee.length} task${noAssignee.length === 1 ? "" : "s"} sem responsável`,
+      detail: "Tasks no plano do sprint precisam de assignee.",
+    });
+  }
+
+  const sprintCaps = capacities.filter((c) => c.sprintId === sprint.id);
+  const overcommit = sprintCaps.filter(
+    (c) => c.fpAllocation > 0 && (plannedFp[c.memberId] ?? 0) > c.fpAllocation,
+  );
+  if (overcommit.length > 0) {
+    alerts.push({
+      id: "overcommit",
+      severity: "info",
+      title: `${overcommit.length} ${overcommit.length === 1 ? "membro" : "membros"} acima da alocação`,
+      detail: "Planejado ultrapassa o contrato no sprint.",
+    });
+  }
+
+  // Mantém o sinal positivo só pra reduzir ruído
+  if (fp.total > 0 && alerts.length === 0) {
+    return [];
+  }
+
+  return alerts;
 }

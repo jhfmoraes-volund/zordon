@@ -11,6 +11,11 @@ type Props = {
   tasks: Task[];
   /** Whether the chart starts expanded. Default: false (collapsed). */
   defaultExpanded?: boolean;
+  /**
+   * Embedded mode — sem card wrapper, sem accordion, sem header próprio.
+   * Usado quando o burndown é uma aba dentro de um widget maior (Sprint Pulse).
+   */
+  embedded?: boolean;
 };
 
 const W = 600;
@@ -21,6 +26,7 @@ export function SprintBurndown({
   sprint,
   tasks,
   defaultExpanded = false,
+  embedded = false,
 }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
@@ -35,7 +41,13 @@ export function SprintBurndown({
 
   if (totalFP === 0) {
     return (
-      <section className="rounded-xl border border-dashed bg-card p-4 text-center text-xs text-muted-foreground">
+      <section
+        className={
+          embedded
+            ? "py-8 text-center text-xs text-muted-foreground"
+            : "rounded-xl border border-dashed bg-card p-4 text-center text-xs text-muted-foreground"
+        }
+      >
         Sem tasks no sprint — burndown indisponível.
       </section>
     );
@@ -100,6 +112,156 @@ export function SprintBurndown({
   const lastActual = [...actualPoints].pop();
   const doneFP = lastActual ? totalFP - lastActual.actual! : 0;
 
+  const chart = (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="block h-48 w-full sm:h-56"
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label={`Burndown — ${doneFP} de ${totalFP} FP entregues, ${completion.etaText}`}
+    >
+      {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+        const fp = totalFP * frac;
+        const y = yFor(fp);
+        return (
+          <g key={frac}>
+            <line
+              x1={PAD.left}
+              x2={W - PAD.right}
+              y1={y}
+              y2={y}
+              className="stroke-border"
+              strokeDasharray="2,3"
+              strokeWidth="0.5"
+            />
+            <text
+              x={PAD.left - 6}
+              y={y + 3}
+              textAnchor="end"
+              className="fill-muted-foreground text-[9px]"
+            >
+              {Math.round(fp)}
+            </text>
+          </g>
+        );
+      })}
+      {Array.from({ length: totalDays + 1 }).map((_, d) => {
+        const x = xFor(d);
+        return (
+          <g key={d}>
+            <line
+              x1={x}
+              x2={x}
+              y1={H - PAD.bottom}
+              y2={H - PAD.bottom + 3}
+              className="stroke-border"
+              strokeWidth="0.5"
+            />
+            <text
+              x={x}
+              y={H - PAD.bottom + 14}
+              textAnchor="middle"
+              className="fill-muted-foreground text-[9px]"
+            >
+              {d === 0 ? "S" : `D${d}`}
+            </text>
+          </g>
+        );
+      })}
+      <line
+        x1={PAD.left}
+        x2={W - PAD.right}
+        y1={H - PAD.bottom}
+        y2={H - PAD.bottom}
+        className="stroke-border"
+      />
+      <path
+        d={idealPath}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeDasharray="4,3"
+        className="text-muted-foreground/50"
+      />
+      {actualPath ? (
+        <path
+          d={actualPath}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="text-primary"
+        />
+      ) : null}
+      {actualPoints.map((p) => (
+        <circle
+          key={p.day}
+          cx={xFor(p.day)}
+          cy={yFor(p.actual!)}
+          r="3"
+          className="fill-primary"
+        />
+      ))}
+      {projectedPath ? (
+        <path
+          d={projectedPath}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeDasharray="3,3"
+          className={projectionStrokeClass}
+        />
+      ) : null}
+    </svg>
+  );
+
+  const legend = (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+      <Legend label="Ideal" swatchClass="bg-muted-foreground/40" dashed />
+      <Legend
+        label={`Real · ${doneFP}/${totalFP} FP entregues`}
+        swatchClass="bg-primary"
+      />
+      {projectedPath ? (
+        <Legend
+          label="Projeção (ritmo dos últimos 3 dias)"
+          swatchClass={
+            tone === "red"
+              ? "bg-red-500"
+              : tone === "amber"
+                ? "bg-amber-500"
+                : tone === "blue"
+                  ? "bg-blue-500"
+                  : "bg-green-500"
+          }
+          dashed
+        />
+      ) : null}
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <span className="text-muted-foreground">
+            Velocity:{" "}
+            <span className="font-mono tabular-nums text-foreground">
+              {completion.velocity.toFixed(1)}
+            </span>{" "}
+            FP/dia
+          </span>
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${pillClass}`}
+          >
+            {completion.etaText}
+          </span>
+        </div>
+        {chart}
+        {legend}
+      </div>
+    );
+  }
+
   return (
     <section className="overflow-hidden rounded-xl border bg-card">
       <button
@@ -135,146 +297,8 @@ export function SprintBurndown({
 
       {expanded ? (
         <div className="space-y-3 border-t px-4 py-4">
-          <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="block h-48 w-full sm:h-56"
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={`Burndown — ${doneFP} de ${totalFP} FP entregues, ${completion.etaText}`}
-      >
-        {/* Y grid + labels */}
-        {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
-          const fp = totalFP * frac;
-          const y = yFor(fp);
-          return (
-            <g key={frac}>
-              <line
-                x1={PAD.left}
-                x2={W - PAD.right}
-                y1={y}
-                y2={y}
-                className="stroke-border"
-                strokeDasharray="2,3"
-                strokeWidth="0.5"
-              />
-              <text
-                x={PAD.left - 6}
-                y={y + 3}
-                textAnchor="end"
-                className="fill-muted-foreground text-[9px]"
-              >
-                {Math.round(fp)}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* X ticks */}
-        {Array.from({ length: totalDays + 1 }).map((_, d) => {
-          const x = xFor(d);
-          return (
-            <g key={d}>
-              <line
-                x1={x}
-                x2={x}
-                y1={H - PAD.bottom}
-                y2={H - PAD.bottom + 3}
-                className="stroke-border"
-                strokeWidth="0.5"
-              />
-              <text
-                x={x}
-                y={H - PAD.bottom + 14}
-                textAnchor="middle"
-                className="fill-muted-foreground text-[9px]"
-              >
-                {d === 0 ? "S" : `D${d}`}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Axis */}
-        <line
-          x1={PAD.left}
-          x2={W - PAD.right}
-          y1={H - PAD.bottom}
-          y2={H - PAD.bottom}
-          className="stroke-border"
-        />
-
-        {/* Ideal line */}
-        <path
-          d={idealPath}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeDasharray="4,3"
-          className="text-muted-foreground/50"
-        />
-
-        {/* Actual line */}
-        {actualPath ? (
-          <path
-            d={actualPath}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="text-primary"
-          />
-        ) : null}
-
-        {/* Actual points */}
-        {actualPoints.map((p) => (
-          <circle
-            key={p.day}
-            cx={xFor(p.day)}
-            cy={yFor(p.actual!)}
-            r="3"
-            className="fill-primary"
-          />
-        ))}
-
-        {/* Projection */}
-        {projectedPath ? (
-          <path
-            d={projectedPath}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeDasharray="3,3"
-            className={projectionStrokeClass}
-          />
-        ) : null}
-      </svg>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
-        <Legend
-          label="Ideal"
-          swatchClass="bg-muted-foreground/40"
-          dashed
-        />
-        <Legend
-          label={`Real · ${doneFP}/${totalFP} FP entregues`}
-          swatchClass="bg-primary"
-        />
-        {projectedPath ? (
-          <Legend
-            label="Projeção (ritmo dos últimos 3 dias)"
-            swatchClass={
-              tone === "red"
-                ? "bg-red-500"
-                : tone === "amber"
-                  ? "bg-amber-500"
-                  : tone === "blue"
-                    ? "bg-blue-500"
-                    : "bg-green-500"
-            }
-            dashed
-          />
-        ) : null}
-          </div>
+          {chart}
+          {legend}
         </div>
       ) : null}
     </section>

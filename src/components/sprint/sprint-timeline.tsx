@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { lookupChip, SPRINT_STATUS } from "@/lib/status-chips";
 import type { Task } from "@/components/story-hierarchy";
-import { sprintFP, sprintTaskCounts } from "./helpers";
+import { sprintFP } from "./helpers";
 import type { Sprint } from "./types";
 
 type Props = {
@@ -49,7 +49,6 @@ export function SprintTimeline({
       <div className="flex gap-2">
         {sorted.map((s) => {
           const fp = sprintFP(s.id, tasks);
-          const counts = sprintTaskCounts(s.id, tasks);
           const pct = fp.total > 0 ? Math.round((fp.done / fp.total) * 100) : 0;
           const isActive = activeId === s.id;
           return (
@@ -73,7 +72,7 @@ export function SprintTimeline({
               </div>
               <div className="flex items-center justify-between text-[11px]">
                 <span className="font-mono tabular-nums text-muted-foreground">
-                  {counts.done}/{counts.total} t · {fp.done}/{fp.total} FP
+                  {fp.done}/{fp.total} FP
                 </span>
                 <span className="font-mono tabular-nums font-medium">
                   {pct}%

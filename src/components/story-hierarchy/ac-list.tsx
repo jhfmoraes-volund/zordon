@@ -2,9 +2,15 @@
 
 import { CheckSquare2, ListChecks, Plus, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { AC } from "./types";
 import { acProgress } from "./helpers";
+
+/** Strip leading markdown checkbox markers ("- [ ]", "- [x]", "* [ ]", "[ ]") that
+ *  legacy AC rows carry as literal text — the checkbox already conveys that state. */
+function stripAcMarker(text: string): string {
+  return text.replace(/^\s*(?:[-*]\s*)?\[[ xX]\]\s*/, "");
+}
 
 type ViewProps = {
   mode: "view";
@@ -44,15 +50,21 @@ export function AcList(props: Props) {
       </div>
 
       {props.mode === "view" ? (
-        <ul className="space-y-1.5">
+        <ul className="divide-y divide-border/40 rounded-md border border-border/40 bg-muted/20">
           {items.map((ac) => (
-            <li key={ac.id} className="flex items-start gap-2 text-sm">
+            <li key={ac.id} className="flex items-start gap-2.5 px-2.5 py-2 text-sm">
               {ac.checked ? (
                 <CheckSquare2 className="mt-0.5 size-4 shrink-0 text-green-600" />
               ) : (
                 <Square className="mt-0.5 size-4 shrink-0 text-muted-foreground/60" />
               )}
-              <span className="flex-1">{ac.text}</span>
+              <span
+                className={`flex-1 leading-snug ${
+                  ac.checked ? "text-muted-foreground line-through" : ""
+                }`}
+              >
+                {stripAcMarker(ac.text)}
+              </span>
               {ac.checkedBy ? (
                 <span className="shrink-0 text-[10px] text-muted-foreground">
                   ✓ {ac.checkedBy}
@@ -61,43 +73,65 @@ export function AcList(props: Props) {
             </li>
           ))}
           {items.length === 0 ? (
-            <li className="text-xs text-muted-foreground">
+            <li className="px-2.5 py-2 text-xs text-muted-foreground">
               Nenhum critério ainda.
             </li>
           ) : null}
         </ul>
       ) : (
         <div className="space-y-2">
-          {items.map((ac) => (
-            <div key={ac.id} className="flex items-start gap-2">
-              <button
-                type="button"
-                onClick={() => props.onToggle(ac.id)}
-                className="mt-1.5 shrink-0"
-                aria-label={ac.checked ? "Desmarcar" : "Marcar"}
-              >
-                {ac.checked ? (
-                  <CheckSquare2 className="size-4 text-green-600" />
-                ) : (
-                  <Square className="size-4 text-muted-foreground/60" />
-                )}
-              </button>
-              <Input
-                value={ac.text}
-                onChange={(e) => props.onChange(ac.id, e.target.value)}
-                placeholder="Critério verificável"
-                className="flex-1"
-              />
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => props.onRemove(ac.id)}
-                aria-label="Remover"
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          ))}
+          <div className="divide-y divide-border/40 rounded-md border border-border/40 bg-muted/10">
+            {items.map((ac) => {
+              const display = stripAcMarker(ac.text);
+              return (
+                <div
+                  key={ac.id}
+                  className="flex items-start gap-2 px-2 py-1.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => props.onToggle(ac.id)}
+                    className="mt-1.5 shrink-0"
+                    aria-label={ac.checked ? "Desmarcar" : "Marcar"}
+                  >
+                    {ac.checked ? (
+                      <CheckSquare2 className="size-4 text-green-600" />
+                    ) : (
+                      <Square className="size-4 text-muted-foreground/60" />
+                    )}
+                  </button>
+                  <Textarea
+                    value={display}
+                    onChange={(e) => props.onChange(ac.id, e.target.value)}
+                    onBlur={() => {
+                      // Persist the normalized (stripped) text once the user finishes
+                      // editing, so legacy "- [ ]" prefixes don't get carried back.
+                      if (display !== ac.text) props.onChange(ac.id, display);
+                    }}
+                    placeholder="Critério verificável"
+                    rows={1}
+                    className={`field-sizing-content min-h-0 flex-1 resize-none border-0 bg-transparent px-1.5 py-1 text-sm leading-snug shadow-none focus-visible:ring-0 dark:bg-transparent ${
+                      ac.checked ? "text-muted-foreground line-through" : ""
+                    }`}
+                  />
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => props.onRemove(ac.id)}
+                    aria-label="Remover"
+                    className="mt-0.5 shrink-0 text-muted-foreground/60 hover:text-foreground"
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              );
+            })}
+            {items.length === 0 ? (
+              <div className="px-2.5 py-2 text-xs text-muted-foreground">
+                Nenhum critério ainda.
+              </div>
+            ) : null}
+          </div>
           <Button
             size="sm"
             variant="outline"

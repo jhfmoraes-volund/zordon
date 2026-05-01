@@ -1,15 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Sparkles, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Sparkles, X } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ResponsiveSheet,
+  ResponsiveSheetBody,
+  ResponsiveSheetContent,
+  ResponsiveSheetFooter,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+} from "@/components/ui/responsive-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -43,15 +51,36 @@ type SprintLite = {
   status?: string;
 };
 
+/** Stories used by TaskSheet. `__id` (DB id) is required only by the create
+ *  flow's user-story picker; pure-view callers may pass plain `Story`s. */
+type StoryWithMaybeDbId = Story & { __id?: string };
+
+export type TaskCreateInput = {
+  title: string;
+  description?: string;
+  type: TaskType;
+  scope: TaskScope;
+  complexity: TaskComplexity;
+  area: TaskArea;
+  status: TaskStatus;
+  /** UserStory id (DB), or null if standalone. */
+  userStoryId: string | null;
+  functionPoints: number;
+};
+
 type TaskSheetProps = {
   task: Task | null;
-  stories: Story[];
+  stories: StoryWithMaybeDbId[];
   modules: Module[];
   members: Member[];
   definitionOfDone: string[];
   /** @deprecated kept for prop-compat with callers; ignored. The sheet has no
    *  view/edit toggle anymore — every field is always inline-editable. */
   editing?: boolean;
+  /** When true, opens in create mode (no `task` required). */
+  creating?: boolean;
+  /** Default story DB id pre-selected in create mode. */
+  defaultStoryId?: string | null;
   onClose: () => void;
   /** @deprecated no-op. */
   onEdit?: () => void;
@@ -59,6 +88,8 @@ type TaskSheetProps = {
   onCancelEdit?: () => void;
   /** Persist a Task patch (called per-field, with the merged Task). */
   onSave: (updated: Task) => void | Promise<void>;
+  /** Required when `creating` is true. */
+  onCreate?: (input: TaskCreateInput) => void | Promise<void>;
   /** Open the parent story when breadcrumb is clicked. */
   onOpenStory?: (storyRef: string) => void;
   /** Sprint picker support. When omitted, the row is read-only. */
@@ -94,17 +125,21 @@ const COMPLEXITY_VALUES: TaskComplexity[] = [
 ];
 
 export function TaskSheet(props: TaskSheetProps) {
-  const { task, onClose } = props;
+  const { task, creating, onClose } = props;
+  const isOpen = creating === true || task !== null;
   return (
-    <Sheet open={task !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full !sm:max-w-[640px] gap-0 p-0 flex flex-col"
-        showCloseButton={false}
-      >
-        {task ? <TaskSheetInner {...props} task={task} /> : null}
-      </SheetContent>
-    </Sheet>
+    <ResponsiveSheet
+      open={isOpen}
+      onOpenChange={(open) => !open && onClose()}
+    >
+      <ResponsiveSheetContent size="lg" showCloseButton={false}>
+        {creating ? (
+          <TaskSheetCreate {...props} />
+        ) : task ? (
+          <TaskSheetInner {...props} task={task} />
+        ) : null}
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }
 
@@ -244,24 +279,25 @@ function TaskSheetInner({
 
   return (
     <>
-      <SheetHeader className="border-b">
+      <ResponsiveSheetHeader>
         <div className="flex items-start justify-between gap-2">
-          <div className="space-y-2">
+          <div className="min-w-0 flex-1 space-y-2">
             <Breadcrumb
               task={task}
               stories={stories}
               modules={modules}
               onOpenStory={onOpenStory}
             />
-            <SheetTitle>
-              <Input
+            <ResponsiveSheetTitle className="text-[1.4375rem]">
+              <Textarea
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={() => persistIfChanged("title", title)}
-                className="border-0 bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
+                rows={1}
+                className="block w-full resize-none border-0 bg-transparent px-0 py-0 text-[1.4375rem] font-semibold leading-snug shadow-none focus-visible:ring-0 min-h-0 field-sizing-content dark:bg-transparent"
                 placeholder="Título da task"
               />
-            </SheetTitle>
+            </ResponsiveSheetTitle>
             <div className="flex flex-wrap items-center gap-2 text-[10px]">
               <Badge variant="outline">{task.scope} · {task.complexity}</Badge>
               <Badge variant="outline" className="font-mono">
@@ -283,9 +319,9 @@ function TaskSheetInner({
             <X />
           </Button>
         </div>
-      </SheetHeader>
+      </ResponsiveSheetHeader>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <ResponsiveSheetBody className="space-y-5">
         {/* Status + Area */}
         <div className="grid grid-cols-2 gap-3">
           <FieldBlock label="Status">
@@ -295,7 +331,7 @@ function TaskSheetInner({
                 v !== null && persist({ status: v as TaskStatus })
               }
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {(Object.keys(TASK_STATUS_MAP) as TaskStatus[]).map((s) => (
                   <SelectItem key={s} value={s}>
@@ -316,7 +352,7 @@ function TaskSheetInner({
                 });
               }}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">— sem area —</SelectItem>
                 {AREA_VALUES.map((a) => (
@@ -338,8 +374,26 @@ function TaskSheetInner({
               persist({ userStoryRef: v === "__none" ? null : v });
             }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Sem story" />
+            <SelectTrigger className="w-full h-9">
+              <SelectValue placeholder="Sem story">
+                {(v: string | null) => {
+                  if (!v || v === "__none") {
+                    return (
+                      <span className="text-muted-foreground">Sem story</span>
+                    );
+                  }
+                  const story = stories.find((s) => s.reference === v);
+                  if (!story) return v;
+                  return (
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {story.reference}
+                      </span>
+                      <span className="truncate">{story.title}</span>
+                    </span>
+                  );
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__none">— sem story —</SelectItem>
@@ -379,8 +433,17 @@ function TaskSheetInner({
                 );
               }}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Sem sprint" />
+              <SelectTrigger className="w-full h-9">
+                <SelectValue placeholder="Sem sprint">
+                  {(v: string | null) => {
+                    if (!v || v === "__none") {
+                      return (
+                        <span className="text-muted-foreground">Sem sprint</span>
+                      );
+                    }
+                    return sprints.find((s) => s.id === v)?.name ?? "Sem sprint";
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">— sem sprint —</SelectItem>
@@ -403,7 +466,7 @@ function TaskSheetInner({
                 v !== null && persist({ type: v as TaskType })
               }
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {TYPE_VALUES.map((t) => (
                   <SelectItem key={t} value={t}>{t}</SelectItem>
@@ -427,7 +490,7 @@ function TaskSheetInner({
                 }
               }}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SCOPE_VALUES.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
@@ -451,7 +514,7 @@ function TaskSheetInner({
                 }
               }}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {COMPLEXITY_VALUES.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
@@ -461,8 +524,13 @@ function TaskSheetInner({
           </FieldBlock>
         </div>
 
-        <div className="flex items-end gap-3">
-          <FieldBlock label="Function Points" className="flex-1">
+        {/* Function Points + Assignees */}
+        <div
+          className={`grid gap-3 items-start ${
+            onChangeAssignees ? "grid-cols-2" : "grid-cols-1"
+          }`}
+        >
+          <FieldBlock label="Function Points">
             <Input
               type="number"
               min={1}
@@ -474,57 +542,79 @@ function TaskSheetInner({
               onBlur={() => persistIfChanged("functionPoints", fp)}
               className="h-9"
             />
+            {fpManual ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const newFp = suggestFunctionPoints(task.scope, task.complexity);
+                  setFp(newFp);
+                  setFpManual(false);
+                  persist({ functionPoints: newFp });
+                }}
+                className="text-left text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Voltar pra matriz {task.scope} × {task.complexity}
+              </button>
+            ) : (
+              <span className="text-[10px] text-muted-foreground">
+                Sugerido pela matriz {task.scope} × {task.complexity}
+              </span>
+            )}
           </FieldBlock>
-          {fpManual ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const newFp = suggestFunctionPoints(task.scope, task.complexity);
-                setFp(newFp);
-                setFpManual(false);
-                persist({ functionPoints: newFp });
-              }}
-              className="text-[10px]"
-            >
-              Voltar pra matriz {task.scope} × {task.complexity}
-            </Button>
-          ) : (
-            <span className="pb-2 text-[10px] text-muted-foreground">
-              Sugerido pela matriz {task.scope} × {task.complexity}
-            </span>
-          )}
-        </div>
 
-        {/* Assignees */}
-        {onChangeAssignees ? (
-          <FieldBlock label="Assignees">
-            <div className="flex flex-wrap gap-1.5">
-              {members.map((m) => {
-                const active = task.assigneeIds.includes(m.id);
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => toggleAssignee(m.id)}
-                    className={`inline-flex h-7 items-center rounded-full border px-2.5 text-xs transition-colors ${
-                      active
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
-                    }`}
-                  >
-                    {m.name}
-                  </button>
-                );
-              })}
-              {members.length === 0 ? (
-                <span className="text-xs text-muted-foreground">
-                  Nenhum membro alocado ao projeto.
-                </span>
-              ) : null}
-            </div>
-          </FieldBlock>
-        ) : null}
+          {onChangeAssignees ? (
+            <FieldBlock label="Assignees">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="flex h-9 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
+                >
+                  {(() => {
+                    const selected = members.filter((m) =>
+                      task.assigneeIds.includes(m.id),
+                    );
+                    if (selected.length === 0) {
+                      return (
+                        <span className="text-muted-foreground">
+                          Sem assignee
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span className="truncate">
+                          {selected.map((m) => m.name).join(", ")}
+                        </span>
+                        {selected.length > 1 ? (
+                          <Badge variant="outline" className="h-4 px-1 text-[9px] font-mono">
+                            {selected.length}
+                          </Badge>
+                        ) : null}
+                      </span>
+                    );
+                  })()}
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[var(--anchor-width)]">
+                  {members.length === 0 ? (
+                    <div className="px-1.5 py-1.5 text-xs text-muted-foreground">
+                      Nenhum membro alocado ao projeto.
+                    </div>
+                  ) : (
+                    members.map((m) => (
+                      <DropdownMenuCheckboxItem
+                        key={m.id}
+                        checked={task.assigneeIds.includes(m.id)}
+                        onCheckedChange={() => toggleAssignee(m.id)}
+                      >
+                        {m.name}
+                      </DropdownMenuCheckboxItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </FieldBlock>
+          ) : null}
+        </div>
 
         <Separator />
 
@@ -582,7 +672,267 @@ function TaskSheetInner({
             ))}
           </ul>
         </div>
-      </div>
+      </ResponsiveSheetBody>
+    </>
+  );
+}
+
+// ─── Create mode ─────────────────────────────────────────────────────────────
+
+const STORY_NONE = "__none__";
+
+function TaskSheetCreate({
+  stories,
+  defaultStoryId,
+  onClose,
+  onCreate,
+}: TaskSheetProps) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [type, setType] = useState<TaskType>("feature");
+  const [scope, setScope] = useState<TaskScope>("small");
+  const [complexity, setComplexity] = useState<TaskComplexity>("medium");
+  const [area, setArea] = useState<TaskArea>(null);
+  const [status, setStatus] = useState<TaskStatus>("backlog");
+  const [storyId, setStoryId] = useState<string>(defaultStoryId ?? STORY_NONE);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setTitle("");
+    setDescription("");
+    setType("feature");
+    setScope("small");
+    setComplexity("medium");
+    setArea(null);
+    setStatus("backlog");
+    setStoryId(defaultStoryId ?? STORY_NONE);
+    setSubmitting(false);
+  }, [defaultStoryId]);
+
+  const fp = suggestFunctionPoints(scope, complexity);
+  const valid = title.trim().length >= 3;
+
+  async function submit() {
+    if (!valid || submitting || !onCreate) return;
+    setSubmitting(true);
+    try {
+      await onCreate({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        type,
+        scope,
+        complexity,
+        area,
+        status,
+        userStoryId: storyId === STORY_NONE ? null : storyId,
+        functionPoints: fp,
+      });
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <ResponsiveSheetHeader>
+        <ResponsiveSheetTitle>Nova task</ResponsiveSheetTitle>
+        <p className="text-sm text-muted-foreground">
+          Quebrar uma story em ações executáveis.
+        </p>
+      </ResponsiveSheetHeader>
+
+      <ResponsiveSheetBody className="space-y-4">
+        <FieldBlock label="Título">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Implementar endpoint /auth/magic-link"
+            autoFocus
+          />
+        </FieldBlock>
+
+        <FieldBlock label="Descrição">
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+          />
+        </FieldBlock>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FieldBlock label="Story">
+            <Select
+              value={storyId}
+              onValueChange={(v) => v !== null && setStoryId(v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Escolha story">
+                  {(v: string | null) => {
+                    if (!v || v === STORY_NONE) {
+                      return (
+                        <span className="text-muted-foreground">
+                          Sem story (avulsa)
+                        </span>
+                      );
+                    }
+                    const story = stories.find((s) => s.__id === v);
+                    if (!story) return "Escolha story";
+                    return (
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {story.reference}
+                        </span>
+                        <span className="truncate">· {story.title}</span>
+                      </span>
+                    );
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={STORY_NONE}>Sem story (avulsa)</SelectItem>
+                {stories
+                  .filter((s): s is Story & { __id: string } => !!s.__id)
+                  .map((s) => (
+                    <SelectItem key={s.__id} value={s.__id}>
+                      <span className="font-mono text-xs">{s.reference}</span>{" "}
+                      · {s.title}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+
+          <FieldBlock label="Status">
+            <Select
+              value={status}
+              onValueChange={(v) =>
+                v !== null && setStatus(v as TaskStatus)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(
+                  [
+                    "backlog",
+                    "todo",
+                    "in_progress",
+                    "review",
+                    "done",
+                  ] as TaskStatus[]
+                ).map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FieldBlock label="Tipo">
+            <Select
+              value={type}
+              onValueChange={(v) => v !== null && setType(v as TaskType)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TYPE_VALUES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+
+          <FieldBlock label="Area">
+            <Select
+              value={area === null ? "__none" : area}
+              onValueChange={(v) => {
+                if (v === null) return;
+                setArea(v === "__none" ? null : (v as TaskArea));
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">— sem area —</SelectItem>
+                {AREA_VALUES.map((a) => (
+                  <SelectItem key={String(a.value)} value={String(a.value)}>
+                    {a.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <FieldBlock label="Scope">
+            <Select
+              value={scope}
+              onValueChange={(v) =>
+                v !== null && setScope(v as TaskScope)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCOPE_VALUES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+
+          <FieldBlock label="Complexity">
+            <Select
+              value={complexity}
+              onValueChange={(v) =>
+                v !== null && setComplexity(v as TaskComplexity)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COMPLEXITY_VALUES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+
+          <FieldBlock label="FP (auto)">
+            <Input
+              value={fp}
+              readOnly
+              className="font-mono tabular-nums"
+            />
+          </FieldBlock>
+        </div>
+      </ResponsiveSheetBody>
+
+      <ResponsiveSheetFooter>
+        <Button variant="ghost" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button onClick={submit} disabled={!valid || submitting}>
+          {submitting ? "Criando…" : "Criar task"}
+        </Button>
+      </ResponsiveSheetFooter>
     </>
   );
 }

@@ -12,6 +12,8 @@ import {
 type PageTitleState = {
   title: ReactNode | null;
   subtitle: ReactNode | null;
+  /** When set, the shell header renders a back button to this href before the title. */
+  backHref: string | null;
 };
 
 type Ctx = PageTitleState & {
@@ -25,11 +27,12 @@ export function PageTitleProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PageTitleState>({
     title: null,
     subtitle: null,
+    backHref: null,
   });
 
   const set = useCallback((next: PageTitleState) => setState(next), []);
   const clear = useCallback(
-    () => setState({ title: null, subtitle: null }),
+    () => setState({ title: null, subtitle: null, backHref: null }),
     [],
   );
 

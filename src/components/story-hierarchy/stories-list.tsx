@@ -119,30 +119,37 @@ function StoryGroup({
         </span>
       </div>
 
+      {/* Legacy pattern: container has rounded border + overflow-hidden for the
+          radius mask; an inner overflow-x-auto wrapper handles horizontal
+          scrolling on narrow viewports without leaking past the radius. */}
       <div
         className={`overflow-hidden rounded-xl border ${
           inbox ? "border-amber-500/30 bg-amber-500/5" : ""
         }`}
       >
-        <div className="grid grid-cols-[110px_1fr_120px_110px_140px_110px_110px] gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <span>Ref</span>
-          <span>Título</span>
-          <span>Módulo</span>
-          <span>Refinement</span>
-          <span>Status</span>
-          <span className="text-right">Tasks</span>
-          <span className="text-right">FP</span>
+        <div className="overflow-x-auto">
+          <div className="min-w-[1000px]">
+            <div className="grid grid-cols-[110px_minmax(220px,1fr)_120px_110px_140px_110px_110px] gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span>Ref</span>
+              <span>Título</span>
+              <span>Módulo</span>
+              <span>Refinement</span>
+              <span>Status</span>
+              <span className="text-right">Tasks</span>
+              <span className="text-right">FP</span>
+            </div>
+            {rows.map((story, i) => (
+              <StoryRow
+                key={story.reference}
+                story={story}
+                tasks={tasks}
+                modules={modules}
+                isLast={i === rows.length - 1}
+                onOpen={() => onOpenStory(story.reference)}
+              />
+            ))}
+          </div>
         </div>
-        {rows.map((story, i) => (
-          <StoryRow
-            key={story.reference}
-            story={story}
-            tasks={tasks}
-            modules={modules}
-            isLast={i === rows.length - 1}
-            onOpen={() => onOpenStory(story.reference)}
-          />
-        ))}
       </div>
     </section>
   );
@@ -170,7 +177,7 @@ function StoryRow({
     <button
       type="button"
       onClick={onOpen}
-      className={`grid w-full grid-cols-[110px_1fr_120px_110px_140px_110px_110px] items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${
+      className={`grid w-full grid-cols-[110px_minmax(220px,1fr)_120px_110px_140px_110px_110px] items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${
         !isLast ? "border-b" : ""
       }`}
     >

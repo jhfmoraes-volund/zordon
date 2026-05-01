@@ -136,6 +136,42 @@ export default function ProjectStoriesMockPage() {
     );
   }
 
+  function changeTaskStatus(taskRef: string, status: Task["status"]) {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.reference === taskRef
+          ? {
+              ...t,
+              status,
+              // Trigger db `sync_task_done_at` mirror — set on entry, clear on exit
+              doneAt:
+                status === "done"
+                  ? t.doneAt ?? new Date().toISOString()
+                  : t.status === "done"
+                    ? null
+                    : t.doneAt,
+            }
+          : t,
+      ),
+    );
+  }
+
+  function changeTaskAssignee(taskRef: string, memberId: string | null) {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.reference === taskRef
+          ? { ...t, assigneeIds: memberId ? [memberId] : [] }
+          : t,
+      ),
+    );
+  }
+
+  function changeTaskSprint(taskRef: string, sprintId: string | null) {
+    setTasks((prev) =>
+      prev.map((t) => (t.reference === taskRef ? { ...t, sprintId } : t)),
+    );
+  }
+
   function approveProposedModule(story: Story) {
     if (!story.proposedModuleName) return;
     const id = genId("mod");
@@ -250,10 +286,14 @@ export default function ProjectStoriesMockPage() {
           stories={stories}
           modules={modules}
           members={MEMBERS}
+          sprints={sprints}
           onOpenTask={(ref) => {
             setSelectedTaskRef(ref);
             setEditingTask(false);
           }}
+          onChangeStatus={changeTaskStatus}
+          onChangeAssignee={changeTaskAssignee}
+          onChangeSprint={changeTaskSprint}
         />
       ) : activeTab === "settings" ? (
         <SettingsPanel
@@ -298,6 +338,9 @@ export default function ProjectStoriesMockPage() {
             setSelectedTaskRef(ref);
             setEditingTask(false);
           }}
+          onChangeTaskStatus={changeTaskStatus}
+          onChangeTaskAssignee={changeTaskAssignee}
+          onChangeTaskSprint={changeTaskSprint}
         />
       ) : activeTab === "overview" ? (
         <OverviewTab
@@ -427,6 +470,9 @@ function SprintsTab({
   onChangeFocus,
   onJumpToActive,
   onOpenTask,
+  onChangeTaskStatus,
+  onChangeTaskAssignee,
+  onChangeTaskSprint,
 }: {
   sprints: Sprint[];
   tasks: Task[];
@@ -437,6 +483,9 @@ function SprintsTab({
   onChangeFocus: (id: string) => void;
   onJumpToActive: () => void;
   onOpenTask: (ref: string) => void;
+  onChangeTaskStatus: (taskRef: string, status: Task["status"]) => void;
+  onChangeTaskAssignee: (taskRef: string, memberId: string | null) => void;
+  onChangeTaskSprint: (taskRef: string, sprintId: string | null) => void;
 }) {
   const focused =
     sprints.find((s) => s.id === focusSprintId) ??
@@ -483,6 +532,10 @@ function SprintsTab({
         members={MEMBERS}
         capacities={SPRINT_CAPACITIES}
         onOpenTask={onOpenTask}
+        allSprints={sprints}
+        onChangeTaskStatus={onChangeTaskStatus}
+        onChangeTaskAssignee={onChangeTaskAssignee}
+        onChangeTaskSprint={onChangeTaskSprint}
       />
     </div>
   );

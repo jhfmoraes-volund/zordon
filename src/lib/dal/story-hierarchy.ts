@@ -530,16 +530,3 @@ export async function setProjectReferenceKey(
   return data;
 }
 
-export async function setProjectUseStoryHierarchy(
-  projectId: string,
-  enabled: boolean,
-): Promise<ProjectRow> {
-  const { data, error } = await db()
-    .from("Project")
-    .update({ useStoryHierarchy: enabled })
-    .eq("id", projectId)
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data;
-}

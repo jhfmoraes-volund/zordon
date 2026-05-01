@@ -1,15 +1,85 @@
 # Story Hierarchy — Runbook de Execução
 
-**Status:** runbook executável
-**Data:** 2026-04-30
-**Audience:** agente (humano ou IA) que vai executar a migração do zero
-**Escopo:** sequência ordenada de waves pra levar o sandbox `/dev/stories` para produção real, sem precisar de contexto prévio do projeto.
+**Status:** em execução · waves 1-5 concluídas · Wave 6 parcial · Wave 7 pendente
+**Última atualização:** 2026-04-30 (audit completo do estado real)
+**Audience:** agente (humano ou IA) retomando o trabalho.
+**Escopo:** sequência de waves pra levar a hierarquia Module/Story/Task de sandbox para produção real.
 
-**Documentos de apoio (leitura obrigatória da Wave 0):**
+**Documentos de apoio:**
 - [story-hierarchy-plan.md](./story-hierarchy-plan.md) — schema-alvo (V2)
-- [story-hierarchy-migration.md](./story-hierarchy-migration.md) — plano de migração (este runbook é o executor)
+- [story-hierarchy-migration.md](./story-hierarchy-migration.md) — plano de migração técnica
 - [story-hierarchy-backfill.md](./story-hierarchy-backfill.md) — backfill de dados legacy
-- [story-hierarchy-alpha-integration.md](./story-hierarchy-alpha-integration.md) — integração com Alpha
+- [story-hierarchy-alpha-integration.md](./story-hierarchy-alpha-integration.md) — integração com Alpha (paralelo)
+
+---
+
+## 📊 Status atual
+
+| Wave | O quê | Status | Notas |
+|---|---|---|---|
+| 0 | Onboarding | ✅ implícito | Sandbox `/dev/stories` foi a base |
+| 1 | Schema migrations (8 arquivos) | ✅ **2026-04-30** | 4 tabelas + 3 cols Project + 3 cols Task + 3 funcs + 1 view |
+| 2 | RLS policies | ✅ **2026-04-30** | 10 policies em Module/Persona/UserStory/AC |
+| 3 | DAL helpers | ✅ | `src/lib/dal/story-hierarchy.ts` |
+| 4 | API route handlers | ✅ | `/api/projects/[id]/{modules,personas,stories,dod}/`, `/api/stories/[ref]/acceptance/`, `/api/tasks/[id]/acceptance/` |
+| 5 | Page real `/projects/[id]` | 🟡 **com divergência** | Componentes integrados; **feature flag não foi implementado** — rollout all-in |
+| 6 | Backfill por projeto | 🟡 **parcial — só Zordon** | 30 stories curadas, 9 módulos, 4 personas, 92 tasks linked. Outros 8 projetos ativos sem hierarquia. |
+| 7 | Cleanup (drop columns) | 🟡 parcial — `useStoryHierarchy` dropado **2026-04-30** | Ainda restam: `Task.acceptanceCriteria/type/scope` |
+| Alpha | Integração agente | ❓ não auditado | Doc separado, escopo paralelo |
+
+### Migrations rodadas (todas em `supabase/migrations/`)
+
+```
+20260430_project_reference_key_and_dod.sql
+20260430_project_persona.sql
+20260430_module.sql
+20260430_user_story.sql
+20260430_acceptance_criterion.sql
+20260430_task_extensions.sql
+20260430_user_story_overview_view.sql
+20260430_story_hierarchy_rls.sql
+```
+
+### Estado dos projetos (snapshot 2026-04-30)
+
+| Projeto | referenceKey | Modules | Personas | Stories | Tasks | Órfãs |
+|---|---|---|---|---|---|---|
+| **Zordon** | `ZRDN` | 9 | 4 | 30 | 92 | 0 |
+| Zelar | — | 0 | 0 | 0 | 1 | 1 |
+| FORGE | — | 0 | 0 | 0 | 1 | 1 |
+| Ripple 2, SESP RJ, EDOweb, PGF, Riple, Escalas Médicas | — | 0 | 0 | 0 | 0 | 0 |
+
+---
+
+## ⚠️ Divergências do plano original
+
+Decisões pragmáticas tomadas durante execução, registradas pra não confundir agentes futuros:
+
+1. ~~**Feature flag `useStoryHierarchy` não foi implementado no frontend.**~~ **Resolvido em 2026-04-30** — coluna dropada via `20260430_drop_use_story_hierarchy.sql`. Limpeza incluiu: `DROP INDEX project_use_story_hierarchy_idx`, `DROP COLUMN`, remoção de tipo + SELECT em `page.tsx`, remoção do helper `setProjectUseStoryHierarchy` no DAL, regen de `database.types.ts`.
+
+2. **Backfill foi feito ad-hoc, sem os scripts numerados (01–09).** O plano em `story-hierarchy-backfill.md` previa scripts em `scripts/backfill/`. Em vez disso, a execução do Zordon foi via SQL direto em transação única (visto na conversa de execução). Resultados:
+   - Audit trail (`BackfillRun`) **não foi criada**.
+   - Pra próximos projetos: ou reusa o approach SQL ad-hoc (mais rápido) ou cria a infra antes (mais auditável). Pra ≤ 3 projetos restantes, ad-hoc é defensável.
+
+3. **AC text → rows feito junto com o backfill de stories.** Originalmente seria step 07 separado. Aglutinar funcionou — todas as 76 ACs do Zordon foram migradas no mesmo DO block.
+
+4. **`Task.doneAt` backfill via `updatedAt`.** Aproximação aceita pelo plano.
+
+5. **UI continua iterando em paralelo às waves.** Componentes em `src/components/sprint/*` e `src/components/story-hierarchy/*` ganharam vários polishes (capacity refactor, burndown collapsible, AC strip de markdown markers, navigator label fix, tasks-list inline edits). Não bloqueia waves.
+
+---
+
+## 🎯 Próximas ações priorizadas
+
+Em ordem de valor × custo:
+
+1. **Backfill dos outros projetos ativos** (estimativa baixa — 8 projetos com 0–1 task cada). Pra os que têm `referenceKey` faltando, definir manualmente. Pode usar mesma SQL ad-hoc do Zordon como template.
+
+2. **AC story-level pro Zordon.** As 30 stories nasceram com 0 AC (só tasks têm). PM pode preencher ao longo do tempo conforme refinar.
+
+3. **Wave 7 (resto) — Cleanup de `Task.acceptanceCriteria/type/scope`.** Após confirmar via `grep` que nada lê esses campos (já temos `AcceptanceCriterion` table como substituto). Verificação obrigatória antes de dropar — irreversível.
+
+4. **Alpha integration.** Doc paralelo. Habilita Alpha gerar UserStory + Tasks + AC respeitando taxonomia. Independente das outras waves após Wave 4.
 
 ---
 
@@ -66,7 +136,7 @@ Não tente "consertar criativamente" — comunique e espere direção.
 
 ---
 
-## Wave 0 — Onboarding
+## Wave 0 — Onboarding ✅ implícito
 
 **Objetivo:** entender o estado atual e validar premissas antes de tocar em código.
 **Pré-requisitos:** acesso ao repo + `.env` com `DIRECT_URL` configurado.
@@ -144,7 +214,7 @@ Sem commit ainda.
 
 ---
 
-## Wave 1 — Schema base (migrations forward-only)
+## Wave 1 — Schema base (migrations forward-only) ✅ executado em 2026-04-30
 
 **Objetivo:** criar todas as tabelas e colunas novas, sem mexer em código de aplicação.
 **Pré-requisitos:** Wave 0 concluída + decisões abertas fechadas.
@@ -296,7 +366,7 @@ Salvar como `supabase/migrations/_rollback-wave-1.sql` antes de rodar Wave 1.
 
 ---
 
-## Wave 2 — RLS policies
+## Wave 2 — RLS policies ✅ executado em 2026-04-30
 
 **Objetivo:** habilitar RLS nas tabelas novas e criar policies usando os helpers existentes do projeto.
 **Pré-requisitos:** Wave 1 concluída.
@@ -378,7 +448,7 @@ DROP POLICY IF EXISTS "ac_write"  ON "AcceptanceCriterion";
 
 ---
 
-## Wave 3 — DAL helpers
+## Wave 3 — DAL helpers ✅ concluído
 
 **Objetivo:** centralizar acesso ao DB pra story-hierarchy num módulo TS reusável por server components e route handlers.
 **Pré-requisitos:** Wave 1 concluída (types regenerados). Wave 2 recomendada mas não obrigatória.
@@ -443,7 +513,7 @@ src/lib/dal/story-hierarchy.ts   ← novo
 
 ---
 
-## Wave 4 — API route handlers
+## Wave 4 — API route handlers ✅ concluído
 
 **Objetivo:** expor a hierarquia via REST pra UI consumir.
 **Pré-requisitos:** Wave 3 concluída.
@@ -546,7 +616,7 @@ src/app/api/tasks/[id]/...                 ← 2 routes (acceptance + move-to-st
 
 ---
 
-## Wave 5 — Page real + feature flag
+## Wave 5 — Page real + feature flag 🟡 concluído sem feature flag (rollout all-in)
 
 **Objetivo:** substituir tabs antigas (Sprints, Schedule, Tasks legacy) na page de projeto pelas novas, atrás do flag `useStoryHierarchy`.
 **Pré-requisitos:** Wave 4 concluída.
@@ -636,7 +706,7 @@ src/app/(dashboard)/projects/[id]/page.tsx   ← modificado, ainda contém códi
 
 ---
 
-## Wave 6 — Alpha integration (paralela)
+## Wave 6 — Alpha integration (paralela) ❓ não auditado neste runbook
 
 **Objetivo:** habilitar Alpha pra gerar UserStories + Tasks + AC respeitando taxonomia do projeto.
 **Pré-requisitos:** Wave 4 concluída (API funcional). Pode rodar antes ou depois da Wave 5.
@@ -722,7 +792,7 @@ docs/alpha-calibration-results.md                       ← seção atualizada
 
 ---
 
-## Wave 7 — Backfill: infra
+## Wave 7 — Backfill: infra 🟡 não criada — backfill foi feito ad-hoc via SQL
 
 **Objetivo:** preparar tudo pra rodar backfill por projeto (sem rodar ainda).
 **Pré-requisitos:** Wave 4 concluída (DAL + API existem pros scripts usarem).
@@ -835,7 +905,7 @@ scripts/backfill/backup-project.sh                 ← novo
 
 ---
 
-## Wave 8 — Backfill: projeto-piloto
+## Wave 8 — Backfill: projeto-piloto ✅ Zordon executado em 2026-04-30 (via SQL ad-hoc)
 
 **Objetivo:** rodar backfill completo em **1 projeto** (escolhido por baixo risco) e validar antes de processar todos.
 **Pré-requisitos:** Wave 7 concluída.
@@ -971,7 +1041,7 @@ psql "$DIRECT_URL" < backups/project-<id>-pre-backfill-<date>.sql
 
 ---
 
-## Wave 9 — Backfill: outros projetos
+## Wave 9 — Backfill: outros projetos ❌ pendente (8 projetos ativos sem hierarquia)
 
 **Objetivo:** repetir Wave 8 pra cada projeto restante.
 **Pré-requisitos:** Wave 8 concluída + lições aprendidas documentadas.
@@ -1017,7 +1087,7 @@ Per projeto: restore from backup. Continue com os outros.
 
 ---
 
-## Wave 10 — Cleanup
+## Wave 10 — Cleanup ❌ pendente
 
 **Objetivo:** remover colunas deprecated e código legacy.
 **Pré-requisitos:** **TODOS** os projetos ativos com `useStoryHierarchy = true`.

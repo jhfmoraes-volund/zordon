@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { usePageTitle } from "./page-title-context";
 
@@ -51,23 +53,34 @@ function deriveFallback(pathname: string): string {
  */
 export function PageTitleSlot() {
   const pathname = usePathname();
-  const { title, subtitle } = usePageTitle();
+  const { title, subtitle, backHref } = usePageTitle();
   const displayTitle = title ?? deriveFallback(pathname);
 
-  if (!displayTitle && !subtitle) return null;
+  if (!displayTitle && !subtitle && !backHref) return null;
 
   return (
-    <div className="min-w-0">
-      {displayTitle && (
-        <span className="block truncate text-sm font-semibold">
-          {displayTitle}
-        </span>
+    <div className="flex min-w-0 items-center gap-1">
+      {backHref && (
+        <Link
+          href={backHref}
+          aria-label="Voltar"
+          className="-ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+        </Link>
       )}
-      {subtitle && (
-        <span className="block truncate font-mono text-xs text-muted-foreground">
-          {subtitle}
-        </span>
-      )}
+      <div className="min-w-0">
+        {displayTitle && (
+          <span className="block truncate text-sm font-semibold">
+            {displayTitle}
+          </span>
+        )}
+        {subtitle && (
+          <span className="block truncate font-mono text-xs text-muted-foreground">
+            {subtitle}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

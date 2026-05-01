@@ -125,61 +125,63 @@ export function TasksList({
   return (
     <div className="space-y-4">
       {/* Toolbar ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={moduleFilter}
-          onValueChange={(v) => v && setModuleFilter(v)}
-        >
-          <SelectTrigger className="h-8 w-[160px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all">Todos módulos</SelectItem>
-            {modules.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                <span className="font-mono">{m.name}</span>
-              </SelectItem>
-            ))}
-            <SelectItem value="null">— sem módulo —</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex flex-wrap gap-2">
+          <Select
+            value={moduleFilter}
+            onValueChange={(v) => v && setModuleFilter(v)}
+          >
+            <SelectTrigger className="h-8 w-full min-w-[140px] flex-1 text-xs sm:w-[160px] sm:flex-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">Todos módulos</SelectItem>
+              {modules.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  <span className="font-mono">{m.name}</span>
+                </SelectItem>
+              ))}
+              <SelectItem value="null">— sem módulo —</SelectItem>
+            </SelectContent>
+          </Select>
 
-        <Select
-          value={areaFilter}
-          onValueChange={(v) => v && setAreaFilter(v)}
-        >
-          <SelectTrigger className="h-8 w-[140px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {AREA_OPTIONS.map((opt) => (
-              <SelectItem
-                key={String(opt.value)}
-                value={opt.value === null ? "null" : String(opt.value)}
-              >
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <Select
+            value={areaFilter}
+            onValueChange={(v) => v && setAreaFilter(v)}
+          >
+            <SelectTrigger className="h-8 w-full min-w-[120px] flex-1 text-xs sm:w-[140px] sm:flex-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {AREA_OPTIONS.map((opt) => (
+                <SelectItem
+                  key={String(opt.value)}
+                  value={opt.value === null ? "null" : String(opt.value)}
+                >
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => v && setStatusFilter(v)}
-        >
-          <SelectTrigger className="h-8 w-[140px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((opt) => (
-              <SelectItem key={String(opt.value)} value={String(opt.value)}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => v && setStatusFilter(v)}
+          >
+            <SelectTrigger className="h-8 w-full min-w-[120px] flex-1 text-xs sm:w-[140px] sm:flex-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem key={String(opt.value)} value={String(opt.value)}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="flex items-center gap-1 sm:ml-auto">
           <div className="flex overflow-hidden rounded-md border">
             <button
               type="button"
@@ -325,7 +327,7 @@ function StoryGroupBlock({
     .reduce((acc, t) => acc + t.functionPoints, 0);
 
   return (
-    <section className="overflow-hidden rounded-xl border">
+    <section className="overflow-hidden rounded-xl border bg-card">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -389,7 +391,7 @@ function FlatList({
     );
   }
   return (
-    <div className="overflow-hidden rounded-xl border">
+    <div className="overflow-hidden rounded-xl border bg-card">
       <TasksTable
         rows={tasks}
         editing={editing}
@@ -420,125 +422,140 @@ function TasksTable({
 }) {
   // Match StoriesList grid look. Cells are spans inside a clickable row.
   // Cols: Ref · Title · [Story] · [Sprint] · Status · FP · Assignee
-  const layoutParts: string[] = ["110px", "1fr"];
-  if (storyHint) layoutParts.push("160px");
+  //
+  // Inline style instead of `grid-cols-[...]` because Tailwind only ships
+  // classes that appear LITERALLY in source — runtime-built strings don't
+  // make it to the CSS bundle, and the layout silently degrades to a
+  // single-column stack.
+  const layoutParts: string[] = ["110px", "minmax(220px, 1fr)"];
+  if (storyHint) layoutParts.push("200px");
   if (editing.showSprint) layoutParts.push("130px");
   layoutParts.push("130px", "70px", "150px");
-  const cols = `grid-cols-[${layoutParts.join("_")}]`;
+  const gridStyle = { gridTemplateColumns: layoutParts.join(" ") };
+
+  // Min total width = sum of fixed columns + 220 (title min) + (col_count - 1) * 12px gap.
+  const fixedSum =
+    110 + 220 + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0) + 130 + 70 + 150;
+  const colCount = layoutParts.length;
+  const minWidthPx = fixedSum + (colCount - 1) * 12;
 
   return (
-    <div>
-      {/* Header */}
-      <div
-        className={`grid gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${cols}`}
-      >
-        <span>Ref</span>
-        <span>Título</span>
-        {storyHint ? <span>Story</span> : null}
-        {editing.showSprint ? <span>Sprint</span> : null}
-        <span>Status</span>
-        <span className="text-right">FP</span>
-        <span className="text-right">Assignee</span>
-      </div>
+    <div className="overflow-x-auto">
+      <div style={{ minWidth: `${minWidthPx}px` }}>
+        {/* Header */}
+        <div
+          className="grid gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+          style={gridStyle}
+        >
+          <span>Ref</span>
+          <span>Título</span>
+          {storyHint ? <span>Story</span> : null}
+          {editing.showSprint ? <span>Sprint</span> : null}
+          <span>Status</span>
+          <span className="text-right">FP</span>
+          <span className="text-right">Assignee</span>
+        </div>
 
-      {/* Rows */}
-      {rows.map((task, i) => {
-        const hint = storyHint?.(task);
-        const firstAssignee = task.assigneeIds[0] ?? null;
-        const isLast = i === rows.length - 1;
+        {/* Rows */}
+        {rows.map((task, i) => {
+          const hint = storyHint?.(task);
+          const firstAssignee = task.assigneeIds[0] ?? null;
+          const isLast = i === rows.length - 1;
 
-        return (
-          <div
-            key={task.reference}
-            role="button"
-            tabIndex={0}
-            onClick={() => editing.onOpenTask(task.reference)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                editing.onOpenTask(task.reference);
-              }
-            }}
-            className={`grid w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${cols} ${
-              !isLast ? "border-b" : ""
-            }`}
-          >
-            <span className="font-mono text-xs text-muted-foreground">
-              {task.reference}
-            </span>
+          return (
+            <div
+              key={task.reference}
+              role="button"
+              tabIndex={0}
+              onClick={() => editing.onOpenTask(task.reference)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  editing.onOpenTask(task.reference);
+                }
+              }}
+              className={`grid w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${
+                !isLast ? "border-b" : ""
+              }`}
+              style={gridStyle}
+            >
+              <span className="font-mono text-xs text-muted-foreground">
+                {task.reference}
+              </span>
 
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate">{task.title}</span>
-              {task.createdByAgent ? (
-                <Sparkles className="size-3 shrink-0 text-muted-foreground/60" />
-              ) : null}
-            </span>
-
-            {storyHint ? (
-              <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-                {hint?.module ? (
-                  <Badge variant="outline" className="font-mono text-[10px]">
-                    {hint.module}
-                  </Badge>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate">{task.title}</span>
+                {task.createdByAgent ? (
+                  <Sparkles className="size-3 shrink-0 text-muted-foreground/60" />
                 ) : null}
-                <span className="truncate font-mono text-[10px]">
-                  {hint?.ref ?? "—"}
+              </span>
+
+              {storyHint ? (
+                <span className="flex min-w-0 items-center gap-2 pr-2 text-muted-foreground">
+                  {hint?.module ? (
+                    <Badge variant="outline" className="font-mono text-[10px]">
+                      {hint.module}
+                    </Badge>
+                  ) : null}
+                  <span className="truncate font-mono text-[10px]">
+                    {hint?.ref ?? "—"}
+                  </span>
                 </span>
-              </span>
-            ) : null}
+              ) : null}
 
-            {editing.showSprint ? (
+              {editing.showSprint ? (
+                <span onClick={stop} onPointerDown={stop}>
+                  <SprintCell
+                    task={task}
+                    sprints={editing.sprints!}
+                    onChangeSprint={editing.onChangeSprint!}
+                  />
+                </span>
+              ) : null}
+
+              {/* Status: chip-select (legacy aesthetic) */}
               <span onClick={stop} onPointerDown={stop}>
-                <SprintCell
-                  task={task}
-                  sprints={editing.sprints!}
-                  onChangeSprint={editing.onChangeSprint!}
-                />
+                {editing.onChangeStatus ? (
+                  <StatusChipSelect
+                    value={task.status}
+                    options={TASK_STATUS}
+                    onValueChange={(v) =>
+                      editing.onChangeStatus!(task.reference, v as TaskStatus)
+                    }
+                  />
+                ) : (
+                  <TaskStatusChip status={task.status} />
+                )}
               </span>
-            ) : null}
 
-            {/* Status: chip-select (legacy aesthetic) */}
-            <span onClick={stop} onPointerDown={stop}>
-              {editing.onChangeStatus ? (
-                <StatusChipSelect
-                  value={task.status}
-                  options={TASK_STATUS}
-                  onValueChange={(v) =>
-                    editing.onChangeStatus!(task.reference, v as TaskStatus)
-                  }
-                />
+              <span className="text-right font-mono text-xs tabular-nums">
+                {task.functionPoints}
+              </span>
+
+              {/* Assignee: borderless select for compact look */}
+              {editing.onChangeAssignee ? (
+                <span onClick={stop} onPointerDown={stop}>
+                  <AssigneeCell
+                    taskRef={task.reference}
+                    value={firstAssignee}
+                    members={editing.members}
+                    onChange={editing.onChangeAssignee}
+                  />
+                </span>
               ) : (
-                <TaskStatusChip status={task.status} />
+                <span className="truncate text-right text-[11px] text-muted-foreground">
+                  {task.assigneeIds.length === 0
+                    ? "—"
+                    : task.assigneeIds
+                        .map((id) => editing.members.find((m) => m.id === id)?.name)
+                        .filter(Boolean)
+                        .join(", ")}
+                </span>
               )}
-            </span>
-
-            <span className="text-right font-mono text-xs tabular-nums">
-              {task.functionPoints}
-            </span>
-
-            {/* Assignee: borderless select for compact look */}
-            {editing.onChangeAssignee ? (
-              <span onClick={stop} onPointerDown={stop}>
-                <AssigneeCell
-                  taskRef={task.reference}
-                  value={firstAssignee}
-                  members={editing.members}
-                  onChange={editing.onChangeAssignee}
-                />
-              </span>
-            ) : (
-              <span className="truncate text-right text-[11px] text-muted-foreground">
-                {task.assigneeIds.length === 0
-                  ? "—"
-                  : task.assigneeIds
-                      .map((id) => editing.members.find((m) => m.id === id)?.name)
-                      .filter(Boolean)
-                      .join(", ")}
-              </span>
-            )}
-          </div>
-        );
-      })}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -564,11 +581,15 @@ function AssigneeCell({
         onChange(taskRef, v === ASSIGNEE_NONE ? null : v);
       }}
     >
-      <SelectTrigger
-        size="sm"
-        className="h-7 w-full justify-end border-none bg-transparent p-0 text-[11px] text-muted-foreground shadow-none hover:opacity-80"
-      >
-        <SelectValue placeholder="Ninguém" />
+      <SelectTrigger size="sm" className="h-7 w-full text-xs">
+        <SelectValue placeholder="Ninguém">
+          {(v: string | null) => {
+            if (!v || v === ASSIGNEE_NONE) {
+              return <span className="text-muted-foreground">Ninguém</span>;
+            }
+            return members.find((m) => m.id === v)?.name ?? "Ninguém";
+          }}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={ASSIGNEE_NONE}>
@@ -601,11 +622,15 @@ function SprintCell({
         onChangeSprint(task.reference, v === SPRINT_NONE ? null : v);
       }}
     >
-      <SelectTrigger
-        size="sm"
-        className="h-7 w-full border-none bg-transparent p-0 text-[11px] text-muted-foreground shadow-none hover:opacity-80"
-      >
-        <SelectValue placeholder="Sem sprint" />
+      <SelectTrigger size="sm" className="h-7 w-full text-xs">
+        <SelectValue placeholder="Sem sprint">
+          {(v: string | null) => {
+            if (!v || v === SPRINT_NONE) {
+              return <span className="text-muted-foreground">Sem sprint</span>;
+            }
+            return sprints.find((s) => s.id === v)?.name ?? "Sem sprint";
+          }}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={SPRINT_NONE}>

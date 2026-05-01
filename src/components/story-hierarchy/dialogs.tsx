@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/ui/responsive-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,19 +65,19 @@ export function ModuleDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
             {initial ? "Editar módulo" : "Novo módulo"}
-          </DialogTitle>
-          <DialogDescription>
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             Módulo é tag de agrupamento por área funcional do produto. Sem
             owner, sem due date.
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-        <div className="space-y-4">
+        <ResponsiveDialogBody className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="module-name">Nome</Label>
             <Input
@@ -107,18 +108,18 @@ export function ModuleDialog({
               rows={2}
             />
           </div>
-        </div>
+        </ResponsiveDialogBody>
 
-        <DialogFooter>
+        <ResponsiveDialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
           <Button onClick={submit} disabled={!valid}>
             {initial ? "Salvar" : "Criar módulo"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 
@@ -159,19 +160,19 @@ export function PersonaDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
             {initial ? "Editar persona" : "Nova persona"}
-          </DialogTitle>
-          <DialogDescription>
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
             Persona é a quem a story serve. Use livre — Cliente Premium, Gestor
             de Vendas, etc. Builder/PM/Cliente já vêm de seed.
-          </DialogDescription>
-        </DialogHeader>
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-        <div className="space-y-4">
+        <ResponsiveDialogBody className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="persona-name">Nome</Label>
             <Input
@@ -193,17 +194,17 @@ export function PersonaDialog({
               rows={2}
             />
           </div>
-        </div>
+        </ResponsiveDialogBody>
 
-        <DialogFooter>
+        <ResponsiveDialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
           <Button onClick={submit} disabled={!valid}>
             {initial ? "Salvar" : "Criar persona"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

@@ -202,7 +202,13 @@ export function ProjectEditSheet({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
+                <SelectValue placeholder="Selecione">
+                  {(v: string | null) =>
+                    v
+                      ? clients.find((c) => c.id === v)?.name ?? "Selecione"
+                      : "Selecione"
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {clients.map((c) => (
@@ -223,7 +229,14 @@ export function ProjectEditSheet({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Selecione (opcional)" />
+                <SelectValue placeholder="Selecione (opcional)">
+                  {(v: string | null) =>
+                    v
+                      ? allMembers.find((m) => m.id === v)?.name ??
+                        "Selecione (opcional)"
+                      : "Selecione (opcional)"
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {allMembers

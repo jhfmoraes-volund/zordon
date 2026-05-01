@@ -17,8 +17,11 @@ const EMPTY_TONE: Tone = {
 /**
  * "skill" — higher is better (ramps from blue to green).
  * "load" — higher is worse (ramps from green to red).
+ * "contract" — fixed amber for [1,99]; red on overcommit (>=100). Use to
+ *   show contract utilization where the contract IS the budget and exceeding
+ *   it is the alert state, not a gradient.
  */
-export type PixelBarVariant = "skill" | "load";
+export type PixelBarVariant = "skill" | "load" | "contract";
 
 function skillTone(value: number | null | undefined): Tone {
   if (value === null || value === undefined) return EMPTY_TONE;
@@ -38,8 +41,17 @@ function loadTone(value: number | null | undefined): Tone {
   return EMPTY_TONE;
 }
 
+function contractTone(value: number | null | undefined): Tone {
+  if (value === null || value === undefined) return EMPTY_TONE;
+  if (value >= 100) return { bar: "oklch(0.637 0.237 22)", glow: "oklch(0.637 0.237 22 / 0.55)", fg: "oklch(0.82 0.2 22)" };
+  if (value >= 1)   return { bar: "oklch(0.7 0.16 65)",    glow: "oklch(0.7 0.16 65 / 0.45)",    fg: "oklch(0.82 0.15 65)" };
+  return EMPTY_TONE;
+}
+
 export function pixelTone(value: number | null | undefined, variant: PixelBarVariant = "skill"): Tone {
-  return variant === "load" ? loadTone(value) : skillTone(value);
+  if (variant === "load") return loadTone(value);
+  if (variant === "contract") return contractTone(value);
+  return skillTone(value);
 }
 
 type Props = {

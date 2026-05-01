@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   BookOpen,
   Eye,
   FileText,
@@ -33,9 +34,7 @@ import {
   PersonaDialog,
   SettingsPanel,
   StoriesList,
-  StoryCreateDialog,
   StorySheet,
-  TaskCreateDialog,
   TasksList,
   TaskSheet,
   type StoryCreateInput,
@@ -95,7 +94,6 @@ type ProjectMeta = {
   githubDefaultBranch: string | null;
   referenceKey: string | null;
   definitionOfDone: string[];
-  useStoryHierarchy: boolean;
 };
 
 type RawTask = {
@@ -210,7 +208,7 @@ export default function ProjectDetailPage({
     const { data } = await supabase
       .from("Project")
       .select(
-        "id, name, status, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, useStoryHierarchy, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role)",
+        "id, name, status, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role)",
       )
       .eq("id", id)
       .single();
@@ -238,7 +236,6 @@ export default function ProjectDetailPage({
       definitionOfDone: Array.isArray(data.definitionOfDone)
         ? (data.definitionOfDone as string[])
         : [],
-      useStoryHierarchy: data.useStoryHierarchy ?? false,
     });
   }, [id, supabase]);
 
@@ -857,6 +854,54 @@ export default function ProjectDetailPage({
         subtitle={`${project.client?.name ?? "—"} · ${project.status}`}
       />
 
+      {/* Hero */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <Link href="/projects">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0"
+              aria-label="Voltar"
+            >
+              <ArrowLeft className="size-4" />
+            </Button>
+          </Link>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-2xl font-bold">{project.name}</h1>
+              <StatusChip
+                tone={project.status === "active" ? "green" : "muted"}
+                dot
+              >
+                {project.status}
+              </StatusChip>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {project.client?.name ?? "—"}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="size-4" />
+            <span className="hidden sm:inline">Editar projeto</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAccessOpen(true)}
+          >
+            <Shield className="size-4" />
+            <span className="hidden sm:inline">Access</span>
+          </Button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         {project.referenceKey ? (
           <Badge variant="outline" className="font-mono text-[10px]">
@@ -870,12 +915,6 @@ export default function ProjectDetailPage({
             sem referenceKey
           </Badge>
         )}
-        <StatusChip
-          tone={project.status === "active" ? "green" : "muted"}
-          dot
-        >
-          {project.status}
-        </StatusChip>
         {project.pm ? (
           <span className="text-xs text-muted-foreground">
             PM:{" "}
@@ -895,34 +934,16 @@ export default function ProjectDetailPage({
             membro{rawMembers.length === 1 ? "" : "s"}
           </span>
         ) : null}
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil className="size-4" />
-            Editar projeto
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAccessOpen(true)}
-          >
-            <Shield className="size-4" />
-            Access
-          </Button>
-        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b overflow-x-auto">
+      <div className="flex gap-1 border-b overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            className={`flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === tab.key
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1015,6 +1036,10 @@ export default function ProjectDetailPage({
                 members={members}
                 capacities={capacities}
                 onOpenTask={(ref) => setSelectedTaskRef(ref)}
+                allSprints={sprints}
+                onChangeTaskStatus={handleInlineStatusChange}
+                onChangeTaskAssignee={handleInlineAssigneeChange}
+                onChangeTaskSprint={handleInlineSprintChange}
               />
             </>
           ) : (
@@ -1052,7 +1077,7 @@ export default function ProjectDetailPage({
         />
       ) : null}
 
-      {/* Story sheet */}
+      {/* Story sheet — view, edit, AND create modes share the same panel. */}
       <StorySheet
         story={selectedStory}
         tasks={tasks}
@@ -1060,9 +1085,11 @@ export default function ProjectDetailPage({
         personas={personas}
         definitionOfDone={project.definitionOfDone}
         editing={editingStory}
+        creating={storyCreateOpen}
         onClose={() => {
           setSelectedStoryRef(null);
           setEditingStory(false);
+          setStoryCreateOpen(false);
         }}
         onEdit={() => setEditingStory(true)}
         onCancelEdit={() => setEditingStory(false)}
@@ -1070,6 +1097,7 @@ export default function ProjectDetailPage({
           handleSaveStory(updated as AdaptedStory);
           setEditingStory(false);
         }}
+        onCreate={handleCreateStory}
         onCreateModuleRequested={(suggested) =>
           setModuleDialog({ open: true, suggested })
         }
@@ -1085,7 +1113,7 @@ export default function ProjectDetailPage({
         }}
       />
 
-      {/* Task sheet — always inline-editable (no view/edit toggle) */}
+      {/* Task sheet — inline edit + create share the same panel. */}
       <TaskSheet
         task={selectedTask}
         stories={stories}
@@ -1093,8 +1121,18 @@ export default function ProjectDetailPage({
         members={members}
         sprints={sprints}
         definitionOfDone={project.definitionOfDone}
-        onClose={() => setSelectedTaskRef(null)}
+        creating={taskCreateOpen}
+        defaultStoryId={
+          selectedStoryRef
+            ? stories.find((s) => s.reference === selectedStoryRef)?.__id ?? null
+            : null
+        }
+        onClose={() => {
+          setSelectedTaskRef(null);
+          setTaskCreateOpen(false);
+        }}
         onSave={(updated) => handleSaveTask(updated as AdaptedTask)}
+        onCreate={handleCreateTask}
         onChangeSprint={handleInlineSprintChange}
         onChangeAssignees={handleInlineAssigneesChange}
         onOpenStory={(ref) => {
@@ -1102,26 +1140,6 @@ export default function ProjectDetailPage({
           setSelectedStoryRef(ref);
           setEditingStory(false);
         }}
-      />
-
-      {/* Create dialogs */}
-      <StoryCreateDialog
-        open={storyCreateOpen}
-        onOpenChange={setStoryCreateOpen}
-        modules={modules}
-        personas={personas}
-        onSubmit={handleCreateStory}
-      />
-      <TaskCreateDialog
-        open={taskCreateOpen}
-        onOpenChange={setTaskCreateOpen}
-        stories={stories}
-        defaultStoryId={
-          selectedStoryRef
-            ? stories.find((s) => s.reference === selectedStoryRef)?.__id ?? null
-            : null
-        }
-        onSubmit={handleCreateTask}
       />
 
       {/* Inline taxonomy dialogs (invoked from story-sheet edit form) */}
