@@ -39,12 +39,14 @@ import type {
   Module,
   Story,
   Task,
-  TaskArea,
   TaskComplexity,
   TaskScope,
   TaskStatus,
+  TaskTag,
   TaskType,
 } from "./types";
+import { TagPicker, type TagPickerOption } from "@/components/tags/tag-picker";
+import type { ChipTone } from "@/lib/status-chips";
 
 type SprintLite = {
   id: string;
@@ -62,7 +64,7 @@ export type TaskCreateInput = {
   type: TaskType;
   scope: TaskScope;
   complexity: TaskComplexity;
-  area: TaskArea;
+  tagIds: string[];
   status: TaskStatus;
   /** UserStory id (DB), or null if standalone. */
   userStoryId: string | null;
@@ -98,15 +100,23 @@ type TaskSheetProps = {
   onChangeSprint?: (taskRef: string, sprintId: string | null) => void | Promise<void>;
   /** Multi-assignee toggle. When omitted, assignees become read-only. */
   onChangeAssignees?: (taskRef: string, memberIds: string[]) => void | Promise<void>;
+  /** Project-wide tag list. When omitted, the picker still works in display-
+   *  only mode (selected tags remain visible). */
+  availableTags?: TaskTag[];
+  /** Create a new tag in the project (project-scoped). Required for the
+   *  create-on-the-fly affordance in the picker. */
+  onCreateTag?: (name: string, tone: ChipTone) => Promise<TaskTag>;
+  /** Replace the task's tag set with the given ids. */
+  onChangeTags?: (taskRef: string, tagIds: string[]) => void | Promise<void>;
 };
 
-const AREA_VALUES: { value: TaskArea; label: string }[] = [
-  { value: "front", label: "Front" },
-  { value: "back",  label: "Back"  },
-  { value: "infra", label: "Infra" },
-  { value: "ops",   label: "Ops"   },
-  { value: "mixed", label: "Mixed" },
-];
+function tagsToOptions(tags: TaskTag[]): TagPickerOption[] {
+  return tags.map((t) => ({
+    id: t.id,
+    name: t.name,
+    tone: t.tone as ChipTone,
+  }));
+}
 
 const TYPE_VALUES: TaskType[] = [
   "feature",
@@ -198,6 +208,9 @@ function TaskSheetInner({
   onOpenStory,
   onChangeSprint,
   onChangeAssignees,
+  availableTags,
+  onCreateTag,
+  onChangeTags,
 }: TaskSheetProps & { task: Task }) {
   // Local drafts for text/number fields (saved on blur).
   const [title, setTitle] = useState(task.title);
@@ -343,26 +356,21 @@ function TaskSheetInner({
             </Select>
           </FieldBlock>
 
-          <FieldBlock label="Area">
-            <Select
-              value={task.area === null ? "__none" : task.area}
-              onValueChange={(v) => {
-                if (v === null) return;
-                persist({
-                  area: v === "__none" ? null : (v as TaskArea),
-                });
+          <FieldBlock label="Tags">
+            <TagPicker
+              available={tagsToOptions(availableTags ?? task.tags)}
+              selectedIds={task.tags.map((t) => t.id)}
+              onChange={(ids) => onChangeTags?.(task.reference, ids)}
+              onCreate={async (name, tone) => {
+                if (!onCreateTag) {
+                  return { id: `tmp-${Date.now()}`, name, tone };
+                }
+                const created = await onCreateTag(name, tone);
+                return { id: created.id, name: created.name, tone: created.tone as ChipTone };
               }}
-            >
-              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none">— sem area —</SelectItem>
-                {AREA_VALUES.map((a) => (
-                  <SelectItem key={String(a.value)} value={String(a.value)}>
-                    {a.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              variant="linear"
+              triggerVisibleCount={2}
+            />
           </FieldBlock>
         </div>
 
@@ -691,13 +699,15 @@ function TaskSheetCreate({
   defaultStoryId,
   onClose,
   onCreate,
+  availableTags,
+  onCreateTag,
 }: TaskSheetProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("feature");
   const [scope, setScope] = useState<TaskScope>("small");
   const [complexity, setComplexity] = useState<TaskComplexity>("medium");
-  const [area, setArea] = useState<TaskArea>(null);
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const [status, setStatus] = useState<TaskStatus>("backlog");
   const [storyId, setStoryId] = useState<string>(defaultStoryId ?? STORY_NONE);
   const [submitting, setSubmitting] = useState(false);
@@ -708,7 +718,7 @@ function TaskSheetCreate({
     setType("feature");
     setScope("small");
     setComplexity("medium");
-    setArea(null);
+    setTagIds([]);
     setStatus("backlog");
     setStoryId(defaultStoryId ?? STORY_NONE);
     setSubmitting(false);
@@ -727,7 +737,7 @@ function TaskSheetCreate({
         type,
         scope,
         complexity,
-        area,
+        tagIds,
         status,
         userStoryId: storyId === STORY_NONE ? null : storyId,
         functionPoints: fp,
@@ -856,26 +866,25 @@ function TaskSheetCreate({
             </Select>
           </FieldBlock>
 
-          <FieldBlock label="Area">
-            <Select
-              value={area === null ? "__none" : area}
-              onValueChange={(v) => {
-                if (v === null) return;
-                setArea(v === "__none" ? null : (v as TaskArea));
+          <FieldBlock label="Tags">
+            <TagPicker
+              available={tagsToOptions(availableTags ?? [])}
+              selectedIds={tagIds}
+              onChange={setTagIds}
+              onCreate={async (name, tone) => {
+                if (!onCreateTag) {
+                  return { id: `tmp-${Date.now()}`, name, tone };
+                }
+                const created = await onCreateTag(name, tone);
+                return {
+                  id: created.id,
+                  name: created.name,
+                  tone: created.tone as ChipTone,
+                };
               }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none">— sem area —</SelectItem>
-                {AREA_VALUES.map((a) => (
-                  <SelectItem key={String(a.value)} value={String(a.value)}>
-                    {a.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              variant="linear"
+              triggerVisibleCount={2}
+            />
           </FieldBlock>
         </div>
 

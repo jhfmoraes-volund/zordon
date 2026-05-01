@@ -83,7 +83,6 @@ export async function POST(
       type: source.type,
       scope: source.scope,
       complexity: source.complexity,
-      area: source.area,
       functionPoints: source.functionPoints,
       billable: source.billable,
       notes: source.notes,
@@ -115,6 +114,17 @@ export async function POST(
       text: ac.text,
       order: ac.order,
     });
+  }
+
+  // Copy tag assignments (same project, IDs map 1:1)
+  const { data: sourceTags } = await supabase
+    .from("TaskTagAssignment")
+    .select("tagId")
+    .eq("taskId", id);
+  if (sourceTags && sourceTags.length > 0) {
+    await supabase
+      .from("TaskTagAssignment")
+      .insert(sourceTags.map((t) => ({ taskId: newId, tagId: t.tagId })));
   }
 
   await createActivity({

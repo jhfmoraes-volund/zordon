@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, requireProjectMemberApi } from "@/lib/dal";
+import { listTagsForTask, setTagsForTask } from "@/lib/dal/task-tags";
+import { TASK_TAG_LIMIT } from "@/lib/task-tags";
 
 const TASK_SELECT = `
   *,
@@ -23,7 +25,8 @@ async function fetchTask(id: string) {
   // Sort iterations desc and add _count
   const iterations = (task as any).iterations ?? [];
   iterations.sort((a: any, b: any) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-  return { ...task, iterations, _count: { iterations: iterations.length } };
+  const tags = await listTagsForTask(id);
+  return { ...task, iterations, tags, _count: { iterations: iterations.length } };
 }
 
 export async function GET(
@@ -46,7 +49,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { assigneeIds, ...data } = await req.json();
+  const { assigneeIds, tagIds, ...data } = await req.json();
   const supabase = db();
 
   const { data: current } = await supabase
@@ -69,6 +72,16 @@ export async function PUT(
         .from("TaskAssignment")
         .insert(assigneeIds.map((a: { memberId?: string }) => ({ id: crypto.randomUUID(), taskId: id, ...a })));
     }
+  }
+
+  if (Array.isArray(tagIds)) {
+    if (tagIds.length > TASK_TAG_LIMIT) {
+      return NextResponse.json(
+        { error: `Task can have at most ${TASK_TAG_LIMIT} tags` },
+        { status: 400 },
+      );
+    }
+    await setTagsForTask(id, tagIds);
   }
 
   await supabase.from("Task").update(data).eq("id", id);

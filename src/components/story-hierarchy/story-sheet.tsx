@@ -30,6 +30,8 @@ import {
   RefinementChip,
   TaskStatusChip,
 } from "./chips";
+import { TagChip, TagChipOverflow } from "@/components/tags/tag-chip";
+import type { ChipTone } from "@/lib/status-chips";
 import { AcList } from "./ac-list";
 import {
   computeStatus,
@@ -271,10 +273,23 @@ function StorySheetView({
                   <span className="font-mono text-muted-foreground">
                     {task.reference}
                   </span>
-                  {task.area ? (
-                    <Badge variant="outline" className="text-[10px]">
-                      {task.area}
-                    </Badge>
+                  {task.tags.length > 0 ? (
+                    <span className="flex shrink-0 items-center gap-1">
+                      {task.tags.slice(0, 2).map((tg) => (
+                        <TagChip
+                          key={tg.id}
+                          name={tg.name}
+                          tone={tg.tone as ChipTone}
+                          variant="linear"
+                          size="sm"
+                        />
+                      ))}
+                      <TagChipOverflow
+                        count={Math.max(0, task.tags.length - 2)}
+                        variant="linear"
+                        size="sm"
+                      />
+                    </span>
                   ) : null}
                   <span className="flex-1 truncate">{task.title}</span>
                   <span className="font-mono tabular-nums text-muted-foreground">

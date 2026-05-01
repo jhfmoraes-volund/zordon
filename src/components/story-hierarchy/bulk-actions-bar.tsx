@@ -5,11 +5,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertTriangle,
   Copy,
   ChevronDown,
   Trash2,
@@ -18,6 +18,8 @@ import {
   CircleDot,
   UserCircle2,
 } from "lucide-react";
+
+const BULK_LIMIT = 100;
 import { TASK_STATUS } from "@/lib/status-chips";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { Member, TaskStatus } from "./types";
@@ -50,11 +52,22 @@ export function BulkActionsBar({
   onDuplicate,
   onDelete,
 }: Props) {
+  const overLimit = count > BULK_LIMIT;
   return (
     <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border bg-background/95 px-3 py-2 shadow-sm backdrop-blur">
       <span className="text-sm font-medium">
         {count} task{count > 1 ? "s" : ""} selecionada{count > 1 ? "s" : ""}
       </span>
+
+      {overLimit ? (
+        <span
+          className="flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+          title={`Ações em massa estão limitadas a ${BULK_LIMIT} tasks por vez. Refine sua seleção.`}
+        >
+          <AlertTriangle className="size-3" />
+          Máx. {BULK_LIMIT} por ação
+        </span>
+      ) : null}
 
       <Button
         variant="ghost"
@@ -71,8 +84,14 @@ export function BulkActionsBar({
       {/* Status ─────────────────────────────────────────── */}
       <DropdownMenu>
         <DropdownMenuTrigger
+          disabled={overLimit}
           render={
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs" />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={overLimit}
+              className="h-7 gap-1.5 px-2 text-xs"
+            />
           }
         >
           <CircleDot className="size-3.5" />
@@ -80,9 +99,9 @@ export function BulkActionsBar({
           <ChevronDown className="size-3" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="px-1.5 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             Mudar status
-          </DropdownMenuLabel>
+          </div>
           <DropdownMenuSeparator />
           {Object.entries(TASK_STATUS).map(([key, desc]) => (
             <DropdownMenuItem
@@ -98,8 +117,14 @@ export function BulkActionsBar({
       {/* Assignee ───────────────────────────────────────── */}
       <DropdownMenu>
         <DropdownMenuTrigger
+          disabled={overLimit}
           render={
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs" />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={overLimit}
+              className="h-7 gap-1.5 px-2 text-xs"
+            />
           }
         >
           <UserCircle2 className="size-3.5" />
@@ -107,9 +132,9 @@ export function BulkActionsBar({
           <ChevronDown className="size-3" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-[300px] overflow-y-auto">
-          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="px-1.5 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             Atribuir a
-          </DropdownMenuLabel>
+          </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onChangeAssignee(null)}>
             <span className="text-muted-foreground">Ninguém</span>
@@ -127,8 +152,14 @@ export function BulkActionsBar({
       {onChangeSprint && sprints ? (
         <DropdownMenu>
           <DropdownMenuTrigger
+            disabled={overLimit}
             render={
-              <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs" />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={overLimit}
+                className="h-7 gap-1.5 px-2 text-xs"
+              />
             }
           >
             <CalendarDays className="size-3.5" />
@@ -136,9 +167,9 @@ export function BulkActionsBar({
             <ChevronDown className="size-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-h-[300px] overflow-y-auto">
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="px-1.5 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Mover para sprint
-            </DropdownMenuLabel>
+            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onChangeSprint(null)}>
               <span className="text-muted-foreground">Sem sprint</span>
@@ -161,6 +192,7 @@ export function BulkActionsBar({
           variant="outline"
           size="sm"
           onClick={onDuplicate}
+          disabled={overLimit}
           className="h-7 gap-1.5 px-2 text-xs"
         >
           <Copy className="size-3.5" />
@@ -173,6 +205,7 @@ export function BulkActionsBar({
         variant="destructive"
         size="sm"
         onClick={onDelete}
+        disabled={overLimit}
         className="h-7 gap-1.5 px-2 text-xs"
       >
         <Trash2 className="size-3.5" />

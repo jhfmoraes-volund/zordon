@@ -40,9 +40,11 @@ import type {
   Module,
   Story,
   Task,
-  TaskArea,
   TaskStatus,
+  TaskTag,
 } from "./types";
+import { TagChip, TagChipOverflow } from "@/components/tags/tag-chip";
+import type { ChipTone } from "@/lib/status-chips";
 
 type SprintLite = {
   id: string;
@@ -80,19 +82,16 @@ type TasksListProps = {
   ) => void | Promise<void>;
   onBulkDelete?: (taskRefs: string[]) => void | Promise<void>;
   onBulkDuplicate?: (taskRefs: string[]) => void | Promise<void>;
+
+  /** Project tag list. Drives the Tag filter — when omitted, the filter is
+   *  hidden entirely. */
+  availableTags?: TaskTag[];
 };
 
 type GroupBy = "story" | "none";
 
-const AREA_OPTIONS: { value: TaskArea | "__all"; label: string }[] = [
-  { value: "__all", label: "Todas as areas" },
-  { value: "front", label: "Front" },
-  { value: "back",  label: "Back"  },
-  { value: "infra", label: "Infra" },
-  { value: "ops",   label: "Ops"   },
-  { value: "mixed", label: "Mixed" },
-  { value: null,    label: "Sem area" },
-];
+const TAG_FILTER_ALL = "__all";
+const TAG_FILTER_NONE = "__none";
 
 const STATUS_OPTIONS: { value: TaskStatus | "__all"; label: string }[] = [
   { value: "__all",       label: "Todos status" },
@@ -109,6 +108,93 @@ const SPRINT_NONE = "__none__";
 
 const stop = (e: React.MouseEvent | React.PointerEvent) =>
   e.stopPropagation();
+
+// ─── Sort ────────────────────────────────────────────────────────────────────
+
+type SortKey =
+  | "ref"
+  | "title"
+  | "story"
+  | "sprint"
+  | "status"
+  | "fp"
+  | "assignee";
+type SortDir = "asc" | "desc";
+
+// Display order — used as the rank for status sort. Matches the status pipeline
+// (draft → backlog → todo → in_progress → review → done), which is more useful
+// than alphabetical when sorting "by status".
+const STATUS_RANK: Record<TaskStatus, number> = {
+  draft: 0,
+  backlog: 1,
+  todo: 2,
+  in_progress: 3,
+  review: 4,
+  done: 5,
+};
+
+type SortContext = {
+  stories: Story[];
+  sprints?: SprintLite[];
+  members: Member[];
+};
+
+function compareTasks(
+  a: Task,
+  b: Task,
+  key: SortKey,
+  ctx: SortContext,
+): number {
+  switch (key) {
+    case "ref":
+      return a.reference.localeCompare(b.reference, undefined, { numeric: true });
+    case "title":
+      return a.title.localeCompare(b.title);
+    case "story": {
+      const aStory = ctx.stories.find((s) => s.reference === a.userStoryRef);
+      const bStory = ctx.stories.find((s) => s.reference === b.userStoryRef);
+      // Sem story → fim (asc); o caller inverte pra desc.
+      if (!aStory && !bStory) return 0;
+      if (!aStory) return 1;
+      if (!bStory) return -1;
+      return aStory.reference.localeCompare(bStory.reference, undefined, { numeric: true });
+    }
+    case "sprint": {
+      const aS = ctx.sprints?.find((s) => s.id === a.sprintId);
+      const bS = ctx.sprints?.find((s) => s.id === b.sprintId);
+      if (!aS && !bS) return 0;
+      if (!aS) return 1;
+      if (!bS) return -1;
+      return aS.name.localeCompare(bS.name, undefined, { numeric: true });
+    }
+    case "status":
+      return STATUS_RANK[a.status] - STATUS_RANK[b.status];
+    case "fp":
+      return a.functionPoints - b.functionPoints;
+    case "assignee": {
+      const aId = a.assigneeIds[0] ?? null;
+      const bId = b.assigneeIds[0] ?? null;
+      if (!aId && !bId) return 0;
+      if (!aId) return 1;
+      if (!bId) return -1;
+      const aName = ctx.members.find((m) => m.id === aId)?.name ?? "";
+      const bName = ctx.members.find((m) => m.id === bId)?.name ?? "";
+      return aName.localeCompare(bName);
+    }
+  }
+}
+
+function sortTasks(
+  tasks: Task[],
+  key: SortKey | null,
+  dir: SortDir,
+  ctx: SortContext,
+): Task[] {
+  if (!key) return tasks;
+  const sign = dir === "asc" ? 1 : -1;
+  // Stable sort: copy first.
+  return [...tasks].sort((a, b) => sign * compareTasks(a, b, key, ctx));
+}
 
 export function TasksList({
   tasks,
@@ -128,14 +214,18 @@ export function TasksList({
   onBulkUpdate,
   onBulkDelete,
   onBulkDuplicate,
+  availableTags,
 }: TasksListProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [moduleFilter, setModuleFilter] = useState<string>("__all");
-  const [areaFilter, setAreaFilter] = useState<string>("__all");
+  const [tagFilter, setTagFilter] = useState<string>(TAG_FILTER_ALL);
   const [statusFilter, setStatusFilter] = useState<string>("__all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("__all");
   const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [lastClickedRef, setLastClickedRef] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const isMobile = useIsMobile();
 
   const bulkEnabled = !!(onBulkUpdate || onBulkDelete);
@@ -147,11 +237,30 @@ export function TasksList({
       else next.add(ref);
       return next;
     });
+    setLastClickedRef(ref);
   };
 
-  const clearSelection = () => setSelected(new Set());
+  const clearSelection = () => {
+    setSelected(new Set());
+    setLastClickedRef(null);
+  };
 
   const selectedRefs = useMemo(() => Array.from(selected), [selected]);
+
+  /** Click → set sortKey/sortDir. Same key cycles asc → desc → off. */
+  const handleSort = (key: SortKey) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+      return;
+    }
+    if (sortDir === "asc") {
+      setSortDir("desc");
+      return;
+    }
+    setSortKey(null);
+    setSortDir("asc");
+  };
 
   // Fecha o bottom sheet automaticamente se a janela cresce pra desktop —
   // a toolbar inline reaparece e não faz sentido manter o sheet aberto.
@@ -161,13 +270,13 @@ export function TasksList({
 
   const activeFilterCount =
     (moduleFilter !== "__all" ? 1 : 0) +
-    (areaFilter !== "__all" ? 1 : 0) +
+    (tagFilter !== TAG_FILTER_ALL ? 1 : 0) +
     (statusFilter !== "__all" ? 1 : 0) +
     (assigneeFilter !== "__all" ? 1 : 0);
 
   const clearAllFilters = () => {
     setModuleFilter("__all");
-    setAreaFilter("__all");
+    setTagFilter(TAG_FILTER_ALL);
     setStatusFilter("__all");
     setAssigneeFilter("__all");
   };
@@ -178,9 +287,12 @@ export function TasksList({
       const moduleId = story?.moduleId ?? null;
 
       if (moduleFilter !== "__all" && moduleFilter !== moduleId) return false;
-      if (areaFilter !== "__all") {
-        const want = areaFilter === "null" ? null : (areaFilter as TaskArea);
-        if (t.area !== want) return false;
+      if (tagFilter !== TAG_FILTER_ALL) {
+        if (tagFilter === TAG_FILTER_NONE) {
+          if (t.tags.length > 0) return false;
+        } else if (!t.tags.some((tg) => tg.id === tagFilter)) {
+          return false;
+        }
       }
       if (statusFilter !== "__all" && t.status !== statusFilter) return false;
       if (assigneeFilter !== "__all") {
@@ -192,7 +304,65 @@ export function TasksList({
       }
       return true;
     });
-  }, [tasks, stories, moduleFilter, areaFilter, statusFilter, assigneeFilter]);
+  }, [tasks, stories, moduleFilter, tagFilter, statusFilter, assigneeFilter]);
+
+  // Apply sort *after* filter. When groupBy="story" each group is sorted in
+  // isolation below — but flat list (groupBy="none") just consumes this.
+  const sortedFiltered = useMemo(
+    () => sortTasks(filtered, sortKey, sortDir, { stories, sprints, members }),
+    [filtered, sortKey, sortDir, stories, sprints, members],
+  );
+
+  // Visual order the user sees, used by shift-click range select. When grouped
+  // by story, ranges still cross story boundaries — the user sees a flat
+  // sequence of rows top-to-bottom regardless of grouping.
+  const visibleRefsOrdered = useMemo(() => {
+    if (groupBy === "none") return sortedFiltered.map((t) => t.reference);
+    // Grouped: walk groups in the same order GroupedByStory builds them
+    // (insertion-order Map of first appearance), each group internally sorted.
+    const seen = new Map<string | "__orphan", Task[]>();
+    for (const t of sortedFiltered) {
+      const key = t.userStoryRef ?? "__orphan";
+      const arr = seen.get(key) ?? [];
+      arr.push(t);
+      seen.set(key, arr);
+    }
+    const out: string[] = [];
+    for (const arr of seen.values()) {
+      for (const t of arr) out.push(t.reference);
+    }
+    return out;
+  }, [groupBy, sortedFiltered]);
+
+  /** Shift-click handler. Mirrors the *clicked* row's intent (select if it
+   *  was unselected, deselect otherwise) across the whole range. */
+  const toggleRange = (ref: string) => {
+    if (!lastClickedRef || lastClickedRef === ref) {
+      toggleOne(ref);
+      return;
+    }
+    const i = visibleRefsOrdered.indexOf(ref);
+    const j = visibleRefsOrdered.indexOf(lastClickedRef);
+    if (i === -1 || j === -1) {
+      // anchor disappeared (filter changed) — fallback to single toggle
+      toggleOne(ref);
+      return;
+    }
+    const [from, to] = i < j ? [i, j] : [j, i];
+    // Intent = opposite of the clicked row's current state. So shift-click on
+    // an unselected row selects the range; on a selected row, deselects it.
+    const intentSelect = !selected.has(ref);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (let k = from; k <= to; k++) {
+        const r = visibleRefsOrdered[k];
+        if (intentSelect) next.add(r);
+        else next.delete(r);
+      }
+      return next;
+    });
+    setLastClickedRef(ref);
+  };
 
   const showSprint = !!(sprints && onChangeSprint);
   const showMenu = !!(onDuplicate && onClone && onCopyRef && onDelete);
@@ -213,6 +383,10 @@ export function TasksList({
     bulkEnabled,
     selected,
     onToggleSelect: toggleOne,
+    onToggleRange: toggleRange,
+    sortKey,
+    sortDir,
+    onSort: handleSort,
   };
 
   const handleBulkDelete = () => {
@@ -268,12 +442,13 @@ export function TasksList({
             layout="inline"
             modules={modules}
             members={members}
+            tags={availableTags ?? []}
             moduleFilter={moduleFilter}
-            areaFilter={areaFilter}
+            tagFilter={tagFilter}
             statusFilter={statusFilter}
             assigneeFilter={assigneeFilter}
             onModuleChange={setModuleFilter}
-            onAreaChange={setAreaFilter}
+            onTagChange={setTagFilter}
             onStatusChange={setStatusFilter}
             onAssigneeChange={setAssigneeFilter}
           />
@@ -368,14 +543,14 @@ export function TasksList({
       {/* Body ───────────────────────────────────────────────────────── */}
       {groupBy === "story" ? (
         <GroupedByStory
-          tasks={filtered}
+          tasks={sortedFiltered}
           stories={stories}
           modules={modules}
           editing={editing}
         />
       ) : (
         <FlatList
-          tasks={filtered}
+          tasks={sortedFiltered}
           stories={stories}
           modules={modules}
           editing={editing}
@@ -404,12 +579,13 @@ export function TasksList({
               layout="stacked"
               modules={modules}
               members={members}
+              tags={availableTags ?? []}
               moduleFilter={moduleFilter}
-              areaFilter={areaFilter}
+              tagFilter={tagFilter}
               statusFilter={statusFilter}
               assigneeFilter={assigneeFilter}
               onModuleChange={setModuleFilter}
-              onAreaChange={setAreaFilter}
+              onTagChange={setTagFilter}
               onStatusChange={setStatusFilter}
               onAssigneeChange={setAssigneeFilter}
             />
@@ -441,12 +617,13 @@ type TasksFiltersProps = {
   layout: "inline" | "stacked";
   modules: Module[];
   members: Member[];
+  tags: TaskTag[];
   moduleFilter: string;
-  areaFilter: string;
+  tagFilter: string;
   statusFilter: string;
   assigneeFilter: string;
   onModuleChange: (v: string) => void;
-  onAreaChange: (v: string) => void;
+  onTagChange: (v: string) => void;
   onStatusChange: (v: string) => void;
   onAssigneeChange: (v: string) => void;
 };
@@ -455,12 +632,13 @@ function TasksFilters({
   layout,
   modules,
   members,
+  tags,
   moduleFilter,
-  areaFilter,
+  tagFilter,
   statusFilter,
   assigneeFilter,
   onModuleChange,
-  onAreaChange,
+  onTagChange,
   onStatusChange,
   onAssigneeChange,
 }: TasksFiltersProps) {
@@ -501,30 +679,25 @@ function TasksFilters({
     </Select>
   );
 
-  const renderArea = (
-    <Select value={areaFilter} onValueChange={(v) => v && onAreaChange(v)}>
+  const renderTag = (
+    <Select value={tagFilter} onValueChange={(v) => v && onTagChange(v)}>
       <SelectTrigger className={triggerCls}>
         <SelectValue>
           {(v: string) => {
-            const opt = AREA_OPTIONS.find(
-              (o) => (o.value === null ? "null" : String(o.value)) === v,
-            );
-            if (stacked) {
-              if (v === "__all") return "Todas";
-              return opt?.label ?? "—";
-            }
-            if (v === "__all") return "Área: todas";
-            return `Área: ${opt?.label ?? "—"}`;
+            if (v === TAG_FILTER_ALL) return stacked ? "Todas" : "Tag: todas";
+            if (v === TAG_FILTER_NONE)
+              return stacked ? "Sem tag" : "Tag: sem tag";
+            const tag = tags.find((t) => t.id === v);
+            return stacked ? (tag?.name ?? "—") : `Tag: ${tag?.name ?? "—"}`;
           }}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {AREA_OPTIONS.map((opt) => (
-          <SelectItem
-            key={String(opt.value)}
-            value={opt.value === null ? "null" : String(opt.value)}
-          >
-            {opt.label}
+        <SelectItem value={TAG_FILTER_ALL}>Todas as tags</SelectItem>
+        <SelectItem value={TAG_FILTER_NONE}>— sem tag —</SelectItem>
+        {tags.map((t) => (
+          <SelectItem key={t.id} value={t.id}>
+            {t.name}
           </SelectItem>
         ))}
       </SelectContent>
@@ -593,7 +766,7 @@ function TasksFilters({
     return (
       <div className="flex flex-col gap-4 py-4">
         <Field label="Módulo">{renderModule}</Field>
-        <Field label="Área">{renderArea}</Field>
+        <Field label="Tag">{renderTag}</Field>
         <Field label="Status">{renderStatus}</Field>
         <Field label="Atribuído a">{renderAssignee}</Field>
       </div>
@@ -603,7 +776,7 @@ function TasksFilters({
   return (
     <>
       {renderModule}
-      {renderArea}
+      {renderTag}
       {renderStatus}
       {renderAssignee}
     </>
@@ -645,6 +818,10 @@ type RowEditingProps = {
   bulkEnabled: boolean;
   selected: Set<string>;
   onToggleSelect: (taskRef: string) => void;
+  onToggleRange: (taskRef: string) => void;
+  sortKey: SortKey | null;
+  sortDir: SortDir;
+  onSort: (key: SortKey) => void;
 };
 
 function GroupedByStory({
@@ -878,13 +1055,17 @@ function TasksTable({
               />
             </span>
           ) : null}
-          <span>Ref</span>
-          <span>Título</span>
-          {storyHint ? <span>Story</span> : null}
-          {editing.showSprint ? <span>Sprint</span> : null}
-          <span>Status</span>
-          <span className="text-right">FP</span>
-          <span className="text-right">Assignee</span>
+          <SortHeader sortKey="ref" label="Ref" editing={editing} />
+          <SortHeader sortKey="title" label="Título" editing={editing} />
+          {storyHint ? (
+            <SortHeader sortKey="story" label="Story" editing={editing} />
+          ) : null}
+          {editing.showSprint ? (
+            <SortHeader sortKey="sprint" label="Sprint" editing={editing} />
+          ) : null}
+          <SortHeader sortKey="status" label="Status" editing={editing} />
+          <SortHeader sortKey="fp" label="FP" editing={editing} align="right" />
+          <SortHeader sortKey="assignee" label="Assignee" editing={editing} align="right" />
           {editing.showMenu ? <span /> : null}
         </div>
 
@@ -921,7 +1102,11 @@ function TasksTable({
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={() => editing.onToggleSelect(task.reference)}
+                    onChange={() => {/* handled in onClick to capture shiftKey */}}
+                    onClick={(e) => {
+                      if (e.shiftKey) editing.onToggleRange(task.reference);
+                      else editing.onToggleSelect(task.reference);
+                    }}
                     aria-label={`Selecionar ${task.reference}`}
                     className="size-3.5 cursor-pointer rounded border-border accent-primary"
                   />
@@ -936,6 +1121,24 @@ function TasksTable({
                 <span className="truncate">{task.title}</span>
                 {task.createdByAgent ? (
                   <Sparkles className="size-3 shrink-0 text-muted-foreground/60" />
+                ) : null}
+                {task.tags.length > 0 ? (
+                  <span className="flex shrink-0 items-center gap-1">
+                    {task.tags.slice(0, 2).map((tg) => (
+                      <TagChip
+                        key={tg.id}
+                        name={tg.name}
+                        tone={tg.tone as ChipTone}
+                        variant="linear"
+                        size="sm"
+                      />
+                    ))}
+                    <TagChipOverflow
+                      count={Math.max(0, task.tags.length - 2)}
+                      variant="linear"
+                      size="sm"
+                    />
+                  </span>
                 ) : null}
               </span>
 
@@ -1018,6 +1221,36 @@ function TasksTable({
         })}
       </div>
     </div>
+  );
+}
+
+// ─── Sort header button ──────────────────────────────────────────────────────
+
+function SortHeader({
+  sortKey: key,
+  label,
+  editing,
+  align = "left",
+}: {
+  sortKey: SortKey;
+  label: string;
+  editing: RowEditingProps;
+  align?: "left" | "right";
+}) {
+  const active = editing.sortKey === key;
+  const Arrow = active && editing.sortDir === "desc" ? ArrowDown : ArrowUp;
+  return (
+    <button
+      type="button"
+      onClick={() => editing.onSort(key)}
+      aria-sort={active ? (editing.sortDir === "asc" ? "ascending" : "descending") : "none"}
+      className={`group flex items-center gap-1 truncate text-[10px] font-semibold uppercase tracking-wider transition-colors hover:text-foreground ${
+        active ? "text-foreground" : "text-muted-foreground"
+      } ${align === "right" ? "justify-end" : ""}`}
+    >
+      <span>{label}</span>
+      {active ? <Arrow className="size-3 shrink-0" /> : null}
+    </button>
   );
 }
 

@@ -13,10 +13,10 @@ export type {
   RefinementStatus,
   Story,
   Task,
-  TaskArea,
   TaskComplexity,
   TaskScope,
   TaskStatus,
+  TaskTag,
   TaskType,
 } from "./types";
 

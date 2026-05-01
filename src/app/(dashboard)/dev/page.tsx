@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Sparkles } from "lucide-react";
+import { BookOpen, Sparkles, Tag } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -97,6 +97,30 @@ export default async function DevSandboxPage() {
             >
               <BookOpen />
               Abrir mock
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Tag className="size-4 text-primary" />
+              Tags (substitui task.area)
+            </CardTitle>
+            <CardDescription>
+              Três variações de chip (Solid / Notion / Linear) com picker,
+              create-on-the-fly, color menu e demo de overflow +N na lista.
+              Mock 100% client-side.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              size="lg"
+              variant="outline"
+              render={<Link href="/dev/tags" />}
+            >
+              <Tag />
+              Abrir sandbox
             </Button>
           </CardContent>
         </Card>

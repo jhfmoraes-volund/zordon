@@ -51,7 +51,12 @@ export type TaskType =
 
 export type TaskScope = "micro" | "small" | "medium" | "large";
 export type TaskComplexity = "trivial" | "low" | "medium" | "high";
-export type TaskArea = "front" | "back" | "infra" | "ops" | "mixed" | null;
+
+export type TaskTag = {
+  id: string;
+  name: string;
+  tone: string;
+};
 
 export type Task = {
   reference: string;
@@ -63,7 +68,7 @@ export type Task = {
   type: TaskType;
   scope: TaskScope;
   complexity: TaskComplexity;
-  area: TaskArea;
+  tags: TaskTag[];
   functionPoints: number;
   billable: boolean;
   dueDate?: string | null;

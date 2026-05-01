@@ -307,7 +307,10 @@ function SprintRowInWeek({ row }: { row: WeekSprintRow }) {
           </p>
         </div>
 
-        <Link href={`/sprints/${row.sprintId}/board`} aria-label="Abrir board">
+        <Link
+          href={`/projects/${row.projectId}?tab=sprints&sprint=${row.sprintId}`}
+          aria-label="Abrir sprint"
+        >
           <Button variant="outline" size="sm" className="h-7 w-7 p-0 shrink-0">
             <KanbanSquare className="h-3.5 w-3.5" />
           </Button>

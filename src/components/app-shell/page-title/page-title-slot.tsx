@@ -9,7 +9,6 @@ const STATIC_FALLBACKS: Record<string, string> = {
   "/": "Overview",
   "/projects": "Projetos",
   "/clients": "Clientes",
-  "/sprints": "Sprints",
   "/meetings": "Reuniões",
   "/members": "Membros",
   "/squads": "Squads",
@@ -24,7 +23,6 @@ const STATIC_FALLBACKS: Record<string, string> = {
 
 const ENTITY_LABEL: Record<string, string> = {
   projects: "Projeto",
-  sprints: "Sprint",
   meetings: "Reunião",
   clients: "Cliente",
   members: "Membro",
@@ -35,8 +33,6 @@ const ENTITY_LABEL: Record<string, string> = {
 
 function deriveFallback(pathname: string): string {
   if (STATIC_FALLBACKS[pathname]) return STATIC_FALLBACKS[pathname];
-
-  if (/^\/sprints\/[^/]+\/board$/.test(pathname)) return "Board do sprint";
 
   const entityMatch = pathname.match(/^\/([^/]+)\/[^/]+$/);
   if (entityMatch) {

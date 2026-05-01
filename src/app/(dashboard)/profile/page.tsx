@@ -52,6 +52,7 @@ type MeTask = {
 type MeSprint = {
   id: string;
   name: string;
+  projectId: string;
   projectName: string;
   taskCount: number;
   fpTotal: number;
@@ -148,6 +149,7 @@ export default function ProfilePage() {
         sprintMap.set(t.sprint.id, {
           id: t.sprint.id,
           name: t.sprint.name,
+          projectId: t.projectId,
           projectName: t.project.name,
           taskCount: 1,
           fpTotal: t.functionPoints ?? 0,
@@ -387,7 +389,7 @@ export default function ProfilePage() {
             {data.sprints.map((s) => {
               const pct = s.taskCount > 0 ? Math.round((s.doneCount / s.taskCount) * 100) : 0;
               return (
-                <Link key={s.id} href={`/sprints/${s.id}/board`}>
+                <Link key={s.id} href={`/projects/${s.projectId}?tab=sprints&sprint=${s.id}`}>
                   <Card className="hover:border-primary/30 transition-colors cursor-pointer">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between mb-2">

@@ -2598,7 +2598,6 @@ export type Database = {
       Task: {
         Row: {
           acceptanceCriteria: string | null
-          area: string | null
           billable: boolean
           complexity: string
           createdAt: string
@@ -2631,7 +2630,6 @@ export type Database = {
         }
         Insert: {
           acceptanceCriteria?: string | null
-          area?: string | null
           billable?: boolean
           complexity?: string
           createdAt?: string
@@ -2664,7 +2662,6 @@ export type Database = {
         }
         Update: {
           acceptanceCriteria?: string | null
-          area?: string | null
           billable?: boolean
           complexity?: string
           createdAt?: string
@@ -2950,6 +2947,74 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "TaskIteration_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "Task"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      TaskTag: {
+        Row: {
+          createdAt: string
+          id: string
+          name: string
+          projectId: string
+          tone: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          id?: string
+          name: string
+          projectId: string
+          tone: string
+          updatedAt?: string
+        }
+        Update: {
+          createdAt?: string
+          id?: string
+          name?: string
+          projectId?: string
+          tone?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "TaskTag_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      TaskTagAssignment: {
+        Row: {
+          createdAt: string
+          tagId: string
+          taskId: string
+        }
+        Insert: {
+          createdAt?: string
+          tagId: string
+          taskId: string
+        }
+        Update: {
+          createdAt?: string
+          tagId?: string
+          taskId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "TaskTagAssignment_tagId_fkey"
+            columns: ["tagId"]
+            isOneToOne: false
+            referencedRelation: "TaskTag"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskTagAssignment_taskId_fkey"
             columns: ["taskId"]
             isOneToOne: false
             referencedRelation: "Task"

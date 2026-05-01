@@ -11,10 +11,10 @@ import type {
   Persona as PersonaView,
   Story as StoryView,
   Task as TaskView,
-  TaskArea,
   TaskComplexity,
   TaskScope,
   TaskStatus,
+  TaskTag,
   TaskType,
 } from "./types";
 
@@ -97,7 +97,6 @@ type TaskAdapterInput = {
   type: string | null;
   scope: string | null;
   complexity: string | null;
-  area: string | null;
   functionPoints: number | null;
   billable: boolean | null;
   dueDate: string | null;
@@ -109,6 +108,10 @@ type TaskAdapterInput = {
   assignments?: Array<{
     memberId?: string | null;
     member?: { id: string } | null;
+  }>;
+  /** Tag rows joined via `tags:TaskTagAssignment(TaskTag(*))`. */
+  tags?: Array<{
+    TaskTag?: { id: string; name: string; tone: string } | null;
   }>;
 };
 
@@ -129,6 +132,12 @@ export function adaptTask(
 
   const ac = (ctx.acByTaskId.get(row.id) ?? []).map(adaptAc);
 
+  const tags: TaskTag[] = (row.tags ?? [])
+    .map((j) => j.TaskTag)
+    .filter((t): t is { id: string; name: string; tone: string } => Boolean(t))
+    .map((t) => ({ id: t.id, name: t.name, tone: t.tone }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return {
     __id: row.id,
     reference: row.reference ?? row.id,
@@ -140,7 +149,7 @@ export function adaptTask(
     type: (row.type ?? "feature") as TaskType,
     scope: (row.scope ?? "small") as TaskScope,
     complexity: (row.complexity ?? "medium") as TaskComplexity,
-    area: (row.area ?? null) as TaskArea,
+    tags,
     functionPoints: row.functionPoints ?? 0,
     billable: row.billable ?? true,
     dueDate: row.dueDate ?? null,

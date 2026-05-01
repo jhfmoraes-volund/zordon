@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   BookOpen,
@@ -41,7 +42,9 @@ import {
   type ProjectLite,
   type StoryCreateInput,
   type TaskCreateInput,
+  type TaskTag,
 } from "@/components/story-hierarchy";
+import type { ChipTone } from "@/lib/status-chips";
 import {
   adaptMember,
   adaptModule,
@@ -104,7 +107,6 @@ type RawTask = {
   type: string | null;
   scope: string | null;
   complexity: string | null;
-  area: string | null;
   functionPoints: number | null;
   billable: boolean | null;
   dueDate: string | null;
@@ -115,6 +117,9 @@ type RawTask = {
   projectId: string;
   createdByAgent: boolean | null;
   assignments: Array<{ memberId: string; member: { id: string; name: string } | null }>;
+  tags: Array<{
+    TaskTag: { id: string; name: string; tone: string } | null;
+  }>;
 };
 
 type RawSprint = {
@@ -164,13 +169,20 @@ export default function ProjectDetailPage({
   const { id } = use(params);
   const supabase = useMemo(() => createClient(), []);
 
-  const [activeTab, setActiveTab] = useState<TabKey>("stories");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") as TabKey | null;
+  const sprintParam = searchParams.get("sprint");
+
+  const [activeTab, setActiveTab] = useState<TabKey>(tabParam ?? "stories");
   const [project, setProject] = useState<ProjectMeta | null>(null);
 
   const [rawModules, setRawModules] = useState<ModuleRow[]>([]);
   const [rawPersonas, setRawPersonas] = useState<PersonaRow[]>([]);
   const [rawStories, setRawStories] = useState<StoryWithRelations[]>([]);
   const [rawTasks, setRawTasks] = useState<RawTask[]>([]);
+  const [projectTags, setProjectTags] = useState<TaskTag[]>([]);
   const [taskAcRows, setTaskAcRows] = useState<AcceptanceCriterionRow[]>([]);
   const [rawSprints, setRawSprints] = useState<RawSprint[]>([]);
   const [rawMembers, setRawMembers] = useState<RawMember[]>([]);
@@ -201,7 +213,20 @@ export default function ProjectDetailPage({
   const [cloneTaskRef, setCloneTaskRef] = useState<string | null>(null);
   const [targetProjects, setTargetProjects] = useState<ProjectLite[]>([]);
 
-  const [focusSprintId, setFocusSprintId] = useState<string | null>(null);
+  const [focusSprintId, setFocusSprintId] = useState<string | null>(sprintParam);
+
+  // Sync activeTab + focusSprintId → URL search params (?tab=...&sprint=...).
+  // Allows deep-link from /profile, weekly-allocation widget, etc.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (activeTab !== "stories") params.set("tab", activeTab);
+    if (activeTab === "sprints" && focusSprintId) params.set("sprint", focusSprintId);
+    const qs = params.toString();
+    const next = qs ? `${pathname}?${qs}` : pathname;
+    if (next !== window.location.pathname + window.location.search) {
+      router.replace(next, { scroll: false });
+    }
+  }, [activeTab, focusSprintId, pathname, router]);
 
   // ─── Loaders ───────────────────────────────────────────────────────────────
 
@@ -274,11 +299,11 @@ export default function ProjectDetailPage({
   }, [id, supabase]);
 
   const loadTasksAndSprints = useCallback(async () => {
-    const [tasksRes, sprintsRes] = await Promise.all([
+    const [tasksRes, sprintsRes, tagsRes] = await Promise.all([
       supabase
         .from("Task")
         .select(
-          "*, assignments:TaskAssignment(memberId, member:Member(id, name))",
+          "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
         )
         .eq("projectId", id)
         .neq("status", "draft")
@@ -288,9 +313,15 @@ export default function ProjectDetailPage({
         .select("*")
         .eq("projectId", id)
         .order("startDate"),
+      supabase
+        .from("TaskTag")
+        .select("id, name, tone")
+        .eq("projectId", id)
+        .order("name"),
     ]);
     setRawTasks((tasksRes.data ?? []) as unknown as RawTask[]);
     setRawSprints((sprintsRes.data ?? []) as RawSprint[]);
+    setProjectTags((tagsRes.data ?? []) as TaskTag[]);
   }, [id, supabase]);
 
   const loadMembers = useCallback(async () => {
@@ -522,8 +553,9 @@ export default function ProjectDetailPage({
       alert(`Falha ao gerar reference: ${refErr.message}`);
       return;
     }
+    const newTaskId = crypto.randomUUID();
     const { error } = await supabase.from("Task").insert({
-      id: crypto.randomUUID(),
+      id: newTaskId,
       projectId: id,
       reference: (refData as unknown as string) ?? null,
       title: input.title,
@@ -531,7 +563,6 @@ export default function ProjectDetailPage({
       type: input.type,
       scope: input.scope,
       complexity: input.complexity,
-      area: input.area,
       status: input.status,
       userStoryId: input.userStoryId,
       functionPoints: input.functionPoints,
@@ -540,6 +571,43 @@ export default function ProjectDetailPage({
     });
     if (error) {
       alert(`Falha ao criar task: ${error.message}`);
+      return;
+    }
+    if (input.tagIds.length > 0) {
+      await supabase
+        .from("TaskTagAssignment")
+        .insert(input.tagIds.map((tagId) => ({ taskId: newTaskId, tagId })));
+    }
+    await loadTasksAndSprints();
+  }
+
+  async function handleCreateTag(name: string, tone: ChipTone): Promise<TaskTag> {
+    const res = await fetch(`/api/projects/${id}/tags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, tone }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Falha ao criar tag");
+    }
+    const created = (await res.json()) as TaskTag;
+    setProjectTags((cur) =>
+      [...cur, created].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    return created;
+  }
+
+  async function handleChangeTaskTags(taskRef: string, tagIds: string[]) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    const res = await fetch(`/api/tasks/${taskId}/tags`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tagIds }),
+    });
+    if (!res.ok) {
+      alert("Falha ao atualizar tags");
       return;
     }
     await loadTasksAndSprints();
@@ -580,15 +648,26 @@ export default function ProjectDetailPage({
   ) {
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
+
+    // Optimistic: update local state immediately so the chip flips with no
+    // perceived delay. Revert on failure.
+    const snapshot = rawTasks;
+    setRawTasks((cur) =>
+      cur.map((t) => (t.id === taskId ? { ...t, status } : t)),
+    );
+
     const { error } = await supabase
       .from("Task")
       .update({ status, updatedAt: new Date().toISOString() })
       .eq("id", taskId);
     if (error) {
+      setRawTasks(snapshot);
       alert(`Falha ao atualizar status: ${error.message}`);
       return;
     }
-    await loadTasksAndSprints();
+    // Reload in background to pick up server-derived fields (e.g. doneAt)
+    // without blocking the UI.
+    void loadTasksAndSprints();
   }
 
   async function handleInlineSprintChange(
@@ -597,15 +676,22 @@ export default function ProjectDetailPage({
   ) {
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
+
+    const snapshot = rawTasks;
+    setRawTasks((cur) =>
+      cur.map((t) => (t.id === taskId ? { ...t, sprintId } : t)),
+    );
+
     const { error } = await supabase
       .from("Task")
       .update({ sprintId, updatedAt: new Date().toISOString() })
       .eq("id", taskId);
     if (error) {
+      setRawTasks(snapshot);
       alert(`Falha ao atualizar sprint: ${error.message}`);
       return;
     }
-    await loadTasksAndSprints();
+    void loadTasksAndSprints();
   }
 
   /** Sets a single assignee — replaces all existing TaskAssignment rows. */
@@ -624,11 +710,30 @@ export default function ProjectDetailPage({
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
 
+    // Optimistic: rebuild assignments locally with the requested members so
+    // the avatar/name flips instantly.
+    const snapshot = rawTasks;
+    const memberLookup = new Map(rawMembers.map((m) => [m.id, m]));
+    const optimisticAssignments = memberIds
+      .map((memberId) => {
+        const m = memberLookup.get(memberId);
+        return m
+          ? { memberId, member: { id: m.id, name: m.name } }
+          : null;
+      })
+      .filter((a): a is { memberId: string; member: { id: string; name: string } } => a !== null);
+    setRawTasks((cur) =>
+      cur.map((t) =>
+        t.id === taskId ? { ...t, assignments: optimisticAssignments } : t,
+      ),
+    );
+
     const { error: delErr } = await supabase
       .from("TaskAssignment")
       .delete()
       .eq("taskId", taskId);
     if (delErr) {
+      setRawTasks(snapshot);
       alert(`Falha ao limpar assignment: ${delErr.message}`);
       return;
     }
@@ -642,11 +747,12 @@ export default function ProjectDetailPage({
         })),
       );
       if (insErr) {
+        setRawTasks(snapshot);
         alert(`Falha ao atribuir: ${insErr.message}`);
         return;
       }
     }
-    await loadTasksAndSprints();
+    void loadTasksAndSprints();
   }
 
   async function handleSaveTask(updated: AdaptedTask) {
@@ -667,7 +773,6 @@ export default function ProjectDetailPage({
         type: updated.type,
         scope: updated.scope,
         complexity: updated.complexity,
-        area: updated.area,
         functionPoints: updated.functionPoints,
         billable: updated.billable,
         dueDate: updated.dueDate,
@@ -1169,6 +1274,7 @@ export default function ProjectDetailPage({
           modules={modules}
           members={members}
           sprints={sprints}
+          availableTags={projectTags}
           onOpenTask={(ref) => setSelectedTaskRef(ref)}
           onCreateTask={() => setTaskCreateOpen(true)}
           onChangeStatus={handleInlineStatusChange}
@@ -1317,6 +1423,9 @@ export default function ProjectDetailPage({
         onCreate={handleCreateTask}
         onChangeSprint={handleInlineSprintChange}
         onChangeAssignees={handleInlineAssigneesChange}
+        availableTags={projectTags}
+        onCreateTag={handleCreateTag}
+        onChangeTags={handleChangeTaskTags}
         onOpenStory={(ref) => {
           setSelectedTaskRef(null);
           setSelectedStoryRef(ref);

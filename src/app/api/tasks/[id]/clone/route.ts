@@ -108,7 +108,6 @@ export async function POST(
       type: source.type,
       scope: source.scope,
       complexity: source.complexity,
-      area: source.area,
       functionPoints: source.functionPoints,
       billable: source.billable,
       notes: source.notes,

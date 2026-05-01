@@ -39,8 +39,8 @@ export async function PATCH(req: NextRequest) {
   if (taskIds.length === 0) {
     return NextResponse.json({ error: "taskIds must be strings" }, { status: 400 });
   }
-  if (taskIds.length > 500) {
-    return NextResponse.json({ error: "Max 500 tasks per request" }, { status: 400 });
+  if (taskIds.length > 100) {
+    return NextResponse.json({ error: "Max 100 tasks per request" }, { status: 400 });
   }
 
   if (body.action !== "update" && body.action !== "delete") {
