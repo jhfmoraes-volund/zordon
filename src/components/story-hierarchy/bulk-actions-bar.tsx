@@ -6,12 +6,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   AlertTriangle,
   Copy,
   ChevronDown,
+  Minus,
+  Plus,
+  Tag as TagIcon,
   Trash2,
   X,
   CalendarDays,
@@ -20,9 +26,10 @@ import {
 } from "lucide-react";
 
 const BULK_LIMIT = 100;
-import { TASK_STATUS } from "@/lib/status-chips";
+import { TASK_STATUS, type ChipTone } from "@/lib/status-chips";
 import { StatusChip } from "@/components/ui/status-chip";
-import type { Member, TaskStatus } from "./types";
+import { TagChip } from "@/components/tags/tag-chip";
+import type { Member, TaskStatus, TaskTag } from "./types";
 
 type SprintLite = { id: string; name: string };
 
@@ -32,10 +39,17 @@ type Props = {
 
   members: Member[];
   sprints?: SprintLite[];
+  /** Project-scoped tag list. Required for the Tag bulk action. */
+  tags?: TaskTag[];
 
   onChangeStatus: (status: TaskStatus) => void;
   onChangeAssignee: (memberId: string | null) => void;
   onChangeSprint?: (sprintId: string | null) => void;
+  /** Add a tag to all selected tasks. Tasks at the 10-tag limit are skipped
+   *  server-side and surfaced via the response. */
+  onAddTag?: (tagId: string) => void;
+  /** Remove a tag from all selected tasks. No-op for tasks that don't have it. */
+  onRemoveTag?: (tagId: string) => void;
 
   onDuplicate?: () => void;
   onDelete: () => void;
@@ -46,9 +60,12 @@ export function BulkActionsBar({
   onClear,
   members,
   sprints,
+  tags,
   onChangeStatus,
   onChangeAssignee,
   onChangeSprint,
+  onAddTag,
+  onRemoveTag,
   onDuplicate,
   onDelete,
 }: Props) {
@@ -180,6 +197,87 @@ export function BulkActionsBar({
                 {s.name}
               </DropdownMenuItem>
             ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+
+      {/* Tag ────────────────────────────────────────────── */}
+      {tags && (onAddTag || onRemoveTag) ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={overLimit}
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={overLimit}
+                className="h-7 gap-1.5 px-2 text-xs"
+              />
+            }
+          >
+            <TagIcon className="size-3.5" />
+            Tag
+            <ChevronDown className="size-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <div className="px-1.5 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Tags
+            </div>
+            <DropdownMenuSeparator />
+            {tags.length === 0 ? (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                Sem tags neste projeto
+              </div>
+            ) : (
+              <>
+                {onAddTag ? (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Plus className="size-3.5" />
+                      Adicionar
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="max-h-[280px] overflow-y-auto">
+                      {tags.map((t) => (
+                        <DropdownMenuItem
+                          key={t.id}
+                          onClick={() => onAddTag(t.id)}
+                        >
+                          <TagChip
+                            name={t.name}
+                            tone={t.tone as ChipTone}
+                            variant="linear"
+                            size="sm"
+                          />
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                ) : null}
+                {onRemoveTag ? (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Minus className="size-3.5" />
+                      Remover
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="max-h-[280px] overflow-y-auto">
+                      {tags.map((t) => (
+                        <DropdownMenuItem
+                          key={t.id}
+                          onClick={() => onRemoveTag(t.id)}
+                        >
+                          <TagChip
+                            name={t.name}
+                            tone={t.tone as ChipTone}
+                            variant="linear"
+                            size="sm"
+                          />
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                ) : null}
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}

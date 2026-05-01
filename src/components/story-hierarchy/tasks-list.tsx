@@ -82,6 +82,10 @@ type TasksListProps = {
   ) => void | Promise<void>;
   onBulkDelete?: (taskRefs: string[]) => void | Promise<void>;
   onBulkDuplicate?: (taskRefs: string[]) => void | Promise<void>;
+  /** Add a tag to all selected tasks (additive — keeps existing tags). */
+  onBulkAddTag?: (taskRefs: string[], tagId: string) => void | Promise<void>;
+  /** Remove a tag from all selected tasks. */
+  onBulkRemoveTag?: (taskRefs: string[], tagId: string) => void | Promise<void>;
 
   /** Project tag list. Drives the Tag filter — when omitted, the filter is
    *  hidden entirely. */
@@ -214,6 +218,8 @@ export function TasksList({
   onBulkUpdate,
   onBulkDelete,
   onBulkDuplicate,
+  onBulkAddTag,
+  onBulkRemoveTag,
   availableTags,
 }: TasksListProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
@@ -415,11 +421,26 @@ export function TasksList({
           onClear={clearSelection}
           members={members}
           sprints={sprints}
+          tags={availableTags}
           onChangeStatus={(status) => handleBulkUpdate({ status })}
           onChangeAssignee={(assigneeId) => handleBulkUpdate({ assigneeId })}
           onChangeSprint={
             onChangeSprint
               ? (sprintId) => handleBulkUpdate({ sprintId })
+              : undefined
+          }
+          onAddTag={
+            onBulkAddTag
+              ? (tagId) => {
+                  void onBulkAddTag(selectedRefs, tagId);
+                }
+              : undefined
+          }
+          onRemoveTag={
+            onBulkRemoveTag
+              ? (tagId) => {
+                  void onBulkRemoveTag(selectedRefs, tagId);
+                }
               : undefined
           }
           onDuplicate={
@@ -1000,7 +1021,7 @@ function TasksTable({
   layoutParts.push("110px", "minmax(220px, 1fr)");
   if (storyHint) layoutParts.push("200px");
   if (editing.showSprint) layoutParts.push("130px");
-  layoutParts.push("130px", "70px", "150px");
+  layoutParts.push("130px", "44px", "170px");
   if (editing.showMenu) layoutParts.push("40px");
   const gridStyle = { gridTemplateColumns: layoutParts.join(" ") };
 
@@ -1008,7 +1029,7 @@ function TasksTable({
   const fixedSum =
     (editing.bulkEnabled ? 28 : 0) + 110 + 220
     + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0)
-    + 130 + 70 + 150 + (editing.showMenu ? 40 : 0);
+    + 130 + 44 + 170 + (editing.showMenu ? 40 : 0);
   const colCount = layoutParts.length;
   const minWidthPx = fixedSum + (colCount - 1) * 12;
 
