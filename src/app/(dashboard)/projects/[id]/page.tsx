@@ -823,6 +823,74 @@ export default function ProjectDetailPage({
     await loadTasksAndSprints();
   }
 
+  function refsToIds(taskRefs: string[]): string[] {
+    return taskRefs
+      .map((ref) => findTaskIdByRef(ref))
+      .filter((id): id is string => !!id);
+  }
+
+  async function handleBulkUpdate(
+    taskRefs: string[],
+    patch: {
+      status?: AdaptedTask["status"];
+      assigneeId?: string | null;
+      sprintId?: string | null;
+    },
+  ) {
+    const taskIds = refsToIds(taskRefs);
+    if (taskIds.length === 0) return;
+    const res = await fetch("/api/tasks/bulk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds, action: "update", patch }),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao atualizar em massa");
+      alert(msg);
+      return;
+    }
+    await loadTasksAndSprints();
+  }
+
+  async function handleBulkDelete(taskRefs: string[]) {
+    const taskIds = refsToIds(taskRefs);
+    if (taskIds.length === 0) return;
+    const res = await fetch("/api/tasks/bulk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds, action: "delete" }),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao deletar em massa");
+      alert(msg);
+      return;
+    }
+    if (selectedTaskRef && taskRefs.includes(selectedTaskRef)) {
+      setSelectedTaskRef(null);
+    }
+    await loadTasksAndSprints();
+  }
+
+  async function handleBulkDuplicate(taskRefs: string[]) {
+    const taskIds = refsToIds(taskRefs);
+    if (taskIds.length === 0) return;
+    // Reuse single-task duplicate endpoint in a sequential loop. Bulk duplicate
+    // dedicated endpoint can come later if this gets slow at >50 tasks.
+    let failures = 0;
+    for (const taskId of taskIds) {
+      const res = await fetch(`/api/tasks/${taskId}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sprintId: null }),
+      });
+      if (!res.ok) failures += 1;
+    }
+    if (failures > 0) {
+      alert(`${failures} duplicação(ões) falharam de ${taskIds.length}.`);
+    }
+    await loadTasksAndSprints();
+  }
+
   async function handleApproveProposedModule(story: AdaptedStory) {
     if (!story.proposedModuleName) return;
     const res = await fetch(
@@ -1110,6 +1178,9 @@ export default function ProjectDetailPage({
           onClone={openCloneDialog}
           onCopyRef={handleCopyTaskRef}
           onDelete={handleDeleteTask}
+          onBulkUpdate={handleBulkUpdate}
+          onBulkDelete={handleBulkDelete}
+          onBulkDuplicate={handleBulkDuplicate}
         />
       ) : activeTab === "sprints" ? (
         <div className="space-y-5">
@@ -1148,6 +1219,9 @@ export default function ProjectDetailPage({
                 onCloneTask={openCloneDialog}
                 onCopyTaskRef={handleCopyTaskRef}
                 onDeleteTask={handleDeleteTask}
+                onBulkUpdate={handleBulkUpdate}
+                onBulkDelete={handleBulkDelete}
+                onBulkDuplicate={handleBulkDuplicate}
               />
             </>
           ) : (

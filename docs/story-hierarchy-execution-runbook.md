@@ -1,7 +1,7 @@
 # Story Hierarchy — Runbook de Execução
 
-**Status:** em execução · waves 1-5 concluídas · Wave 6 parcial · Wave 7 pendente
-**Última atualização:** 2026-04-30 (audit completo do estado real)
+**Status:** em execução · waves 1-5 + 9 concluídas · Wave 6 (Alpha) não auditado · Wave 10 (cleanup) pronta pra rodar
+**Última atualização:** 2026-05-01 (backfill dos 8 ativos restantes)
 **Audience:** agente (humano ou IA) retomando o trabalho.
 **Escopo:** sequência de waves pra levar a hierarquia Module/Story/Task de sandbox para produção real.
 
@@ -23,8 +23,8 @@
 | 3 | DAL helpers | ✅ | `src/lib/dal/story-hierarchy.ts` |
 | 4 | API route handlers | ✅ | `/api/projects/[id]/{modules,personas,stories,dod}/`, `/api/stories/[ref]/acceptance/`, `/api/tasks/[id]/acceptance/` |
 | 5 | Page real `/projects/[id]` | 🟡 **com divergência** | Componentes integrados; **feature flag não foi implementado** — rollout all-in |
-| 6 | Backfill por projeto | 🟡 **parcial — só Zordon** | 30 stories curadas, 9 módulos, 4 personas, 92 tasks linked. Outros 8 projetos ativos sem hierarquia. |
-| 7 | Cleanup (drop columns) | 🟡 parcial — `useStoryHierarchy` dropado **2026-04-30** | Ainda restam: `Task.acceptanceCriteria/type/scope` |
+| 6 | Backfill por projeto | ✅ **2026-05-01** | Zordon: 30 stories curadas. Outros 8 ativos: bootstrap mínimo (referenceKey, personas só em Zelar, 2 stories Bootstrap em FORGE+Zelar). 0 órfãs em projetos não-archived. |
+| 7 | Cleanup (drop columns) | 🟡 parcial — `useStoryHierarchy` dropado **2026-04-30** | Ainda restam: `Task.acceptanceCriteria/type/scope`. **Pré-condição satisfeita** (zero órfãs). |
 | Alpha | Integração agente | ❓ não auditado | Doc separado, escopo paralelo |
 
 ### Migrations rodadas (todas em `supabase/migrations/`)
@@ -38,16 +38,26 @@
 20260430_task_extensions.sql
 20260430_user_story_overview_view.sql
 20260430_story_hierarchy_rls.sql
+20260430_drop_use_story_hierarchy.sql           ← cleanup parcial Wave 7
+20260501_backfill_active_projects.sql           ← backfill 8 ativos restantes
 ```
 
-### Estado dos projetos (snapshot 2026-04-30)
+### Estado dos projetos (snapshot 2026-05-01 pós-backfill)
 
-| Projeto | referenceKey | Modules | Personas | Stories | Tasks | Órfãs |
-|---|---|---|---|---|---|---|
-| **Zordon** | `ZRDN` | 9 | 4 | 30 | 92 | 0 |
-| Zelar | — | 0 | 0 | 0 | 1 | 1 |
-| FORGE | — | 0 | 0 | 0 | 1 | 1 |
-| Ripple 2, SESP RJ, EDOweb, PGF, Riple, Escalas Médicas | — | 0 | 0 | 0 | 0 | 0 |
+| Projeto | Status | referenceKey | Modules | Personas | Stories | Tasks | Órfãs |
+|---|---|---|---|---|---|---|---|
+| **Zordon** | active | `ZRDN` | 9 | 4 | 30 | 90 | 0 |
+| Zelar | active | `ZLAR` | 0 | 3 (cliente/fornecedor/admin) | 1 (Bootstrap) | 1 | 0 |
+| FORGE | active | `FRGE` | 0 | 0 | 1 (Bootstrap) | 1 | 0 |
+| EDOweb | active | `EDOW` | 0 | 0 | 0 | 0 | 0 |
+| Escalas Médicas | active | `ESCM` | 0 | 0 | 0 | 0 | 0 |
+| PGF | active | `PGFP` | 0 | 0 | 0 | 0 | 0 |
+| Riple | active | `RIPL` | 0 | 0 | 0 | 0 | 0 |
+| Ripple 2 | active | `RIP2` | 0 | 0 | 0 | 0 | 0 |
+| SESP RJ | active | `SSPR` | 0 | 0 | 0 | 0 | 0 |
+| Zelar [Deprecated] | **archived** | — | 0 | 0 | 0 | 80 | 80 |
+
+**Total tasks órfãs em projetos não-archived: 0** → Wave 10 destravada.
 
 ---
 
@@ -57,9 +67,10 @@ Decisões pragmáticas tomadas durante execução, registradas pra não confundi
 
 1. ~~**Feature flag `useStoryHierarchy` não foi implementado no frontend.**~~ **Resolvido em 2026-04-30** — coluna dropada via `20260430_drop_use_story_hierarchy.sql`. Limpeza incluiu: `DROP INDEX project_use_story_hierarchy_idx`, `DROP COLUMN`, remoção de tipo + SELECT em `page.tsx`, remoção do helper `setProjectUseStoryHierarchy` no DAL, regen de `database.types.ts`.
 
-2. **Backfill foi feito ad-hoc, sem os scripts numerados (01–09).** O plano em `story-hierarchy-backfill.md` previa scripts em `scripts/backfill/`. Em vez disso, a execução do Zordon foi via SQL direto em transação única (visto na conversa de execução). Resultados:
-   - Audit trail (`BackfillRun`) **não foi criada**.
-   - Pra próximos projetos: ou reusa o approach SQL ad-hoc (mais rápido) ou cria a infra antes (mais auditável). Pra ≤ 3 projetos restantes, ad-hoc é defensável.
+2. **Backfill foi feito ad-hoc, sem os scripts numerados (01–09).** O plano em `story-hierarchy-backfill.md` previa scripts em `scripts/backfill/`. Em vez disso, foram dois SQLs em transação única:
+   - Zordon (2026-04-30): SQL ad-hoc não versionado.
+   - 8 ativos restantes (2026-05-01): `supabase/migrations/20260501_backfill_active_projects.sql` (versionado, idempotente onde aplicável via ON CONFLICT).
+   - Audit trail (`BackfillRun`) **não foi criada** — não houve necessidade dado o volume.
 
 3. **AC text → rows feito junto com o backfill de stories.** Originalmente seria step 07 separado. Aglutinar funcionou — todas as 76 ACs do Zordon foram migradas no mesmo DO block.
 
@@ -73,13 +84,16 @@ Decisões pragmáticas tomadas durante execução, registradas pra não confundi
 
 Em ordem de valor × custo:
 
-1. **Backfill dos outros projetos ativos** (estimativa baixa — 8 projetos com 0–1 task cada). Pra os que têm `referenceKey` faltando, definir manualmente. Pode usar mesma SQL ad-hoc do Zordon como template.
+1. **Wave 10 — Cleanup de `Task.acceptanceCriteria/type/scope`** (irreversível). Pré-condição (zero órfãs em ativos) satisfeita. Antes de rodar:
+   - `grep -rn '"acceptanceCriteria"\b' src/ | grep -v "AcceptanceCriterion"`  → deve estar vazio (ou só em arquivos a deletar)
+   - `grep -rn '\btask\.\(type\|scope\)\b' src/`  → idem
+   - Backup completo antes do `ALTER TABLE DROP COLUMN`.
 
-2. **AC story-level pro Zordon.** As 30 stories nasceram com 0 AC (só tasks têm). PM pode preencher ao longo do tempo conforme refinar.
+2. **AC story-level pro Zordon.** As 30 stories nasceram com 0 AC (só tasks têm). PM preenche ao longo do tempo conforme refinar.
 
-3. **Wave 7 (resto) — Cleanup de `Task.acceptanceCriteria/type/scope`.** Após confirmar via `grep` que nada lê esses campos (já temos `AcceptanceCriterion` table como substituto). Verificação obrigatória antes de dropar — irreversível.
+3. **Alpha integration.** Doc paralelo. Habilita Alpha gerar UserStory + Tasks + AC respeitando taxonomia. Independente das outras waves após Wave 4.
 
-4. **Alpha integration.** Doc paralelo. Habilita Alpha gerar UserStory + Tasks + AC respeitando taxonomia. Independente das outras waves após Wave 4.
+4. **Tratar Zelar [Deprecated] (archived).** 80 órfãs lá — não bloqueia Wave 10 (só conta projetos ativos), mas decidir se vale archive permanente / soft-delete tasks / wrap em story LEGACY.
 
 ---
 

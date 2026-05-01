@@ -32,6 +32,18 @@ type Props = {
   onCloneTask?: (taskRef: string) => void;
   onCopyTaskRef?: (taskRef: string) => void;
   onDeleteTask?: (taskRef: string) => void;
+
+  // ─── Bulk callbacks (forwarded to TasksList) ──────────────────────────────
+  onBulkUpdate?: (
+    taskRefs: string[],
+    patch: {
+      status?: TaskStatus;
+      assigneeId?: string | null;
+      sprintId?: string | null;
+    },
+  ) => void | Promise<void>;
+  onBulkDelete?: (taskRefs: string[]) => void | Promise<void>;
+  onBulkDuplicate?: (taskRefs: string[]) => void | Promise<void>;
 };
 
 /**
@@ -55,6 +67,9 @@ export function SprintDetail({
   onCloneTask,
   onCopyTaskRef,
   onDeleteTask,
+  onBulkUpdate,
+  onBulkDelete,
+  onBulkDuplicate,
 }: Props) {
   const own = useMemo(
     () => tasksOfSprint(sprint.id, tasks),
@@ -80,6 +95,9 @@ export function SprintDetail({
         onClone={onCloneTask}
         onCopyRef={onCopyTaskRef}
         onDelete={onDeleteTask}
+        onBulkUpdate={onBulkUpdate}
+        onBulkDelete={onBulkDelete}
+        onBulkDuplicate={onBulkDuplicate}
       />
     </section>
   );

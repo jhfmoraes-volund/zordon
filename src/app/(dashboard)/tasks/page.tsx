@@ -104,8 +104,35 @@ export default function TasksPage() {
   };
 
   const handleBulkDelete = async (taskIds: string[]) => {
-    const supabase = createClient();
-    await supabase.from("Task").delete().in("id", taskIds);
+    const res = await fetch("/api/tasks/bulk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds, action: "delete" }),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao deletar em massa");
+      alert(msg);
+    }
+    load();
+  };
+
+  const handleBulkUpdate = async (
+    taskIds: string[],
+    patch: {
+      status?: string;
+      assigneeId?: string | null;
+      sprintId?: string | null;
+    },
+  ) => {
+    const res = await fetch("/api/tasks/bulk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds, action: "update", patch }),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao atualizar em massa");
+      alert(msg);
+    }
     load();
   };
 
@@ -151,6 +178,7 @@ export default function TasksPage() {
         onAssigneeChange={handleAssigneeChange}
         onDelete={handleDelete}
         onBulkDelete={handleBulkDelete}
+        onBulkUpdate={handleBulkUpdate}
         showProject
         showSprint
         showSession

@@ -17,6 +17,8 @@ import { fmtDate, isOverdue } from "@/lib/task-constants";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
+import { BulkActionsBar } from "@/components/story-hierarchy/bulk-actions-bar";
+import type { TaskStatus } from "@/components/story-hierarchy";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -60,6 +62,15 @@ type Props = {
   onDelete: (taskId: string) => void;
   /** DELETE multiple tasks */
   onBulkDelete?: (taskIds: string[]) => void;
+  /** PATCH multiple tasks at once. */
+  onBulkUpdate?: (
+    taskIds: string[],
+    patch: {
+      status?: TaskStatus;
+      assigneeId?: string | null;
+      sprintId?: string | null;
+    },
+  ) => void;
   /** Show project column (useful in global lists) */
   showProject?: boolean;
   /** Show sprint column (useful when not scoped to one sprint) */
@@ -81,6 +92,7 @@ export function TaskList({
   onSprintChange,
   onDelete,
   onBulkDelete,
+  onBulkUpdate,
   showProject = false,
   showSprint = true,
   showSession = false,
@@ -118,24 +130,51 @@ export function TaskList({
     setSelected(new Set());
   };
 
+  const handleBulkPatch = (patch: {
+    status?: TaskStatus;
+    assigneeId?: string | null;
+    sprintId?: string | null;
+  }) => {
+    if (selected.size === 0 || !onBulkUpdate) return;
+    onBulkUpdate(Array.from(selected), patch);
+    setSelected(new Set());
+  };
+
   const colCount = 8 + (showProject ? 1 : 0) + (showSprint ? 1 : 0) + (showSession ? 1 : 0);
 
   return (
     <div className="space-y-2">
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-muted/60 border">
-          <span className="text-sm font-medium">
-            {selected.size} task{selected.size > 1 ? "s" : ""} selecionada{selected.size > 1 ? "s" : ""}
-          </span>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleBulkDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-            Deletar selecionadas
-          </Button>
-        </div>
+        onBulkUpdate ? (
+          <BulkActionsBar
+            count={selected.size}
+            onClear={() => setSelected(new Set())}
+            members={members}
+            sprints={sprints}
+            onChangeStatus={(status) => handleBulkPatch({ status })}
+            onChangeAssignee={(assigneeId) => handleBulkPatch({ assigneeId })}
+            onChangeSprint={
+              sprintEditable
+                ? (sprintId) => handleBulkPatch({ sprintId })
+                : undefined
+            }
+            onDelete={handleBulkDelete}
+          />
+        ) : (
+          <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-muted/60 border">
+            <span className="text-sm font-medium">
+              {selected.size} task{selected.size > 1 ? "s" : ""} selecionada{selected.size > 1 ? "s" : ""}
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Deletar selecionadas
+            </Button>
+          </div>
+        )
       )}
 
       <div className="surface rounded-lg">

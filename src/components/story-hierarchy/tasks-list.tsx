@@ -1,16 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronDown,
   ChevronRight,
   LayoutGrid,
   List,
   Plus,
+  SlidersHorizontal,
   Sparkles,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -18,10 +23,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { TASK_STATUS } from "@/lib/status-chips";
 import { TaskStatusChip } from "./chips";
 import { TaskRowMenu } from "./task-row-menu";
+import { BulkActionsBar } from "./bulk-actions-bar";
 import type {
   Member,
   Module,
@@ -55,6 +68,18 @@ type TasksListProps = {
   onClone?: (taskRef: string) => void;
   onCopyRef?: (taskRef: string) => void;
   onDelete?: (taskRef: string) => void;
+
+  // ─── Bulk callbacks. When provided, checkbox column appears. ──────────────
+  onBulkUpdate?: (
+    taskRefs: string[],
+    patch: {
+      status?: TaskStatus;
+      assigneeId?: string | null;
+      sprintId?: string | null;
+    },
+  ) => void | Promise<void>;
+  onBulkDelete?: (taskRefs: string[]) => void | Promise<void>;
+  onBulkDuplicate?: (taskRefs: string[]) => void | Promise<void>;
 };
 
 type GroupBy = "story" | "none";
@@ -100,12 +125,52 @@ export function TasksList({
   onClone,
   onCopyRef,
   onDelete,
+  onBulkUpdate,
+  onBulkDelete,
+  onBulkDuplicate,
 }: TasksListProps) {
-  const [groupBy, setGroupBy] = useState<GroupBy>("story");
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [moduleFilter, setModuleFilter] = useState<string>("__all");
   const [areaFilter, setAreaFilter] = useState<string>("__all");
   const [statusFilter, setStatusFilter] = useState<string>("__all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("__all");
+  const [filtersSheetOpen, setFiltersSheetOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const isMobile = useIsMobile();
+
+  const bulkEnabled = !!(onBulkUpdate || onBulkDelete);
+
+  const toggleOne = (ref: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(ref)) next.delete(ref);
+      else next.add(ref);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelected(new Set());
+
+  const selectedRefs = useMemo(() => Array.from(selected), [selected]);
+
+  // Fecha o bottom sheet automaticamente se a janela cresce pra desktop —
+  // a toolbar inline reaparece e não faz sentido manter o sheet aberto.
+  useEffect(() => {
+    if (!isMobile && filtersSheetOpen) setFiltersSheetOpen(false);
+  }, [isMobile, filtersSheetOpen]);
+
+  const activeFilterCount =
+    (moduleFilter !== "__all" ? 1 : 0) +
+    (areaFilter !== "__all" ? 1 : 0) +
+    (statusFilter !== "__all" ? 1 : 0) +
+    (assigneeFilter !== "__all" ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setModuleFilter("__all");
+    setAreaFilter("__all");
+    setStatusFilter("__all");
+    setAssigneeFilter("__all");
+  };
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -145,114 +210,119 @@ export function TasksList({
     onClone,
     onCopyRef,
     onDelete,
+    bulkEnabled,
+    selected,
+    onToggleSelect: toggleOne,
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedRefs.length === 0) return;
+    const count = selectedRefs.length;
+    if (!confirm(`Deletar ${count} task${count > 1 ? "s" : ""}?`)) return;
+    onBulkDelete?.(selectedRefs);
+    clearSelection();
+  };
+
+  const handleBulkUpdate = (patch: {
+    status?: TaskStatus;
+    assigneeId?: string | null;
+    sprintId?: string | null;
+  }) => {
+    if (selectedRefs.length === 0) return;
+    onBulkUpdate?.(selectedRefs, patch);
+    clearSelection();
   };
 
   return (
     <div className="space-y-4">
+      {bulkEnabled && selected.size > 0 ? (
+        <BulkActionsBar
+          count={selected.size}
+          onClear={clearSelection}
+          members={members}
+          sprints={sprints}
+          onChangeStatus={(status) => handleBulkUpdate({ status })}
+          onChangeAssignee={(assigneeId) => handleBulkUpdate({ assigneeId })}
+          onChangeSprint={
+            onChangeSprint
+              ? (sprintId) => handleBulkUpdate({ sprintId })
+              : undefined
+          }
+          onDuplicate={
+            onBulkDuplicate
+              ? () => {
+                  onBulkDuplicate(selectedRefs);
+                  clearSelection();
+                }
+              : undefined
+          }
+          onDelete={handleBulkDelete}
+        />
+      ) : null}
+
       {/* Toolbar ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="flex flex-wrap gap-2">
-          <Select
-            value={moduleFilter}
-            onValueChange={(v) => v && setModuleFilter(v)}
-          >
-            <SelectTrigger className="h-8 w-full min-w-[140px] flex-1 text-xs sm:w-[160px] sm:flex-none">
-              <SelectValue>
-                {(v: string) => {
-                  if (v === "__all") return "Módulo: todos";
-                  if (v === "null") return "Módulo: sem módulo";
-                  const mod = modules.find((m) => m.id === v);
-                  return `Módulo: ${mod?.name ?? "—"}`;
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all">Todos módulos</SelectItem>
-              {modules.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  <span className="font-mono">{m.name}</span>
-                </SelectItem>
-              ))}
-              <SelectItem value="null">— sem módulo —</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={areaFilter}
-            onValueChange={(v) => v && setAreaFilter(v)}
-          >
-            <SelectTrigger className="h-8 w-full min-w-[120px] flex-1 text-xs sm:w-[140px] sm:flex-none">
-              <SelectValue>
-                {(v: string) => {
-                  if (v === "__all") return "Área: todas";
-                  const opt = AREA_OPTIONS.find(
-                    (o) => (o.value === null ? "null" : String(o.value)) === v,
-                  );
-                  return `Área: ${opt?.label ?? "—"}`;
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {AREA_OPTIONS.map((opt) => (
-                <SelectItem
-                  key={String(opt.value)}
-                  value={opt.value === null ? "null" : String(opt.value)}
-                >
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => v && setStatusFilter(v)}
-          >
-            <SelectTrigger className="h-8 w-full min-w-[120px] flex-1 text-xs sm:w-[140px] sm:flex-none">
-              <SelectValue>
-                {(v: string) => {
-                  if (v === "__all") return "Status: todos";
-                  const opt = STATUS_OPTIONS.find((o) => String(o.value) === v);
-                  return `Status: ${opt?.label ?? "—"}`;
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((opt) => (
-                <SelectItem key={String(opt.value)} value={String(opt.value)}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={assigneeFilter}
-            onValueChange={(v) => v && setAssigneeFilter(v)}
-          >
-            <SelectTrigger className="h-8 w-full min-w-[140px] flex-1 text-xs sm:w-[160px] sm:flex-none">
-              <SelectValue>
-                {(v: string) => {
-                  if (v === "__all") return "Atribuído: todos";
-                  if (v === "__unassigned__") return "Atribuído: sem atribuição";
-                  const m = members.find((mb) => mb.id === v);
-                  return `Atribuído: ${m?.name ?? "—"}`;
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all">Todos os membros</SelectItem>
-              <SelectItem value="__unassigned__">— sem atribuição —</SelectItem>
-              {members.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex flex-row flex-wrap items-center gap-2">
+        {/* Desktop: filtros inline */}
+        <div className="hidden flex-wrap gap-2 md:flex">
+          <TasksFilters
+            layout="inline"
+            modules={modules}
+            members={members}
+            moduleFilter={moduleFilter}
+            areaFilter={areaFilter}
+            statusFilter={statusFilter}
+            assigneeFilter={assigneeFilter}
+            onModuleChange={setModuleFilter}
+            onAreaChange={setAreaFilter}
+            onStatusChange={setStatusFilter}
+            onAssigneeChange={setAssigneeFilter}
+          />
+          {activeFilterCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+              Limpar
+            </Button>
+          )}
         </div>
 
-        <div className="flex items-center gap-1 sm:ml-auto">
+        {/* Mobile: trigger único pro bottom sheet */}
+        <div className="flex items-center gap-2 md:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFiltersSheetOpen(true)}
+            className="h-8 gap-1.5"
+          >
+            <SlidersHorizontal className="size-3.5" />
+            Filtros
+            {activeFilterCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px] font-mono tabular-nums"
+              >
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
+          {activeFilterCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
+              aria-label="Limpar filtros"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+
+        <div className="ml-auto flex items-center gap-1">
           <div className="flex overflow-hidden rounded-md border">
             <button
               type="button"
@@ -311,6 +381,248 @@ export function TasksList({
           editing={editing}
         />
       )}
+
+      {/* Mobile filters bottom sheet ─────────────────────────────────── */}
+      <Sheet open={filtersSheetOpen} onOpenChange={setFiltersSheetOpen}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] rounded-t-xl"
+        >
+          <SheetHeader className="border-b pb-4">
+            <SheetTitle className="text-base">
+              Filtros
+              {activeFilterCount > 0 && (
+                <span className="ml-2 font-mono text-xs text-muted-foreground tabular-nums">
+                  {activeFilterCount} ativo{activeFilterCount === 1 ? "" : "s"}
+                </span>
+              )}
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 pb-2">
+            <TasksFilters
+              layout="stacked"
+              modules={modules}
+              members={members}
+              moduleFilter={moduleFilter}
+              areaFilter={areaFilter}
+              statusFilter={statusFilter}
+              assigneeFilter={assigneeFilter}
+              onModuleChange={setModuleFilter}
+              onAreaChange={setAreaFilter}
+              onStatusChange={setStatusFilter}
+              onAssigneeChange={setAssigneeFilter}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-t p-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
+            <Button
+              variant="ghost"
+              onClick={clearAllFilters}
+              disabled={activeFilterCount === 0}
+              className="gap-1.5"
+            >
+              <X className="size-4" />
+              Limpar tudo
+            </Button>
+            <Button onClick={() => setFiltersSheetOpen(false)}>
+              Ver {filtered.length} task{filtered.length === 1 ? "" : "s"}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+// ─── Filters (shared between desktop inline + mobile sheet) ─────────────────
+
+type TasksFiltersProps = {
+  layout: "inline" | "stacked";
+  modules: Module[];
+  members: Member[];
+  moduleFilter: string;
+  areaFilter: string;
+  statusFilter: string;
+  assigneeFilter: string;
+  onModuleChange: (v: string) => void;
+  onAreaChange: (v: string) => void;
+  onStatusChange: (v: string) => void;
+  onAssigneeChange: (v: string) => void;
+};
+
+function TasksFilters({
+  layout,
+  modules,
+  members,
+  moduleFilter,
+  areaFilter,
+  statusFilter,
+  assigneeFilter,
+  onModuleChange,
+  onAreaChange,
+  onStatusChange,
+  onAssigneeChange,
+}: TasksFiltersProps) {
+  const stacked = layout === "stacked";
+
+  // Inline trigger: compact, "Label: value", flex-fit. Stacked: full-width with label above.
+  const triggerCls = stacked
+    ? "h-10 w-full text-sm"
+    : "h-8 w-full min-w-[140px] flex-1 text-xs sm:w-[160px] sm:flex-none";
+
+  const renderModule = (
+    <Select value={moduleFilter} onValueChange={(v) => v && onModuleChange(v)}>
+      <SelectTrigger className={triggerCls}>
+        <SelectValue>
+          {(v: string) => {
+            if (stacked) {
+              if (v === "__all") return "Todos";
+              if (v === "null") return "Sem módulo";
+              const mod = modules.find((m) => m.id === v);
+              return mod?.name ?? "—";
+            }
+            if (v === "__all") return "Módulo: todos";
+            if (v === "null") return "Módulo: sem módulo";
+            const mod = modules.find((m) => m.id === v);
+            return `Módulo: ${mod?.name ?? "—"}`;
+          }}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__all">Todos módulos</SelectItem>
+        {modules.map((m) => (
+          <SelectItem key={m.id} value={m.id}>
+            <span className="font-mono">{m.name}</span>
+          </SelectItem>
+        ))}
+        <SelectItem value="null">— sem módulo —</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+
+  const renderArea = (
+    <Select value={areaFilter} onValueChange={(v) => v && onAreaChange(v)}>
+      <SelectTrigger className={triggerCls}>
+        <SelectValue>
+          {(v: string) => {
+            const opt = AREA_OPTIONS.find(
+              (o) => (o.value === null ? "null" : String(o.value)) === v,
+            );
+            if (stacked) {
+              if (v === "__all") return "Todas";
+              return opt?.label ?? "—";
+            }
+            if (v === "__all") return "Área: todas";
+            return `Área: ${opt?.label ?? "—"}`;
+          }}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {AREA_OPTIONS.map((opt) => (
+          <SelectItem
+            key={String(opt.value)}
+            value={opt.value === null ? "null" : String(opt.value)}
+          >
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  const renderStatus = (
+    <Select value={statusFilter} onValueChange={(v) => v && onStatusChange(v)}>
+      <SelectTrigger className={triggerCls}>
+        <SelectValue>
+          {(v: string) => {
+            const opt = STATUS_OPTIONS.find((o) => String(o.value) === v);
+            if (stacked) {
+              if (v === "__all") return "Todos";
+              return opt?.label ?? "—";
+            }
+            if (v === "__all") return "Status: todos";
+            return `Status: ${opt?.label ?? "—"}`;
+          }}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {STATUS_OPTIONS.map((opt) => (
+          <SelectItem key={String(opt.value)} value={String(opt.value)}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  const renderAssignee = (
+    <Select
+      value={assigneeFilter}
+      onValueChange={(v) => v && onAssigneeChange(v)}
+    >
+      <SelectTrigger className={triggerCls}>
+        <SelectValue>
+          {(v: string) => {
+            if (stacked) {
+              if (v === "__all") return "Todos";
+              if (v === "__unassigned__") return "Sem atribuição";
+              const m = members.find((mb) => mb.id === v);
+              return m?.name ?? "—";
+            }
+            if (v === "__all") return "Atribuído: todos";
+            if (v === "__unassigned__") return "Atribuído: sem atribuição";
+            const m = members.find((mb) => mb.id === v);
+            return `Atribuído: ${m?.name ?? "—"}`;
+          }}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__all">Todos os membros</SelectItem>
+        <SelectItem value="__unassigned__">— sem atribuição —</SelectItem>
+        {members.map((m) => (
+          <SelectItem key={m.id} value={m.id}>
+            {m.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  if (stacked) {
+    return (
+      <div className="flex flex-col gap-4 py-4">
+        <Field label="Módulo">{renderModule}</Field>
+        <Field label="Área">{renderArea}</Field>
+        <Field label="Status">{renderStatus}</Field>
+        <Field label="Atribuído a">{renderAssignee}</Field>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {renderModule}
+      {renderArea}
+      {renderStatus}
+      {renderAssignee}
+    </>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Label>
+      {children}
     </div>
   );
 }
@@ -330,6 +642,9 @@ type RowEditingProps = {
   onClone?: (taskRef: string) => void;
   onCopyRef?: (taskRef: string) => void;
   onDelete?: (taskRef: string) => void;
+  bulkEnabled: boolean;
+  selected: Set<string>;
+  onToggleSelect: (taskRef: string) => void;
 };
 
 function GroupedByStory({
@@ -497,13 +812,15 @@ function TasksTable({
   storyHint?: (task: Task) => { module: string | null; ref: string | null };
 }) {
   // Match StoriesList grid look. Cells are spans inside a clickable row.
-  // Cols: Ref · Title · [Story] · [Sprint] · Status · FP · Assignee
+  // Cols: [✓] · Ref · Title · [Story] · [Sprint] · Status · FP · Assignee · [⋯]
   //
   // Inline style instead of `grid-cols-[...]` because Tailwind only ships
   // classes that appear LITERALLY in source — runtime-built strings don't
   // make it to the CSS bundle, and the layout silently degrades to a
   // single-column stack.
-  const layoutParts: string[] = ["110px", "minmax(220px, 1fr)"];
+  const layoutParts: string[] = [];
+  if (editing.bulkEnabled) layoutParts.push("28px");
+  layoutParts.push("110px", "minmax(220px, 1fr)");
   if (storyHint) layoutParts.push("200px");
   if (editing.showSprint) layoutParts.push("130px");
   layoutParts.push("130px", "70px", "150px");
@@ -512,10 +829,34 @@ function TasksTable({
 
   // Min total width = sum of fixed columns + 220 (title min) + (col_count - 1) * 12px gap.
   const fixedSum =
-    110 + 220 + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0)
+    (editing.bulkEnabled ? 28 : 0) + 110 + 220
+    + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0)
     + 130 + 70 + 150 + (editing.showMenu ? 40 : 0);
   const colCount = layoutParts.length;
   const minWidthPx = fixedSum + (colCount - 1) * 12;
+
+  // "Select all visible rows" header checkbox state. Toggles only rows in this
+  // table block — selections from sibling story groups stay intact.
+  const visibleRefs = rows.map((r) => r.reference);
+  const selectedVisibleCount = visibleRefs.filter((r) =>
+    editing.selected.has(r),
+  ).length;
+  const allVisibleSelected =
+    visibleRefs.length > 0 && selectedVisibleCount === visibleRefs.length;
+  const someVisibleSelected =
+    selectedVisibleCount > 0 && selectedVisibleCount < visibleRefs.length;
+
+  const toggleAllVisible = () => {
+    if (allVisibleSelected) {
+      visibleRefs.forEach((r) => {
+        if (editing.selected.has(r)) editing.onToggleSelect(r);
+      });
+    } else {
+      visibleRefs.forEach((r) => {
+        if (!editing.selected.has(r)) editing.onToggleSelect(r);
+      });
+    }
+  };
 
   return (
     <div className="overflow-x-auto">
@@ -525,6 +866,18 @@ function TasksTable({
           className="grid gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
           style={gridStyle}
         >
+          {editing.bulkEnabled ? (
+            <span className="flex items-center" onClick={stop} onPointerDown={stop}>
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                ref={(el) => { if (el) el.indeterminate = someVisibleSelected; }}
+                onChange={toggleAllVisible}
+                aria-label="Selecionar todas"
+                className="size-3.5 cursor-pointer rounded border-border accent-primary"
+              />
+            </span>
+          ) : null}
           <span>Ref</span>
           <span>Título</span>
           {storyHint ? <span>Story</span> : null}
@@ -540,6 +893,7 @@ function TasksTable({
           const hint = storyHint?.(task);
           const firstAssignee = task.assigneeIds[0] ?? null;
           const isLast = i === rows.length - 1;
+          const isSelected = editing.selected.has(task.reference);
 
           return (
             <div
@@ -553,11 +907,27 @@ function TasksTable({
                   editing.onOpenTask(task.reference);
                 }
               }}
-              className={`grid w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${
-                !isLast ? "border-b" : ""
-              }`}
+              className={`grid w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors ${
+                isSelected ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/40"
+              } ${!isLast ? "border-b" : ""}`}
               style={gridStyle}
             >
+              {editing.bulkEnabled ? (
+                <span
+                  className="flex items-center"
+                  onClick={stop}
+                  onPointerDown={stop}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => editing.onToggleSelect(task.reference)}
+                    aria-label={`Selecionar ${task.reference}`}
+                    className="size-3.5 cursor-pointer rounded border-border accent-primary"
+                  />
+                </span>
+              ) : null}
+
               <span className="font-mono text-xs text-muted-foreground">
                 {task.reference}
               </span>
