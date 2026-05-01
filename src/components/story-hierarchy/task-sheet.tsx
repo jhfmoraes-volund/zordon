@@ -32,6 +32,7 @@ import {
 import { suggestFunctionPoints } from "@/lib/function-points";
 import { TASK_STATUS_MAP } from "./chips";
 import { AcList } from "./ac-list";
+import { TaskActivitySection } from "./task-activity-section";
 import type {
   AC,
   Member,
@@ -661,6 +662,10 @@ function TaskSheetInner({
             className="font-mono text-sm"
           />
         </FieldBlock>
+
+        <TaskActivitySection
+          taskId={(task as Task & { __id?: string }).__id ?? null}
+        />
 
         <div className="rounded-md border border-dashed bg-muted/30 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

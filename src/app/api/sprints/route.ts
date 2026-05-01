@@ -86,10 +86,10 @@ export async function POST(req: NextRequest) {
     .single();
   if (error) {
     if (error.code === "23505") {
-      return NextResponse.json(
-        { error: "Já existe um sprint com esse nome neste projeto." },
-        { status: 409 },
-      );
+      const msg = error.message.includes("sprint_unique_week_per_project")
+        ? "Já existe um sprint nessa semana neste projeto."
+        : "Já existe um sprint com esse nome neste projeto.";
+      return NextResponse.json({ error: msg }, { status: 409 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

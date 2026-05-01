@@ -530,7 +530,6 @@ function SprintsTab({
         stories={stories}
         modules={modules}
         members={MEMBERS}
-        capacities={SPRINT_CAPACITIES}
         onOpenTask={onOpenTask}
         allSprints={sprints}
         onChangeTaskStatus={onChangeTaskStatus}

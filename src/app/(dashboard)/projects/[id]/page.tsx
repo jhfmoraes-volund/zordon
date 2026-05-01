@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   BookOpen,
-  Eye,
   FileText,
   Lightbulb,
   ListTodo,
@@ -37,6 +36,9 @@ import {
   StorySheet,
   TasksList,
   TaskSheet,
+  TaskDuplicateDialog,
+  TaskCloneDialog,
+  type ProjectLite,
   type StoryCreateInput,
   type TaskCreateInput,
 } from "@/components/story-hierarchy";
@@ -52,11 +54,9 @@ import {
 } from "@/components/story-hierarchy/adapters";
 import {
   findCurrentSprint,
-  projectStats,
   SprintDetail,
   SprintNavigator,
-  SprintSummaryStats,
-  SprintTimeline,
+  SprintRibbon,
   type Sprint as SprintView,
   type SprintMemberCapacity,
 } from "@/components/sprint";
@@ -70,7 +70,6 @@ import type {
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type TabKey =
-  | "overview"
   | "stories"
   | "tasks"
   | "sprints"
@@ -146,8 +145,7 @@ type RawProjectMember = {
   fpAllocation: number;
 };
 
-const TABS: { key: TabKey; label: string; icon: typeof Eye }[] = [
-  { key: "overview", label: "Overview", icon: Eye },
+const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "tasks", label: "Tasks", icon: ListTodo },
   { key: "sprints", label: "Sprints", icon: Zap },
@@ -166,7 +164,7 @@ export default function ProjectDetailPage({
   const { id } = use(params);
   const supabase = useMemo(() => createClient(), []);
 
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [activeTab, setActiveTab] = useState<TabKey>("stories");
   const [project, setProject] = useState<ProjectMeta | null>(null);
 
   const [rawModules, setRawModules] = useState<ModuleRow[]>([]);
@@ -199,6 +197,9 @@ export default function ProjectDetailPage({
   });
   const [storyCreateOpen, setStoryCreateOpen] = useState(false);
   const [taskCreateOpen, setTaskCreateOpen] = useState(false);
+  const [duplicateTaskRef, setDuplicateTaskRef] = useState<string | null>(null);
+  const [cloneTaskRef, setCloneTaskRef] = useState<string | null>(null);
+  const [targetProjects, setTargetProjects] = useState<ProjectLite[]>([]);
 
   const [focusSprintId, setFocusSprintId] = useState<string | null>(null);
 
@@ -464,14 +465,18 @@ export default function ProjectDetailPage({
       id: crypto.randomUUID(),
       projectId: id,
       name: form.name,
-      startDate: new Date(form.startDate).toISOString(),
-      endDate: new Date(form.endDate).toISOString(),
+      startDate: form.startDate,
+      endDate: form.endDate,
       status: form.status,
       updatedAt: now,
     });
     if (error) {
       if (error.code === "23505") {
-        alert("Já existe um sprint com esse nome neste projeto.");
+        alert(
+          error.message.includes("sprint_unique_week_per_project")
+            ? "Já existe um sprint nessa semana neste projeto."
+            : "Já existe um sprint com esse nome neste projeto.",
+        );
       } else {
         alert(`Falha ao criar sprint: ${error.message}`);
       }
@@ -724,6 +729,100 @@ export default function ProjectDetailPage({
     await loadTasksAndSprints();
   }
 
+  async function loadTargetProjects() {
+    const { data, error } = await supabase
+      .from("Project")
+      .select("id, name")
+      .neq("id", id)
+      .order("name");
+    if (error) {
+      console.error("[loadTargetProjects]", error);
+      setTargetProjects([]);
+      return;
+    }
+    setTargetProjects((data ?? []) as ProjectLite[]);
+  }
+
+  function openDuplicateDialog(taskRef: string) {
+    setDuplicateTaskRef(taskRef);
+  }
+
+  async function openCloneDialog(taskRef: string) {
+    await loadTargetProjects();
+    setCloneTaskRef(taskRef);
+  }
+
+  async function handleCopyTaskRef(taskRef: string) {
+    try {
+      await navigator.clipboard.writeText(taskRef);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleConfirmDuplicate(input: {
+    sprintId: string | null;
+    status: AdaptedTask["status"];
+  }) {
+    if (!duplicateTaskRef) return;
+    const taskId = findTaskIdByRef(duplicateTaskRef);
+    if (!taskId) return;
+    const res = await fetch(`/api/tasks/${taskId}/duplicate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao duplicar task");
+      alert(msg);
+      return;
+    }
+    const created = await res.json().catch(() => null);
+    await loadTasksAndSprints();
+    if (created?.reference) {
+      setSelectedTaskRef(created.reference);
+    }
+  }
+
+  async function handleConfirmClone(input: {
+    targetProjectId: string;
+    status: AdaptedTask["status"];
+  }) {
+    if (!cloneTaskRef) return;
+    const taskId = findTaskIdByRef(cloneTaskRef);
+    if (!taskId) return;
+    const res = await fetch(`/api/tasks/${taskId}/clone`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao clonar task");
+      alert(msg);
+      return;
+    }
+    const data = await res.json().catch(() => null);
+    const projectName = data?.targetProjectName ?? "outro projeto";
+    const newRef = data?.task?.reference ?? "";
+    alert(`Clonada para ${projectName}${newRef ? ` (${newRef})` : ""}.`);
+  }
+
+  async function handleDeleteTask(taskRef: string) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    if (!confirm(`Deletar task ${taskRef}? Essa ação não pode ser desfeita.`)) {
+      return;
+    }
+    const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao deletar task");
+      alert(msg);
+      return;
+    }
+    if (selectedTaskRef === taskRef) setSelectedTaskRef(null);
+    await loadTasksAndSprints();
+  }
+
   async function handleApproveProposedModule(story: AdaptedStory) {
     if (!story.proposedModuleName) return;
     const res = await fetch(
@@ -936,6 +1035,24 @@ export default function ProjectDetailPage({
         ) : null}
       </div>
 
+      {/* Sprint Ribbon — sticky, vale pra todas as tabs */}
+      {focused ? (
+        <SprintRibbon
+          sprint={focused}
+          sprints={sprints}
+          activeSprintId={activeSprintId}
+          tasks={tasks}
+          members={members}
+          capacities={capacities}
+          onJumpToActive={() => setFocusSprintId(activeSprintId)}
+          onSelectSprint={(sid) => {
+            setFocusSprintId(sid);
+            setActiveTab("sprints");
+          }}
+          className="-mx-3 md:-mx-6"
+        />
+      ) : null}
+
       {/* Tabs */}
       <div className="flex gap-1 border-b overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
         {TABS.map((tab) => (
@@ -966,17 +1083,7 @@ export default function ProjectDetailPage({
       </div>
 
       {/* Tab content */}
-      {activeTab === "overview" ? (
-        <OverviewTab
-          sprints={sprints}
-          tasks={tasks}
-          activeSprintId={activeSprintId}
-          onOpenSprint={(sid) => {
-            setFocusSprintId(sid);
-            setActiveTab("sprints");
-          }}
-        />
-      ) : activeTab === "stories" ? (
+      {activeTab === "stories" ? (
         <StoriesList
           stories={stories}
           tasks={tasks}
@@ -999,6 +1106,10 @@ export default function ProjectDetailPage({
           onChangeStatus={handleInlineStatusChange}
           onChangeAssignee={handleInlineAssigneeChange}
           onChangeSprint={handleInlineSprintChange}
+          onDuplicate={openDuplicateDialog}
+          onClone={openCloneDialog}
+          onCopyRef={handleCopyTaskRef}
+          onDelete={handleDeleteTask}
         />
       ) : activeTab === "sprints" ? (
         <div className="space-y-5">
@@ -1018,15 +1129,9 @@ export default function ProjectDetailPage({
                 sprints={sprints}
                 currentId={focused.id}
                 activeId={activeSprintId}
+                tasks={tasks}
                 onChange={setFocusSprintId}
                 onJumpToActive={() => setFocusSprintId(activeSprintId)}
-              />
-              <SprintTimeline
-                sprints={sprints}
-                tasks={tasks}
-                activeId={focused.id}
-                onSelect={setFocusSprintId}
-                cardWidth={170}
               />
               <SprintDetail
                 sprint={focused}
@@ -1034,12 +1139,15 @@ export default function ProjectDetailPage({
                 stories={stories}
                 modules={modules}
                 members={members}
-                capacities={capacities}
                 onOpenTask={(ref) => setSelectedTaskRef(ref)}
                 allSprints={sprints}
                 onChangeTaskStatus={handleInlineStatusChange}
                 onChangeTaskAssignee={handleInlineAssigneeChange}
                 onChangeTaskSprint={handleInlineSprintChange}
+                onDuplicateTask={openDuplicateDialog}
+                onCloneTask={openCloneDialog}
+                onCopyTaskRef={handleCopyTaskRef}
+                onDeleteTask={handleDeleteTask}
               />
             </>
           ) : (
@@ -1181,6 +1289,29 @@ export default function ProjectDetailPage({
         onSave={handleCreateSprint}
       />
 
+      {/* Task duplicate / clone dialogs */}
+      <TaskDuplicateDialog
+        open={duplicateTaskRef !== null}
+        onOpenChange={(open) => !open && setDuplicateTaskRef(null)}
+        taskRef={duplicateTaskRef}
+        sprints={sprints.map((s) => ({ id: s.id, name: s.name }))}
+        defaultSprintId={
+          duplicateTaskRef
+            ? tasks.find((t) => t.reference === duplicateTaskRef)?.sprintId ??
+              null
+            : null
+        }
+        onSubmit={handleConfirmDuplicate}
+      />
+
+      <TaskCloneDialog
+        open={cloneTaskRef !== null}
+        onOpenChange={(open) => !open && setCloneTaskRef(null)}
+        taskRef={cloneTaskRef}
+        targetProjects={targetProjects}
+        onSubmit={handleConfirmClone}
+      />
+
       {/* Edit project sheet (PM, members, repo, dates, status) */}
       <ProjectEditSheet
         open={editOpen}
@@ -1207,61 +1338,6 @@ export default function ProjectDetailPage({
           await Promise.all([loadProject(), loadMembers()]);
         }}
       />
-    </div>
-  );
-}
-
-// ─── Overview Tab ───────────────────────────────────────────────────────────
-
-function OverviewTab({
-  sprints,
-  tasks,
-  activeSprintId,
-  onOpenSprint,
-}: {
-  sprints: SprintView[];
-  tasks: AdaptedTask[];
-  activeSprintId: string | null;
-  onOpenSprint: (id: string) => void;
-}) {
-  const stats = projectStats(sprints, tasks);
-  const active = sprints.find((s) => s.id === activeSprintId);
-
-  return (
-    <div className="space-y-6">
-      <SprintSummaryStats stats={stats} />
-
-      {active ? (
-        <button
-          type="button"
-          onClick={() => onOpenSprint(active.id)}
-          className="block w-full overflow-hidden rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/40"
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="space-y-0.5">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Sprint vigente
-              </p>
-              <p className="text-base font-semibold">{active.name}</p>
-            </div>
-            <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-              abrir →
-            </span>
-          </div>
-        </button>
-      ) : null}
-
-      <section className="space-y-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Timeline
-        </h3>
-        <SprintTimeline
-          sprints={sprints}
-          tasks={tasks}
-          activeId={activeSprintId}
-          onSelect={onOpenSprint}
-        />
-      </section>
     </div>
   );
 }

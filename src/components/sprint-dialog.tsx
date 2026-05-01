@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,52 +16,19 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  getNextSprintDefaults,
+  shiftSprintByWeeks,
+  type ExistingSprint,
+} from "@/lib/sprint-dates";
 
-// ─── Date helpers ────────────────────────────────────────
+export { getNextSprintDefaults, type ExistingSprint };
 
-function nextMonday(d: Date) {
-  const day = d.getDay();
-  const diff = day === 0 ? 1 : day === 1 ? 0 : 8 - day;
-  const mon = new Date(d);
-  mon.setDate(mon.getDate() + diff);
-  return mon;
-}
-
-function fridayOfWeek(mon: Date) {
-  const fri = new Date(mon);
-  fri.setDate(fri.getDate() + 4);
-  return fri;
-}
-
-function toDateStr(d: Date) {
-  return d.toISOString().split("T")[0];
-}
-
-// ─── Public helper ───────────────────────────────────────
-
-export type ExistingSprint = { endDate: string };
-
-export function getNextSprintDefaults(existingSprints: ExistingSprint[]) {
-  const sorted = [...existingSprints].sort(
-    (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime()
-  );
-  const nextNumber = sorted.length + 1;
-  const lastSprint = sorted[0];
-
-  let monday: Date;
-  if (lastSprint) {
-    const afterLast = new Date(lastSprint.endDate);
-    afterLast.setDate(afterLast.getDate() + 1);
-    monday = nextMonday(afterLast);
-  } else {
-    monday = nextMonday(new Date());
-  }
-
-  return {
-    name: `Sprint ${nextNumber}`,
-    startDate: toDateStr(monday),
-    endDate: toDateStr(fridayOfWeek(monday)),
-  };
+function formatRange(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const fmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
+  return `${fmt.format(start)} → ${fmt.format(end)}`;
 }
 
 // ─── Component ───────────────────────────────────────────
@@ -200,15 +168,46 @@ export function SprintDialog({
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Início</Label>
-              <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+          <div className="grid gap-2">
+            <Label>Semana</Label>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Semana anterior"
+                disabled={!form.startDate}
+                onClick={() => {
+                  if (!form.startDate) return;
+                  const next = shiftSprintByWeeks(form.startDate, -1);
+                  setForm({ ...form, ...next });
+                }}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <div className="flex-1 rounded-md border bg-muted/30 px-3 py-2 text-center font-mono text-sm tabular-nums">
+                {form.startDate
+                  ? formatRange(form.startDate, form.endDate)
+                  : "—"}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Próxima semana"
+                disabled={!form.startDate}
+                onClick={() => {
+                  if (!form.startDate) return;
+                  const next = shiftSprintByWeeks(form.startDate, 1);
+                  setForm({ ...form, ...next });
+                }}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
             </div>
-            <div className="grid gap-2">
-              <Label>Fim</Label>
-              <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Sprints sempre vão de segunda a domingo (7 dias). Use ← / → pra navegar.
+            </p>
           </div>
           <div className="grid gap-2">
             <Label>Status</Label>

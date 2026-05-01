@@ -133,10 +133,12 @@ export default function SprintsPage() {
 
   const handleSave = async (data: SprintFormData) => {
     const supabase = createClient();
+    // startDate/endDate vêm do dialog como YYYY-MM-DD em local time —
+    // não passa por new Date(...).toISOString() pra não driftar pra UTC.
     const body = {
       name: data.name,
-      startDate: new Date(data.startDate).toISOString(),
-      endDate: new Date(data.endDate).toISOString(),
+      startDate: data.startDate,
+      endDate: data.endDate,
       status: data.status,
       projectId: editing ? editing.projectId : data.projectId!,
     };
@@ -145,7 +147,11 @@ export default function SprintsPage() {
       : await supabase.from("Sprint").insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), ...body });
     if (error) {
       if (error.code === "23505") {
-        alert("Já existe um sprint com esse nome neste projeto.");
+        alert(
+          error.message.includes("sprint_unique_week_per_project")
+            ? "Já existe um sprint nessa semana neste projeto."
+            : "Já existe um sprint com esse nome neste projeto.",
+        );
       } else {
         alert(`Erro ao salvar: ${error.message}`);
       }

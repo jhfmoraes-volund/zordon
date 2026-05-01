@@ -285,10 +285,11 @@ function Sidebar({
       : ""
 
   // When hoverExpand is on and hover-expanded, container floats above main —
-  // give it a shadow so it visually separates from content underneath.
+  // give it a shadow so it visually separates from content underneath, and
+  // bump z-index above sticky elements inside main (e.g. SprintRibbon z-20).
   const containerHoverShadow =
     hoverExpand && !open && state === "expanded"
-      ? "shadow-2xl shadow-black/40"
+      ? "!z-30 shadow-2xl shadow-black/40"
       : ""
 
   return (

@@ -21,6 +21,7 @@ import {
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { TASK_STATUS } from "@/lib/status-chips";
 import { TaskStatusChip } from "./chips";
+import { TaskRowMenu } from "./task-row-menu";
 import type {
   Member,
   Module,
@@ -48,6 +49,12 @@ type TasksListProps = {
   onChangeAssignee?: (taskRef: string, memberId: string | null) => void;
   sprints?: SprintLite[];
   onChangeSprint?: (taskRef: string, sprintId: string | null) => void;
+
+  // ─── Row menu callbacks (3-dot menu). When all 4 are passed, column shows. ─
+  onDuplicate?: (taskRef: string) => void;
+  onClone?: (taskRef: string) => void;
+  onCopyRef?: (taskRef: string) => void;
+  onDelete?: (taskRef: string) => void;
 };
 
 type GroupBy = "story" | "none";
@@ -89,11 +96,16 @@ export function TasksList({
   onChangeAssignee,
   sprints,
   onChangeSprint,
+  onDuplicate,
+  onClone,
+  onCopyRef,
+  onDelete,
 }: TasksListProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("story");
   const [moduleFilter, setModuleFilter] = useState<string>("__all");
   const [areaFilter, setAreaFilter] = useState<string>("__all");
   const [statusFilter, setStatusFilter] = useState<string>("__all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("__all");
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -106,20 +118,33 @@ export function TasksList({
         if (t.area !== want) return false;
       }
       if (statusFilter !== "__all" && t.status !== statusFilter) return false;
+      if (assigneeFilter !== "__all") {
+        if (assigneeFilter === "__unassigned__") {
+          if (t.assigneeIds.length > 0) return false;
+        } else if (!t.assigneeIds.includes(assigneeFilter)) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [tasks, stories, moduleFilter, areaFilter, statusFilter]);
+  }, [tasks, stories, moduleFilter, areaFilter, statusFilter, assigneeFilter]);
 
   const showSprint = !!(sprints && onChangeSprint);
+  const showMenu = !!(onDuplicate && onClone && onCopyRef && onDelete);
 
   const editing: RowEditingProps = {
     members,
     sprints,
     showSprint,
+    showMenu,
     onOpenTask,
     onChangeStatus,
     onChangeAssignee,
     onChangeSprint,
+    onDuplicate,
+    onClone,
+    onCopyRef,
+    onDelete,
   };
 
   return (
@@ -132,7 +157,14 @@ export function TasksList({
             onValueChange={(v) => v && setModuleFilter(v)}
           >
             <SelectTrigger className="h-8 w-full min-w-[140px] flex-1 text-xs sm:w-[160px] sm:flex-none">
-              <SelectValue />
+              <SelectValue>
+                {(v: string) => {
+                  if (v === "__all") return "Módulo: todos";
+                  if (v === "null") return "Módulo: sem módulo";
+                  const mod = modules.find((m) => m.id === v);
+                  return `Módulo: ${mod?.name ?? "—"}`;
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all">Todos módulos</SelectItem>
@@ -150,7 +182,15 @@ export function TasksList({
             onValueChange={(v) => v && setAreaFilter(v)}
           >
             <SelectTrigger className="h-8 w-full min-w-[120px] flex-1 text-xs sm:w-[140px] sm:flex-none">
-              <SelectValue />
+              <SelectValue>
+                {(v: string) => {
+                  if (v === "__all") return "Área: todas";
+                  const opt = AREA_OPTIONS.find(
+                    (o) => (o.value === null ? "null" : String(o.value)) === v,
+                  );
+                  return `Área: ${opt?.label ?? "—"}`;
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {AREA_OPTIONS.map((opt) => (
@@ -169,12 +209,43 @@ export function TasksList({
             onValueChange={(v) => v && setStatusFilter(v)}
           >
             <SelectTrigger className="h-8 w-full min-w-[120px] flex-1 text-xs sm:w-[140px] sm:flex-none">
-              <SelectValue />
+              <SelectValue>
+                {(v: string) => {
+                  if (v === "__all") return "Status: todos";
+                  const opt = STATUS_OPTIONS.find((o) => String(o.value) === v);
+                  return `Status: ${opt?.label ?? "—"}`;
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {STATUS_OPTIONS.map((opt) => (
                 <SelectItem key={String(opt.value)} value={String(opt.value)}>
                   {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={assigneeFilter}
+            onValueChange={(v) => v && setAssigneeFilter(v)}
+          >
+            <SelectTrigger className="h-8 w-full min-w-[140px] flex-1 text-xs sm:w-[160px] sm:flex-none">
+              <SelectValue>
+                {(v: string) => {
+                  if (v === "__all") return "Atribuído: todos";
+                  if (v === "__unassigned__") return "Atribuído: sem atribuição";
+                  const m = members.find((mb) => mb.id === v);
+                  return `Atribuído: ${m?.name ?? "—"}`;
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">Todos os membros</SelectItem>
+              <SelectItem value="__unassigned__">— sem atribuição —</SelectItem>
+              {members.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -250,10 +321,15 @@ type RowEditingProps = {
   members: Member[];
   sprints?: SprintLite[];
   showSprint: boolean;
+  showMenu: boolean;
   onOpenTask: (ref: string) => void;
   onChangeStatus?: (taskRef: string, status: TaskStatus) => void;
   onChangeAssignee?: (taskRef: string, memberId: string | null) => void;
   onChangeSprint?: (taskRef: string, sprintId: string | null) => void;
+  onDuplicate?: (taskRef: string) => void;
+  onClone?: (taskRef: string) => void;
+  onCopyRef?: (taskRef: string) => void;
+  onDelete?: (taskRef: string) => void;
 };
 
 function GroupedByStory({
@@ -431,11 +507,13 @@ function TasksTable({
   if (storyHint) layoutParts.push("200px");
   if (editing.showSprint) layoutParts.push("130px");
   layoutParts.push("130px", "70px", "150px");
+  if (editing.showMenu) layoutParts.push("40px");
   const gridStyle = { gridTemplateColumns: layoutParts.join(" ") };
 
   // Min total width = sum of fixed columns + 220 (title min) + (col_count - 1) * 12px gap.
   const fixedSum =
-    110 + 220 + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0) + 130 + 70 + 150;
+    110 + 220 + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0)
+    + 130 + 70 + 150 + (editing.showMenu ? 40 : 0);
   const colCount = layoutParts.length;
   const minWidthPx = fixedSum + (colCount - 1) * 12;
 
@@ -454,6 +532,7 @@ function TasksTable({
           <span>Status</span>
           <span className="text-right">FP</span>
           <span className="text-right">Assignee</span>
+          {editing.showMenu ? <span /> : null}
         </div>
 
         {/* Rows */}
@@ -552,6 +631,18 @@ function TasksTable({
                         .join(", ")}
                 </span>
               )}
+
+              {editing.showMenu ? (
+                <span className="flex justify-center">
+                  <TaskRowMenu
+                    taskRef={task.reference}
+                    onDuplicate={editing.onDuplicate!}
+                    onClone={editing.onClone!}
+                    onCopyRef={editing.onCopyRef!}
+                    onDelete={editing.onDelete!}
+                  />
+                </span>
+              ) : null}
             </div>
           );
         })}

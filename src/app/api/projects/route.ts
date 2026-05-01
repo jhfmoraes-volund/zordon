@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/dal";
+import { getNextSprintDefaults } from "@/lib/sprint-dates";
 
 export async function GET() {
   const user = await getUser();
@@ -62,6 +63,19 @@ export async function POST(req: NextRequest) {
       .from("ProjectMember")
       .insert(memberIds.map((memberId: string) => ({ id: crypto.randomUUID(), projectId: project.id, memberId })));
   }
+
+  // Invariante: todo projeto começa com pelo menos uma sprint.
+  // CHECK constraint sprint_week_invariant garante seg→dom no DB.
+  const sprintDefaults = getNextSprintDefaults([]);
+  await supabase.from("Sprint").insert({
+    id: crypto.randomUUID(),
+    projectId: project.id,
+    name: sprintDefaults.name,
+    startDate: sprintDefaults.startDate,
+    endDate: sprintDefaults.endDate,
+    status: "planning",
+    updatedAt: new Date().toISOString(),
+  });
 
   const { data: full } = await supabase
     .from("Project")

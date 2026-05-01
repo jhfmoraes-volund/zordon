@@ -25,5 +25,7 @@ export {
   SprintPulseNotes,
   SprintPulseVitals,
 } from "./sprint-pulse-overview";
+export { SprintRibbon } from "./sprint-ribbon";
+export type { RibbonTab } from "./sprint-ribbon";
 export { SprintSummaryStats } from "./sprint-summary-stats";
 export { SprintTimeline } from "./sprint-timeline";

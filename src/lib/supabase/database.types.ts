@@ -2768,6 +2768,69 @@ export type Database = {
           },
         ]
       }
+      TaskActivity: {
+        Row: {
+          actorMemberId: string | null
+          createdAt: string
+          id: string
+          payload: Json
+          taskId: string
+          type: string
+        }
+        Insert: {
+          actorMemberId?: string | null
+          createdAt?: string
+          id?: string
+          payload?: Json
+          taskId: string
+          type: string
+        }
+        Update: {
+          actorMemberId?: string | null
+          createdAt?: string
+          id?: string
+          payload?: Json
+          taskId?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "TaskActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskActivity_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "Task"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       TaskAssignment: {
         Row: {
           createdAt: string

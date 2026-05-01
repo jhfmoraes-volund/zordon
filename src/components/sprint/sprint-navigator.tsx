@@ -3,15 +3,9 @@
 import { useEffect, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Locate } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StatusChip } from "@/components/ui/status-chip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { lookupChip, SPRINT_STATUS } from "@/lib/status-chips";
+import type { Task } from "@/components/story-hierarchy";
+import { sprintFP } from "./helpers";
 import type { Sprint } from "./types";
 
 type Props = {
@@ -23,6 +17,8 @@ type Props = {
   onJumpToActive?: () => void;
   /** When true, ←/→ keys navigate between sprints. */
   enableKeyboard?: boolean;
+  /** Optional — when provided, meta line shows progress %. */
+  tasks?: Task[];
 };
 
 const fmt = (d: string) =>
@@ -38,6 +34,7 @@ export function SprintNavigator({
   onChange,
   onJumpToActive,
   enableKeyboard = true,
+  tasks,
 }: Props) {
   const sorted = useMemo(
     () => [...sprints].sort((a, b) => a.startDate.localeCompare(b.startDate)),
@@ -74,59 +71,50 @@ export function SprintNavigator({
 
   if (!current) return null;
 
+  const status = lookupChip(SPRINT_STATUS, current.status);
+  const fp = tasks ? sprintFP(current.id, tasks) : null;
+  const pct = fp && fp.total > 0 ? Math.round((fp.done / fp.total) * 100) : null;
   const isViewingActive = activeId && current.id === activeId;
 
   return (
-    <div className="flex items-center gap-2 rounded-xl border bg-muted/30 p-2 md:gap-3 md:p-3">
+    <div className="relative flex items-center gap-2 rounded-xl border bg-muted/30 px-2 py-2 md:px-3">
       <Button
         size="icon-sm"
-        variant="outline"
+        variant="ghost"
         disabled={!prev}
         onClick={() => prev && onChange(prev.id)}
         aria-label="Sprint anterior"
         title={prev ? `Anterior · ${prev.name}` : "Sem sprint anterior"}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft />
       </Button>
 
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <h2 className="truncate text-base font-semibold">{current.name}</h2>
-        <StatusChip
-          {...lookupChip(SPRINT_STATUS, current.status)}
-          dot
-          className="hidden md:inline-flex"
-        />
-        <span className="hidden font-mono text-xs tabular-nums text-muted-foreground md:inline">
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-2 md:gap-3">
+        <h2 className="truncate text-sm font-semibold tracking-tight md:text-base">
+          {current.name}
+        </h2>
+        <span aria-hidden className="text-muted-foreground/50">·</span>
+        <span
+          className={`text-xs font-medium ${
+            isViewingActive ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          {status.label}
+        </span>
+        <span aria-hidden className="hidden text-muted-foreground/50 sm:inline">·</span>
+        <span className="hidden font-mono text-xs tabular-nums text-muted-foreground sm:inline">
           {fmt(current.startDate)} → {fmt(current.endDate)}
         </span>
-        {isViewingActive ? (
-          <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary md:inline">
-            vigente
-          </span>
+        {pct !== null ? (
+          <>
+            <span aria-hidden className="hidden text-muted-foreground/50 md:inline">·</span>
+            <span className="hidden font-mono text-xs tabular-nums text-muted-foreground md:inline">
+              {pct}%
+            </span>
+          </>
         ) : null}
       </div>
-
-      <Select value={currentId} onValueChange={(v) => v && onChange(v)}>
-        <SelectTrigger className="h-8 w-[110px] text-xs md:w-[140px]">
-          <SelectValue>
-            {(v: string | null) =>
-              v ? sorted.find((s) => s.id === v)?.name ?? "—" : "—"
-            }
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {sorted.map((s) => (
-            <SelectItem key={s.id} value={s.id}>
-              <span className="flex items-center gap-2">
-                <span>{s.name}</span>
-                {activeId === s.id ? (
-                  <span className="text-[10px] text-primary">●</span>
-                ) : null}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
 
       {activeId && currentId !== activeId && onJumpToActive ? (
         <Button
@@ -134,6 +122,7 @@ export function SprintNavigator({
           variant="ghost"
           onClick={onJumpToActive}
           aria-label="Ir pro sprint vigente"
+          className="shrink-0 gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <Locate className="size-3.5" />
           <span className="hidden md:inline">Ir pro vigente</span>
@@ -142,11 +131,12 @@ export function SprintNavigator({
 
       <Button
         size="icon-sm"
-        variant="outline"
+        variant="ghost"
         disabled={!next}
         onClick={() => next && onChange(next.id)}
         aria-label="Próximo sprint"
         title={next ? `Próximo · ${next.name}` : "Sem próximo sprint"}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
       >
         <ChevronRight />
       </Button>
