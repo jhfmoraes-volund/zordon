@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
+import { useCallback, useOptimistic, useRef, useState, useTransition } from "react";
 import {
   reconcileById,
   removeById,
@@ -97,14 +97,6 @@ export function useOptimisticCollection<T extends WithId, X = never>(
   reducer: Reducer<T, X> = baseReducer as Reducer<T, X>,
 ): UseOptimisticCollection<T, X> {
   const [committed, setCommitted] = useState<T[]>(initial);
-  const initialRef = useRef(initial);
-  useEffect(() => {
-    if (initialRef.current !== initial) {
-      initialRef.current = initial;
-      setCommitted(initial);
-    }
-  }, [initial]);
-
   const [optimistic, applyOptimistic] = useOptimistic(committed, reducer);
   const [isPending, startTransition] = useTransition();
 
