@@ -13,7 +13,6 @@ import {
   User, Zap, FolderKanban, ListTodo, ArrowRight, Sparkles, ArrowUpRight, Star, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { TaskSheet } from "@/components/task-sheet";
 import { fmtDate, isOverdue } from "@/lib/task-constants";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
@@ -105,8 +104,6 @@ export default function ProfilePage() {
   const { member } = useAuth();
   const [data, setData] = useState<MeData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetTaskId, setSheetTaskId] = useState<string | null>(null);
   const [skillsSummary, setSkillsSummary] = useState<SkillsSummary | null>(null);
   const [capacity, setCapacity] = useState<CapacitySummary | null>(null);
 
@@ -344,7 +341,9 @@ export default function ProfilePage() {
                     <TableRow
                       key={t.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => { setSheetTaskId(t.id); setSheetOpen(true); }}
+                      onClick={() => {
+                        window.location.href = `/projects/${t.projectId}?tab=tasks&task=${t.reference}`;
+                      }}
                     >
                       <TableCell className="font-mono text-xs text-primary">
                         {t.reference}
@@ -442,15 +441,6 @@ export default function ProfilePage() {
         <PdiWidget />
       </div>
 
-      <TaskSheet
-        taskId={sheetTaskId}
-        open={sheetOpen}
-        onOpenChange={(open) => {
-          setSheetOpen(open);
-          if (!open) reload();
-        }}
-        onChange={reload}
-      />
     </div>
   );
 }

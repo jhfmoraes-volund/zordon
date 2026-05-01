@@ -235,7 +235,6 @@ function TaskSheetBody({
           description: (merged.description as string) || null,
           dueDate: (merged.dueDate as string) || null,
           dependencies: merged.dependencies as string[] | null,
-          acceptanceCriteria: (merged.acceptanceCriteria as string) || null,
           notes: (merged.notes as string) || null,
           createdById: auth.member?.id ?? null,
           createdByAgent: false,
@@ -436,17 +435,19 @@ function TaskSheetEditor({
         />
 
         {/* Status + Type */}
-        <div className="flex items-center gap-1.5">
+        <div className="grid grid-cols-2 gap-2">
           {task.status === "draft" ? (
             <StatusChip {...lookupChip(TASK_STATUS, "draft")} />
           ) : (
             <StatusChipSelect
+              variant="input"
               value={task.status}
               options={TASK_STATUS}
               onValueChange={(v) => onSave({ status: v })}
             />
           )}
           <StatusChipSelect
+            variant="input"
             value={task.type}
             options={TASK_TYPE}
             onValueChange={(v) => onSave({ type: v })}

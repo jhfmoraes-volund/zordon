@@ -81,7 +81,6 @@ export function updateTaskTool(sessionId: string) {
       updates: z.object({
         title: z.string().optional(),
         description: z.string().optional(),
-        acceptanceCriteria: z.array(z.string()).optional(),
         notes: z.string().optional().nullable(),
         complexity: complexityEnum.optional(),
         scope: scopeEnum.optional(),
@@ -115,8 +114,6 @@ export function updateTaskTool(sessionId: string) {
       if (updates.title !== undefined) payload.title = updates.title;
       if (updates.description !== undefined)
         payload.description = updates.description;
-      if (updates.acceptanceCriteria !== undefined)
-        payload.acceptanceCriteria = JSON.stringify(updates.acceptanceCriteria);
       if (updates.dependsOn !== undefined)
         payload.dependencies = updates.dependsOn.length
           ? JSON.stringify(updates.dependsOn)

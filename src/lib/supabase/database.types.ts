@@ -2597,7 +2597,6 @@ export type Database = {
       }
       Task: {
         Row: {
-          acceptanceCriteria: string | null
           billable: boolean
           complexity: string
           createdAt: string
@@ -2629,7 +2628,6 @@ export type Database = {
           userStoryId: string | null
         }
         Insert: {
-          acceptanceCriteria?: string | null
           billable?: boolean
           complexity?: string
           createdAt?: string
@@ -2661,7 +2659,6 @@ export type Database = {
           userStoryId?: string | null
         }
         Update: {
-          acceptanceCriteria?: string | null
           billable?: boolean
           complexity?: string
           createdAt?: string

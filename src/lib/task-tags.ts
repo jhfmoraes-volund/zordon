@@ -42,3 +42,16 @@ export const TASK_TAG_LIMIT = 10;
 export function pickRandomTone(): ChipTone {
   return TAG_TONES[Math.floor(Math.random() * TAG_TONES.length)];
 }
+
+// Stable tone derivation from any string id — same id always maps to the same
+// tone. Useful for assignees/avatars where we want a chip color but no DB-level
+// tone column. Uses djb2-ish hash; collisions are fine, we just want spread.
+export function deriveToneFromId(id: string): ChipTone {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
+  }
+  // Avoid "muted" — it's the no-tone fallback and reads visually as disabled.
+  const palette = TAG_TONES.filter((t) => t !== "muted");
+  return palette[Math.abs(hash) % palette.length];
+}

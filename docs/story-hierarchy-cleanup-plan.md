@@ -172,67 +172,61 @@ bash scripts/sync-main.sh -m "ZRD-JM-NN: cleanup B — drop /sprints kanban + de
 
 ---
 
-## Onda C — Refactor pra dropar `Task.type/scope/acceptanceCriteria(text)`
+## Onda C — Refactor pra dropar `Task.acceptanceCriteria(text)`
 
-**Objetivo:** remover toda leitura/escrita das 3 colunas marcadas pra drop, sem quebrar features. Pré-requisito pra Onda D.
+**Objetivo:** remover toda leitura/escrita da coluna text legacy de AC, sem quebrar features. Pré-requisito pra Onda D.
 
 ### Princípio
 
-- `task.acceptanceCriteria` (text) → substituído pela tabela `AcceptanceCriterion` (já existe, já populada nos Zordon tasks).
-- `task.type` + `task.scope` → substituídos por `task.area` (5 valores: `front`/`back`/`infra`/`ops`/`mixed`).
-- **Não migrar valores** legacy de `type`/`scope` pra `area`. Decisão PM 2026-05-01: "os valores foram preenchidos sem critério, mapeá-los só perpetua ruído". Tasks ficam com `area = NULL`; PM/Alpha preenche conforme refinar.
+- `task.acceptanceCriteria` (text) → substituído pela tabela `AcceptanceCriterion` (já existe, já populada).
+- ~~`task.type` + `task.scope` → `task.area`~~ — **revisado em 2026-05-01.** `Task.area` já foi dropada (migration `20260501_task_tags.sql` substituiu por `TaskTag`/`TaskTagAssignment`). `task.type` e `task.scope` **permanecem por enquanto** porque alimentam o `suggestFunctionPoints(scope, complexity)` — matriz 4×4 que define FP automático. Sem decisão sobre como FP funciona sem scope (1D? manual? tag-based?), ambos ficam.
+- Resultado prático: Onda C cuida só de AC. Onda D dropa só `acceptanceCriteria`.
 
 ### Inventário de readers (snapshot 2026-05-01)
 
-#### Components a editar (mantém arquivo)
+#### 1. AC backend writers (param de gravar string `acceptanceCriteria`)
 
-| Arquivo | Mudança |
-|---|---|
-| `src/components/story-hierarchy/types.ts` | Remover `type: TaskType` e `scope: TaskScope` do tipo `Task` (linhas 63-64). Remover exports `TaskType`, `TaskScope`, `TYPE_VALUES`, `SCOPE_VALUES`. |
-| `src/components/story-hierarchy/task-sheet.tsx` | Remover seções "Tipo" + "Scope" (linhas ~463-501 e ~840-857). Manter só "Complexity" + "Area". Reajustar grid (`grid-cols-3` → `grid-cols-2`). |
-| `src/components/story-hierarchy/adapters.ts` | Remover mapping de `type`/`scope` no `adaptTask`. Manter mapping de AC (já vem de `AcceptanceCriterion` table). |
-| `src/components/sprint/helpers.ts` (linhas 517-518) | Verificar se `task.acceptanceCriteria` é AC[] ou string. Se string, refatorar pra usar lookup na tabela AC. |
-| `src/components/design-session/task-preview.tsx` | Remover chip de `task.type`/`task.scope` (linhas 146, 191-200). Substituir por chip de `task.area` (com fallback "—"). |
-| `src/components/meetings/meeting-task-action-sheet.tsx` (linhas 550-551) | Remover textarea de `acceptanceCriteria` text. AC passa a ser editado via story-hierarchy/task-sheet. |
-
-#### Lib/API a editar
-
-| Arquivo | Mudança |
-|---|---|
-| `src/lib/meetings/task-action-executor.ts` (linhas 99, 136) | Remover `acceptanceCriteria` do payload. Se a action criava AC, fazer INSERT em `AcceptanceCriterion` table. |
-| `src/lib/agent/tools/manage-tasks.ts` (linhas 118-119) | Remover handling de `acceptanceCriteria` string. Se Alpha cria AC, usar RPC dedicada (já existe `create_user_story_with_tasks`?) ou INSERT em `AcceptanceCriterion`. |
-| `src/lib/github.ts` (linha 178) | Trocar `**Scope:** ${task.scope}` por `**Area:** ${task.area ?? "—"}`. |
-| `src/lib/agent/agents/alpha/tools.ts` (linha 745) | Remover `scope: task.scope` do log/contexto. |
-| `src/app/api/tasks/[id]/duplicate/route.ts` (linha 90) | Não copiar `task.acceptanceCriteria` text. Em vez disso, copiar rows de `AcceptanceCriterion` onde `taskId = source.id`. |
-| `src/app/api/tasks/[id]/clone/route.ts` (linha 115) | Idem ao duplicate. |
-| `src/app/(dashboard)/projects/[id]/page.tsx` (linhas 686-689) | Verificar se `before/updated.acceptanceCriteria` é AC[] (provável). Manter; é o array novo. |
-
-#### Pages que usam components legacy → migrar pra new
-
-| Page | Component legacy importado | Component novo |
+| Arquivo | Linha(s) | Mudança |
 |---|---|---|
-| `src/app/(dashboard)/tasks/page.tsx` | `TaskSheet`, `TaskList` de `@/components/task-sheet`/`task-list` | `NewTaskSheet`, `NewTasksList` de `@/components/story-hierarchy` |
-| `src/app/(dashboard)/profile/page.tsx` | `TaskSheet` de `@/components/task-sheet` | `NewTaskSheet` |
-| `src/app/(dashboard)/design-sessions/[id]/review/page.tsx` | `TaskSheet`, chip `TASK_TYPE` | `NewTaskSheet`. Trocar chip de tipo por chip de area (ou remover se review não precisa). |
+| `src/components/meetings/meeting-task-action-sheet.tsx` | 547-554, 39, 550-551 | Remover bloco `<Textarea>` "Critérios de aceitação". AC sai do escopo de meeting actions; preenchido via story sheet depois. Remover field do shape. |
+| `src/lib/meetings/task-action-executor.ts` | 99 | Remover `acceptanceCriteria: (p.acceptanceCriteria as string) ?? null` do INSERT da `applyCreate`. |
+| `src/lib/meetings/task-action-executor.ts` | 136 | Remover `"acceptanceCriteria"` do array `allowed` de `applyUpdate`. |
+| `src/lib/agent/tools/manage-tasks.ts` | 84, 118-119 | Remover `acceptanceCriteria` do schema Zod e o `JSON.stringify(...)` no handler. Alpha cria AC via outro fluxo (story sheet ou RPC dedicada). |
+| `src/app/api/tasks/[id]/duplicate/route.ts` | 89 | Remover `acceptanceCriteria: source.acceptanceCriteria` do INSERT. Após o INSERT da task, fazer SELECT em `AcceptanceCriterion` (taskId=source.id) e INSERT em batch com novo `taskId`. |
+| `src/app/api/tasks/[id]/clone/route.ts` | 114 | Idem ao duplicate. |
 
-**Atenção:** `tasks/page.tsx` é listagem global cross-project — `NewTasksList` foi desenhada pra contexto de **projeto único** (tem `projectId` implícito, modules/personas filtrados). Pode precisar ajuste pra suportar listagem global. Avaliar:
-- (a) adaptar `NewTasksList` pra aceitar `projectId` opcional (mais trabalho, mais valor)
-- (b) reescrever `tasks/page.tsx` com tabela mais simples (menos features, mais rápido)
+**Bug latente que isso conserta:** tasks criadas via meeting/Alpha hoje gravam AC como string mas nunca viram rows na tabela `AcceptanceCriterion`. Logo, abrem no fluxo novo com AC vazio. Após Onda C, AC só nasce via story sheet (que insere na tabela), e duplicate/clone copiam rows reais.
 
-Recomendação: **(b)** primeiro, deixar (a) pra trás se necessário.
+#### 2. Pages que usam components legacy → migrar pra new
 
-#### Components legacy a deletar (após migração das pages acima)
+| Page | Hoje importa | Decisão |
+|---|---|---|
+| `src/app/(dashboard)/tasks/page.tsx` | `TaskSheet`, `TaskList` legacy | **Delete** — rota órfã (sem entry no menu, sem links externos). Listagem cross-project já é coberta por `/profile`. |
+| `src/app/(dashboard)/profile/page.tsx` | `TaskSheet` legacy | **Migrar** pra `TaskSheet` de `@/components/story-hierarchy`. UI muda (chip TASK_TYPE colorido vira Select texto; FP layout idêntico). |
+| `src/app/(dashboard)/design-sessions/[id]/review/page.tsx` | `TaskSheet` legacy + chip `TASK_TYPE` colorido na listagem | **Migrar** pra `TaskSheet` novo. Decidir se mantém chip TASK_TYPE colorido na listagem (registry permanece) ou troca por exibição texto. Recomendação: manter chip por enquanto (estética). |
 
-| Arquivo | Após qual passo |
+#### 3. Components/files a deletar
+
+| Arquivo | Razão |
 |---|---|
-| `src/components/task-sheet.tsx` | Após pages migrarem pra `NewTaskSheet` |
-| `src/components/task-list.tsx` | Após `tasks/page.tsx` migrar |
+| `src/app/(dashboard)/tasks/page.tsx` | Page órfã (sem nav entry). |
+| `src/app/(dashboard)/tasks/` (pasta) | Idem |
+| `src/components/task-sheet.tsx` | Após `/profile` e `/design-sessions/[id]/review` migrarem. |
+| `src/components/task-list.tsx` | Após `/tasks` deletar. |
+| `src/components/design-session/task-preview.tsx` | **Componente órfão** — não importado em lugar nenhum (verificado via grep). |
 
-#### Cleanup de chip registry
+#### 4. Mantém intacto
 
-| Arquivo | Mudança |
+| Arquivo | Por que |
 |---|---|
-| `src/lib/status-chips.ts` (linhas 70-78) | Remover `TASK_TYPE` registry inteiro. Remover `SCOPE` registry. Verificar nenhum import remanescente. |
+| `src/components/story-hierarchy/task-sheet.tsx` | Mantém Tipo/Scope/Complexity (PM decidiu manter por enquanto — FP matriz 4×4 ainda depende). |
+| `src/components/story-hierarchy/types.ts` | Mantém `TaskType`/`TaskScope`/`TYPE_VALUES`/`SCOPE_VALUES`. |
+| `src/components/story-hierarchy/adapters.ts` | Mantém mapping de `type`/`scope`. |
+| `src/lib/github.ts` (`task.scope` no body) | Mantém — coluna ainda existe. |
+| `src/lib/agent/agents/alpha/tools.ts` (log de scope) | Mantém. |
+| `src/lib/status-chips.ts` (registries `TASK_TYPE`, `SCOPE`) | Mantém — chip ainda usado pela `/design-sessions/[id]/review`. |
+| `src/components/sprint/helpers.ts` (linhas 517-518) | Já lê AC como `AC[]` (verificado: usa `.checked`). Sem mudança. |
+| `src/app/(dashboard)/projects/[id]/page.tsx` (linhas 791, 794) | Já lê AC como `AC[]`. Sem mudança. |
 
 ### Validação
 
@@ -278,15 +272,16 @@ Ou tudo num commit só, se preferir simplicidade. Recomendação: **3 commits** 
 
 ---
 
-## Onda D — `ALTER TABLE Task DROP COLUMN`
+## Onda D — `ALTER TABLE Task DROP COLUMN acceptanceCriteria`
 
-**Objetivo:** remover fisicamente as 3 colunas do schema. **Irreversível.**
+**Objetivo:** remover fisicamente a coluna text legacy de AC. **Irreversível.** `type` e `scope` mantidos.
 
 ### Pré-condição obrigatória
 
 ```bash
 bunx tsc --noEmit                                            # PASSA limpo
-grep -rn '\btask\.\(type\|scope\|acceptanceCriteria\)\b' src/ # zero hits
+grep -rn '\btask\.acceptanceCriteria\b' src/                 # zero hits (texto string)
+grep -rn '"acceptanceCriteria":\s*[^[]' src/                 # zero hits (objetos com AC text)
 ```
 
 Se qualquer um falhar — **não rodar Onda D**. Voltar pra Onda C.
@@ -300,24 +295,24 @@ pg_dump "$DIRECT_URL" > backups/pre-cleanup-D-$(date +%Y%m%d-%H%M).sql
 
 ### Migration
 
-**Arquivo:** `supabase/migrations/<YYYYMMDD>_drop_task_legacy_columns.sql`
+**Arquivo:** `supabase/migrations/<YYYYMMDD>_drop_task_acceptance_criteria_text.sql`
 
 ```sql
--- Drop colunas legacy do Task após cleanup completo do código.
+-- Drop coluna legacy text de AC após cleanup completo do código.
 --
 -- Pré-condição: bunx tsc --noEmit passa, grep das colunas é vazio.
 -- Backup completo do banco gerado antes do drop.
 --
--- Substitutos:
---   acceptanceCriteria (text) → tabela AcceptanceCriterion
---   type, scope                → coluna Task.area (criada em 20260430_task_extensions.sql)
+-- Substituto:
+--   acceptanceCriteria (text) → tabela AcceptanceCriterion (rows interativos)
+--
+-- Type e scope NÃO são dropados aqui — alimentam suggestFunctionPoints (matriz 4×4).
+-- Cleanup deles fica pra um futuro plano separado, junto com decisão sobre FP matrix.
 
 BEGIN;
 
 ALTER TABLE "Task"
-  DROP COLUMN "acceptanceCriteria",
-  DROP COLUMN "type",
-  DROP COLUMN "scope";
+  DROP COLUMN "acceptanceCriteria";
 
 COMMIT;
 ```

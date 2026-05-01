@@ -106,7 +106,6 @@ export function createTaskTool(sessionId: string, projectId: string, createdById
           functionPoints,
           projectId,
           designSessionId: sessionId,
-          acceptanceCriteria: JSON.stringify(acceptanceCriteria),
           notes: enrichedNotes,
           dependencies: dependsOn?.length
             ? JSON.stringify(dependsOn)

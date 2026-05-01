@@ -1190,6 +1190,7 @@ function TasksTable({
               <span onClick={stop} onPointerDown={stop}>
                 {editing.onChangeStatus ? (
                   <StatusChipSelect
+                    variant="input"
                     value={task.status}
                     options={TASK_STATUS}
                     onValueChange={(v) =>

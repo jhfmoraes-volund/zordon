@@ -8,6 +8,7 @@ import {
   type Story,
   type Task,
   type TaskStatus,
+  type TaskTag,
 } from "@/components/story-hierarchy";
 import { tasksOfSprint } from "./helpers";
 import type { Sprint } from "./types";
@@ -44,6 +45,11 @@ type Props = {
   ) => void | Promise<void>;
   onBulkDelete?: (taskRefs: string[]) => void | Promise<void>;
   onBulkDuplicate?: (taskRefs: string[]) => void | Promise<void>;
+  onBulkAddTag?: (taskRefs: string[], tagId: string) => void | Promise<void>;
+  onBulkRemoveTag?: (taskRefs: string[], tagId: string) => void | Promise<void>;
+
+  /** Project-scoped tag list for the bulk Tag action and tag chips on rows. */
+  availableTags?: TaskTag[];
 };
 
 /**
@@ -70,6 +76,9 @@ export function SprintDetail({
   onBulkUpdate,
   onBulkDelete,
   onBulkDuplicate,
+  onBulkAddTag,
+  onBulkRemoveTag,
+  availableTags,
 }: Props) {
   const own = useMemo(
     () => tasksOfSprint(sprint.id, tasks),
@@ -98,6 +107,9 @@ export function SprintDetail({
         onBulkUpdate={onBulkUpdate}
         onBulkDelete={onBulkDelete}
         onBulkDuplicate={onBulkDuplicate}
+        onBulkAddTag={onBulkAddTag}
+        onBulkRemoveTag={onBulkRemoveTag}
+        availableTags={availableTags}
       />
     </section>
   );

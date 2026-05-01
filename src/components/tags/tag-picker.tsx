@@ -21,7 +21,10 @@ export type TagPickerProps = {
   available: TagPickerOption[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
-  onCreate: (
+  /** When omitted, the picker becomes pure-selection (no "create" affordance
+   *  in the dropdown, no random-tone generator). Useful for reusing this UI
+   *  for fixed-set pickers like assignees. */
+  onCreate?: (
     name: string,
     tone: ChipTone,
   ) => TagPickerOption | Promise<TagPickerOption>;
@@ -30,6 +33,8 @@ export type TagPickerProps = {
   variant?: TagChipVariant;
   triggerVisibleCount?: number;
   placeholder?: string;
+  /** Empty-state message in the dropdown when there are no options to pick. */
+  emptyText?: string;
 };
 
 const dotClassByTone: Record<ChipTone, string> = {
@@ -56,6 +61,7 @@ export function TagPicker({
   variant = "solid",
   triggerVisibleCount = 2,
   placeholder = "Add tag",
+  emptyText,
 }: TagPickerProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -129,6 +135,7 @@ export function TagPicker({
   }
 
   async function handleCreate() {
+    if (!onCreate) return;
     const name = query.trim();
     if (!name || exactMatch || atLimit) return;
     const tone = pickRandomTone();
@@ -143,11 +150,20 @@ export function TagPicker({
 
   return (
     <div ref={wrapperRef} className="relative w-full">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }
+        }}
+        aria-expanded={open}
+        aria-haspopup="listbox"
         className={cn(
-          "flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-lg border border-input bg-transparent px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/30",
+          "flex min-h-9 w-full cursor-pointer flex-wrap items-center gap-1.5 rounded-lg border border-input bg-transparent px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/30",
           open && "ring-3 ring-ring/50 border-ring",
         )}
       >
@@ -170,10 +186,10 @@ export function TagPicker({
             <TagChipOverflow count={overflow} variant={variant} />
           </>
         )}
-        <span className="ml-auto pl-2 text-[10px] text-muted-foreground">
+        <span className="ml-auto self-center pl-2 text-[10px] text-muted-foreground">
           {selected.length}/{max}
         </span>
-      </button>
+      </div>
 
       {open ? (
         <div className="absolute left-0 top-[calc(100%+4px)] z-50 w-full min-w-[220px] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10">
@@ -193,7 +209,7 @@ export function TagPicker({
                   if (!exactMatch) handleCreate();
                 }
               }}
-              placeholder="Search or create"
+              placeholder={onCreate ? "Search or create" : "Search"}
               className="w-full bg-transparent px-1 py-1 text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
@@ -201,7 +217,10 @@ export function TagPicker({
           <div className="max-h-[260px] overflow-y-auto p-1">
             {filtered.length === 0 && !query.trim() ? (
               <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                Sem tags ainda — digite pra criar
+                {emptyText ??
+                  (onCreate
+                    ? "Sem tags ainda — digite pra criar"
+                    : "Nada disponível")}
               </div>
             ) : null}
 
@@ -282,7 +301,7 @@ export function TagPicker({
               );
             })}
 
-            {query.trim() && !exactMatch ? (
+            {onCreate && query.trim() && !exactMatch ? (
               <button
                 type="button"
                 disabled={atLimit}

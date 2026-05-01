@@ -31,6 +31,7 @@ import {
 import { Pencil, Trash2, Users, ChevronDown, ChevronRight, MoreVertical, ListChecks } from "lucide-react";
 import { roleLabel } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 
 type ProjectMemberAlloc = {
@@ -517,15 +518,12 @@ export default function ProjectsPage() {
             </div>
 <div className="grid gap-2">
               <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => v && setForm({ ...form, status: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="paused">Paused</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
+              <StatusChipSelect
+                variant="input"
+                value={form.status}
+                options={PROJECT_STATUS}
+                onValueChange={(v) => setForm({ ...form, status: v })}
+              />
             </div>
           </ResponsiveDialogBody>
           <ResponsiveDialogFooter>

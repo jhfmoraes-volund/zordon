@@ -96,7 +96,6 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
     priority: (p.priority as number) ?? 0,
     billable: (p.billable as boolean) ?? true,
     functionPoints: (p.functionPoints as number | null) ?? null,
-    acceptanceCriteria: (p.acceptanceCriteria as string) ?? null,
     notes: (p.notes as string) ?? null,
     dueDate: (p.dueDate as string) ?? null,
     projectId: action.projectId,
@@ -133,7 +132,7 @@ async function applyUpdate(supabase: Supabase, action: ActionRow) {
 
   const allowed = [
     "title", "description", "status", "type", "scope", "complexity",
-    "priority", "billable", "functionPoints", "acceptanceCriteria",
+    "priority", "billable", "functionPoints",
     "notes", "dueDate",
   ] as const;
   const patch: TaskUpdate = { updatedAt: new Date().toISOString() };

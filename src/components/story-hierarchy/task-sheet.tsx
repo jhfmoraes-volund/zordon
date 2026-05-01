@@ -19,6 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { StatusChipSelect } from "@/components/ui/status-chip-select";
+import { TASK_STATUS } from "@/lib/status-chips";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -336,43 +338,87 @@ function TaskSheetInner({
       </ResponsiveSheetHeader>
 
       <ResponsiveSheetBody className="space-y-5">
-        {/* Status + Area */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Status + Assignees */}
+        <div className="grid grid-cols-2 gap-3 items-start">
           <FieldBlock label="Status">
-            <Select
+            <StatusChipSelect
+              variant="input"
               value={task.status}
-              onValueChange={(v) =>
-                v !== null && persist({ status: v as TaskStatus })
-              }
-            >
-              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {(Object.keys(TASK_STATUS_MAP) as TaskStatus[]).map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {TASK_STATUS_MAP[s].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldBlock>
-
-          <FieldBlock label="Tags">
-            <TagPicker
-              available={tagsToOptions(availableTags ?? task.tags)}
-              selectedIds={task.tags.map((t) => t.id)}
-              onChange={(ids) => onChangeTags?.(task.reference, ids)}
-              onCreate={async (name, tone) => {
-                if (!onCreateTag) {
-                  return { id: `tmp-${Date.now()}`, name, tone };
-                }
-                const created = await onCreateTag(name, tone);
-                return { id: created.id, name: created.name, tone: created.tone as ChipTone };
-              }}
-              variant="linear"
-              triggerVisibleCount={2}
+              options={TASK_STATUS}
+              onValueChange={(v) => persist({ status: v as TaskStatus })}
             />
           </FieldBlock>
+
+          {onChangeAssignees ? (
+            <FieldBlock label="Assignees">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="flex h-9 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
+                >
+                  {(() => {
+                    const selected = members.filter((m) =>
+                      task.assigneeIds.includes(m.id),
+                    );
+                    if (selected.length === 0) {
+                      return (
+                        <span className="text-muted-foreground">
+                          Sem assignee
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span className="truncate">
+                          {selected.map((m) => m.name).join(", ")}
+                        </span>
+                        {selected.length > 1 ? (
+                          <Badge variant="outline" className="h-4 px-1 text-[9px] font-mono">
+                            {selected.length}
+                          </Badge>
+                        ) : null}
+                      </span>
+                    );
+                  })()}
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[var(--anchor-width)]">
+                  {members.length === 0 ? (
+                    <div className="px-1.5 py-1.5 text-xs text-muted-foreground">
+                      Nenhum membro alocado ao projeto.
+                    </div>
+                  ) : (
+                    members.map((m) => (
+                      <DropdownMenuCheckboxItem
+                        key={m.id}
+                        checked={task.assigneeIds.includes(m.id)}
+                        onCheckedChange={() => toggleAssignee(m.id)}
+                      >
+                        {m.name}
+                      </DropdownMenuCheckboxItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </FieldBlock>
+          ) : null}
         </div>
+
+        <FieldBlock label="Tags">
+          <TagPicker
+            available={tagsToOptions(availableTags ?? task.tags)}
+            selectedIds={task.tags.map((t) => t.id)}
+            onChange={(ids) => onChangeTags?.(task.reference, ids)}
+            onCreate={async (name, tone) => {
+              if (!onCreateTag) {
+                return { id: `tmp-${Date.now()}`, name, tone };
+              }
+              const created = await onCreateTag(name, tone);
+              return { id: created.id, name: created.name, tone: created.tone as ChipTone };
+            }}
+            variant="linear"
+            triggerVisibleCount={99}
+          />
+        </FieldBlock>
 
         {/* User Story */}
         <FieldBlock label="User Story">
@@ -466,24 +512,8 @@ function TaskSheetInner({
           </FieldBlock>
         ) : null}
 
-        {/* Type / Scope / Complexity / FP */}
-        <div className="grid grid-cols-3 gap-3">
-          <FieldBlock label="Tipo">
-            <Select
-              value={task.type}
-              onValueChange={(v) =>
-                v !== null && persist({ type: v as TaskType })
-              }
-            >
-              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {TYPE_VALUES.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldBlock>
-
+        {/* Scope + Complexity */}
+        <div className="grid grid-cols-2 gap-3">
           <FieldBlock label="Scope">
             <Select
               value={task.scope}
@@ -533,12 +563,8 @@ function TaskSheetInner({
           </FieldBlock>
         </div>
 
-        {/* Function Points + Assignees */}
-        <div
-          className={`grid gap-3 items-start ${
-            onChangeAssignees ? "grid-cols-2" : "grid-cols-1"
-          }`}
-        >
+        {/* Function Points + Tipo */}
+        <div className="grid grid-cols-2 gap-3 items-start">
           <FieldBlock label="Function Points">
             <Input
               type="number"
@@ -571,58 +597,21 @@ function TaskSheetInner({
             )}
           </FieldBlock>
 
-          {onChangeAssignees ? (
-            <FieldBlock label="Assignees">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  className="flex h-9 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
-                >
-                  {(() => {
-                    const selected = members.filter((m) =>
-                      task.assigneeIds.includes(m.id),
-                    );
-                    if (selected.length === 0) {
-                      return (
-                        <span className="text-muted-foreground">
-                          Sem assignee
-                        </span>
-                      );
-                    }
-                    return (
-                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                        <span className="truncate">
-                          {selected.map((m) => m.name).join(", ")}
-                        </span>
-                        {selected.length > 1 ? (
-                          <Badge variant="outline" className="h-4 px-1 text-[9px] font-mono">
-                            {selected.length}
-                          </Badge>
-                        ) : null}
-                      </span>
-                    );
-                  })()}
-                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[var(--anchor-width)]">
-                  {members.length === 0 ? (
-                    <div className="px-1.5 py-1.5 text-xs text-muted-foreground">
-                      Nenhum membro alocado ao projeto.
-                    </div>
-                  ) : (
-                    members.map((m) => (
-                      <DropdownMenuCheckboxItem
-                        key={m.id}
-                        checked={task.assigneeIds.includes(m.id)}
-                        onCheckedChange={() => toggleAssignee(m.id)}
-                      >
-                        {m.name}
-                      </DropdownMenuCheckboxItem>
-                    ))
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </FieldBlock>
-          ) : null}
+          <FieldBlock label="Tipo">
+            <Select
+              value={task.type}
+              onValueChange={(v) =>
+                v !== null && persist({ type: v as TaskType })
+              }
+            >
+              <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TYPE_VALUES.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
         </div>
 
         <Separator />
@@ -847,48 +836,28 @@ function TaskSheetCreate({
           </FieldBlock>
         </div>
 
+        <FieldBlock label="Tags">
+          <TagPicker
+            available={tagsToOptions(availableTags ?? [])}
+            selectedIds={tagIds}
+            onChange={setTagIds}
+            onCreate={async (name, tone) => {
+              if (!onCreateTag) {
+                return { id: `tmp-${Date.now()}`, name, tone };
+              }
+              const created = await onCreateTag(name, tone);
+              return {
+                id: created.id,
+                name: created.name,
+                tone: created.tone as ChipTone,
+              };
+            }}
+            variant="linear"
+            triggerVisibleCount={99}
+          />
+        </FieldBlock>
+
         <div className="grid grid-cols-2 gap-3">
-          <FieldBlock label="Tipo">
-            <Select
-              value={type}
-              onValueChange={(v) => v !== null && setType(v as TaskType)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TYPE_VALUES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldBlock>
-
-          <FieldBlock label="Tags">
-            <TagPicker
-              available={tagsToOptions(availableTags ?? [])}
-              selectedIds={tagIds}
-              onChange={setTagIds}
-              onCreate={async (name, tone) => {
-                if (!onCreateTag) {
-                  return { id: `tmp-${Date.now()}`, name, tone };
-                }
-                const created = await onCreateTag(name, tone);
-                return {
-                  id: created.id,
-                  name: created.name,
-                  tone: created.tone as ChipTone,
-                };
-              }}
-              variant="linear"
-              triggerVisibleCount={2}
-            />
-          </FieldBlock>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
           <FieldBlock label="Scope">
             <Select
               value={scope}
@@ -928,13 +897,33 @@ function TaskSheetCreate({
               </SelectContent>
             </Select>
           </FieldBlock>
+        </div>
 
+        <div className="grid grid-cols-2 gap-3 items-start">
           <FieldBlock label="FP (auto)">
             <Input
               value={fp}
               readOnly
               className="font-mono tabular-nums"
             />
+          </FieldBlock>
+
+          <FieldBlock label="Tipo">
+            <Select
+              value={type}
+              onValueChange={(v) => v !== null && setType(v as TaskType)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TYPE_VALUES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </FieldBlock>
         </div>
       </ResponsiveSheetBody>

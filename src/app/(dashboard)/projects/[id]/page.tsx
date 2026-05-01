@@ -174,6 +174,7 @@ export default function ProjectDetailPage({
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") as TabKey | null;
   const sprintParam = searchParams.get("sprint");
+  const taskParam = searchParams.get("task");
 
   const [activeTab, setActiveTab] = useState<TabKey>(tabParam ?? "stories");
   const [project, setProject] = useState<ProjectMeta | null>(null);
@@ -198,7 +199,7 @@ export default function ProjectDetailPage({
   const [sprintDialogOpen, setSprintDialogOpen] = useState(false);
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [editingStory, setEditingStory] = useState(false);
-  const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(null);
+  const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(taskParam);
 
   const [moduleDialog, setModuleDialog] = useState<{
     open: boolean;
@@ -996,6 +997,55 @@ export default function ProjectDetailPage({
     await loadTasksAndSprints();
   }
 
+  async function handleBulkAddTag(taskRefs: string[], tagId: string) {
+    const taskIds = refsToIds(taskRefs);
+    if (taskIds.length === 0) return;
+    const res = await fetch("/api/tasks/bulk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskIds,
+        action: "update",
+        patch: { addTagIds: [tagId] },
+      }),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao adicionar tag");
+      alert(msg);
+      return;
+    }
+    const result = (await res.json().catch(() => null)) as
+      | { skippedDueToLimit?: string[] }
+      | null;
+    const skipped = result?.skippedDueToLimit?.length ?? 0;
+    if (skipped > 0) {
+      alert(
+        `${skipped} task${skipped > 1 ? "s" : ""} não recebe${skipped > 1 ? "ram" : "u"} a tag (limite de 10 atingido).`,
+      );
+    }
+    await loadTasksAndSprints();
+  }
+
+  async function handleBulkRemoveTag(taskRefs: string[], tagId: string) {
+    const taskIds = refsToIds(taskRefs);
+    if (taskIds.length === 0) return;
+    const res = await fetch("/api/tasks/bulk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskIds,
+        action: "update",
+        patch: { removeTagIds: [tagId] },
+      }),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "Falha ao remover tag");
+      alert(msg);
+      return;
+    }
+    await loadTasksAndSprints();
+  }
+
   async function handleApproveProposedModule(story: AdaptedStory) {
     if (!story.proposedModuleName) return;
     const res = await fetch(
@@ -1287,6 +1337,8 @@ export default function ProjectDetailPage({
           onBulkUpdate={handleBulkUpdate}
           onBulkDelete={handleBulkDelete}
           onBulkDuplicate={handleBulkDuplicate}
+          onBulkAddTag={handleBulkAddTag}
+          onBulkRemoveTag={handleBulkRemoveTag}
         />
       ) : activeTab === "sprints" ? (
         <div className="space-y-5">
@@ -1328,6 +1380,9 @@ export default function ProjectDetailPage({
                 onBulkUpdate={handleBulkUpdate}
                 onBulkDelete={handleBulkDelete}
                 onBulkDuplicate={handleBulkDuplicate}
+                onBulkAddTag={handleBulkAddTag}
+                onBulkRemoveTag={handleBulkRemoveTag}
+                availableTags={projectTags}
               />
             </>
           ) : (

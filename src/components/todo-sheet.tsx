@@ -6,11 +6,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { Trash2, Calendar, FileText, Link2 } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
+import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
 
 // ─── Types ────────────────────────────────────────────────
@@ -18,11 +16,11 @@ import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
 const STATUSES = ["todo", "doing", "done"] as const;
 type Status = (typeof STATUSES)[number];
 
-// Label override — registry uses uppercase TODO/DOING/DONE; this surface uses prose
+// Re-export from the central chip registry so consumers don't duplicate labels.
 const STATUS_LABELS: Record<Status, string> = {
-  todo: "To-do",
-  doing: "Em andamento",
-  done: "Concluído",
+  todo:  ACTION_ITEM_STATUS.todo.label,
+  doing: ACTION_ITEM_STATUS.doing.label,
+  done:  ACTION_ITEM_STATUS.done.label,
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -242,18 +240,12 @@ function TodoSheetBody({
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
         <FieldBlock label="Status">
-          <Select value={draft.status} onValueChange={(v) => handleStatus(v as Status)}>
-            <SelectTrigger className="h-8 w-full text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_LABELS[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <StatusChipSelect
+            variant="input"
+            value={draft.status}
+            options={ACTION_ITEM_STATUS}
+            onValueChange={(v) => handleStatus(v as Status)}
+          />
         </FieldBlock>
 
         <FieldBlock label="Prazo" icon={<Calendar className="h-3.5 w-3.5" />}>

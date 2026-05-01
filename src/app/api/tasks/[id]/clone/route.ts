@@ -111,7 +111,6 @@ export async function POST(
       functionPoints: source.functionPoints,
       billable: source.billable,
       notes: source.notes,
-      acceptanceCriteria: source.acceptanceCriteria,
       projectId: targetProjectId,
       userStoryId: null,
       sprintId: null,

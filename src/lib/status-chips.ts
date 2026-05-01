@@ -132,9 +132,9 @@ export const ACTION_TYPE = defineRegistry({
 // (red=todo is intentional — pending actions read as "warning" until done)
 
 export const ACTION_ITEM_STATUS = defineRegistry({
-  todo:  { label: "TODO",  tone: "red"   },
-  doing: { label: "DOING", tone: "amber" },
-  done:  { label: "DONE",  tone: "green" },
+  todo:  { label: "To-do",        tone: "red"   },
+  doing: { label: "Em andamento", tone: "amber" },
+  done:  { label: "Concluído",    tone: "green" },
 });
 
 // ─── Complexity & Scope ──────────────────────────────────
@@ -162,3 +162,40 @@ export function lookupChip<T extends Record<string, ChipDescriptor>>(
   if (key && key in registry) return registry[key as keyof T];
   return { label: key ?? "—", tone: "muted" };
 }
+
+// ─── Tonal classes ───────────────────────────────────────
+// Tailwind utility maps keyed by ChipTone. Centralized here so any component
+// that needs to reflect a tone (chip background, full-trigger fill, dot,
+// border, etc.) reads from the same source. Tailwind only ships classes that
+// appear LITERALLY in source — these maps are the literal source.
+
+/** Subtle tonal background + matching text/border. Use when you want the whole
+ *  surface to take the tone (e.g. a Select trigger acting as a status badge). */
+export const TONE_FILL: Record<ChipTone, string> = {
+  blue:   "bg-blue-500/15 text-blue-700 border-blue-500/30 hover:bg-blue-500/20 dark:text-blue-300",
+  green:  "bg-green-500/15 text-green-700 border-green-500/30 hover:bg-green-500/20 dark:text-green-300",
+  amber:  "bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/20 dark:text-amber-300",
+  red:    "bg-red-500/15 text-red-700 border-red-500/30 hover:bg-red-500/20 dark:text-red-300",
+  purple: "bg-purple-500/15 text-purple-700 border-purple-500/30 hover:bg-purple-500/20 dark:text-purple-300",
+  cyan:   "bg-cyan-500/15 text-cyan-700 border-cyan-500/30 hover:bg-cyan-500/20 dark:text-cyan-300",
+  teal:   "bg-teal-500/15 text-teal-700 border-teal-500/30 hover:bg-teal-500/20 dark:text-teal-300",
+  pink:   "bg-pink-500/15 text-pink-700 border-pink-500/30 hover:bg-pink-500/20 dark:text-pink-300",
+  slate:  "bg-slate-500/15 text-slate-700 border-slate-500/30 hover:bg-slate-500/20 dark:text-slate-300",
+  brand:  "bg-primary/15 text-primary border-primary/30 hover:bg-primary/20",
+  muted:  "bg-muted text-muted-foreground border-border hover:bg-muted/70",
+};
+
+/** Solid dot color — for "● Label" patterns inside selects, lists, chips. */
+export const TONE_DOT: Record<ChipTone, string> = {
+  blue:   "bg-blue-500",
+  green:  "bg-green-500",
+  amber:  "bg-amber-500",
+  red:    "bg-red-500",
+  purple: "bg-purple-500",
+  cyan:   "bg-cyan-500",
+  teal:   "bg-teal-500",
+  pink:   "bg-pink-500",
+  slate:  "bg-slate-500",
+  brand:  "bg-primary",
+  muted:  "bg-muted-foreground/40",
+};

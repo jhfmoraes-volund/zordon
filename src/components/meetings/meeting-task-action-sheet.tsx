@@ -36,7 +36,6 @@ type Task = {
   scope: string;
   complexity: string;
   priority: number;
-  acceptanceCriteria: string | null;
   notes: string | null;
   dueDate: string | null;
   projectId: string;
@@ -544,14 +543,6 @@ function CreateUpdateForm({
         />
       </div>
 
-      <div className="grid gap-2">
-        <Label>Critérios de aceitação</Label>
-        <Textarea
-          value={get<string>("acceptanceCriteria") ?? ""}
-          onChange={(e) => set("acceptanceCriteria", e.target.value)}
-          rows={3}
-        />
-      </div>
     </div>
   );
 }
