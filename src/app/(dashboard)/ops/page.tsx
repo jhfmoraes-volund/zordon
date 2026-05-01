@@ -12,6 +12,7 @@ import { AlphaBadge } from "@/components/alpha-chat/alpha-badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { UIMessage } from "ai";
+import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 
 type Thread = {
   id: string;
@@ -152,13 +153,20 @@ export default function OpsPage() {
   const handleDeleteThread = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Apagar esta conversa?")) return;
-    const res = await fetch(`/api/agents/alpha/threads/${id}`, { method: "DELETE" });
-    if (!res.ok) return;
+    const snapshot = threads;
+    setThreads((prev) => prev.filter((t) => t.id !== id));
     if (id === threadId) {
       setThreadId(null);
       chat.setMessages([]);
     }
-    refreshThreads();
+    try {
+      await fetchOrThrow(`/api/agents/alpha/threads/${id}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      setThreads(snapshot);
+      showErrorToast(err, { label: "Falha ao apagar conversa" });
+    }
   };
 
   // Threads list — rendered inline as <aside> on desktop and inside a Sheet on mobile.

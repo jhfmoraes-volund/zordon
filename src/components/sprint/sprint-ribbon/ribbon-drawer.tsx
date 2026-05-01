@@ -29,7 +29,6 @@ type Props = {
   sprint: Sprint;
   /** All sprints (for the timeline in "info"). */
   sprints: Sprint[];
-  activeSprintId: string | null;
   tasks: Task[];
   members: Member[];
   capacities: SprintMemberCapacity[];
@@ -47,7 +46,6 @@ type Props = {
 export function RibbonDrawer({
   sprint,
   sprints,
-  activeSprintId,
   tasks,
   members,
   capacities,
@@ -84,7 +82,7 @@ export function RibbonDrawer({
           <InfoPanel
             sprints={sprints}
             tasks={tasks}
-            activeSprintId={activeSprintId}
+            focusedSprintId={sprint.id}
             onSelectSprint={onSelectSprint}
           />
         ) : openTab === "vitais" ? (
@@ -116,12 +114,12 @@ export function RibbonDrawer({
 function InfoPanel({
   sprints,
   tasks,
-  activeSprintId,
+  focusedSprintId,
   onSelectSprint,
 }: {
   sprints: Sprint[];
   tasks: Task[];
-  activeSprintId: string | null;
+  focusedSprintId: string | null;
   onSelectSprint?: (id: string) => void;
 }) {
   const stats = useMemo(() => projectStats(sprints, tasks), [sprints, tasks]);
@@ -131,7 +129,7 @@ function InfoPanel({
       <SprintTimeline
         sprints={sprints}
         tasks={tasks}
-        activeId={activeSprintId}
+        activeId={focusedSprintId}
         onSelect={(id) => onSelectSprint?.(id)}
       />
     </div>

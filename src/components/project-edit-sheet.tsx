@@ -16,6 +16,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { roleLabel } from "@/lib/roles";
+import { showErrorToast } from "@/lib/optimistic/toast";
 
 type ClientOption = { id: string; name: string };
 type MemberOption = { id: string; name: string; role: string };
@@ -134,7 +135,9 @@ export function ProjectEditSheet({
         .update(projectData)
         .eq("id", project.id);
       if (pErr) {
-        alert(`Falha ao salvar: ${pErr.message}`);
+        showErrorToast(new Error(pErr.message), {
+          label: "Falha ao salvar projeto",
+        });
         return;
       }
 

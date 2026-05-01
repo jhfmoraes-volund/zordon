@@ -20,6 +20,7 @@ import {
 } from "@/lib/task-constants";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ACTION_TYPE, lookupChip } from "@/lib/status-chips";
+import { showErrorToast } from "@/lib/optimistic/toast";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -178,7 +179,7 @@ function Body({ action, meetingId, projectId, onChange, onOpenChange }: MeetingT
       onOpenChange(false);
     } catch (e) {
       console.error("decide failed:", e);
-      alert("Falha ao registrar decisão.");
+      showErrorToast(e, { label: "Falha ao registrar decisão" });
     } finally {
       setBusy(false);
     }

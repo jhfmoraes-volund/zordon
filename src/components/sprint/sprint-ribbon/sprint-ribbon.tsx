@@ -172,7 +172,6 @@ export function SprintRibbon({
       <RibbonDrawer
         sprint={sprint}
         sprints={sprints}
-        activeSprintId={activeSprintId}
         tasks={tasks}
         members={members}
         capacities={capacities}

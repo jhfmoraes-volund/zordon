@@ -30,6 +30,7 @@ import {
   MEETING_STATUS, MEETING_TYPE, HEALTH, ACTION_ITEM_STATUS, lookupChip,
   meetingStatusFromDate,
 } from "@/lib/status-chips";
+import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -213,49 +214,96 @@ export default function MeetingDetailPage({
   // ─── Handlers ─────────────────────────────────────────
 
   const saveNotes = async () => {
-    await fetch(`/api/meetings/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes }),
-    });
+    try {
+      await fetchOrThrow(`/api/meetings/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao salvar notas" });
+    }
   };
 
   const updateReview = async (reviewId: string, data: Partial<ProjectReview>) => {
-    await fetch(`/api/meetings/${id}/reviews/${reviewId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
+    try {
+      await fetchOrThrow(`/api/meetings/${id}/reviews/${reviewId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao salvar review" });
+    }
   };
 
   const cycleActionStatus = async (action: ActionItem) => {
     const nextStatus = actionStatusCycle[action.status];
-    await fetch(`/api/meetings/${id}/actions/${action.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus }),
-    });
-    load();
+    setMeeting((cur) =>
+      cur
+        ? {
+            ...cur,
+            actionItems: cur.actionItems.map((a) =>
+              a.id === action.id ? { ...a, status: nextStatus } : a,
+            ),
+          }
+        : cur,
+    );
+    try {
+      await fetchOrThrow(`/api/meetings/${id}/actions/${action.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+    } catch (e) {
+      setMeeting((cur) =>
+        cur
+          ? {
+              ...cur,
+              actionItems: cur.actionItems.map((a) =>
+                a.id === action.id ? { ...a, status: action.status } : a,
+              ),
+            }
+          : cur,
+      );
+      showErrorToast(e, { label: "Falha ao atualizar status" });
+    }
   };
 
   const deleteAction = async (actionId: string) => {
-    await fetch(`/api/meetings/${id}/actions/${actionId}`, { method: "DELETE" });
-    load();
+    const snapshot = meeting?.actionItems ?? [];
+    setMeeting((cur) =>
+      cur
+        ? { ...cur, actionItems: cur.actionItems.filter((a) => a.id !== actionId) }
+        : cur,
+    );
+    try {
+      await fetchOrThrow(`/api/meetings/${id}/actions/${actionId}`, {
+        method: "DELETE",
+      });
+    } catch (e) {
+      setMeeting((cur) => (cur ? { ...cur, actionItems: snapshot } : cur));
+      showErrorToast(e, { label: "Falha ao remover action item" });
+    }
   };
 
   const createAction = async () => {
-    await fetch(`/api/meetings/${id}/actions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        description: actionForm.description,
-        assigneeId: actionForm.assigneeId,
-        dueDate: actionForm.dueDate || null,
-        sourceReviewId: actionForm.sourceReviewId || null,
-      }),
-    });
     setActionDialogOpen(false);
     setActionForm({ description: "", assigneeId: "", dueDate: "", sourceReviewId: "" });
+    try {
+      await fetchOrThrow(`/api/meetings/${id}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: actionForm.description,
+          assigneeId: actionForm.assigneeId,
+          dueDate: actionForm.dueDate || null,
+          sourceReviewId: actionForm.sourceReviewId || null,
+        }),
+      });
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao criar action item" });
+    }
     load();
   };
 

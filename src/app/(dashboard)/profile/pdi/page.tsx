@@ -37,6 +37,7 @@ import {
   ACTION_STATUSES,
   type ActionStatus,
 } from "@/lib/pdiCycles";
+import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 
 type PdiAction = {
   id: string;
@@ -94,18 +95,49 @@ export default function PdiPage() {
       action.status === "done" ? "in_progress" :
       action.status === "pending" ? "in_progress" :
       action.status === "in_progress" ? "done" : "pending";
-    await fetch(`/api/profile/pdi/actions/${action.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: next }),
-    });
-    load();
+    setData((cur) =>
+      cur
+        ? {
+            ...cur,
+            actions: cur.actions.map((a) =>
+              a.id === action.id ? { ...a, status: next } : a,
+            ),
+          }
+        : cur,
+    );
+    try {
+      await fetchOrThrow(`/api/profile/pdi/actions/${action.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+    } catch (e) {
+      setData((cur) =>
+        cur
+          ? {
+              ...cur,
+              actions: cur.actions.map((a) =>
+                a.id === action.id ? { ...a, status: action.status } : a,
+              ),
+            }
+          : cur,
+      );
+      showErrorToast(e, { label: "Falha ao atualizar status" });
+    }
   };
 
   const remove = async (id: string) => {
     if (!confirm("Remover essa ação do PDI?")) return;
-    await fetch(`/api/profile/pdi/actions/${id}`, { method: "DELETE" });
-    load();
+    const snapshot = data?.actions ?? [];
+    setData((cur) =>
+      cur ? { ...cur, actions: cur.actions.filter((a) => a.id !== id) } : cur,
+    );
+    try {
+      await fetchOrThrow(`/api/profile/pdi/actions/${id}`, { method: "DELETE" });
+    } catch (e) {
+      setData((cur) => (cur ? { ...cur, actions: snapshot } : cur));
+      showErrorToast(e, { label: "Falha ao remover ação" });
+    }
   };
 
   if (error) return <p className="p-6 text-sm text-red-600">{error}</p>;

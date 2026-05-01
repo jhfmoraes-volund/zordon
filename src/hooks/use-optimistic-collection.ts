@@ -7,7 +7,6 @@ import {
   removeManyById,
   patchById,
   patchManyById,
-  replaceTempId,
 } from "@/lib/optimistic/reconcile";
 import { showErrorToast, withServerRetry } from "@/lib/optimistic/toast";
 
@@ -66,7 +65,7 @@ const baseReducerTypeMap = {
   external_update: 1,
 } as const;
 
-export type MutateOptions<T extends WithId, X, R> = {
+export type MutateOptions<T extends WithId, R> = {
   reconcile?: (prev: T[], result: R) => T[];
   errorLabel: string;
   retry?: boolean;
@@ -75,7 +74,7 @@ export type MutateOptions<T extends WithId, X, R> = {
 export type Mutate<T extends WithId, X> = <R>(
   mutation: AnyMutation<T, X>,
   persist: (signal: AbortSignal) => Promise<R>,
-  options: MutateOptions<T, X, R>,
+  options: MutateOptions<T, R>,
 ) => Promise<R | null>;
 
 export type UseOptimisticCollection<T extends WithId, X> = {
@@ -92,6 +91,14 @@ type Reducer<T extends WithId, X> = (
   m: AnyMutation<T, X>,
 ) => T[];
 
+function keyForMutation(m: { type?: string; id?: string }): string {
+  if (m.type === "bulkPatch" || m.type === "bulkDelete") {
+    return `bulk:${m.type}`;
+  }
+  if (m.id) return `${m.type}:${m.id}`;
+  return `m:${m.type ?? "unknown"}`;
+}
+
 export function useOptimisticCollection<T extends WithId, X = never>(
   initial: T[],
   reducer: Reducer<T, X> = baseReducer as Reducer<T, X>,
@@ -107,18 +114,9 @@ export function useOptimisticCollection<T extends WithId, X = never>(
     controllers.current.delete(key);
   }, []);
 
-  const keyFor = (m: AnyMutation<T, X>): string => {
-    const any = m as { type?: string; id?: string; ids?: string[] };
-    if (any.type === "bulkPatch" || any.type === "bulkDelete") {
-      return `bulk:${any.type}`;
-    }
-    if (any.id) return `${any.type}:${any.id}`;
-    return `m:${any.type ?? "unknown"}`;
-  };
-
   const mutate: Mutate<T, X> = useCallback(
     async (mutation, persist, options) => {
-      const key = keyFor(mutation);
+      const key = keyForMutation(mutation as { type?: string; id?: string });
       controllers.current.get(key)?.abort();
       const ctrl = new AbortController();
       controllers.current.set(key, ctrl);

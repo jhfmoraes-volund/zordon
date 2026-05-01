@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { MeetingTaskActionSheet, type MeetingTaskAction } from "./meeting-task-action-sheet";
+import { toast } from "sonner";
+import { showErrorToast } from "@/lib/optimistic/toast";
 
 type Project = { id: string; name: string };
 type Sprint = { id: string; name: string; status: string };
@@ -126,11 +128,14 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
       if (!res.ok) throw new Error(data?.error ?? "erro");
       await load();
       if (data.inserted === 0) {
-        alert("IA não retornou sugestões com confiança suficiente.");
+        showErrorToast(
+          new Error("IA não retornou sugestões com confiança suficiente."),
+          { label: "Sugestões" },
+        );
       }
     } catch (e) {
       console.error("suggest failed:", e);
-      alert("Falha ao gerar sugestões. Veja o console.");
+      showErrorToast(e, { label: "Falha ao gerar sugestões" });
     } finally {
       setSuggesting(false);
     }
@@ -147,11 +152,11 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "erro");
       const msg = `Aplicado: ${data.applied} | Falhas: ${data.failed} | Pulado: ${data.skipped}`;
-      alert(msg);
+      toast.success(msg);
       await load();
     } catch (e) {
       console.error("apply failed:", e);
-      alert("Falha ao aplicar.");
+      showErrorToast(e, { label: "Falha ao aplicar" });
     } finally {
       setApplying(false);
     }
@@ -354,7 +359,7 @@ function ActionRow({
       onChange();
     } catch (e) {
       console.error("decide failed:", e);
-      alert("Falha ao decidir.");
+      showErrorToast(e, { label: "Falha ao decidir" });
     } finally {
       setBusy(false);
     }
@@ -468,7 +473,7 @@ function NewActionDialog({
       onCreated(data);
     } catch (e) {
       console.error("create action failed:", e);
-      alert("Falha ao criar ação.");
+      showErrorToast(e, { label: "Falha ao criar ação" });
     } finally {
       setBusy(false);
     }

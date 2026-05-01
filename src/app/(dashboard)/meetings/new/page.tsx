@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, X } from "lucide-react";
+import { showErrorToast } from "@/lib/optimistic/toast";
 
 type Member = { id: string; name: string; role: string };
 type Project = { id: string; name: string; status: string };
@@ -163,14 +164,14 @@ export default function NewMeetingPage() {
           const parsed = JSON.parse(err);
           if (parsed?.error) msg = parsed.error;
         } catch {}
-        alert(msg);
+        showErrorToast(new Error(msg), { label: "Criar reunião" });
         return;
       }
       const meeting = await res.json();
       router.push(`/meetings/${meeting.id}`);
     } catch (e) {
       console.error("Erro ao criar reunião:", e);
-      alert("Erro ao criar reunião.");
+      showErrorToast(e, { label: "Criar reunião" });
     } finally {
       setSaving(false);
     }

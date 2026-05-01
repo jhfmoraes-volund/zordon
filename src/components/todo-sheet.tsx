@@ -10,6 +10,7 @@ import { Trash2, Calendar, FileText, Link2 } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
+import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -135,17 +136,20 @@ function TodoSheetBody({
   const patch = useCallback(
     async (changes: Partial<{ description: string; status: Status; dueDate: string | null }>) => {
       if (!todo) return;
-      // Optimistic
-      setTodo((prev) => (prev ? { ...prev, ...changes } as Todo : prev));
-      const res = await fetch(`/api/profile/todos/${todo.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(changes),
-      });
-      if (res.ok) {
+      const previous = todo;
+      setTodo((prev) => (prev ? ({ ...prev, ...changes } as Todo) : prev));
+      try {
+        const res = await fetchOrThrow(`/api/profile/todos/${todo.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(changes),
+        });
         const fresh = (await res.json()) as Todo;
         setTodo(fresh);
         onChange?.();
+      } catch (e) {
+        setTodo(previous);
+        showErrorToast(e, { label: "Falha ao salvar to-do" });
       }
     },
     [todo, onChange],
@@ -189,10 +193,13 @@ function TodoSheetBody({
       return;
     }
     if (!confirm("Remover esta To-do?")) return;
-    const res = await fetch(`/api/profile/todos/${todo.id}`, { method: "DELETE" });
-    if (res.ok) {
+    onClose();
+    onChange?.();
+    try {
+      await fetchOrThrow(`/api/profile/todos/${todo.id}`, { method: "DELETE" });
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao remover to-do" });
       onChange?.();
-      onClose();
     }
   };
 

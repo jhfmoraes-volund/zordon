@@ -15,6 +15,7 @@ import {
   TaskSheetInner,
   type TaskTag,
 } from "@/components/story-hierarchy";
+import { showErrorToast } from "@/lib/optimistic/toast";
 import {
   adaptMember,
   adaptModule,
@@ -246,7 +247,9 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
         })
         .eq("id", updated.__id);
       if (error) {
-        alert(`Falha ao salvar task: ${error.message}`);
+        showErrorToast(new Error(error.message), {
+          label: "Falha ao salvar task",
+        });
         return;
       }
 
@@ -299,7 +302,9 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
         .update({ sprintId, updatedAt: new Date().toISOString() })
         .eq("id", ctx.task.__id);
       if (error) {
-        alert(`Falha ao atualizar sprint: ${error.message}`);
+        showErrorToast(new Error(error.message), {
+          label: "Falha ao atualizar sprint",
+        });
         return;
       }
       await refreshTask();
@@ -317,7 +322,9 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
         .delete()
         .eq("taskId", taskId);
       if (delErr) {
-        alert(`Falha ao limpar assignment: ${delErr.message}`);
+        showErrorToast(new Error(delErr.message), {
+          label: "Falha ao limpar assignment",
+        });
         return;
       }
       if (memberIds.length > 0) {
@@ -329,7 +336,9 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
           })),
         );
         if (insErr) {
-          alert(`Falha ao atribuir: ${insErr.message}`);
+          showErrorToast(new Error(insErr.message), {
+            label: "Falha ao atribuir",
+          });
           return;
         }
       }
@@ -375,7 +384,9 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
         body: JSON.stringify({ tagIds }),
       });
       if (!res.ok) {
-        alert("Falha ao atualizar tags");
+        showErrorToast(new Error("Falha ao atualizar tags"), {
+          label: "Tags",
+        });
         return;
       }
       await refreshTask();

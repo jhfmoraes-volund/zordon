@@ -16,6 +16,8 @@ import {
   MEETING_STATUS, MEETING_TYPE, lookupChip, meetingStatusFromDate,
 } from "@/lib/status-chips";
 import { Trash2 } from "lucide-react";
+import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { fetchOrThrow } from "@/lib/optimistic/toast";
 
 type Meeting = {
   id: string;
@@ -109,7 +111,10 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
 }
 
 export default function MeetingsPage() {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const meetingsCollection = useOptimisticCollection<Meeting>([]);
+  const meetings = meetingsCollection.items;
+  const setMeetings = meetingsCollection.setCommitted;
+  const meetingMutate = meetingsCollection.mutate;
   const [typeFilter, setTypeFilter] = useState<"all" | "pm_review" | "general" | "daily" | "super_planning">("all");
   const [pmFilter, setPmFilter] = useState<string>("all");
   const router = useRouter();
@@ -131,8 +136,20 @@ export default function MeetingsPage() {
 
   const remove = async (id: string) => {
     if (!confirm("Remover esta reunião?")) return;
-    await fetch(`/api/meetings/${id}`, { method: "DELETE" });
-    load();
+    await meetingMutate(
+      { type: "delete", id },
+      async (signal) => {
+        const res = await fetchOrThrow(`/api/meetings/${id}`, {
+          method: "DELETE",
+          signal,
+        });
+        return (await res.json().catch(() => ({}))) as { ok?: true };
+      },
+      {
+        errorLabel: "Falha ao remover reunião",
+        reconcile: (prev) => prev.filter((m) => m.id !== id),
+      },
+    );
   };
 
   const fmtDate = (d: string) =>
