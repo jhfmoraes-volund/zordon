@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TaskSheet } from "@/components/task-sheet";
+import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
 import { ArrowLeft, BookOpen, CheckCircle2, Loader2, Rocket } from "lucide-react";
 import {
   SCOPES, COMPLEXITIES, fmtDate,
@@ -316,13 +316,10 @@ export default function ReviewPage({
         </p>
       )}
 
-      <TaskSheet
+      <TaskSheetByRef
         taskId={openTaskId}
-        open={openTaskId !== null}
-        onOpenChange={(open) => {
-          if (!open) setOpenTaskId(null);
-        }}
-        onChange={load}
+        onClose={() => setOpenTaskId(null)}
+        onAfterChange={load}
       />
     </div>
   );

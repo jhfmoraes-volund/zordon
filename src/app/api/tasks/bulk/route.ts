@@ -99,7 +99,11 @@ export async function PATCH(req: NextRequest) {
   if (body.action === "delete") {
     const { error } = await supabase.from("Task").delete().in("id", allowedIds);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, count: allowedIds.length });
+    return NextResponse.json({
+      ok: true,
+      count: allowedIds.length,
+      ids: allowedIds,
+    });
   }
 
   // ─── action = "update" ─────────────────────────────────────
@@ -269,6 +273,8 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     count: allowedIds.length,
+    ids: allowedIds,
     skippedDueToLimit,
+    updatedAt: new Date().toISOString(),
   });
 }

@@ -198,7 +198,7 @@ function Breadcrumb({
 
 // ─── Inner: always-editable task body ────────────────────────────────────────
 
-function TaskSheetInner({
+export function TaskSheetInner({
   task,
   stories,
   modules,
@@ -304,27 +304,32 @@ function TaskSheetInner({
               modules={modules}
               onOpenStory={onOpenStory}
             />
-            <ResponsiveSheetTitle className="text-[1.4375rem]">
-              <Textarea
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => persistIfChanged("title", title)}
-                rows={1}
-                className="block w-full resize-none border-0 bg-transparent px-0 py-0 text-[1.4375rem] font-semibold leading-snug shadow-none focus-visible:ring-0 min-h-0 field-sizing-content dark:bg-transparent"
-                placeholder="Título da task"
-              />
+            <ResponsiveSheetTitle className="sr-only">
+              {title || "Título da task"}
             </ResponsiveSheetTitle>
-            <div className="flex flex-wrap items-center gap-2 text-[10px]">
-              <Badge variant="outline">{task.scope} · {task.complexity}</Badge>
-              <Badge variant="outline" className="font-mono">
-                {task.functionPoints} FP
-              </Badge>
-              {task.createdByAgent ? (
+            <textarea
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => persistIfChanged("title", title)}
+              rows={1}
+              className="block w-full resize-none bg-transparent font-heading font-semibold leading-snug text-foreground outline-none placeholder:text-muted-foreground field-sizing-content"
+              style={{
+                border: 0,
+                margin: 0,
+                padding: 0,
+                boxShadow: "none",
+                minHeight: 0,
+                fontSize: "1.322rem",
+              }}
+              placeholder="Título da task"
+            />
+            {task.createdByAgent ? (
+              <div className="flex items-center text-[10px]">
                 <span className="ml-auto inline-flex items-center gap-1 uppercase tracking-wider text-muted-foreground">
                   <Sparkles className="size-3" /> Alpha
                 </span>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </div>
           <Button
             size="icon-sm"

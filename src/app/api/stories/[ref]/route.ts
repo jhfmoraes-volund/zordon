@@ -107,7 +107,7 @@ export async function DELETE(
 
   try {
     await deleteStory(story.id);
-    return new NextResponse(null, { status: 204 });
+    return NextResponse.json({ ok: true, id: story.id, reference: ref });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "delete failed";
     return NextResponse.json({ error: msg }, { status: 500 });

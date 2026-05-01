@@ -80,7 +80,7 @@ export async function DELETE(
 
   try {
     await deleteAc(acId);
-    return new NextResponse(null, { status: 204 });
+    return NextResponse.json({ ok: true, id: acId });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "delete failed";
     return NextResponse.json({ error: msg }, { status: 500 });

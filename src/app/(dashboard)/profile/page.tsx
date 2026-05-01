@@ -29,6 +29,7 @@ import { PixelBar, PixelDot, pixelBarLabel, PixelHud, pixelTone } from "@/compon
 import { MemberBattery } from "@/components/member-battery";
 import { PdiWidget } from "@/components/pdi-widget";
 import { TodosWidget } from "@/components/todos-widget";
+import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
 import { bucketSprintsByWeek, type SprintInput } from "@/lib/weekBuckets";
 import { OPEN_STATUSES } from "@/lib/function-points";
 
@@ -106,6 +107,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [skillsSummary, setSkillsSummary] = useState<SkillsSummary | null>(null);
   const [capacity, setCapacity] = useState<CapacitySummary | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   const FETCH_STATUSES = [...OPEN_STATUSES, "backlog"];
 
@@ -341,9 +343,7 @@ export default function ProfilePage() {
                     <TableRow
                       key={t.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => {
-                        window.location.href = `/projects/${t.projectId}?tab=tasks&task=${t.reference}`;
-                      }}
+                      onClick={() => setOpenTaskId(t.id)}
                     >
                       <TableCell className="font-mono text-xs text-primary">
                         {t.reference}
@@ -441,6 +441,11 @@ export default function ProfilePage() {
         <PdiWidget />
       </div>
 
+      <TaskSheetByRef
+        taskId={openTaskId}
+        onClose={() => setOpenTaskId(null)}
+        onAfterChange={reload}
+      />
     </div>
   );
 }

@@ -43,7 +43,7 @@ export { StoriesList } from "./stories-list";
 export { StorySheet } from "./story-sheet";
 export type { StoryCreateInput } from "./story-sheet";
 export { TasksList } from "./tasks-list";
-export { TaskSheet } from "./task-sheet";
+export { TaskSheet, TaskSheetInner } from "./task-sheet";
 export type { TaskCreateInput } from "./task-sheet";
 export { TaskRowMenu } from "./task-row-menu";
 export { TaskDuplicateDialog } from "./task-duplicate-dialog";

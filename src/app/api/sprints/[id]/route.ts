@@ -31,5 +31,5 @@ export async function DELETE(
   const { id } = await params;
   const { error } = await db().from("Sprint").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, id });
 }

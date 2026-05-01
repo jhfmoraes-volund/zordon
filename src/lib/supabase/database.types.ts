@@ -3614,6 +3614,26 @@ export type Database = {
         }
         Returns: undefined
       }
+      task_acceptance_bulk_diff: {
+        Args: { p_payload: Json; p_task_id: string }
+        Returns: {
+          checkedAt: string | null
+          checkedBy: string | null
+          createdAt: string
+          id: string
+          order: number
+          taskId: string | null
+          text: string
+          updatedAt: string
+          userStoryId: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "AcceptanceCriterion"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       unassigned_active_task_count: { Args: never; Returns: number }
     }
     Enums: {
@@ -3747,3 +3767,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
