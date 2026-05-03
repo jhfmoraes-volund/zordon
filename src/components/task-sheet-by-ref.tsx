@@ -134,7 +134,7 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
         .order("name"),
       supabase
         .from("ProjectMember")
-        .select("member:Member!ProjectMember_memberId_fkey(id, name, role)")
+        .select("member:Member!ProjectMember_memberId_fkey(id, name, role, position)")
         .eq("projectId", projectId),
     ]);
 
@@ -222,16 +222,16 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
   const handleSave = useCallback(
     async (updated: AdaptedTask) => {
       if (!ctx) return;
-      const before = ctx.task;
       const userStoryId =
         updated.userStoryRef === null
           ? null
           : ctx.stories.find((s) => s.reference === updated.userStoryRef)?.__id ??
             null;
 
-      const { error } = await supabase
-        .from("Task")
-        .update({
+      const res = await fetch(`/api/tasks/${updated.__id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           title: updated.title,
           description: updated.description,
           notes: updated.notes,
@@ -244,72 +244,63 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
           dueDate: updated.dueDate,
           userStoryId,
           updatedAt: new Date().toISOString(),
-        })
-        .eq("id", updated.__id);
-      if (error) {
-        showErrorToast(new Error(error.message), {
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showErrorToast(new Error(err.error || "Falha ao salvar task"), {
           label: "Falha ao salvar task",
         });
         return;
       }
-
-      // ─── AC diff ────────────────────────────────────────────────────────
-      const beforeMap = new Map(before.acceptanceCriteria.map((ac) => [ac.id, ac]));
-      const afterMap = new Map(updated.acceptanceCriteria.map((ac) => [ac.id, ac]));
-
-      for (const id of beforeMap.keys()) {
-        if (!afterMap.has(id)) {
-          await fetch(`/api/tasks/${updated.__id}/acceptance/${id}`, {
-            method: "DELETE",
-          });
-        }
-      }
-      for (const [id, after] of afterMap) {
-        if (id.startsWith("ac-new-")) {
-          await fetch(`/api/tasks/${updated.__id}/acceptance`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: after.text }),
-          });
-          continue;
-        }
-        const prev = beforeMap.get(id);
-        if (!prev) continue;
-        const textChanged = prev.text !== after.text;
-        const checkedChanged = prev.checked !== after.checked;
-        if (textChanged || checkedChanged) {
-          await fetch(`/api/tasks/${updated.__id}/acceptance/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...(textChanged ? { text: after.text } : {}),
-              ...(checkedChanged ? { checked: after.checked } : {}),
-            }),
-          });
-        }
-      }
-
-      await refreshTask();
+      // Reflect updated fields locally without a full refetch.
+      setCtx((cur) =>
+        cur
+          ? {
+              ...cur,
+              task: {
+                ...cur.task,
+                title: updated.title,
+                description: updated.description,
+                notes: updated.notes,
+                status: updated.status,
+                type: updated.type,
+                scope: updated.scope,
+                complexity: updated.complexity,
+                functionPoints: updated.functionPoints,
+                billable: updated.billable,
+                dueDate: updated.dueDate,
+                userStoryRef: updated.userStoryRef,
+              },
+            }
+          : cur,
+      );
+      onAfterChange?.();
     },
-    [ctx, supabase, refreshTask],
+    [ctx, onAfterChange],
   );
 
   const handleChangeSprint = useCallback(
     async (_taskRef: string, sprintId: string | null) => {
       if (!ctx) return;
-      const { error } = await supabase
-        .from("Task")
-        .update({ sprintId, updatedAt: new Date().toISOString() })
-        .eq("id", ctx.task.__id);
-      if (error) {
-        showErrorToast(new Error(error.message), {
+      const res = await fetch(`/api/tasks/${ctx.task.__id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sprintId,
+          updatedAt: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showErrorToast(new Error(err.error || "Falha ao atualizar sprint"), {
           label: "Falha ao atualizar sprint",
         });
         return;
       }
       await refreshTask();
     },
-    [ctx, supabase, refreshTask],
+    [ctx, refreshTask],
   );
 
   const handleChangeAssignees = useCallback(
@@ -317,34 +308,24 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
       if (!ctx) return;
       const taskId = ctx.task.__id;
 
-      const { error: delErr } = await supabase
-        .from("TaskAssignment")
-        .delete()
-        .eq("taskId", taskId);
-      if (delErr) {
-        showErrorToast(new Error(delErr.message), {
-          label: "Falha ao limpar assignment",
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assigneeIds: memberIds.map((memberId) => ({ memberId })),
+          updatedAt: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showErrorToast(new Error(err.error || "Falha ao atribuir"), {
+          label: "Falha ao atribuir",
         });
         return;
       }
-      if (memberIds.length > 0) {
-        const { error: insErr } = await supabase.from("TaskAssignment").insert(
-          memberIds.map((memberId) => ({
-            id: crypto.randomUUID(),
-            taskId,
-            memberId,
-          })),
-        );
-        if (insErr) {
-          showErrorToast(new Error(insErr.message), {
-            label: "Falha ao atribuir",
-          });
-          return;
-        }
-      }
       await refreshTask();
     },
-    [ctx, supabase, refreshTask],
+    [ctx, refreshTask],
   );
 
   const handleCreateTag = useCallback(
@@ -384,14 +365,178 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
         body: JSON.stringify({ tagIds }),
       });
       if (!res.ok) {
-        showErrorToast(new Error("Falha ao atualizar tags"), {
-          label: "Tags",
-        });
-        return;
+        const err = await res.json().catch(() => ({}));
+        const error = new Error(err.error || "Falha ao atualizar tags");
+        showErrorToast(error, { label: "Tags" });
+        throw error;
       }
-      await refreshTask();
+      const updated = (await res.json()) as Array<{
+        id: string;
+        name: string;
+        tone: string;
+      }>;
+      const tags: TaskTag[] = updated.map((t) => ({
+        id: t.id,
+        name: t.name,
+        tone: t.tone,
+      }));
+      setCtx((cur) =>
+        cur ? { ...cur, task: { ...cur.task, tags } } : cur,
+      );
+      onAfterChange?.();
     },
-    [ctx, refreshTask],
+    [ctx, onAfterChange],
+  );
+
+  // ─── AC granular handlers (optimistic apply via setCtx + rollback) ───────
+
+  function patchAcInCtx(updater: (acs: AdaptedTask["acceptanceCriteria"]) => AdaptedTask["acceptanceCriteria"]) {
+    setCtx((cur) =>
+      cur
+        ? {
+            ...cur,
+            task: {
+              ...cur.task,
+              acceptanceCriteria: updater(cur.task.acceptanceCriteria),
+            },
+          }
+        : cur,
+    );
+  }
+
+  const handleAcCreate = useCallback(
+    async (_taskRef: string, text: string, order: number) => {
+      if (!ctx) return;
+      const taskDbId = ctx.task.__id;
+      const tempId = `ac-tmp-${Date.now()}`;
+      const draftAc: AdaptedTask["acceptanceCriteria"][number] = {
+        id: tempId,
+        text,
+        checked: false,
+      };
+      patchAcInCtx((acs) => [...acs, draftAc]);
+      try {
+        const res = await fetch(`/api/tasks/${taskDbId}/acceptance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, order }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao criar critério");
+        }
+        const data = (await res.json()) as {
+          acceptance: { id: string; text: string; checkedAt: string | null };
+        };
+        patchAcInCtx((acs) =>
+          acs.map((a) =>
+            a.id === tempId
+              ? {
+                  id: data.acceptance.id,
+                  text: data.acceptance.text,
+                  checked: data.acceptance.checkedAt !== null,
+                }
+              : a,
+          ),
+        );
+        onAfterChange?.();
+      } catch (e) {
+        patchAcInCtx((acs) => acs.filter((a) => a.id !== tempId));
+        showErrorToast(e, { label: "Falha ao criar critério" });
+      }
+    },
+    [ctx, onAfterChange],
+  );
+
+  const handleAcUpdateText = useCallback(
+    async (_taskRef: string, acId: string, text: string) => {
+      if (!ctx) return;
+      const taskDbId = ctx.task.__id;
+      const prev = ctx.task.acceptanceCriteria.find((a) => a.id === acId);
+      if (!prev) return;
+      patchAcInCtx((acs) =>
+        acs.map((a) => (a.id === acId ? { ...a, text } : a)),
+      );
+      try {
+        const res = await fetch(
+          `/api/tasks/${taskDbId}/acceptance/${acId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          },
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao salvar critério");
+        }
+        onAfterChange?.();
+      } catch (e) {
+        patchAcInCtx((acs) =>
+          acs.map((a) => (a.id === acId ? { ...a, text: prev.text } : a)),
+        );
+        showErrorToast(e, { label: "Falha ao salvar critério" });
+      }
+    },
+    [ctx, onAfterChange],
+  );
+
+  const handleAcToggle = useCallback(
+    async (_taskRef: string, acId: string, checked: boolean) => {
+      if (!ctx) return;
+      const taskDbId = ctx.task.__id;
+      const prev = ctx.task.acceptanceCriteria.find((a) => a.id === acId);
+      if (!prev) return;
+      patchAcInCtx((acs) =>
+        acs.map((a) => (a.id === acId ? { ...a, checked } : a)),
+      );
+      try {
+        const res = await fetch(
+          `/api/tasks/${taskDbId}/acceptance/${acId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ checked }),
+          },
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao marcar critério");
+        }
+        onAfterChange?.();
+      } catch (e) {
+        patchAcInCtx((acs) =>
+          acs.map((a) => (a.id === acId ? { ...a, checked: prev.checked } : a)),
+        );
+        showErrorToast(e, { label: "Falha ao marcar critério" });
+      }
+    },
+    [ctx, onAfterChange],
+  );
+
+  const handleAcDelete = useCallback(
+    async (_taskRef: string, acId: string) => {
+      if (!ctx) return;
+      const taskDbId = ctx.task.__id;
+      const prev = ctx.task.acceptanceCriteria.find((a) => a.id === acId);
+      if (!prev) return;
+      patchAcInCtx((acs) => acs.filter((a) => a.id !== acId));
+      try {
+        const res = await fetch(
+          `/api/tasks/${taskDbId}/acceptance/${acId}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao remover critério");
+        }
+        onAfterChange?.();
+      } catch (e) {
+        patchAcInCtx((acs) => [...acs, prev]);
+        showErrorToast(e, { label: "Falha ao remover critério" });
+      }
+    },
+    [ctx, onAfterChange],
   );
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -420,6 +565,10 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
             onChangeAssignees={handleChangeAssignees}
             onCreateTag={handleCreateTag}
             onChangeTags={handleChangeTags}
+            onAcCreate={handleAcCreate}
+            onAcUpdateText={handleAcUpdateText}
+            onAcToggle={handleAcToggle}
+            onAcDelete={handleAcDelete}
           />
         )}
       </ResponsiveSheetContent>

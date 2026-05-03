@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getUser, getRealRole, requireMinLevelApi } from "@/lib/dal";
-import { MANAGER, hasMinLevel } from "@/lib/roles";
+import { MANAGER, hasMinLevel, type Role, roleLabel } from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { projectAccessInviteEmail, sendEmail } from "@/lib/email";
 
@@ -22,6 +22,11 @@ type AccessRow = {
   memberId: string | null;
   fpAllocation: number | null;
   grantedAt: string;
+  // Manager rows have implicit full access (is_manager() bypass) and are
+  // surfaced even without a ProjectAccess row. UI hides role-edit / revoke.
+  isManager: boolean;
+  managerRole: Role | null;
+  managerRoleLabel: string | null;
 };
 
 /**
@@ -38,6 +43,41 @@ export async function GET(
   const { id: projectId } = await params;
 
   const supabase = db();
+  const admin = createAdminClient();
+
+  // Pull every auth.user upfront — we need it twice: (1) name/email fallback
+  // for ProjectAccess rows, (2) finding all managers (pm/admin) to inject.
+  const { data: list, error: listErr } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 200,
+  });
+  if (listErr)
+    return NextResponse.json({ error: listErr.message }, { status: 500 });
+
+  const authMap = new Map<
+    string,
+    { email: string | null; name: string | null; role: Role | null }
+  >();
+  for (const u of list.users) {
+    const role =
+      ((u.app_metadata as { role?: string } | null)?.role as Role | undefined) ??
+      null;
+    authMap.set(u.id, {
+      email: u.email ?? null,
+      name:
+        (u.user_metadata as { name?: string } | null)?.name ?? null,
+      role,
+    });
+  }
+
+  const managerUserIds = list.users
+    .filter((u) =>
+      hasMinLevel(
+        (u.app_metadata as { role?: string } | null)?.role,
+        MANAGER,
+      ),
+    )
+    .map((u) => u.id);
 
   const { data: accessRows, error } = await supabase
     .from("ProjectAccess")
@@ -46,11 +86,19 @@ export async function GET(
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const userIds = (accessRows ?? []).map((r) => r.userId);
+  const accessByUser = new Map(
+    (accessRows ?? []).map((r) => [r.userId as string, r]),
+  );
+  const userIds = Array.from(
+    new Set([
+      ...(accessRows ?? []).map((r) => r.userId as string),
+      ...managerUserIds,
+    ]),
+  );
   if (userIds.length === 0) return NextResponse.json([] as AccessRow[]);
 
   // Member info (name, fpAllocation) keyed by userId.
-  const [{ data: members }, { data: pms }, admin] = await Promise.all([
+  const [{ data: members }, { data: pms }] = await Promise.all([
     supabase
       .from("Member")
       .select("id, name, email, userId")
@@ -59,23 +107,7 @@ export async function GET(
       .from("ProjectMember")
       .select("memberId, fpAllocation")
       .eq("projectId", projectId),
-    Promise.resolve(createAdminClient()),
   ]);
-
-  // auth.users for email/name fallback (guests don't have Member rows).
-  const authUsers = await Promise.all(
-    userIds.map((uid) => admin.auth.admin.getUserById(uid)),
-  );
-  const authMap = new Map<string, { email: string | null; name: string | null }>();
-  authUsers.forEach((res, idx) => {
-    if (res.data?.user) {
-      authMap.set(userIds[idx], {
-        email: res.data.user.email ?? null,
-        name:
-          (res.data.user.user_metadata as { name?: string } | null)?.name ?? null,
-      });
-    }
-  });
 
   const memberByUser = new Map(
     (members ?? []).map((m) => [m.userId as string, m]),
@@ -84,23 +116,33 @@ export async function GET(
     (pms ?? []).map((p) => [p.memberId as string, p.fpAllocation ?? 0]),
   );
 
-  const result: AccessRow[] = (accessRows ?? []).map((r) => {
-    const member = memberByUser.get(r.userId);
-    const auth = authMap.get(r.userId);
+  const result: AccessRow[] = userIds.map((uid) => {
+    const member = memberByUser.get(uid);
+    const auth = authMap.get(uid);
+    const access = accessByUser.get(uid);
+    const isManager = hasMinLevel(auth?.role, MANAGER);
     return {
-      userId: r.userId,
+      userId: uid,
       email: member?.email ?? auth?.email ?? null,
       name: member?.name ?? auth?.name ?? null,
-      role: r.role as AccessRole,
+      // Managers without ProjectAccess get a synthetic 'lead' for display only;
+      // UI hides the editable control for them anyway.
+      role: (access?.role as AccessRole | undefined) ?? "lead",
       isMember: !!member,
       memberId: member?.id ?? null,
       fpAllocation: member ? pmFp.get(member.id) ?? null : null,
-      grantedAt: r.grantedAt,
+      grantedAt: access?.grantedAt ?? new Date(0).toISOString(),
+      isManager,
+      managerRole: isManager ? auth?.role ?? null : null,
+      managerRoleLabel: isManager ? roleLabel(auth?.role) : null,
     };
   });
 
   result.sort((a, b) => {
-    if (a.isMember !== b.isMember) return a.isMember ? -1 : 1;
+    // Managers first, then other members, then guests.
+    const groupA = a.isManager ? 0 : a.isMember ? 1 : 2;
+    const groupB = b.isManager ? 0 : b.isMember ? 1 : 2;
+    if (groupA !== groupB) return groupA - groupB;
     return (a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? "");
   });
 

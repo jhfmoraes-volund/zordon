@@ -21,7 +21,7 @@ export async function GET(
   const [memberRes, assessmentRes, skillsRes] = await Promise.all([
     supabase
       .from("Member")
-      .select("id, name, role, specialty")
+      .select("id, name, role, position, specialty")
       .eq("id", id)
       .maybeSingle(),
     supabase

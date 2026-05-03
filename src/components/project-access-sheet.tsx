@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+} from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,6 +32,9 @@ type AccessRow = {
   memberId: string | null;
   fpAllocation: number | null;
   grantedAt: string;
+  isManager: boolean;
+  managerRole: string | null;
+  managerRoleLabel: string | null;
 };
 
 const ROLE_OPTIONS = [
@@ -131,13 +137,13 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
     }
   };
 
-  const members = rows.filter((r) => r.isMember);
-  const guests = rows.filter((r) => !r.isMember);
+  const members = rows.filter((r) => r.isMember || r.isManager);
+  const guests = rows.filter((r) => !r.isMember && !r.isManager);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-xl flex flex-col gap-0 p-0">
-        <div className="px-6 pt-6 pb-4 border-b">
+    <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+      <ResponsiveSheetContent size="md">
+        <div className="px-4 pt-2 pb-4 border-b sm:px-6 sm:pt-6">
           <h2 className="font-heading text-base font-medium">
             Acesso ao projeto
           </h2>
@@ -147,11 +153,11 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
           </p>
         </div>
 
-        <div className="px-6 py-4 border-b bg-muted/30 space-y-2">
+        <div className="px-4 py-4 border-b bg-muted/30 space-y-2 sm:px-6">
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Convidar
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               placeholder="email@empresa.com"
               value={inviteEmail}
@@ -159,25 +165,27 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
               type="email"
               className="flex-1"
             />
-            <Select
-              value={inviteRole}
-              onValueChange={(v) => setInviteRole(v as AccessRow["role"])}
-            >
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={invite} disabled={inviting}>
-              <UserPlus className="h-4 w-4 mr-1" />
-              Convidar
-            </Button>
+            <div className="flex gap-2">
+              <Select
+                value={inviteRole}
+                onValueChange={(v) => setInviteRole(v as AccessRow["role"])}
+              >
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={invite} disabled={inviting} className="flex-1 sm:flex-none">
+                <UserPlus className="h-4 w-4 mr-1" />
+                Convidar
+              </Button>
+            </div>
           </div>
           <div className="text-[11px] text-muted-foreground">
             Se a pessoa não tiver conta, criamos uma como guest e enviamos
@@ -185,7 +193,7 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 sm:px-6">
           {loading && (
             <div className="text-sm text-muted-foreground">Carregando…</div>
           )}
@@ -210,8 +218,8 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
             />
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }
 
@@ -251,59 +259,73 @@ function Section({
                     {r.email}
                   </div>
                 )}
-                {r.isMember &&
+                {r.isManager && r.managerRoleLabel && (
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    {r.managerRoleLabel} · acesso total
+                  </div>
+                )}
+                {!r.isManager &&
+                  r.isMember &&
                   r.fpAllocation === null &&
                   r.role === "viewer" && (
                     <div className="text-[11px] text-muted-foreground mt-0.5">
                       (desalocado — acesso histórico)
                     </div>
                   )}
-                {r.isMember && r.fpAllocation !== null && (
+                {!r.isManager && r.isMember && r.fpAllocation !== null && (
                   <div className="text-[11px] text-muted-foreground mt-0.5">
                     FP: {r.fpAllocation}
                   </div>
                 )}
               </div>
-              <Select
-                value={r.role}
-                onValueChange={(v) =>
-                  onRoleChange(r.userId, v as AccessRow["role"])
-                }
-              >
-                <SelectTrigger className="w-44 h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      <span className="flex flex-col items-start">
-                        <span>{opt.label}</span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {opt.hint}
-                        </span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="ghost" size="icon-sm">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => onRevoke(r.userId)}
-                    className="text-destructive"
+              {r.isManager ? (
+                <span className="text-xs text-muted-foreground px-2 py-1 rounded-md border bg-muted/40">
+                  {r.managerRoleLabel ?? "Manager"}
+                </span>
+              ) : (
+                <>
+                  <Select
+                    value={r.role}
+                    onValueChange={(v) =>
+                      onRoleChange(r.userId, v as AccessRow["role"])
+                    }
                   >
-                    <X className="h-4 w-4 mr-2" />
-                    Revogar acesso
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <SelectTrigger className="w-44 h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          <span className="flex flex-col items-start">
+                            <span>{opt.label}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {opt.hint}
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button variant="ghost" size="icon-sm">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => onRevoke(r.userId)}
+                        className="text-destructive"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Revogar acesso
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
             </div>
           ))}
         </div>

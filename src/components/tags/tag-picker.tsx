@@ -20,7 +20,7 @@ export type TagPickerOption = {
 export type TagPickerProps = {
   available: TagPickerOption[];
   selectedIds: string[];
-  onChange: (ids: string[]) => void;
+  onChange: (ids: string[]) => void | Promise<void>;
   /** When omitted, the picker becomes pure-selection (no "create" affordance
    *  in the dropdown, no random-tone generator). Useful for reusing this UI
    *  for fixed-set pickers like assignees. */
@@ -66,8 +66,30 @@ export function TagPicker({
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [colorMenuFor, setColorMenuFor] = React.useState<string | null>(null);
+  const [pendingIds, setPendingIds] = React.useState<string[] | null>(null);
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Reconcile: prop change wins over local optimistic state.
+  React.useEffect(() => {
+    setPendingIds(null);
+  }, [selectedIds]);
+
+  const effectiveIds = pendingIds ?? selectedIds;
+
+  const commit = React.useCallback(
+    (nextIds: string[]) => {
+      setPendingIds(nextIds);
+      void (async () => {
+        try {
+          await onChange(nextIds);
+        } catch {
+          setPendingIds(null);
+        }
+      })();
+    },
+    [onChange],
+  );
 
   React.useEffect(() => {
     if (!open) return;
@@ -101,10 +123,10 @@ export function TagPicker({
 
   const selected = React.useMemo(
     () =>
-      selectedIds
+      effectiveIds
         .map((id) => available.find((t) => t.id === id))
         .filter((t): t is TagPickerOption => Boolean(t)),
-    [selectedIds, available],
+    [effectiveIds, available],
   );
 
   const filtered = React.useMemo(() => {
@@ -126,11 +148,11 @@ export function TagPicker({
   const remaining = max - selected.length;
 
   function toggle(id: string) {
-    if (selectedIds.includes(id)) {
-      onChange(selectedIds.filter((s) => s !== id));
+    if (effectiveIds.includes(id)) {
+      commit(effectiveIds.filter((s) => s !== id));
     } else {
       if (atLimit) return;
-      onChange([...selectedIds, id]);
+      commit([...effectiveIds, id]);
     }
   }
 
@@ -142,7 +164,7 @@ export function TagPicker({
     const result = onCreate(name, tone);
     setQuery("");
     const created = result instanceof Promise ? await result : result;
-    onChange([...selectedIds, created.id]);
+    commit([...effectiveIds, created.id]);
   }
 
   const visible = selected.slice(0, triggerVisibleCount);
@@ -225,7 +247,7 @@ export function TagPicker({
             ) : null}
 
             {filtered.map((t) => {
-              const checked = selectedIds.includes(t.id);
+              const checked = effectiveIds.includes(t.id);
               const disabled = !checked && atLimit;
               return (
                 <div key={t.id} className="group relative">

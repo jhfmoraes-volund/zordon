@@ -33,7 +33,7 @@ export async function GET(
   ] = await Promise.all([
     supabase
       .from("Member")
-      .select("id, name, role, fpCapacity, seniority, dedicationPercent, isExternal")
+      .select("id, name, role, position, fpCapacity, seniority, dedicationPercent, isExternal")
       .eq("id", id)
       .maybeSingle(),
     supabase
@@ -115,6 +115,7 @@ export async function GET(
       id: member.id,
       name: member.name,
       role: member.role,
+      position: member.position,
       fpCapacity: member.fpCapacity,
       seniority: member.seniority,
       dedicationPercent: member.dedicationPercent,

@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireProjectViewApi } from "@/lib/dal";
-import { getActivityForTask } from "@/lib/dal/task-activity";
+import { getFeedForTask } from "@/lib/dal/task-feed";
+
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 50;
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = db();
 
-  const { data: task } = await supabase
+  const { data: task } = await db()
     .from("Task")
     .select("projectId")
     .eq("id", id)
@@ -22,6 +24,13 @@ export async function GET(
   const denied = await requireProjectViewApi(task.projectId);
   if (denied) return denied;
 
-  const activity = await getActivityForTask(id);
-  return NextResponse.json({ activity });
+  const sp = req.nextUrl.searchParams;
+  const before = sp.get("before") ?? undefined;
+  const limitParam = sp.get("limit");
+  const limit = limitParam
+    ? Math.min(MAX_LIMIT, Math.max(1, parseInt(limitParam, 10) || DEFAULT_LIMIT))
+    : DEFAULT_LIMIT;
+
+  const items = await getFeedForTask(id, { before, limit });
+  return NextResponse.json({ items });
 }

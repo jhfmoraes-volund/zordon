@@ -1,0 +1,136 @@
+{
+  "task": "Tornar a alteração de tags da TaskSheet otimista (sem aguardar roundtrip + refetch completo)",
+  "repo_root": "/Users/joaomoraes/projetos-ai-dev/Perke/perke/volund",
+  "branch_strategy": "Trabalhe direto em main. Commit final via `bash scripts/sync-main.sh -m \"ZRD-JM-NN: tags — otimista no TagPicker da TaskSheet\"` (o script auto-tagueia incremental).",
+  "context": {
+    "problem": "Hoje cada toggle de tag na TaskSheet (TagPicker) chama `onChange(ids)` → `handleChangeTags` faz `fetch PUT /api/tasks/[id]/tags` e aguarda; em seguida aguarda `refreshTask()` (refetch da task + AC). São ~2 roundtrips até a UI refletir, percebido como lento.",
+    "user_complaint": "‘a alteração de tags ficou meio lenta’",
+    "scope": "Reduzir latência percebida a zero (tag aparece/desaparece instantâneo, reconcilia em background, rollback com toast em erro). Não mudar API nem schema — só o caminho client.",
+    "non_goals": [
+      "Não tocar no endpoint /api/tasks/[id]/tags (ele já recebe o set inteiro e está OK).",
+      "Não mexer em outros pickers (assignees, sprint).",
+      "Não reescrever TagPicker como `useOptimisticCollection` por inteiro — manter API atual `selectedIds + onChange(ids)`. Otimismo fica DENTRO do TagPicker como estado-espelho com reconcile."
+    ]
+  },
+  "files_to_read_first": [
+    {
+      "path": "src/components/tags/tag-picker.tsx",
+      "why": "Componente alvo. Ler inteiro. Já controla `selectedIds` via prop; precisa virar híbrido (props como source-of-truth eventual + estado local otimista que adianta a UI)."
+    },
+    {
+      "path": "src/components/task-sheet-by-ref.tsx",
+      "why": "Onde mora `handleChangeTags` (linha ~375). Usa `fetch PUT /api/tasks/[id]/tags` + `await refreshTask()`. O refetch completo é o segundo roundtrip lento. Substituir por update local da `ctx.task.tags` (e dispensar `refreshTask` no caminho feliz)."
+    },
+    {
+      "path": "src/components/story-hierarchy/task-sheet.tsx",
+      "why": "Ver onde `<TagPicker available selectedIds onChange onCreate onChangeTags ...>` é renderizado (linha ~424 e ~852). Confirma o contrato atual."
+    },
+    {
+      "path": "src/app/api/tasks/[id]/tags/route.ts",
+      "why": "Endpoint PUT já retorna o set atualizado (`tags`) — usar essa resposta como reconcile, evita refetch."
+    },
+    {
+      "path": "src/hooks/use-optimistic-collection.ts",
+      "why": "Padrão de optimistic do projeto. Não usar como hook aqui (overkill, coleção é { ids: string[] }), mas seguir as convenções: rollback automático em erro, toast contextualizado via `showErrorToast` de `@/lib/optimistic/toast`."
+    },
+    {
+      "path": "src/lib/optimistic/toast.ts",
+      "why": "`showErrorToast` é o que `handleChangeTags` já usa. Manter mesma UX."
+    }
+  ],
+  "design_decision": {
+    "where_optimism_lives": "Dentro do TagPicker (estado local `pendingIds`). Razão: o componente é genérico e reutilizável; concentrar a regra ali evita repetir lógica em cada callsite. `onChange(ids)` continua sendo o contrato com o pai — só que invocado depois de já ter atualizado a UI local.",
+    "props_remain_source_of_truth": "Quando `selectedIds` (prop) muda (ex: pai reconciliou com resposta do server), o estado local `pendingIds` zera/sincroniza. Pattern: `useEffect(() => setPendingIds(null), [selectedIds])`.",
+    "rollback_strategy": "Se `onChange` for async e lançar/rejeitar, o TagPicker reverte automaticamente. Mudar a assinatura: `onChange?: (ids: string[]) => void | Promise<void>` (já é assim na TaskSheet — `onChangeTags` retorna `void | Promise<void>`).",
+    "remove_refetch": "No `handleChangeTags` do task-sheet-by-ref, depois do PUT bem-sucedido, atualizar `ctx.task.tags` localmente com a resposta do endpoint (que já vem ordenada e tipada). Eliminar `await refreshTask()` no caminho feliz. Em erro, fazer rollback manual + toast."
+  },
+  "execution_plan": [
+    {
+      "step": 1,
+      "title": "Estado otimista no TagPicker",
+      "files": ["src/components/tags/tag-picker.tsx"],
+      "instructions": [
+        "Adicionar estado local `pendingIds: string[] | null` (null = sem otimismo, usa prop direto).",
+        "`const effectiveIds = pendingIds ?? selectedIds` — usar em TODOS os lugares que hoje leem `selectedIds` (selected memo, atLimit, toggle, render). MENOS quando ler intenção do callsite (ex: array passado pra `onChange`).",
+        "`useEffect` que zera `pendingIds` quando `selectedIds` muda (reconcile do pai).",
+        "Reescrever `toggle(id)` para: (1) computar `nextIds` a partir de `effectiveIds`; (2) `setPendingIds(nextIds)`; (3) chamar `onChange(nextIds)`; (4) se `onChange` retornar Promise que rejeita, fazer `setPendingIds(null)` (rollback) — ENVOLVER com try/catch async dentro de uma IIFE para não quebrar o sync caller.",
+        "Mesma coisa em `handleCreate` (após `await onCreate`, somar o id criado em `pendingIds` antes do `onChange`).",
+        "Garantir que `onChange` continua sendo `(ids: string[]) => void | Promise<void>` — sem breaking change na API."
+      ],
+      "pseudo_code": "const [pendingIds, setPendingIds] = useState<string[] | null>(null);\nconst effectiveIds = pendingIds ?? selectedIds;\nuseEffect(() => { setPendingIds(null); }, [selectedIds]);\n\nasync function commit(nextIds: string[]) {\n  setPendingIds(nextIds);\n  try {\n    await onChange(nextIds);\n  } catch (e) {\n    setPendingIds(null); // rollback\n    throw e;\n  }\n}\n\nfunction toggle(id: string) {\n  const next = effectiveIds.includes(id)\n    ? effectiveIds.filter(s => s !== id)\n    : (atLimit ? null : [...effectiveIds, id]);\n  if (!next) return;\n  void commit(next);\n}"
+    },
+    {
+      "step": 2,
+      "title": "Eliminar refetch no caminho feliz do handleChangeTags",
+      "files": ["src/components/task-sheet-by-ref.tsx"],
+      "instructions": [
+        "Em `handleChangeTags`, parsear `await res.json()` (endpoint retorna o array de TaskTag atualizado, ordenado por nome).",
+        "Em vez de `await refreshTask()`, atualizar `ctx.task.tags` localmente via `setCtx(cur => cur ? ({ ...cur, task: { ...cur.task, tags: updated } }) : cur)`.",
+        "Em erro: PROPAGAR (lançar) para que o TagPicker faça rollback. O `showErrorToast` continua sendo chamado — ele já é compatível com Error.",
+        "Manter `onAfterChange?.()` se existir (avisa o pai pra atualizar a lista global, mas não bloqueia).",
+        "IMPORTANTE: tipo de `cur.task.tags` é `TaskTag[]` do adapter. A resposta do endpoint é `TaskTag[]` do DAL (`src/lib/dal/task-tags.ts`). Verificar shape — provavelmente compatível direto. Se não, usar mapper inline curto."
+      ],
+      "pseudo_code": "const handleChangeTags = useCallback(\n  async (_taskRef: string, tagIds: string[]) => {\n    if (!ctx) return;\n    const res = await fetch(`/api/tasks/${ctx.task.__id}/tags`, {\n      method: 'PUT',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ tagIds }),\n    });\n    if (!res.ok) {\n      const err = await res.json().catch(() => ({}));\n      const error = new Error(err.error || 'Falha ao atualizar tags');\n      showErrorToast(error, { label: 'Tags' });\n      throw error; // ← propaga para rollback no TagPicker\n    }\n    const updated = (await res.json()) as TaskTag[];\n    setCtx(cur => cur ? ({\n      ...cur,\n      task: { ...cur.task, tags: updated },\n    }) : cur);\n    onAfterChange?.();\n  },\n  [ctx, onAfterChange],\n);"
+    },
+    {
+      "step": 3,
+      "title": "Verificar segundo callsite do TagPicker",
+      "files": ["src/components/story-hierarchy/task-sheet.tsx"],
+      "instructions": [
+        "Tem dois `<TagPicker>` (linhas ~424 e ~852). Conferir que ambos respeitam o novo contrato (`onChange` pode lançar). O da linha ~852 provavelmente é o flow de criação (TaskSheetCreate) — passar lista local sem fetch, OK. Não mudar.",
+        "Garantir que o `onCreate` callback (linha ~428 do task-sheet.tsx, e o `handleCreateTag` no task-sheet-by-ref) continua compatível: ele retorna `Promise<TagPickerOption>`, não `void`."
+      ]
+    },
+    {
+      "step": 4,
+      "title": "Typecheck + lint",
+      "commands": [
+        "npx tsc --noEmit",
+        "npx eslint src/components/tags/tag-picker.tsx src/components/task-sheet-by-ref.tsx src/components/story-hierarchy/task-sheet.tsx"
+      ],
+      "expected": "Zero erros novos. Erros pré-existentes (any cast em fetchTask, prefer-const em iterationCounts, useEffect setState warning em task-sheet) podem permanecer."
+    },
+    {
+      "step": 5,
+      "title": "Teste manual",
+      "instructions": [
+        "Rodar `npm run dev`.",
+        "Abrir uma task na TaskSheet, clicar em uma tag não-selecionada → DEVE aparecer instantâneo no chip de cima (sem flash de loading).",
+        "Throttle network 3G no DevTools, repetir → tag aparece imediato; barra de loading do navegador continua → após retorno do servidor, fica estável.",
+        "Forçar erro: bloquear `/api/tasks/*/tags` no DevTools (block request URL) → toggle aparece, depois reverte + toast de erro.",
+        "Testar criação de tag nova: digite nome novo, Enter → tag entra otimista após o servidor responder a criação (criação ainda precisa do server pra ter id real)."
+      ]
+    }
+  ],
+  "edge_cases_to_handle": [
+    "Toggle rápido (3 cliques na mesma tag em 200ms): cada toggle reescreve `pendingIds`. Se cada `onChange` é uma chamada separada ao server, podem chegar fora de ordem. Aceitar isso como limitação conhecida — o `useEffect([selectedIds])` reconcilia quando o último response chega. NÃO implementar serialization de requests no TagPicker (overkill).",
+    "Limite de tags atingido com tags pendentes: `atLimit` é calculado de `effectiveIds.length`, então o limite respeita o estado otimista (correto).",
+    "Pai re-renderiza com `selectedIds` igual ao pendente: `useEffect` zera `pendingIds` (vira `null`), passa a usar prop. Sem flash visual porque os ids são iguais.",
+    "Pai re-renderiza com `selectedIds` diferente do pendente (ex: outro usuário mudou tags via realtime): `pendingIds` zera, UI reflete server. Aceitável.",
+    "`onChange` síncrono (callsite que não retorna Promise): `await onChange()` resolve imediato → não há rollback possível, otimismo é equivalente a estado direto. Sem regressão."
+  ],
+  "files_not_to_touch": [
+    "src/app/api/tasks/[id]/tags/route.ts (endpoint OK)",
+    "src/lib/dal/task-tags.ts (DAL OK)",
+    "src/lib/dal/task-activity-recorder.ts (recorder do feed OK)",
+    "src/hooks/use-optimistic-collection.ts (não usar pra esse caso)"
+  ],
+  "acceptance_criteria": [
+    "Clicar em tag → chip de cima atualiza em <16ms (próximo frame), antes de qualquer roundtrip.",
+    "Network throttle 3G → toggle continua instantâneo na UI.",
+    "Erro 500 forçado no endpoint → tag reverte + toast 'Falha ao atualizar tags'.",
+    "Criar tag nova ainda funciona (espera server pra ter id, mas seleção é otimista após criação).",
+    "Sem refetch de task/AC depois de toggle (verificar Network tab — só 1 request `PUT /tags`).",
+    "Typecheck zero erros novos.",
+    "Lint zero erros novos."
+  ],
+  "commit_message_template": "ZRD-JM-NN: tags — otimista no TagPicker (rollback em erro, sem refetch no happy path)",
+  "estimated_effort_hours": 0.7,
+  "notes_for_agent": [
+    "NÃO usar `useOptimisticCollection`. A coleção aqui é trivial (array de ids). O hook é pra coleções com `id` por item e reconcile por tempId — overkill.",
+    "NÃO criar arquivo novo. Tudo dentro de `tag-picker.tsx` + `task-sheet-by-ref.tsx`.",
+    "NÃO adicionar comentários explicando o quê. Os identificadores (`pendingIds`, `effectiveIds`, `commit`) são auto-explicativos. Comentário só se houver invariante não-óbvio (ex: ‘useEffect zera pendingIds quando server reconcilia’).",
+    "Manter o estilo do projeto: TS strict, sem `any`, `useCallback`/`useMemo` onde já é convenção.",
+    "NÃO commitar até passar typecheck + lint dos arquivos tocados."
+  ]
+}

@@ -6,6 +6,19 @@ type Tables = Database["public"]["Tables"];
 export type TaskActivityRow = Tables["TaskActivity"]["Row"];
 
 export type TaskActivityType =
+  | "created"
+  | "status_changed"
+  | "assignees_changed"
+  | "sprint_changed"
+  | "story_changed"
+  | "fp_changed"
+  | "scope_changed"
+  | "complexity_changed"
+  | "type_changed"
+  | "tags_changed"
+  | "ac_bulk_changed"
+  | "title_edited"
+  | "description_edited"
   | "duplicated"
   | "cloned_to"
   | "cloned_from";
@@ -36,12 +49,17 @@ export async function createActivity(input: {
 
 export async function getActivityForTask(
   taskId: string,
+  opts: { limit?: number; before?: string } = {},
 ): Promise<TaskActivityWithActor[]> {
-  const { data, error } = await db()
+  const limit = opts.limit ?? 50;
+  let q = db()
     .from("TaskActivity")
     .select("*, actor:Member!TaskActivity_actorMemberId_fkey(id, name)")
     .eq("taskId", taskId)
-    .order("createdAt", { ascending: false });
+    .order("createdAt", { ascending: false })
+    .limit(limit);
+  if (opts.before) q = q.lt("createdAt", opts.before);
+  const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as unknown as TaskActivityWithActor[];
 }

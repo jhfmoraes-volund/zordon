@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveAccessLevel } from "@/lib/roles";
 
 /**
  * Next.js 16 Proxy (formerly middleware).
@@ -63,9 +64,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // Resolve access level once: prefer `app_metadata.access_level` (new), fall
+  // back to legacy `role` for JWTs issued before the migration.
+  const accessLevel = user
+    ? resolveAccessLevel(
+        (user.app_metadata as { access_level?: string } | null)?.access_level,
+        user.app_metadata?.role,
+      )
+    : null;
+
   // Guests can only navigate inside the project surface and design sessions.
   // Anywhere else (members, squads, ops, profile, etc.) redirects to /projects.
-  if (user && user.app_metadata?.role === "guest" && !isApi) {
+  if (user && accessLevel === "guest" && !isApi) {
     const guestAllowed =
       pathname === "/" ||
       pathname.startsWith("/projects") ||
@@ -84,6 +94,7 @@ export async function proxy(request: NextRequest) {
     requestHeaders.set("x-user-id", user.id);
     requestHeaders.set("x-user-email", user.email ?? "");
     requestHeaders.set("x-user-role", user.app_metadata?.role ?? "");
+    requestHeaders.set("x-user-access-level", accessLevel ?? "");
     requestHeaders.set("x-member-id", user.app_metadata?.member_id ?? "");
 
     // Forward impersonation cookie as header so layouts avoid cookies() call

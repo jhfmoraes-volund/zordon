@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useFieldDebounce } from "@/hooks/use-field-debounce";
 import { ChevronDown, ChevronRight, Sparkles, X } from "lucide-react";
 import {
   ResponsiveSheet,
   ResponsiveSheetBody,
   ResponsiveSheetContent,
-  ResponsiveSheetFooter,
   ResponsiveSheetHeader,
   ResponsiveSheetTitle,
 } from "@/components/ui/responsive-sheet";
@@ -32,11 +32,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { suggestFunctionPoints } from "@/lib/function-points";
-import { TASK_STATUS_MAP } from "./chips";
 import { AcList } from "./ac-list";
-import { TaskActivitySection } from "./task-activity-section";
+import { TaskFeed } from "./task-feed";
 import type {
-  AC,
   Member,
   Module,
   Story,
@@ -56,22 +54,8 @@ type SprintLite = {
   status?: string;
 };
 
-/** Stories used by TaskSheet. `__id` (DB id) is required only by the create
- *  flow's user-story picker; pure-view callers may pass plain `Story`s. */
+/** Stories used by TaskSheet. */
 type StoryWithMaybeDbId = Story & { __id?: string };
-
-export type TaskCreateInput = {
-  title: string;
-  description?: string;
-  type: TaskType;
-  scope: TaskScope;
-  complexity: TaskComplexity;
-  tagIds: string[];
-  status: TaskStatus;
-  /** UserStory id (DB), or null if standalone. */
-  userStoryId: string | null;
-  functionPoints: number;
-};
 
 type TaskSheetProps = {
   task: Task | null;
@@ -79,22 +63,9 @@ type TaskSheetProps = {
   modules: Module[];
   members: Member[];
   definitionOfDone: string[];
-  /** @deprecated kept for prop-compat with callers; ignored. The sheet has no
-   *  view/edit toggle anymore — every field is always inline-editable. */
-  editing?: boolean;
-  /** When true, opens in create mode (no `task` required). */
-  creating?: boolean;
-  /** Default story DB id pre-selected in create mode. */
-  defaultStoryId?: string | null;
   onClose: () => void;
-  /** @deprecated no-op. */
-  onEdit?: () => void;
-  /** @deprecated no-op. */
-  onCancelEdit?: () => void;
   /** Persist a Task patch (called per-field, with the merged Task). */
   onSave: (updated: Task) => void | Promise<void>;
-  /** Required when `creating` is true. */
-  onCreate?: (input: TaskCreateInput) => void | Promise<void>;
   /** Open the parent story when breadcrumb is clicked. */
   onOpenStory?: (storyRef: string) => void;
   /** Sprint picker support. When omitted, the row is read-only. */
@@ -110,6 +81,26 @@ type TaskSheetProps = {
   onCreateTag?: (name: string, tone: ChipTone) => Promise<TaskTag>;
   /** Replace the task's tag set with the given ids. */
   onChangeTags?: (taskRef: string, tagIds: string[]) => void | Promise<void>;
+  /** Create an acceptance criterion. Optimistic apply happens in the caller. */
+  onAcCreate?: (
+    taskRef: string,
+    text: string,
+    order: number,
+  ) => Promise<void>;
+  /** Persist a text edit on an existing AC. */
+  onAcUpdateText?: (
+    taskRef: string,
+    acId: string,
+    text: string,
+  ) => Promise<void>;
+  /** Toggle the checked state of an AC. */
+  onAcToggle?: (
+    taskRef: string,
+    acId: string,
+    checked: boolean,
+  ) => Promise<void>;
+  /** Remove an AC. */
+  onAcDelete?: (taskRef: string, acId: string) => Promise<void>;
 };
 
 function tagsToOptions(tags: TaskTag[]): TagPickerOption[] {
@@ -138,19 +129,14 @@ const COMPLEXITY_VALUES: TaskComplexity[] = [
 ];
 
 export function TaskSheet(props: TaskSheetProps) {
-  const { task, creating, onClose } = props;
-  const isOpen = creating === true || task !== null;
+  const { task, onClose } = props;
   return (
     <ResponsiveSheet
-      open={isOpen}
+      open={task !== null}
       onOpenChange={(open) => !open && onClose()}
     >
       <ResponsiveSheetContent size="lg" showCloseButton={false}>
-        {creating ? (
-          <TaskSheetCreate {...props} />
-        ) : task ? (
-          <TaskSheetInner {...props} task={task} />
-        ) : null}
+        {task ? <TaskSheetInner {...props} task={task} /> : null}
       </ResponsiveSheetContent>
     </ResponsiveSheet>
   );
@@ -204,7 +190,6 @@ export function TaskSheetInner({
   modules,
   members,
   sprints,
-  definitionOfDone,
   onClose,
   onSave,
   onOpenStory,
@@ -213,6 +198,10 @@ export function TaskSheetInner({
   availableTags,
   onCreateTag,
   onChangeTags,
+  onAcCreate,
+  onAcUpdateText,
+  onAcToggle,
+  onAcDelete,
 }: TaskSheetProps & { task: Task }) {
   // Local drafts for text/number fields (saved on blur).
   const [title, setTitle] = useState(task.title);
@@ -240,41 +229,34 @@ export function TaskSheetInner({
     persist({ [field]: value } as Partial<Task>);
   }
 
-  // ─── AC handlers (mutation via onSave with merged AC list) ────────────────
-  function patchAC(id: string, text: string) {
-    persist({
-      acceptanceCriteria: task.acceptanceCriteria.map((ac) =>
-        ac.id === id ? { ...ac, text } : ac,
-      ),
-    });
+  // Coalesce repeated blurs on free-text fields so re-focusing doesn't spam
+  // the audit trail with identical edits.
+  const { schedule: scheduleTextPersist } = useFieldDebounce(2_000);
+  function persistTextDebounced<K extends keyof Task>(
+    field: K,
+    value: Task[K],
+  ) {
+    scheduleTextPersist(String(field), () =>
+      persistIfChanged(field, value),
+    );
   }
-  function toggleAC(id: string) {
-    persist({
-      acceptanceCriteria: task.acceptanceCriteria.map((ac) =>
-        ac.id === id
-          ? {
-              ...ac,
-              checked: !ac.checked,
-              checkedBy: !ac.checked ? "Você" : undefined,
-            }
-          : ac,
-      ),
-    });
+
+  // ─── AC handlers (each persists individually with optimistic apply) ──────
+  async function handleAcTextCommit(id: string, text: string) {
+    if (!onAcUpdateText) return;
+    await onAcUpdateText(task.reference, id, text);
   }
-  function removeAC(id: string) {
-    persist({
-      acceptanceCriteria: task.acceptanceCriteria.filter((ac) => ac.id !== id),
-    });
+  async function handleAcToggle(id: string, checked: boolean) {
+    if (!onAcToggle) return;
+    await onAcToggle(task.reference, id, checked);
   }
-  function addAC() {
-    const newAc: AC = {
-      id: `ac-new-${Date.now()}`,
-      text: "",
-      checked: false,
-    };
-    persist({
-      acceptanceCriteria: [...task.acceptanceCriteria, newAc],
-    });
+  async function handleAcRemove(id: string) {
+    if (!onAcDelete) return;
+    await onAcDelete(task.reference, id);
+  }
+  async function handleAcAdd() {
+    if (!onAcCreate) return;
+    await onAcCreate(task.reference, "", task.acceptanceCriteria.length);
   }
 
   function toggleAssignee(memberId: string) {
@@ -310,7 +292,7 @@ export function TaskSheetInner({
             <textarea
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              onBlur={() => persistIfChanged("title", title)}
+              onBlur={() => persistTextDebounced("title", title)}
               rows={1}
               className="block w-full resize-none bg-transparent font-heading font-semibold leading-snug text-foreground outline-none placeholder:text-muted-foreground field-sizing-content"
               style={{
@@ -622,12 +604,12 @@ export function TaskSheetInner({
         <Separator />
 
         <AcList
-          mode="edit"
+          mode="editPersisted"
           items={task.acceptanceCriteria}
-          onToggle={toggleAC}
-          onChange={patchAC}
-          onAdd={addAC}
-          onRemove={removeAC}
+          onToggle={handleAcToggle}
+          onTextCommit={handleAcTextCommit}
+          onAdd={handleAcAdd}
+          onRemove={handleAcRemove}
         />
 
         <Separator />
@@ -638,7 +620,7 @@ export function TaskSheetInner({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             onBlur={() =>
-              persistIfChanged(
+              persistTextDebounced(
                 "description",
                 description.trim() === "" ? null : description,
               )
@@ -654,7 +636,7 @@ export function TaskSheetInner({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             onBlur={() =>
-              persistIfChanged(
+              persistTextDebounced(
                 "notes",
                 notes.trim() === "" ? null : notes,
               )
@@ -665,282 +647,23 @@ export function TaskSheetInner({
           />
         </FieldBlock>
 
-        <TaskActivitySection
-          taskId={(task as Task & { __id?: string }).__id ?? null}
-        />
-
-        <div className="rounded-md border border-dashed bg-muted/30 p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Definition of Done · projeto
-          </div>
-          <ul className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
-            {definitionOfDone.map((d, i) => (
-              <li key={i}>· {d}</li>
-            ))}
-          </ul>
-        </div>
-      </ResponsiveSheetBody>
-    </>
-  );
-}
-
-// ─── Create mode ─────────────────────────────────────────────────────────────
-
-const STORY_NONE = "__none__";
-
-function TaskSheetCreate({
-  stories,
-  defaultStoryId,
-  onClose,
-  onCreate,
-  availableTags,
-  onCreateTag,
-}: TaskSheetProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [type, setType] = useState<TaskType>("feature");
-  const [scope, setScope] = useState<TaskScope>("small");
-  const [complexity, setComplexity] = useState<TaskComplexity>("medium");
-  const [tagIds, setTagIds] = useState<string[]>([]);
-  const [status, setStatus] = useState<TaskStatus>("backlog");
-  const [storyId, setStoryId] = useState<string>(defaultStoryId ?? STORY_NONE);
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    setTitle("");
-    setDescription("");
-    setType("feature");
-    setScope("small");
-    setComplexity("medium");
-    setTagIds([]);
-    setStatus("backlog");
-    setStoryId(defaultStoryId ?? STORY_NONE);
-    setSubmitting(false);
-  }, [defaultStoryId]);
-
-  const fp = suggestFunctionPoints(scope, complexity);
-  const valid = title.trim().length >= 3;
-
-  async function submit() {
-    if (!valid || submitting || !onCreate) return;
-    setSubmitting(true);
-    try {
-      await onCreate({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        type,
-        scope,
-        complexity,
-        tagIds,
-        status,
-        userStoryId: storyId === STORY_NONE ? null : storyId,
-        functionPoints: fp,
-      });
-      onClose();
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <>
-      <ResponsiveSheetHeader>
-        <ResponsiveSheetTitle>Nova task</ResponsiveSheetTitle>
-        <p className="text-sm text-muted-foreground">
-          Quebrar uma story em ações executáveis.
-        </p>
-      </ResponsiveSheetHeader>
-
-      <ResponsiveSheetBody className="space-y-4">
-        <FieldBlock label="Título">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Implementar endpoint /auth/magic-link"
-            autoFocus
-          />
-        </FieldBlock>
-
-        <FieldBlock label="Descrição">
-          <Textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-          />
-        </FieldBlock>
-
-        <div className="grid grid-cols-2 gap-3">
-          <FieldBlock label="Story">
-            <Select
-              value={storyId}
-              onValueChange={(v) => v !== null && setStoryId(v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Escolha story">
-                  {(v: string | null) => {
-                    if (!v || v === STORY_NONE) {
-                      return (
-                        <span className="text-muted-foreground">
-                          Sem story (avulsa)
-                        </span>
-                      );
-                    }
-                    const story = stories.find((s) => s.__id === v);
-                    if (!story) return "Escolha story";
-                    return (
-                      <span className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {story.reference}
-                        </span>
-                        <span className="truncate">· {story.title}</span>
-                      </span>
-                    );
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={STORY_NONE}>Sem story (avulsa)</SelectItem>
-                {stories
-                  .filter((s): s is Story & { __id: string } => !!s.__id)
-                  .map((s) => (
-                    <SelectItem key={s.__id} value={s.__id}>
-                      <span className="font-mono text-xs">{s.reference}</span>{" "}
-                      · {s.title}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </FieldBlock>
-
-          <FieldBlock label="Status">
-            <Select
-              value={status}
-              onValueChange={(v) =>
-                v !== null && setStatus(v as TaskStatus)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(
-                  [
-                    "backlog",
-                    "todo",
-                    "in_progress",
-                    "review",
-                    "done",
-                  ] as TaskStatus[]
-                ).map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldBlock>
-        </div>
-
-        <FieldBlock label="Tags">
-          <TagPicker
-            available={tagsToOptions(availableTags ?? [])}
-            selectedIds={tagIds}
-            onChange={setTagIds}
-            onCreate={async (name, tone) => {
-              if (!onCreateTag) {
-                return { id: `tmp-${Date.now()}`, name, tone };
-              }
-              const created = await onCreateTag(name, tone);
-              return {
-                id: created.id,
-                name: created.name,
-                tone: created.tone as ChipTone,
-              };
-            }}
-            variant="linear"
-            triggerVisibleCount={99}
-          />
-        </FieldBlock>
-
-        <div className="grid grid-cols-2 gap-3">
-          <FieldBlock label="Scope">
-            <Select
-              value={scope}
-              onValueChange={(v) =>
-                v !== null && setScope(v as TaskScope)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SCOPE_VALUES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldBlock>
-
-          <FieldBlock label="Complexity">
-            <Select
-              value={complexity}
-              onValueChange={(v) =>
-                v !== null && setComplexity(v as TaskComplexity)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {COMPLEXITY_VALUES.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldBlock>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 items-start">
-          <FieldBlock label="FP (auto)">
-            <Input
-              value={fp}
-              readOnly
-              className="font-mono tabular-nums"
+        {(() => {
+          const dbTaskId = (task as Task & { __id?: string }).__id ?? null;
+          if (!dbTaskId) return null;
+          return (
+            <TaskFeed
+              taskId={dbTaskId}
+              ctx={{
+                members,
+                sprints: sprints ?? [],
+                stories,
+                projectTags: availableTags ?? [],
+              }}
+              members={members}
             />
-          </FieldBlock>
-
-          <FieldBlock label="Tipo">
-            <Select
-              value={type}
-              onValueChange={(v) => v !== null && setType(v as TaskType)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TYPE_VALUES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FieldBlock>
-        </div>
+          );
+        })()}
       </ResponsiveSheetBody>
-
-      <ResponsiveSheetFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button onClick={submit} disabled={!valid || submitting}>
-          {submitting ? "Criando…" : "Criar task"}
-        </Button>
-      </ResponsiveSheetFooter>
     </>
   );
 }

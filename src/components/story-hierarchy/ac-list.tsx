@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { CheckSquare2, ListChecks, Plus, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,8 +18,10 @@ type ViewProps = {
   items: AC[];
 };
 
-type EditProps = {
-  mode: "edit";
+/** Synchronous edit: handlers mutate parent draft state only. Used for
+ *  forms that commit on a "Salvar" button (story-sheet). */
+type EditDraftProps = {
+  mode: "editDraft";
   items: AC[];
   onToggle: (id: string) => void;
   onChange: (id: string, text: string) => void;
@@ -26,7 +29,18 @@ type EditProps = {
   onRemove: (id: string) => void;
 };
 
-type Props = (ViewProps | EditProps) & {
+/** Async edit: every operation persists individually with optimistic apply
+ *  + rollback in the parent. Used in the open-task TaskSheet. */
+type EditPersistedProps = {
+  mode: "editPersisted";
+  items: AC[];
+  onToggle: (id: string, checked: boolean) => void | Promise<void>;
+  onTextCommit: (id: string, text: string) => void | Promise<void>;
+  onAdd: () => void | Promise<void>;
+  onRemove: (id: string) => void | Promise<void>;
+};
+
+type Props = (ViewProps | EditDraftProps | EditPersistedProps) & {
   /** Header label override. Default: "Acceptance Criteria" */
   label?: string;
   /** Show the ListChecks icon next to header. Default true. */
@@ -81,51 +95,25 @@ export function AcList(props: Props) {
       ) : (
         <div className="space-y-2">
           <div className="divide-y divide-border/40 rounded-md border border-border/40 bg-muted/10">
-            {items.map((ac) => {
-              const display = stripAcMarker(ac.text);
-              return (
-                <div
+            {items.map((ac) =>
+              props.mode === "editDraft" ? (
+                <AcEditRow
                   key={ac.id}
-                  className="flex items-start gap-2 px-2 py-1.5"
-                >
-                  <button
-                    type="button"
-                    onClick={() => props.onToggle(ac.id)}
-                    className="mt-1.5 shrink-0"
-                    aria-label={ac.checked ? "Desmarcar" : "Marcar"}
-                  >
-                    {ac.checked ? (
-                      <CheckSquare2 className="size-4 text-green-600" />
-                    ) : (
-                      <Square className="size-4 text-muted-foreground/60" />
-                    )}
-                  </button>
-                  <Textarea
-                    value={display}
-                    onChange={(e) => props.onChange(ac.id, e.target.value)}
-                    onBlur={() => {
-                      // Persist the normalized (stripped) text once the user finishes
-                      // editing, so legacy "- [ ]" prefixes don't get carried back.
-                      if (display !== ac.text) props.onChange(ac.id, display);
-                    }}
-                    placeholder="Critério verificável"
-                    rows={1}
-                    className={`field-sizing-content min-h-0 flex-1 resize-none border-0 bg-transparent px-1.5 py-1 text-sm leading-snug shadow-none focus-visible:ring-0 dark:bg-transparent ${
-                      ac.checked ? "text-muted-foreground line-through" : ""
-                    }`}
-                  />
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => props.onRemove(ac.id)}
-                    aria-label="Remover"
-                    className="mt-0.5 shrink-0 text-muted-foreground/60 hover:text-foreground"
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-              );
-            })}
+                  ac={ac}
+                  onToggle={() => props.onToggle(ac.id)}
+                  onTextCommit={(text) => props.onChange(ac.id, text)}
+                  onRemove={() => props.onRemove(ac.id)}
+                />
+              ) : (
+                <AcEditRow
+                  key={ac.id}
+                  ac={ac}
+                  onToggle={() => props.onToggle(ac.id, !ac.checked)}
+                  onTextCommit={(text) => props.onTextCommit(ac.id, text)}
+                  onRemove={() => props.onRemove(ac.id)}
+                />
+              ),
+            )}
             {items.length === 0 ? (
               <div className="px-2.5 py-2 text-xs text-muted-foreground">
                 Nenhum critério ainda.
@@ -135,7 +123,7 @@ export function AcList(props: Props) {
           <Button
             size="sm"
             variant="outline"
-            onClick={props.onAdd}
+            onClick={() => void props.onAdd()}
             className="w-full"
           >
             <Plus className="size-3.5" />
@@ -144,5 +132,60 @@ export function AcList(props: Props) {
         </div>
       )}
     </section>
+  );
+}
+
+type AcEditRowProps = {
+  ac: AC;
+  onToggle: () => void | Promise<void>;
+  onTextCommit: (text: string) => void | Promise<void>;
+  onRemove: () => void | Promise<void>;
+};
+
+function AcEditRow({ ac, onToggle, onTextCommit, onRemove }: AcEditRowProps) {
+  const display = stripAcMarker(ac.text);
+  // Local draft keeps each keystroke off the parent re-render path; only
+  // flushes upstream on blur. Reconcile when the prop changes externally.
+  const [draft, setDraft] = useState(display);
+  useEffect(() => {
+    setDraft(display);
+  }, [display]);
+
+  return (
+    <div className="flex items-start gap-2 px-2 py-1.5">
+      <button
+        type="button"
+        onClick={() => void onToggle()}
+        className="mt-1.5 shrink-0"
+        aria-label={ac.checked ? "Desmarcar" : "Marcar"}
+      >
+        {ac.checked ? (
+          <CheckSquare2 className="size-4 text-green-600" />
+        ) : (
+          <Square className="size-4 text-muted-foreground/60" />
+        )}
+      </button>
+      <Textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          if (draft !== ac.text) void onTextCommit(draft);
+        }}
+        placeholder="Critério verificável"
+        rows={1}
+        className={`field-sizing-content min-h-0 flex-1 resize-none border-0 bg-transparent px-1.5 py-1 text-sm leading-snug shadow-none focus-visible:ring-0 dark:bg-transparent ${
+          ac.checked ? "text-muted-foreground line-through" : ""
+        }`}
+      />
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        onClick={() => void onRemove()}
+        aria-label="Remover"
+        className="mt-0.5 shrink-0 text-muted-foreground/60 hover:text-foreground"
+      >
+        <Trash2 />
+      </Button>
+    </div>
   );
 }

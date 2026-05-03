@@ -70,7 +70,11 @@ export function StatusChipSelect<T extends Record<string, ChipDescriptor>>({
           <SelectValue placeholder={placeholder}>
             {(v: string | null) => {
               const key = v ?? value;
-              if (!key) return null;
+              if (!key) {
+                return (
+                  <span className="text-muted-foreground">{placeholder}</span>
+                );
+              }
               const desc = lookupChip(options, key);
               return (
                 <span className="flex items-center gap-2">
@@ -122,7 +126,13 @@ export function StatusChipSelect<T extends Record<string, ChipDescriptor>>({
         <SelectValue placeholder={placeholder}>
           {(v: string | null) => {
             const key = v ?? value;
-            if (!key) return null;
+            if (!key) {
+              return (
+                <span className="text-xs text-muted-foreground">
+                  {placeholder}
+                </span>
+              );
+            }
             return <StatusChip {...lookupChip(options, key)} size={size} dot={dot} />;
           }}
         </SelectValue>

@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { getUser, requireProjectMemberApi } from "@/lib/dal";
 import { listTagsForTask, setTagsForTask } from "@/lib/dal/task-tags";
 import { TASK_TAG_LIMIT } from "@/lib/task-tags";
+import { snapshotTaskHydrated } from "@/lib/dal/task-snapshot";
+import { recordTaskChanges } from "@/lib/dal/task-activity-recorder";
 
 async function loadTaskOr404(taskId: string) {
   const { data } = await db()
@@ -60,8 +62,17 @@ export async function PUT(
   }
 
   try {
+    const before = await snapshotTaskHydrated(taskId);
     await setTagsForTask(taskId, body.tagIds);
     const tags = await listTagsForTask(taskId);
+    if (before) {
+      const after = await snapshotTaskHydrated(taskId);
+      if (after) {
+        recordTaskChanges(taskId, before, after).catch((e) =>
+          console.error("[task-activity] recordTaskChanges failed", e),
+        );
+      }
+    }
     return NextResponse.json(tags);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to set tags";

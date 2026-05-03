@@ -397,20 +397,10 @@ export default function ProjectStoriesMockPage() {
         modules={modules}
         members={MEMBERS}
         definitionOfDone={PROJECT.definitionOfDone}
-        editing={editingTask}
-        onClose={() => {
-          setSelectedTaskRef(null);
-          setEditingTask(false);
-        }}
-        onEdit={() => setEditingTask(true)}
-        onCancelEdit={() => setEditingTask(false)}
-        onSave={(updated) => {
-          updateTask(updated);
-          setEditingTask(false);
-        }}
+        onClose={() => setSelectedTaskRef(null)}
+        onSave={(updated) => updateTask(updated)}
         onOpenStory={(ref) => {
           setSelectedTaskRef(null);
-          setEditingTask(false);
           setSelectedStoryRef(ref);
           setEditingStory(false);
         }}

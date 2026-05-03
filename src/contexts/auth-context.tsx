@@ -1,10 +1,14 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
+import type { AccessLevel } from "@/lib/roles";
 
 export type SessionMember = {
   id: string;
   name: string;
+  /** Job title (renamed from `role`). */
+  position: string;
+  /** @deprecated mirror of `position` while callers migrate. */
   role: string;
   fpCapacity: number;
   email: string | null;
@@ -16,16 +20,26 @@ export type AuthValue = {
   /** Email from the auth user. */
   userEmail: string | null;
   /**
-   * The real role from app_metadata. Use this to decide whether to show the
-   * impersonation dropdown — only real admins can impersonate.
+   * @deprecated use `realAccessLevel` (authz) or `member.position` (cargo).
+   * The real legacy role from app_metadata.
    */
   realRole: string | null;
   /**
-   * The effective role for UI/read gating. Equal to realRole, except when an
-   * admin is impersonating another member (then it equals that member's role).
-   * Use this for sidebar visibility and page access decisions.
+   * @deprecated use `effectiveAccessLevel` (authz) or `member.position` (cargo).
    */
   effectiveRole: string | null;
+  /**
+   * Real access level of the logged-in user (`guest`/`builder`/`manager`/`admin`).
+   * Use this to decide whether to show the impersonation dropdown — only real
+   * admins can impersonate.
+   */
+  realAccessLevel: AccessLevel;
+  /**
+   * Effective access level for UI/read gating. Equal to `realAccessLevel`,
+   * except when an admin is impersonating another user (then it reflects that
+   * user's real access level). Use this for sidebar visibility and page access.
+   */
+  effectiveAccessLevel: AccessLevel;
   /**
    * The "current" Member — usually the one linked to userId, but if the real
    * user is admin and impersonating, this is the impersonated member.

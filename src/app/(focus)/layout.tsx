@@ -14,6 +14,8 @@ import {
   verifySession,
   getRealRole,
   getEffectiveRole,
+  getAccessLevel,
+  getEffectiveAccessLevel,
   getCurrentMember,
 } from "@/lib/dal";
 
@@ -30,6 +32,8 @@ export default async function FocusLayout({
   const user = await verifySession();
   const realRole = await getRealRole();
   const effectiveRole = await getEffectiveRole();
+  const realAccessLevel = await getAccessLevel();
+  const effectiveAccessLevel = await getEffectiveAccessLevel();
   const member = await getCurrentMember();
 
   const members: SessionMember[] = [];
@@ -39,10 +43,13 @@ export default async function FocusLayout({
     userEmail: user.email ?? null,
     realRole,
     effectiveRole,
+    realAccessLevel,
+    effectiveAccessLevel,
     member: member
       ? {
           id: member.id,
           name: member.name,
+          position: member.role,
           role: member.role,
           fpCapacity: member.fpCapacity,
           email: member.email,

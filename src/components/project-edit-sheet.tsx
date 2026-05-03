@@ -19,7 +19,7 @@ import { roleLabel } from "@/lib/roles";
 import { showErrorToast } from "@/lib/optimistic/toast";
 
 type ClientOption = { id: string; name: string };
-type MemberOption = { id: string; name: string; role: string };
+type MemberOption = { id: string; name: string; role: string; position: string | null };
 
 export type ProjectEditInitial = {
   id: string;
@@ -74,7 +74,7 @@ export function ProjectEditSheet({
     const supabase = createClient();
     Promise.all([
       supabase.from("Client").select("id, name").order("name"),
-      supabase.from("Member").select("id, name, role").order("name"),
+      supabase.from("Member").select("id, name, role, position").order("name"),
     ]).then(([cRes, mRes]) => {
       if (cRes.data) setClients(cRes.data);
       if (mRes.data) setAllMembers(mRes.data as MemberOption[]);
@@ -243,13 +243,13 @@ export function ProjectEditSheet({
               </SelectTrigger>
               <SelectContent>
                 {allMembers
-                  .filter((m) => m.role === "pm")
+                  .filter((m) => m.position === "pm")
                   .map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.name}
                     </SelectItem>
                   ))}
-                {allMembers.filter((m) => m.role === "pm").length === 0 && (
+                {allMembers.filter((m) => m.position === "pm").length === 0 && (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
                     Nenhum membro com role &quot;pm&quot; cadastrado
                   </div>
@@ -265,7 +265,7 @@ export function ProjectEditSheet({
             </p>
             <div className="flex flex-wrap gap-1.5 p-3 border rounded-md min-h-[40px]">
               {allMembers
-                .filter((m) => m.role !== "pm")
+                .filter((m) => m.position !== "pm")
                 .map((m) => {
                   const isSelected = form.memberIds.includes(m.id);
                   return (
@@ -279,12 +279,12 @@ export function ProjectEditSheet({
                     >
                       {m.name}
                       <span className="ml-1 text-[10px]">
-                        {roleLabel(m.role)}
+                        {roleLabel(m.position)}
                       </span>
                     </Badge>
                   );
                 })}
-              {allMembers.filter((m) => m.role !== "pm").length === 0 && (
+              {allMembers.filter((m) => m.position !== "pm").length === 0 && (
                 <span className="text-xs text-muted-foreground">
                   Nenhum membro cadastrado
                 </span>

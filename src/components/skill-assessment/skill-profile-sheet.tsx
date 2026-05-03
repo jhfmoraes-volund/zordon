@@ -22,7 +22,7 @@ import {
 import { roleLabel } from "@/lib/roles";
 
 type SkillResponse = {
-  member: { id: string; name: string; role: string; specialty: string | null };
+  member: { id: string; name: string; role: string; position: string | null; specialty: string | null };
   assessment: {
     status: "in_progress" | "completed";
     updatedAt: string;
@@ -123,7 +123,7 @@ function SheetBody({ data }: { data: SkillResponse }) {
           {data.member.name}
         </SheetTitle>
         <SheetDescription>
-          {roleLabel(data.member.role)}
+          {roleLabel(data.member.position)}
         </SheetDescription>
       </SheetHeader>
 

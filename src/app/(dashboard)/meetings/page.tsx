@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -15,9 +14,10 @@ import { StatusChip } from "@/components/ui/status-chip";
 import {
   MEETING_STATUS, MEETING_TYPE, lookupChip, meetingStatusFromDate,
 } from "@/lib/status-chips";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
+import { MeetingSheet, type MeetingEditInitial } from "@/components/meetings/meeting-sheet";
 
 type Meeting = {
   id: string;
@@ -39,6 +39,7 @@ type Meeting = {
   attendees: {
     id: string;
     role: string | null;
+    memberId: string | null;
     member: { id: string; name: string } | null;
     externalName: string | null;
   }[];
@@ -47,7 +48,15 @@ type Meeting = {
   }[];
 };
 
-function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
+function MeetingCardMobile({
+  meeting,
+  onEdit,
+  onDelete,
+}: {
+  meeting: Meeting;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const pendingActions = meeting.actionItems.filter((a) => a.status !== "done").length;
   const projectCount =
     meeting.type === "pm_review"
@@ -55,10 +64,12 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
       : meeting.projectLinks.length;
   const totalActions = meeting.actionItems.length;
 
+  // Título explícito tem prioridade; se vazio, deriva do contexto.
   const titleText =
-    meeting.type === "pm_review"
+    meeting.title ||
+    (meeting.type === "pm_review"
       ? meeting.attendees
-          .filter((a) => a.role === "pm" && a.member)
+          .filter((a) => a.member)
           .map((a) => a.member!.name)
           .join(", ") || null
       : meeting.type === "daily" || meeting.type === "super_planning"
@@ -66,7 +77,7 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
             .map((l) => l.project?.name)
             .filter(Boolean)
             .join(", ") || null
-        : meeting.title;
+        : null);
 
   const shortDate = new Date(meeting.date).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -74,39 +85,46 @@ function MeetingCardMobile({ meeting }: { meeting: Meeting }) {
   });
 
   return (
-    <Link
-      href={`/meetings/${meeting.id}`}
-      className="surface p-4 block hover:bg-muted/30 transition-colors"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{shortDate}</span>
-        <StatusChip {...lookupChip(MEETING_TYPE, meeting.type)} />
-      </div>
+    <div className="surface p-4 hover:bg-muted/30 transition-colors">
+      <Link href={`/meetings/${meeting.id}`} className="block">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium">{shortDate}</span>
+          <StatusChip {...lookupChip(MEETING_TYPE, meeting.type)} />
+        </div>
 
-      <p
-        className={`mt-2 text-base font-medium line-clamp-2 ${
-          titleText ? "" : "text-muted-foreground"
-        }`}
-      >
-        {titleText || "Sem título"}
-      </p>
+        <p
+          className={`mt-2 text-base font-medium line-clamp-2 ${
+            titleText ? "" : "text-muted-foreground"
+          }`}
+        >
+          {titleText || "Sem título"}
+        </p>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <StatusChip
-          {...lookupChip(MEETING_STATUS, meetingStatusFromDate(meeting.date))}
-          dot
-        />
-        <span>
-          {projectCount} {projectCount === 1 ? "projeto" : "projetos"} · {totalActions}{" "}
-          {totalActions === 1 ? "to-do" : "to-dos"}
-        </span>
-        {pendingActions > 0 && (
-          <span className="font-medium text-yellow-700 dark:text-yellow-500">
-            ⚠ {pendingActions} pendente{pendingActions > 1 ? "s" : ""}
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <StatusChip
+            {...lookupChip(MEETING_STATUS, meetingStatusFromDate(meeting.date))}
+            dot
+          />
+          <span>
+            {projectCount} {projectCount === 1 ? "projeto" : "projetos"} · {totalActions}{" "}
+            {totalActions === 1 ? "to-do" : "to-dos"}
           </span>
-        )}
+          {pendingActions > 0 && (
+            <span className="font-medium text-yellow-700 dark:text-yellow-500">
+              ⚠ {pendingActions} pendente{pendingActions > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+      </Link>
+      <div className="mt-3 pt-3 border-t flex items-center justify-end gap-1">
+        <Button variant="ghost" size="icon" onClick={onEdit} aria-label="Editar reunião">
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={onDelete} aria-label="Remover reunião">
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -117,7 +135,41 @@ export default function MeetingsPage() {
   const meetingMutate = meetingsCollection.mutate;
   const [typeFilter, setTypeFilter] = useState<"all" | "pm_review" | "general" | "daily" | "super_planning">("all");
   const [pmFilter, setPmFilter] = useState<string>("all");
-  const router = useRouter();
+
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetMode, setSheetMode] = useState<"create" | "edit">("create");
+  const [editingMeeting, setEditingMeeting] = useState<MeetingEditInitial | null>(null);
+
+  const openCreate = () => {
+    setSheetMode("create");
+    setEditingMeeting(null);
+    setSheetOpen(true);
+  };
+
+  const openEdit = (m: Meeting) => {
+    setSheetMode("edit");
+    setEditingMeeting({
+      id: m.id,
+      type: m.type,
+      date: m.date,
+      title: m.title,
+      notes: m.notes,
+      attendees: m.attendees.map((a) => ({
+        memberId: a.memberId ?? a.member?.id ?? null,
+        externalName: a.externalName ?? null,
+        externalEmail: null,
+        externalRole: null,
+        role: a.role,
+      })),
+      projectLinks: m.projectLinks.map((l) => ({
+        project: l.project ? { id: l.project.id } : null,
+      })),
+      projectReviews: m.projectReviews.map((r) => ({
+        member: r.member ? { id: r.member.id } : null,
+      })),
+    });
+    setSheetOpen(true);
+  };
 
   const load = async () => {
     // Use API route (not direct Supabase) so impersonation/visibility filters apply.
@@ -192,7 +244,7 @@ export default function MeetingsPage() {
       <PageHeader
         title="Reuniões"
         description="Reuniões com PMs e reuniões gerais"
-        onAdd={() => router.push("/meetings/new")}
+        onAdd={openCreate}
         addLabel="Nova reunião"
       />
 
@@ -239,9 +291,24 @@ export default function MeetingsPage() {
           </div>
         )}
         {filtered.map((m) => (
-          <MeetingCardMobile key={m.id} meeting={m} />
+          <MeetingCardMobile
+            key={m.id}
+            meeting={m}
+            onEdit={() => openEdit(m)}
+            onDelete={() => remove(m.id)}
+          />
         ))}
       </div>
+
+      <MeetingSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        mode={sheetMode}
+        meeting={editingMeeting}
+        onSaved={() => {
+          load();
+        }}
+      />
 
       {/* Desktop: table */}
       <div className="surface hidden md:block">
@@ -255,7 +322,7 @@ export default function MeetingsPage() {
               <TableHead>Projetos</TableHead>
               <TableHead>Ações</TableHead>
               <TableHead>Pendentes</TableHead>
-              <TableHead className="w-[60px]" />
+              <TableHead className="w-[100px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -264,14 +331,15 @@ export default function MeetingsPage() {
               const projectCount =
                 m.type === "pm_review" ? m.projectReviews.length : m.projectLinks.length;
               const titleCell =
-                m.type === "pm_review"
+                m.title ||
+                (m.type === "pm_review"
                   ? m.attendees
-                      .filter((a) => a.role === "pm" && a.member)
+                      .filter((a) => a.member)
                       .map((a) => a.member!.name)
                       .join(", ") || "—"
                   : m.type === "daily" || m.type === "super_planning"
                     ? m.projectLinks.map((l) => l.project?.name).filter(Boolean).join(", ") || "—"
-                    : m.title || "—";
+                    : "—");
               return (
                 <TableRow key={m.id} className="cursor-pointer">
                   <TableCell>
@@ -306,16 +374,30 @@ export default function MeetingsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        remove(m.id);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Editar reunião"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEdit(m);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remover reunião"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          remove(m.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );

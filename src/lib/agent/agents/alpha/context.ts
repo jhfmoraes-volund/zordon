@@ -171,7 +171,7 @@ async function buildBaseline(): Promise<Baseline> {
       const rem = Number(m.remaining) || 0;
       const pc = Number(m.project_count) || 0;
       const flag = rem < 0 ? " 🔴 overcommit" : rem === 0 ? " 🟡 cheia" : "";
-      return `- **${m.name}** (${m.role}): ${committed}/${cap} FP comprometidos em ${pc} projeto(s), ${rem} livre${flag}`;
+      return `- **${m.name}** (${m.position}): ${committed}/${cap} FP comprometidos em ${pc} projeto(s), ${rem} livre${flag}`;
     }),
   ].join("\n");
 
@@ -414,7 +414,7 @@ async function buildProjectFocus(
       .limit(20),
     supabase
       .from("ProjectMember")
-      .select("fpAllocation, member:Member(id, name, role, fpCapacity)")
+      .select("fpAllocation, member:Member(id, name, role, position, fpCapacity)")
       .eq("projectId", projectId),
   ]);
 
@@ -494,9 +494,9 @@ async function buildProjectFocus(
     ? [
         "**Membros alocados:**",
         ...memberList.map((m) => {
-          const member = m.member as { name: string; role: string; fpCapacity: number } | null;
+          const member = m.member as { name: string; role: string; position: string | null; fpCapacity: number } | null;
           if (!member) return "- (membro removido)";
-          return `- ${member.name} (${member.role}): ${m.fpAllocation} FP/sprint dedicado a este projeto (capacity total ${member.fpCapacity})`;
+          return `- ${member.name} (${member.position}): ${m.fpAllocation} FP/sprint dedicado a este projeto (capacity total ${member.fpCapacity})`;
         }),
       ].join("\n")
     : "_Nenhum membro alocado ao projeto._";
@@ -805,10 +805,10 @@ async function renderPmReviewMeeting(m: MeetingRow, pendingBlock: string): Promi
   if (projectIds.length > 0) {
     const { data: pmRows } = await supabase
       .from("ProjectMember")
-      .select("projectId, fpAllocation, member:Member(id, name, role)")
+      .select("projectId, fpAllocation, member:Member(id, name, role, position)")
       .in("projectId", projectIds);
 
-    type Mb = { id: string; name: string; role: string };
+    type Mb = { id: string; name: string; role: string; position: string | null };
     type SquadRow = { name: string; role: string; fpAllocation: number | null; isPM: boolean };
 
     const pmIdByProject = new Map<string, string | null>();
@@ -829,7 +829,7 @@ async function renderPmReviewMeeting(m: MeetingRow, pendingBlock: string): Promi
         if (row.projectId !== projectId || !row.member) continue;
         byMemberId.set(row.member.id, {
           name: row.member.name,
-          role: row.member.role,
+          role: row.member.position ?? row.member.role,
           fpAllocation: row.fpAllocation,
           isPM: ownerPmId === row.member.id,
         });

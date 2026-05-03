@@ -12,6 +12,7 @@ export type TeamCapacityMember = {
   id: string;
   name: string;
   role: string;
+  position: string | null;
   squads: string[];
   fpCapacity: number;
   fpContract: number;
@@ -89,7 +90,7 @@ export function TeamCapacityWidget({
                   <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     <span className="text-sm font-medium">{m.name}</span>
                     <Badge variant="outline" className="text-[10px]">
-                      {roleLabel(m.role)}
+                      {roleLabel(m.position)}
                     </Badge>
                     {m.squads.map((s: string) => (
                       <Badge key={s} variant="secondary" className="text-[10px]">

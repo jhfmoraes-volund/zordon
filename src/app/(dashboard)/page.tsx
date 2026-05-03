@@ -168,7 +168,7 @@ export default async function OverviewPage() {
   // (mesmo filtro do widget "Capacity do Time": exclui admin/principal-eng).
   const teamWeeklyCapacity = members
     .filter(
-      (m: any) => getRoleLevel(m.role) < ADMIN && m.role !== "principal-engineer",
+      (m: any) => getRoleLevel(m.position) < ADMIN && m.position !== "principal-engineer",
     )
     .reduce((sum: number, m: any) => sum + (m.fpCapacity ?? 0), 0);
 
@@ -261,6 +261,7 @@ export default async function OverviewPage() {
       id: m.id,
       name: m.name,
       role: m.role,
+      position: m.position,
       squads,
       fpCapacity: m.fpCapacity ?? 0,
       fpContract: contractByMember.get(m.id) ?? 0,
@@ -458,7 +459,7 @@ export default async function OverviewPage() {
         {/* ─── Capacity por Membro ─── */}
         <TeamCapacityWidget
           members={memberCapacity.filter(
-            (m) => getRoleLevel(m.role) < ADMIN && m.role !== "principal-engineer",
+            (m) => getRoleLevel(m.position) < ADMIN && m.position !== "principal-engineer",
           )}
         />
       </div>

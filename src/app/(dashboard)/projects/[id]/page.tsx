@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -41,7 +41,6 @@ import {
   TaskCloneDialog,
   type ProjectLite,
   type StoryCreateInput,
-  type TaskCreateInput,
   type TaskTag,
 } from "@/components/story-hierarchy";
 import type { ChipTone } from "@/lib/status-chips";
@@ -73,6 +72,7 @@ import { toast } from "sonner";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { tempId as makeTempId } from "@/lib/optimistic/reconcile";
+import { suggestFunctionPoints } from "@/lib/function-points";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -195,6 +195,13 @@ export default function ProjectDetailPage({
     useOptimisticCollection<AcceptanceCriterionRow>([]);
   const taskAcRows = acRowsCollection.items;
   const setTaskAcRows = acRowsCollection.setCommitted;
+  // Map client-side tempId → real DB id. Lets us keep the tempId as the React
+  // key after the create resolves, avoiding a remount/flicker on the row.
+  const acIdAliasRef = useRef<Map<string, string>>(new Map());
+  const resolveAcId = useCallback(
+    (clientId: string) => acIdAliasRef.current.get(clientId) ?? clientId,
+    [],
+  );
   const [rawSprints, setRawSprints] = useState<RawSprint[]>([]);
   const [rawMembers, setRawMembers] = useState<RawMember[]>([]);
   const [rawProjectMembers, setRawProjectMembers] = useState<RawProjectMember[]>(
@@ -219,7 +226,6 @@ export default function ProjectDetailPage({
     open: false,
   });
   const [storyCreateOpen, setStoryCreateOpen] = useState(false);
-  const [taskCreateOpen, setTaskCreateOpen] = useState(false);
   const [duplicateTaskRef, setDuplicateTaskRef] = useState<string | null>(null);
   const [cloneTaskRef, setCloneTaskRef] = useState<string | null>(null);
   const [targetProjects, setTargetProjects] = useState<ProjectLite[]>([]);
@@ -307,6 +313,8 @@ export default function ProjectDetailPage({
       ((storiesRes.data ?? []) as unknown) as StoryWithRelations[],
     );
     setTaskAcRows((taskAcRes.data ?? []) as AcceptanceCriterionRow[]);
+    // After a hard reload, all rows carry real ids — aliases are obsolete.
+    acIdAliasRef.current.clear();
   }, [id, supabase]);
 
   const loadTasksAndSprints = useCallback(async () => {
@@ -399,6 +407,9 @@ export default function ProjectDetailPage({
     () => rawStories.map(adaptStory),
     [rawStories],
   );
+  // The SQL loader already filters `.neq("status","draft")`, so `rawTasks`
+  // never contains AI-proposed drafts (those are reviewed inside the
+  // originating Design Session sheet, not the project board).
   const tasks: AdaptedTask[] = useMemo(() => {
     const ctx = buildTaskAdapterContext(stories, taskAcRows);
     return rawTasks.map((t) => adaptTask(t, ctx));
@@ -553,30 +564,43 @@ export default function ProjectDetailPage({
     }
   }
 
-  async function handleCreateTask(input: TaskCreateInput) {
+  /**
+   * Create a backlog task and open the unified TaskSheet on it. The sheet
+   * persists each field inline (saved on blur via the inline mutators), so
+   * there's no "create form" — the user just edits the new task. The task
+   * appears in the list immediately; if it was a misclick, the user deletes
+   * via the row's kebab menu like any other task.
+   *
+   * `status="draft"` is reserved for AI-proposed tasks pending human review
+   * (revealed only inside the originating Design Session), and is set
+   * explicitly by that flow — never by this manual button.
+   */
+  async function handleCreateTask(opts?: {
+    userStoryId?: string | null;
+    sprintId?: string | null;
+  }) {
     const tempTaskId = makeTempId("task");
     const now = new Date().toISOString();
     const optimistic: RawTask = {
       id: tempTaskId,
       reference: "…",
-      title: input.title,
-      description: input.description ?? null,
-      status: input.status,
-      type: input.type,
-      scope: input.scope,
-      complexity: input.complexity,
-      functionPoints: input.functionPoints ?? null,
+      title: "Nova task",
+      description: null,
+      status: "backlog",
+      type: "feature",
+      scope: "small",
+      complexity: "medium",
+      functionPoints: suggestFunctionPoints("small", "medium"),
       billable: true,
       dueDate: null,
       doneAt: null,
       notes: null,
-      sprintId: null,
-      userStoryId: input.userStoryId,
+      sprintId: opts?.sprintId ?? null,
+      userStoryId: opts?.userStoryId ?? null,
       projectId: id,
       createdByAgent: false,
       assignments: [],
       tags: [],
-      // updatedAt + createdAt aren't part of RawTask but keep server-shape generic
     } as unknown as RawTask;
 
     const result = await taskMutate(
@@ -587,14 +611,14 @@ export default function ProjectDetailPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId: id,
-            title: input.title,
-            description: input.description ?? null,
-            type: input.type,
-            scope: input.scope,
-            complexity: input.complexity,
-            status: input.status,
-            userStoryId: input.userStoryId,
-            functionPoints: input.functionPoints,
+            title: "Nova task",
+            type: "feature",
+            scope: "small",
+            complexity: "medium",
+            status: "backlog",
+            userStoryId: opts?.userStoryId ?? null,
+            sprintId: opts?.sprintId ?? null,
+            functionPoints: suggestFunctionPoints("small", "medium"),
             billable: true,
             updatedAt: now,
           }),
@@ -611,12 +635,8 @@ export default function ProjectDetailPage({
       },
     );
 
-    if (result && input.tagIds.length > 0) {
-      await fetch(`/api/tasks/${result.id}/tags`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagIds: input.tagIds }),
-      }).then(() => loadTasksAndSprints());
+    if (result?.reference) {
+      setSelectedTaskRef(result.reference);
     }
   }
 
@@ -788,7 +808,6 @@ export default function ProjectDetailPage({
   }
 
   async function handleSaveTask(updated: AdaptedTask) {
-    const before = tasks.find((t) => t.__id === updated.__id);
     const userStoryId =
       updated.userStoryRef === null
         ? null
@@ -809,7 +828,7 @@ export default function ProjectDetailPage({
       userStoryId,
     };
 
-    const taskFieldsResult = await taskMutate(
+    await taskMutate(
       { type: "patch", id: updated.__id, patch: fieldsPatch },
       async (signal) => {
         const res = await fetchOrThrow(`/api/tasks/${updated.__id}`, {
@@ -826,101 +845,138 @@ export default function ProjectDetailPage({
           prev.map((t) => (t.id === updated.__id ? { ...t, ...server } : t)),
       },
     );
-    if (taskFieldsResult === null) return;
+  }
 
-    if (!before) return;
+  // ─── AC handlers (granular optimistic via acRowsCollection) ────────────────
 
-    // ─── AC bulk diff ────────────────────────────────────────────────────────
-    const beforeMap = new Map(
-      before.acceptanceCriteria.map((ac) => [ac.id, ac]),
-    );
-    const afterMap = new Map(
-      updated.acceptanceCriteria.map((ac) => [ac.id, ac]),
-    );
-
-    const creates: { text: string; order?: number }[] = [];
-    const updates: {
-      id: string;
-      text?: string;
-      order?: number;
-      checked?: boolean;
-    }[] = [];
-    const deletes: string[] = [];
-
-    for (const id of beforeMap.keys()) {
-      if (!afterMap.has(id)) deletes.push(id);
-    }
-
-    let order = 0;
-    for (const [id, after] of afterMap) {
-      if (id.startsWith("ac-new-")) {
-        creates.push({ text: after.text, order });
-      } else {
-        const prev = beforeMap.get(id);
-        if (!prev) continue;
-        const textChanged = prev.text !== after.text;
-        const checkedChanged = prev.checked !== after.checked;
-        if (textChanged || checkedChanged) {
-          updates.push({
-            id,
-            ...(textChanged ? { text: after.text } : {}),
-            ...(checkedChanged ? { checked: after.checked } : {}),
-          });
-        }
-      }
-      order += 1;
-    }
-
-    if (creates.length === 0 && updates.length === 0 && deletes.length === 0) {
-      return;
-    }
-
-    // Build optimistic snapshot of taskAcRows for this task only.
-    const acRowsSnapshot = taskAcRows.filter(
-      (r) => r.taskId === updated.__id,
-    );
-    const otherAcRows = taskAcRows.filter((r) => r.taskId !== updated.__id);
-    const optimisticForTask: AcceptanceCriterionRow[] =
-      updated.acceptanceCriteria.map((ac, idx) => {
-        const existing = beforeMap.get(ac.id);
-        return {
-          id: ac.id.startsWith("ac-new-") ? makeTempId("ac") : ac.id,
-          taskId: updated.__id,
-          userStoryId: null,
-          text: ac.text,
-          order: idx,
-          checkedAt: ac.checked
-            ? existing?.checkedAt ?? new Date().toISOString()
-            : null,
-          checkedBy: ac.checked ? existing?.checkedBy ?? null : null,
-          createdAt: existing?.checkedAt ?? new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        } as AcceptanceCriterionRow;
-      });
-
-    setTaskAcRows([...otherAcRows, ...optimisticForTask]);
-
-    try {
-      const res = await fetchOrThrow(
-        `/api/tasks/${updated.__id}/acceptance/bulk`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ creates, updates, deletes }),
+  async function handleAcCreate(taskRef: string, text: string, order: number) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    const tempId = makeTempId("ac");
+    const optimistic: AcceptanceCriterionRow = {
+      id: tempId,
+      taskId,
+      userStoryId: null,
+      text,
+      order,
+      checkedAt: null,
+      checkedBy: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as AcceptanceCriterionRow;
+    await acRowsCollection.mutate(
+      { type: "create", entity: optimistic },
+      async (signal) => {
+        const res = await fetchOrThrow(
+          `/api/tasks/${taskId}/acceptance`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, order }),
+            signal,
+          },
+        );
+        const data = (await res.json()) as {
+          acceptance: AcceptanceCriterionRow;
+        };
+        acIdAliasRef.current.set(tempId, data.acceptance.id);
+        return data.acceptance;
+      },
+      {
+        errorLabel: "Falha ao criar critério",
+        // Keep tempId as the row's id in client state so the React key stays
+        // stable (no remount/flicker). Server fields are merged in; URL ops
+        // resolve through `acIdAliasRef`.
+        reconcile: (prev, server) => {
+          const merged: AcceptanceCriterionRow = { ...server, id: tempId };
+          const exists = prev.some((r) => r.id === tempId);
+          return exists
+            ? prev.map((r) => (r.id === tempId ? merged : r))
+            : [...prev, merged];
         },
-      );
-      const data = (await res.json()) as { acceptance: AcceptanceCriterionRow[] };
-      setTaskAcRows((prev) => {
-        const others = prev.filter((r) => r.taskId !== updated.__id);
-        return [...others, ...(data.acceptance ?? [])];
-      });
-    } catch (e) {
-      setTaskAcRows((prev) => {
-        const others = prev.filter((r) => r.taskId !== updated.__id);
-        return [...others, ...acRowsSnapshot];
-      });
-      showErrorToast(e, { label: "Falha ao salvar critérios" });
-    }
+      },
+    );
+  }
+
+  async function handleAcUpdateText(
+    taskRef: string,
+    acId: string,
+    text: string,
+  ) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    const realAcId = resolveAcId(acId);
+    await acRowsCollection.mutate(
+      {
+        type: "patch",
+        id: acId,
+        patch: { text } as Partial<AcceptanceCriterionRow>,
+      },
+      async (signal) => {
+        const res = await fetchOrThrow(
+          `/api/tasks/${taskId}/acceptance/${realAcId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+            signal,
+          },
+        );
+        return (await res.json()) as { acceptance: AcceptanceCriterionRow };
+      },
+      { errorLabel: "Falha ao salvar critério" },
+    );
+  }
+
+  async function handleAcToggle(
+    taskRef: string,
+    acId: string,
+    checked: boolean,
+  ) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    const realAcId = resolveAcId(acId);
+    const now = new Date().toISOString();
+    await acRowsCollection.mutate(
+      {
+        type: "patch",
+        id: acId,
+        patch: {
+          checkedAt: checked ? now : null,
+        } as Partial<AcceptanceCriterionRow>,
+      },
+      async (signal) => {
+        const res = await fetchOrThrow(
+          `/api/tasks/${taskId}/acceptance/${realAcId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ checked }),
+            signal,
+          },
+        );
+        return (await res.json()) as { acceptance: AcceptanceCriterionRow };
+      },
+      { errorLabel: "Falha ao marcar critério" },
+    );
+  }
+
+  async function handleAcDelete(taskRef: string, acId: string) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    const realAcId = resolveAcId(acId);
+    await acRowsCollection.mutate(
+      { type: "delete", id: acId },
+      async (signal) => {
+        await fetchOrThrow(
+          `/api/tasks/${taskId}/acceptance/${realAcId}`,
+          { method: "DELETE", signal },
+        );
+        acIdAliasRef.current.delete(acId);
+        return realAcId;
+      },
+      { errorLabel: "Falha ao remover critério" },
+    );
   }
 
   async function loadTargetProjects() {
@@ -1491,7 +1547,7 @@ export default function ProjectDetailPage({
           sprints={sprints}
           availableTags={projectTags}
           onOpenTask={(ref) => setSelectedTaskRef(ref)}
-          onCreateTask={() => setTaskCreateOpen(true)}
+          onCreateTask={() => handleCreateTask()}
           onChangeStatus={handleInlineStatusChange}
           onChangeAssignee={handleInlineAssigneeChange}
           onChangeSprint={handleInlineSprintChange}
@@ -1629,23 +1685,17 @@ export default function ProjectDetailPage({
         members={members}
         sprints={sprints}
         definitionOfDone={project.definitionOfDone}
-        creating={taskCreateOpen}
-        defaultStoryId={
-          selectedStoryRef
-            ? stories.find((s) => s.reference === selectedStoryRef)?.__id ?? null
-            : null
-        }
-        onClose={() => {
-          setSelectedTaskRef(null);
-          setTaskCreateOpen(false);
-        }}
+        onClose={() => setSelectedTaskRef(null)}
         onSave={(updated) => handleSaveTask(updated as AdaptedTask)}
-        onCreate={handleCreateTask}
         onChangeSprint={handleInlineSprintChange}
         onChangeAssignees={handleInlineAssigneesChange}
         availableTags={projectTags}
         onCreateTag={handleCreateTag}
         onChangeTags={handleChangeTaskTags}
+        onAcCreate={handleAcCreate}
+        onAcUpdateText={handleAcUpdateText}
+        onAcToggle={handleAcToggle}
+        onAcDelete={handleAcDelete}
         onOpenStory={(ref) => {
           setSelectedTaskRef(null);
           setSelectedStoryRef(ref);

@@ -592,7 +592,7 @@ function StorySheetEdit({
         <Separator />
 
         <AcList
-          mode="edit"
+          mode="editDraft"
           items={draft.acceptanceCriteria}
           onToggle={toggleAC}
           onChange={patchAC}

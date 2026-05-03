@@ -235,7 +235,7 @@ export function AppSidebar() {
             <p className="text-[10px] text-muted-foreground truncate">
               {userEmail ?? "—"}
               {member && (
-                <span className="ml-1">· {roleLabel(member.role)}</span>
+                <span className="ml-1">· {roleLabel(member.position)}</span>
               )}
             </p>
           </div>
@@ -265,7 +265,7 @@ export function AppSidebar() {
                     <SelectItem key={m.id} value={m.id}>
                       {m.name}
                       <span className="text-muted-foreground ml-1 text-xs">
-                        ({roleLabel(m.role)})
+                        ({roleLabel(m.position)})
                       </span>
                     </SelectItem>
                   ))}

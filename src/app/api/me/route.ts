@@ -75,6 +75,7 @@ export async function GET() {
       id: member.id,
       name: member.name,
       role: member.role,
+      position: member.position,
       fpCapacity: member.fpCapacity,
     },
     fpOpen,

@@ -22,11 +22,11 @@ type Squad = {
   id: string;
   name: string;
   projectSquads: { id: string; project: { id: string; name: string } }[];
-  members: { id: string; member: { id: string; name: string; role: string } }[];
+  members: { id: string; member: { id: string; name: string; role: string; position: string | null } }[];
 };
 
 type Project = { id: string; name: string };
-type Member = { id: string; name: string; role: string };
+type Member = { id: string; name: string; role: string; position: string | null };
 
 /** Map Supabase row shape (PascalCase join tables) to the Squad type used by the UI. */
 function mapSquadRow(row: Record<string, unknown>): Squad {
@@ -41,7 +41,7 @@ function mapSquadRow(row: Record<string, unknown>): Squad {
     (row.SquadMember as Array<Record<string, unknown>> | undefined) ?? []
   ).map((sm) => ({
     id: sm.id as string,
-    member: sm.member as { id: string; name: string; role: string },
+    member: sm.member as { id: string; name: string; role: string; position: string | null },
   }));
 
   return {
@@ -73,7 +73,7 @@ export default function SquadsPage() {
         )
         .order("name"),
       supabase.from("Project").select("id, name").order("name"),
-      supabase.from("Member").select("id, name, role").order("name"),
+      supabase.from("Member").select("id, name, role, position").order("name"),
     ]);
 
     if (squadsRes.data) setSquads(squadsRes.data.map(mapSquadRow));

@@ -38,7 +38,7 @@ import { showErrorToast } from "@/lib/optimistic/toast";
 
 type ProjectMemberAlloc = {
   id: string;
-  member: { id: string; name: string; role: string };
+  member: { id: string; name: string; role: string; position: string | null };
 };
 
 type Project = {
@@ -60,7 +60,7 @@ type Project = {
 };
 
 type Client = { id: string; name: string };
-type Member = { id: string; name: string; role: string };
+type Member = { id: string; name: string; role: string; position: string | null };
 
 function ProjectCardMobile({
   p,
@@ -158,10 +158,10 @@ export default function ProjectsPage() {
     const [projectsRes, clientsRes, membersRes] = await Promise.all([
       supabase
         .from("Project")
-        .select("*, client:Client(id, name), projectMembers:ProjectMember(id, member:Member(id, name, role)), pm:Member!pmId(id, name)")
+        .select("*, client:Client(id, name), projectMembers:ProjectMember(id, member:Member(id, name, role, position)), pm:Member!pmId(id, name)")
         .order("createdAt", { ascending: false }),
       supabase.from("Client").select("id, name").order("name"),
-      supabase.from("Member").select("id, name, role").order("name"),
+      supabase.from("Member").select("id, name, role, position").order("name"),
     ]);
 
     if (projectsRes.data) {
@@ -384,7 +384,7 @@ export default function ProjectsPage() {
                               <Badge key={pm.id} variant="outline" className="text-xs">
                                 {pm.member.name}
                                 <span className="ml-1 text-muted-foreground">
-                                  {roleLabel(pm.member.role)}
+                                  {roleLabel(pm.member.position)}
                                 </span>
                               </Badge>
                             ))}
@@ -438,11 +438,11 @@ export default function ProjectsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {members
-                    .filter((m) => m.role === "pm")
+                    .filter((m) => m.position === "pm")
                     .map((m) => (
                       <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                     ))}
-                  {members.filter((m) => m.role === "pm").length === 0 && (
+                  {members.filter((m) => m.position === "pm").length === 0 && (
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">
                       Nenhum membro com role &quot;pm&quot; cadastrado
                     </div>
@@ -455,7 +455,7 @@ export default function ProjectsPage() {
               <p className="text-xs text-muted-foreground">Clique para alocar/desalocar membros do projeto</p>
               <div className="flex flex-wrap gap-1.5 p-3 border rounded-md min-h-[40px]">
                 {members
-                  .filter((m) => m.role !== "pm")
+                  .filter((m) => m.position !== "pm")
                   .map((m) => {
                     const isSelected = form.memberIds.includes(m.id);
                     return (
@@ -469,12 +469,12 @@ export default function ProjectsPage() {
                       >
                         {m.name}
                         <span className="ml-1 text-[10px]">
-                          {roleLabel(m.role)}
+                          {roleLabel(m.position)}
                         </span>
                       </Badge>
                     );
                   })}
-                {members.filter((m) => m.role !== "pm").length === 0 && (
+                {members.filter((m) => m.position !== "pm").length === 0 && (
                   <span className="text-xs text-muted-foreground">Nenhum membro cadastrado</span>
                 )}
               </div>

@@ -18,6 +18,7 @@ type Member = {
   id: string;
   name: string;
   role: string;
+  position: string | null;
   fpCapacity: number;
   seniority: Seniority | null;
   dedicationPercent: number;
@@ -140,7 +141,7 @@ export default function MemberCapacityPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">{member.name}</h1>
-            <p className="text-sm text-muted-foreground">{roleLabel(member.role)}</p>
+            <p className="text-sm text-muted-foreground">{roleLabel(member.position)}</p>
           </div>
         </div>
       </div>
@@ -251,7 +252,7 @@ export default function MemberCapacityPage() {
 
         <CapacityWidget
           memberId={member.id}
-          role={member.role}
+          role={member.position ?? member.role}
           isExternal={member.isExternal}
           initialCapacity={member.fpCapacity}
           initialSeniority={member.seniority}

@@ -3,9 +3,9 @@
 import { motion } from "framer-motion";
 
 const MEMBERS = [
-  { name: "Marina", role: "Frontend", used: 32, capacity: 40, delay: 0.2 },
-  { name: "Caio", role: "Backend", used: 28, capacity: 36, delay: 0.32 },
-  { name: "Lia", role: "Fullstack", used: 18, capacity: 32, delay: 0.44 },
+  { name: "Marina", position: "Frontend", used: 32, capacity: 40, delay: 0.2 },
+  { name: "Caio", position: "Backend", used: 28, capacity: 36, delay: 0.32 },
+  { name: "Lia", position: "Fullstack", used: 18, capacity: 32, delay: 0.44 },
 ];
 
 export function SprintsScene() {
@@ -78,7 +78,7 @@ export function SprintsScene() {
                     </div>
                     <span className="font-medium">{m.name}</span>
                     <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {m.role}
+                      {m.position}
                     </span>
                   </div>
                   <span className="font-mono tabular-nums text-muted-foreground">

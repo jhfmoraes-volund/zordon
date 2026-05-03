@@ -6,9 +6,14 @@ import {
   requireProjectEditTasksApi,
 } from "@/lib/dal";
 import { deleteAc, toggleAcCheck, updateAc } from "@/lib/dal/story-hierarchy";
+import { snapshotAcceptance } from "@/lib/dal/task-snapshot";
+import {
+  diffAcceptance,
+  recordAcceptanceChanges,
+} from "@/lib/dal/task-activity-recorder";
 
 const patchSchema = z.object({
-  text: z.string().min(1).max(500).optional(),
+  text: z.string().max(500).optional(),
   order: z.number().int().min(0).optional(),
   checked: z.boolean().optional(),
 });
@@ -43,6 +48,7 @@ export async function PATCH(
   }
 
   try {
+    const before = await snapshotAcceptance(id);
     let acceptance;
     if (parsed.data.checked !== undefined) {
       const memberId = await getActorMemberId();
@@ -60,6 +66,10 @@ export async function PATCH(
         order: parsed.data.order,
       });
     }
+    const after = await snapshotAcceptance(id);
+    recordAcceptanceChanges(id, diffAcceptance(before, after)).catch((e) =>
+      console.error("[task-activity] recordAcceptanceChanges failed", e),
+    );
     return NextResponse.json({ acceptance });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "update failed";
@@ -79,7 +89,12 @@ export async function DELETE(
   if (denied) return denied;
 
   try {
+    const before = await snapshotAcceptance(id);
     await deleteAc(acId);
+    const after = await snapshotAcceptance(id);
+    recordAcceptanceChanges(id, diffAcceptance(before, after)).catch((e) =>
+      console.error("[task-activity] recordAcceptanceChanges failed", e),
+    );
     return NextResponse.json({ ok: true, id: acId });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "delete failed";

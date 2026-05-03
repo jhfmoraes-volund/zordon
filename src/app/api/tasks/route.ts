@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { suggestFunctionPoints } from "@/lib/function-points";
 import { getCurrentMember, getUser, requireProjectMemberApi } from "@/lib/dal";
+import { recordTaskCreated } from "@/lib/dal/task-activity-recorder";
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -107,12 +108,23 @@ export async function POST(req: NextRequest) {
         .insert(assigneeIds.map((a: { memberId?: string }) => ({ id: crypto.randomUUID(), taskId: task.id, ...a })));
     }
 
-    // Re-fetch with assignments
+    // Re-fetch with the same shape RawTask expects on the client (assignments
+    // + tags). Missing `tags` would leave optimistic-reconciled rows with
+    // undefined relations and crash any consumer that reads `raw.tags.length`.
     const { data: full } = await supabase
       .from("Task")
-      .select("*, project:Project(name), assignments:TaskAssignment(*, member:Member(id, name))")
+      .select(
+        "*, project:Project(name), assignments:TaskAssignment(*, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+      )
       .eq("id", task.id)
       .single();
+
+    recordTaskCreated(task.id, {
+      title: task.title,
+      reference: task.reference ?? null,
+    }).catch((e) =>
+      console.error("[task-activity] recordTaskCreated failed", e),
+    );
 
     return NextResponse.json(full, { status: 201 });
   }

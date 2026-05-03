@@ -23,9 +23,11 @@ import {
   verifySession,
   getRealRole,
   getEffectiveRole,
+  getAccessLevel,
+  getEffectiveAccessLevel,
   getCurrentMember,
 } from "@/lib/dal";
-import { hasMinLevel, ADMIN } from "@/lib/roles";
+import { hasMinAccessLevel } from "@/lib/roles";
 import { db } from "@/lib/db";
 
 export default async function DashboardLayout({
@@ -36,6 +38,8 @@ export default async function DashboardLayout({
   const user = await verifySession();
   const realRole = await getRealRole();
   const effectiveRole = await getEffectiveRole();
+  const realAccessLevel = await getAccessLevel();
+  const effectiveAccessLevel = await getEffectiveAccessLevel();
   const member = await getCurrentMember();
 
   // Membros recém-convidados (onboardedAt nulo) passam pelo flow inicial
@@ -46,14 +50,21 @@ export default async function DashboardLayout({
   }
 
   // Only fetch the full members list for admins (powers the impersonation dropdown).
-  const isAdmin = hasMinLevel(realRole, ADMIN);
+  const isAdmin = hasMinAccessLevel(realAccessLevel, "admin");
   const members: SessionMember[] = isAdmin
-    ? (
+    ? ((
         await db()
           .from("Member")
           .select("id, name, role, fpCapacity, email")
           .order("name")
-      ).data ?? []
+      ).data ?? []).map((m) => ({
+        id: m.id,
+        name: m.name,
+        position: m.role,
+        role: m.role,
+        fpCapacity: m.fpCapacity,
+        email: m.email,
+      }))
     : [];
 
   const auth: AuthValue = {
@@ -61,10 +72,13 @@ export default async function DashboardLayout({
     userEmail: user.email ?? null,
     realRole,
     effectiveRole,
+    realAccessLevel,
+    effectiveAccessLevel,
     member: member
       ? {
           id: member.id,
           name: member.name,
+          position: member.role,
           role: member.role,
           fpCapacity: member.fpCapacity,
           email: member.email,

@@ -3,8 +3,16 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "./supabase/server";
+import { createAdminClient } from "./supabase/admin";
 import { db } from "./db";
-import { hasMinLevel, ADMIN, MANAGER } from "./roles";
+import {
+  hasMinLevel,
+  ADMIN,
+  MANAGER,
+  resolveAccessLevel,
+  hasMinAccessLevel,
+  type AccessLevel,
+} from "./roles";
 import type { Member } from "./supabase/types";
 
 const IMPERSONATION_COOKIE = "volund_impersonate";
@@ -16,7 +24,7 @@ const IMPERSONATION_COOKIE = "volund_impersonate";
 type ProxyUser = {
   id: string;
   email: string | null;
-  app_metadata: { role?: string };
+  app_metadata: { role?: string; access_level?: string };
 };
 
 /**
@@ -30,7 +38,10 @@ const getUserFromHeaders = cache(async (): Promise<ProxyUser | null> => {
   return {
     id,
     email: h.get("x-user-email") || null,
-    app_metadata: { role: h.get("x-user-role") || undefined },
+    app_metadata: {
+      role: h.get("x-user-role") || undefined,
+      access_level: h.get("x-user-access-level") || undefined,
+    },
   };
 });
 
@@ -73,6 +84,9 @@ export const getUser = cache(async () => {
 });
 
 /**
+ * @deprecated Use `getAccessLevel()` for authz, or read `position` from
+ * Member for cargo. The legacy `role` mixed both axes.
+ *
  * The role used for authorization decisions, sourced from auth.users.app_metadata.
  * NEVER use user_metadata for authz — it's user-editable.
  * Falls back to null if missing (treat as "no role" / forbidden).
@@ -81,6 +95,20 @@ export const getRealRole = cache(async (): Promise<string | null> => {
   const user = await verifySession();
   const role = user.app_metadata?.role;
   return typeof role === "string" ? role : null;
+});
+
+/**
+ * Real access level of the authenticated user, sourced from
+ * `auth.users.app_metadata.access_level`. While JWTs are still rotating after
+ * the migration, falls back to `mapPositionToAccessLevel(role)` so older
+ * sessions keep working. Use this for authorization decisions.
+ */
+export const getAccessLevel = cache(async (): Promise<AccessLevel> => {
+  const user = await verifySession();
+  return resolveAccessLevel(
+    user.app_metadata?.access_level,
+    user.app_metadata?.role,
+  );
 });
 
 export type CurrentMember = Member & {
@@ -141,6 +169,33 @@ export const getEffectiveRole = cache(async (): Promise<string | null> => {
   const member = await getCurrentMember();
   if (member?._impersonatedBy) return member.role;
   return realRole;
+});
+
+/**
+ * Access level used for UI visibility / read-route gating, honoring impersonation:
+ *   - Real user / not impersonating: real `access_level` from JWT.
+ *   - Admin impersonating: the impersonated user's real `access_level`
+ *     (looked up from `auth.users.app_metadata.access_level` via admin client).
+ *
+ * Use this for UI/menu/page visibility. For mutation gates that should keep
+ * admin powers during impersonation, use `getAccessLevel()` (real) instead.
+ */
+export const getEffectiveAccessLevel = cache(async (): Promise<AccessLevel> => {
+  const real = await getAccessLevel();
+  const member = await getCurrentMember();
+  if (!member?._impersonatedBy || !member.userId) return real;
+
+  // Look up the impersonated user's access_level from auth.users.
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.getUserById(member.userId);
+  if (error || !data?.user) {
+    // Fallback to deriving from member.role/position if the lookup fails.
+    return resolveAccessLevel(undefined, member.role);
+  }
+  return resolveAccessLevel(
+    (data.user.app_metadata as { access_level?: string } | null)?.access_level,
+    (data.user.app_metadata as { role?: string } | null)?.role,
+  );
 });
 
 /**
@@ -338,6 +393,8 @@ export const isAllocatedTo = canViewProject;
 export const getAllocatedProjectIds = getAccessibleProjectIds;
 
 /**
+ * @deprecated Use `requireMinAccessLevelApi(level)` with an `AccessLevel` string.
+ *
  * Route Handler guard. Returns a Response to return from the handler when the
  * caller is not authorized; returns null when OK to proceed.
  *
@@ -351,6 +408,26 @@ export async function requireMinLevelApi(
   if (!user) return new Response("Unauthorized", { status: 401 });
   const realRole = await getRealRole();
   if (!hasMinLevel(realRole, level)) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  return null;
+}
+
+/**
+ * Route Handler guard. Same as `requireMinLevelApi` but uses the new
+ * `AccessLevel` axis (read from `app_metadata.access_level`, with fallback
+ * to legacy `role` while JWTs rotate).
+ *
+ *   const denied = await requireMinAccessLevelApi("manager");
+ *   if (denied) return denied;
+ */
+export async function requireMinAccessLevelApi(
+  min: AccessLevel,
+): Promise<Response | null> {
+  const user = await getUser();
+  if (!user) return new Response("Unauthorized", { status: 401 });
+  const level = await getAccessLevel();
+  if (!hasMinAccessLevel(level, min)) {
     return new Response("Forbidden", { status: 403 });
   }
   return null;

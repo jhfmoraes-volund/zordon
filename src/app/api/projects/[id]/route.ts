@@ -25,9 +25,9 @@ export async function GET(
   ] = await Promise.all([
     supabase.from("Project").select("*, client:Client(*)").eq("id", id).maybeSingle(),
     supabase.from("ProjectSquad").select("*, squad:Squad(*, members:SquadMember(*, member:Member(*)))").eq("projectId", id),
-    supabase.from("ProjectMember").select("*, member:Member(id, name, role, fpCapacity)").eq("projectId", id),
+    supabase.from("ProjectMember").select("*, member:Member(id, name, role, position, fpCapacity)").eq("projectId", id),
     supabase.from("Sprint").select("*, tasks:Task(status, functionPoints, dueDate)").eq("projectId", id).order("startDate", { ascending: false }),
-    supabase.from("Task").select("*, assignments:TaskAssignment(*, member:Member(id, name, role, fpCapacity)), sprint:Sprint(name)").eq("projectId", id).neq("status", "draft").order("priority", { ascending: false }).order("createdAt", { ascending: false }),
+    supabase.from("Task").select("*, assignments:TaskAssignment(*, member:Member(id, name, role, position, fpCapacity)), sprint:Sprint(name)").eq("projectId", id).neq("status", "draft").order("priority", { ascending: false }).order("createdAt", { ascending: false }),
     // View doesn't have FK relationships — query without joins
     supabase.from("design_session_summary").select("*").eq("projectId", id).order("createdAt", { ascending: false }),
   ]);
@@ -218,6 +218,7 @@ export async function GET(
       id: member.id,
       name: member.name,
       role: member.role,
+      position: member.position,
       fpCapacity: member.fpCapacity,
       fpThisProject,
       fpOtherProjects,
@@ -296,7 +297,7 @@ export async function PUT(
 
   const { data: project, error } = await supabase
     .from("Project")
-    .select("*, projectMembers:ProjectMember(*, member:Member(id, name, role))")
+    .select("*, projectMembers:ProjectMember(*, member:Member(id, name, role, position))")
     .eq("id", id)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

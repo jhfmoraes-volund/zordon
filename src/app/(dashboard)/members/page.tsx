@@ -67,6 +67,7 @@ type Member = {
   name: string;
   email: string | null;
   role: string;
+  position: string | null;
   specialty: string | null;
   githubUsername: string | null;
   isExternal: boolean;
@@ -229,7 +230,7 @@ function MemberCardMobile({
       <div className="pr-10 space-y-1.5">
         <h3 className="font-medium text-base leading-tight truncate">{m.name}</h3>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline" className="text-[10px]">{roleLabel(m.role)}</Badge>
+          <Badge variant="outline" className="text-[10px]">{roleLabel(m.position)}</Badge>
           {m.primaryTower && (
             <Badge variant="secondary" className="text-[10px]">
               {towerLabel(m.primaryTower)}
@@ -355,6 +356,7 @@ export default function MembersPage() {
         name: m.name as string,
         email: (m.email as string) ?? null,
         role: m.role as string,
+        position: ((m.position as string | null) ?? (m.role as string)) ?? null,
         specialty: (m.specialty as string) ?? null,
         githubUsername: (m.githubUsername as string) ?? null,
         isExternal: (m.isExternal as boolean) ?? false,
@@ -506,7 +508,7 @@ export default function MembersPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{roleLabel(m.role)}</Badge>
+                    <Badge variant="outline">{roleLabel(m.position)}</Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -596,7 +598,7 @@ export default function MembersPage() {
         </h2>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {Object.entries(roleDetails).map(([key, role]) => {
-            const count = members.filter((m) => m.role === key).length;
+            const count = members.filter((m) => m.position === key).length;
             return (
               <DetailCard key={key} label={role.label} summary={role.summary} responsibilities={role.responsibilities} extra={role.suggestedCapacity} count={count} />
             );

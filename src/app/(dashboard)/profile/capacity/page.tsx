@@ -8,7 +8,7 @@ import { MemberBattery, type BatterySegment } from "@/components/member-battery"
 import { WeeklyAllocation } from "@/components/weekly-allocation";
 import { roleLabel } from "@/lib/roles";
 
-type Member = { id: string; name: string; role: string; fpCapacity: number };
+type Member = { id: string; name: string; role: string; position: string | null; fpCapacity: number };
 type Commitment = { capacity: number; committed: number; remaining: number; projectCount: number };
 type ProjectAlloc = { projectId: string; projectName: string; fpAllocation: number };
 type SprintRow = {
@@ -73,7 +73,7 @@ export default function ProfileCapacityPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold">Minha capacity</h1>
-          <p className="text-sm text-muted-foreground">{roleLabel(member.role)}</p>
+          <p className="text-sm text-muted-foreground">{roleLabel(member.position)}</p>
         </div>
       </div>
 

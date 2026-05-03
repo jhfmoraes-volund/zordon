@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireProjectEditTasksApi } from "@/lib/dal";
 import { setTaskUserStory } from "@/lib/dal/story-hierarchy";
+import { snapshotTaskHydrated } from "@/lib/dal/task-snapshot";
+import { recordTaskChanges } from "@/lib/dal/task-activity-recorder";
 
 const bodySchema = z.object({
   userStoryId: z.string().nullable(),
@@ -55,7 +57,16 @@ export async function POST(
   }
 
   try {
+    const before = await snapshotTaskHydrated(id);
     const updated = await setTaskUserStory(id, parsed.data.userStoryId);
+    if (before) {
+      const after = await snapshotTaskHydrated(id);
+      if (after) {
+        recordTaskChanges(id, before, after).catch((e) =>
+          console.error("[task-activity] recordTaskChanges failed", e),
+        );
+      }
+    }
     return NextResponse.json({ task: updated });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "update failed";

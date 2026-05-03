@@ -49,6 +49,7 @@ export async function GET() {
     memberId: m.id,
     name: m.name,
     role: m.role,
+    position: m.position,
     capacity: Number(m.capacity) || 0,
     committed: Number(m.committed) || 0,
     remaining: Number(m.remaining) || 0,

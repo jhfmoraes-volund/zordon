@@ -96,7 +96,7 @@ export function assembleAlphaTools(
       return {
         members: (data || []).map((m) => ({
           name: m.name,
-          role: m.role,
+          role: m.position,
           capacity: m.capacity,
           committed: m.committed,
           remaining: m.remaining,
@@ -373,7 +373,7 @@ export function assembleAlphaTools(
     execute: async ({ projectName }) => {
       const { data: project } = await supabase
         .from("Project")
-        .select("id, name, status, pmId, pm:Member!Project_pmId_fkey(id, name, role, fpCapacity)")
+        .select("id, name, status, pmId, pm:Member!Project_pmId_fkey(id, name, role, position, fpCapacity)")
         .ilike("name", `%${projectName}%`)
         .limit(1)
         .maybeSingle();
@@ -382,10 +382,10 @@ export function assembleAlphaTools(
 
       const { data: pmRows } = await supabase
         .from("ProjectMember")
-        .select("memberId, fpAllocation, member:Member(id, name, role, fpCapacity, isExternal, dedicationPercent)")
+        .select("memberId, fpAllocation, member:Member(id, name, role, position, fpCapacity, isExternal, dedicationPercent)")
         .eq("projectId", project.id);
 
-      type Mb = { id: string; name: string; role: string; fpCapacity: number };
+      type Mb = { id: string; name: string; role: string; position: string | null; fpCapacity: number };
       const pm = (project.pm as Mb | null) ?? null;
       const explicitRows = (pmRows || []) as Array<{
         memberId: string;
@@ -412,7 +412,7 @@ export function assembleAlphaTools(
         byId.set(pm.id, {
           memberId: pm.id,
           name: pm.name,
-          role: pm.role,
+          role: pm.position ?? pm.role,
           fpCapacity: pm.fpCapacity,
           fpAllocation: null,
           isPM: true,
@@ -436,7 +436,7 @@ export function assembleAlphaTools(
           byId.set(m.id, {
             memberId: m.id,
             name: m.name,
-            role: m.role,
+            role: m.position ?? m.role,
             fpCapacity: m.fpCapacity,
             fpAllocation: row.fpAllocation,
             isPM: false,

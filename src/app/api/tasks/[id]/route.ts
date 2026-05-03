@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser, requireProjectMemberApi } from "@/lib/dal";
 import { listTagsForTask, setTagsForTask } from "@/lib/dal/task-tags";
 import { TASK_TAG_LIMIT } from "@/lib/task-tags";
+import { snapshotTaskHydrated } from "@/lib/dal/task-snapshot";
+import { recordTaskChanges } from "@/lib/dal/task-activity-recorder";
 
 const TASK_SELECT = `
   *,
@@ -52,16 +54,12 @@ export async function PUT(
   const { assigneeIds, tagIds, ...data } = await req.json();
   const supabase = db();
 
-  const { data: current } = await supabase
-    .from("Task")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (!current) {
+  const before = await snapshotTaskHydrated(id);
+  if (!before) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  const denied = await requireProjectMemberApi(current.projectId);
+  const denied = await requireProjectMemberApi(before.task.projectId);
   if (denied) return denied;
 
   // Handle assignment updates
@@ -86,6 +84,13 @@ export async function PUT(
 
   await supabase.from("Task").update(data).eq("id", id);
   const task = await fetchTask(id);
+
+  const after = await snapshotTaskHydrated(id);
+  if (after) {
+    recordTaskChanges(id, before, after).catch((e) =>
+      console.error("[task-activity] recordTaskChanges failed", e),
+    );
+  }
 
   return NextResponse.json(task);
 }

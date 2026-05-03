@@ -14,6 +14,7 @@ type MemberCapacity = {
   id: string;
   name: string;
   role: string;
+  position: string | null;
   fpCapacity: number;
   fpThisProject: number;
   fpOtherProjects: number;
@@ -252,7 +253,7 @@ function MemberCapacityRow({
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground truncate">{roleLabel(member.role)}</p>
+          <p className="text-xs text-muted-foreground truncate">{roleLabel(member.position)}</p>
         </div>
         {member.isOverloaded && (
           <StatusChip tone="red" size="sm" className="shrink-0">overloaded</StatusChip>

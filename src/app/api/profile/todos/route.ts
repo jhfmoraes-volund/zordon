@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   if (assigneeId !== me.id) {
     const { data: assignee } = await db()
       .from("Member")
-      .select("id, role")
+      .select("id, role, position")
       .eq("id", assigneeId)
       .maybeSingle();
     if (!assignee) {

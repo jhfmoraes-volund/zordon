@@ -14,7 +14,7 @@ export async function GET() {
     .select(`
       *,
       client:Client(name),
-      projectMembers:ProjectMember(*, member:Member(id, name, role)),
+      projectMembers:ProjectMember(*, member:Member(id, name, role, position)),
       pm:Member!Project_pmId_fkey(id, name)
     `)
     .order("createdAt", { ascending: false });
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
 
   const { data: full } = await supabase
     .from("Project")
-    .select("*, projectMembers:ProjectMember(*, member:Member(id, name, role))")
+    .select("*, projectMembers:ProjectMember(*, member:Member(id, name, role, position))")
     .eq("id", project.id)
     .single();
 

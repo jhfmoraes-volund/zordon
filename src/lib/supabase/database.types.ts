@@ -1614,6 +1614,7 @@ export type Database = {
           isExternal: boolean
           name: string
           onboardedAt: string | null
+          position: string
           role: string
           seniority: string | null
           specialty: string | null
@@ -1630,6 +1631,7 @@ export type Database = {
           isExternal?: boolean
           name: string
           onboardedAt?: string | null
+          position?: string
           role?: string
           seniority?: string | null
           specialty?: string | null
@@ -1646,6 +1648,7 @@ export type Database = {
           isExternal?: boolean
           name?: string
           onboardedAt?: string | null
+          position?: string
           role?: string
           seniority?: string | null
           specialty?: string | null
@@ -2892,6 +2895,75 @@ export type Database = {
           },
         ]
       }
+      TaskComment: {
+        Row: {
+          authorMemberId: string | null
+          body: string
+          createdAt: string
+          deletedAt: string | null
+          editedAt: string | null
+          id: string
+          mentionedMemberIds: string[]
+          taskId: string
+        }
+        Insert: {
+          authorMemberId?: string | null
+          body: string
+          createdAt?: string
+          deletedAt?: string | null
+          editedAt?: string | null
+          id?: string
+          mentionedMemberIds?: string[]
+          taskId: string
+        }
+        Update: {
+          authorMemberId?: string | null
+          body?: string
+          createdAt?: string
+          deletedAt?: string | null
+          editedAt?: string | null
+          id?: string
+          mentionedMemberIds?: string[]
+          taskId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "TaskComment_authorMemberId_fkey"
+            columns: ["authorMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskComment_authorMemberId_fkey"
+            columns: ["authorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskComment_authorMemberId_fkey"
+            columns: ["authorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskComment_authorMemberId_fkey"
+            columns: ["authorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskComment_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "Task"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       TaskIteration: {
         Row: {
           commitSha: string | null
@@ -3395,6 +3467,7 @@ export type Database = {
           fp_capacity: number | null
           id: string | null
           name: string | null
+          position: string | null
           role: string | null
         }
         Relationships: []
@@ -3405,6 +3478,7 @@ export type Database = {
           committed: number | null
           id: string | null
           name: string | null
+          position: string | null
           project_count: number | null
           remaining: number | null
           role: string | null
@@ -3420,6 +3494,7 @@ export type Database = {
           githubUsername: string | null
           id: string | null
           name: string | null
+          position: string | null
           role: string | null
           squad_count: number | null
           updatedAt: string | null
@@ -3433,6 +3508,7 @@ export type Database = {
           githubUsername?: string | null
           id?: string | null
           name?: string | null
+          position?: string | null
           role?: string | null
           squad_count?: never
           updatedAt?: string | null
@@ -3446,6 +3522,7 @@ export type Database = {
           githubUsername?: string | null
           id?: string | null
           name?: string | null
+          position?: string | null
           role?: string | null
           squad_count?: never
           updatedAt?: string | null
@@ -3767,4 +3844,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

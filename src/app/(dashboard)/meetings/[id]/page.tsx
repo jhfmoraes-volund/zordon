@@ -353,10 +353,19 @@ export default function MeetingDetailPage({
     return new Date(d) < new Date();
   };
 
-  const headerTitle =
-    meeting.type === "general"
-      ? meeting.title || "Reunião geral"
-      : `Reunião com PMs — ${fmtDate(meeting.date)}`;
+  // Título: prioriza título explícito; senão deriva por tipo.
+  const derivedHeaderTitle =
+    meeting.type === "pm_review"
+      ? meeting.attendees
+          .filter((a) => a.member)
+          .map((a) => a.member!.name)
+          .join(", ") || "Reunião com PMs"
+      : meeting.type === "daily"
+        ? "Daily"
+        : meeting.type === "super_planning"
+          ? "Super Planning"
+          : "Reunião geral";
+  const headerTitle = meeting.title || derivedHeaderTitle;
 
   return (
     <div className="space-y-6">

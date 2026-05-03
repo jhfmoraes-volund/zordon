@@ -6,9 +6,14 @@ import {
   requireProjectViewApi,
 } from "@/lib/dal";
 import { createAc, getAcForTask } from "@/lib/dal/story-hierarchy";
+import { snapshotAcceptance } from "@/lib/dal/task-snapshot";
+import {
+  diffAcceptance,
+  recordAcceptanceChanges,
+} from "@/lib/dal/task-activity-recorder";
 
 const createSchema = z.object({
-  text: z.string().min(1).max(500),
+  text: z.string().max(500),
   order: z.number().int().min(0).optional(),
 });
 
@@ -57,11 +62,16 @@ export async function POST(
   }
 
   try {
+    const before = await snapshotAcceptance(id);
     const ac = await createAc({
       taskId: id,
       text: parsed.data.text,
       order: parsed.data.order ?? 0,
     });
+    const after = await snapshotAcceptance(id);
+    recordAcceptanceChanges(id, diffAcceptance(before, after)).catch((e) =>
+      console.error("[task-activity] recordAcceptanceChanges failed", e),
+    );
     return NextResponse.json({ acceptance: ac }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "create failed";

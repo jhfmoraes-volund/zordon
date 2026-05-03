@@ -66,7 +66,7 @@ type MeProject = {
 };
 
 type MeData = {
-  member: { id: string; name: string; role: string; fpCapacity: number };
+  member: { id: string; name: string; role: string; position: string; fpCapacity: number };
   fpOpen: number;
   tasks: MeTask[];
   sprints: MeSprint[];
@@ -158,7 +158,7 @@ export default function ProfilePage() {
     }
 
     return {
-      member: { id: memberId, name: memberInfo!.name, role: memberInfo!.role, fpCapacity: memberInfo!.fpCapacity },
+      member: { id: memberId, name: memberInfo!.name, role: memberInfo!.role, position: memberInfo!.position, fpCapacity: memberInfo!.fpCapacity },
       fpOpen,
       tasks,
       sprints: Array.from(sprintMap.values()),
@@ -284,7 +284,7 @@ export default function ProfilePage() {
         <div>
           <h1 className="text-2xl font-bold">{data.member.name}</h1>
           <p className="text-sm text-muted-foreground">
-            {roleLabel(data.member.role)}
+            {roleLabel(data.member.position)}
           </p>
         </div>
       </div>
