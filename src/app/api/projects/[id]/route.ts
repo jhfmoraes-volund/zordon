@@ -138,7 +138,7 @@ export async function GET(
   // ─── Member capacity (multi-project) ───────────────────
   const allMemberIds = projectMembers.map((pm: any) => pm.member.id);
   const activeSprintIds = sprints
-    .filter((s: any) => s.status === "active" || s.status === "planning")
+    .filter((s: any) => s.status === "active" || s.status === "upcoming")
     .map((s: any) => s.id);
 
   let fpByMember = new Map<string, number>();

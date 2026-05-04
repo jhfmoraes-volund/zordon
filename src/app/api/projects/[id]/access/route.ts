@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getUser, getRealRole, requireMinLevelApi } from "@/lib/dal";
-import { MANAGER, hasMinLevel, type Role, roleLabel } from "@/lib/roles";
+import {
+  MANAGER,
+  hasMinLevel,
+  hasMinAccessLevel,
+  resolveAccessLevel,
+  positionLabel,
+  type AccessLevel,
+  type Position,
+} from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { projectAccessInviteEmail, sendEmail } from "@/lib/email";
 
@@ -25,8 +33,11 @@ type AccessRow = {
   // Manager rows have implicit full access (is_manager() bypass) and are
   // surfaced even without a ProjectAccess row. UI hides role-edit / revoke.
   isManager: boolean;
-  managerRole: Role | null;
-  managerRoleLabel: string | null;
+  /** Job title (cargo) — for display next to the manager chip. */
+  managerPosition: Position | null;
+  managerPositionLabel: string | null;
+  /** Resolved access level (manager / admin). */
+  managerAccessLevel: AccessLevel | null;
 };
 
 /**
@@ -56,27 +67,40 @@ export async function GET(
 
   const authMap = new Map<
     string,
-    { email: string | null; name: string | null; role: Role | null }
+    {
+      email: string | null;
+      name: string | null;
+      position: Position | null;
+      accessLevel: AccessLevel;
+    }
   >();
   for (const u of list.users) {
-    const role =
-      ((u.app_metadata as { role?: string } | null)?.role as Role | undefined) ??
-      null;
+    const meta = (u.app_metadata as {
+      role?: string;
+      access_level?: string;
+    } | null) ?? null;
+    // Legacy `role` doubled as cargo; new schema uses `access_level` for authz
+    // and the user's Member.position for cargo. Until JWTs rotate, derive
+    // accessLevel via resolveAccessLevel and read cargo from meta.role.
     authMap.set(u.id, {
       email: u.email ?? null,
-      name:
-        (u.user_metadata as { name?: string } | null)?.name ?? null,
-      role,
+      name: (u.user_metadata as { name?: string } | null)?.name ?? null,
+      position: (meta?.role as Position | undefined) ?? null,
+      accessLevel: resolveAccessLevel(meta?.access_level, meta?.role),
     });
   }
 
+  // Managers (manager + admin) get implicit access to every project. Surface
+  // them even without a ProjectAccess row.
   const managerUserIds = list.users
-    .filter((u) =>
-      hasMinLevel(
-        (u.app_metadata as { role?: string } | null)?.role,
-        MANAGER,
-      ),
-    )
+    .filter((u) => {
+      const meta = (u.app_metadata as {
+        role?: string;
+        access_level?: string;
+      } | null) ?? null;
+      const level = resolveAccessLevel(meta?.access_level, meta?.role);
+      return hasMinAccessLevel(level, "manager");
+    })
     .map((u) => u.id);
 
   const { data: accessRows, error } = await supabase
@@ -120,7 +144,7 @@ export async function GET(
     const member = memberByUser.get(uid);
     const auth = authMap.get(uid);
     const access = accessByUser.get(uid);
-    const isManager = hasMinLevel(auth?.role, MANAGER);
+    const isManager = hasMinAccessLevel(auth?.accessLevel, "manager");
     return {
       userId: uid,
       email: member?.email ?? auth?.email ?? null,
@@ -133,8 +157,9 @@ export async function GET(
       fpAllocation: member ? pmFp.get(member.id) ?? null : null,
       grantedAt: access?.grantedAt ?? new Date(0).toISOString(),
       isManager,
-      managerRole: isManager ? auth?.role ?? null : null,
-      managerRoleLabel: isManager ? roleLabel(auth?.role) : null,
+      managerPosition: isManager ? auth?.position ?? null : null,
+      managerPositionLabel: isManager ? positionLabel(auth?.position) : null,
+      managerAccessLevel: isManager ? auth?.accessLevel ?? null : null,
     };
   });
 
@@ -209,7 +234,7 @@ export async function POST(
         email,
         email_confirm: true,
         user_metadata: name ? { name } : {},
-        app_metadata: { role: "guest" },
+        app_metadata: { role: "guest", access_level: "guest" },
       });
     if (createErr || !created.user) {
       console.error("[access POST] createUser failed:", createErr?.message);

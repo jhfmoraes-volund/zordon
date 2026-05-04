@@ -80,9 +80,9 @@ export const TASK_TYPE = defineRegistry({
 // ─── Sprint ──────────────────────────────────────────────
 
 export const SPRINT_STATUS = defineRegistry({
-  planning:  { label: "Planning",  tone: "muted" },
-  active:    { label: "Ativo",     tone: "green" },
-  completed: { label: "Concluído", tone: "blue"  },
+  upcoming:  { label: "A iniciar", tone: "muted" },
+  active:    { label: "Ativa",     tone: "green" },
+  completed: { label: "Concluída", tone: "blue"  },
 });
 
 // ─── Design Session ──────────────────────────────────────

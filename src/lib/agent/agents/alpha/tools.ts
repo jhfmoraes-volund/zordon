@@ -496,7 +496,7 @@ export function assembleAlphaTools(
         projectName: z.string().describe("Nome do projeto (busca por nome parcial)"),
         startDate: z.string().describe("Data de inicio no formato YYYY-MM-DD"),
         endDate: z.string().describe("Data de fim no formato YYYY-MM-DD"),
-        status: z.enum(["planning", "active", "done"]).default("planning").describe("Status inicial do sprint"),
+        status: z.enum(["upcoming", "completed"]).default("upcoming").describe("Status inicial do sprint. 'active' não pode ser definido aqui — promova depois usando o botão Ativar na UI ou o endpoint /activate."),
       }),
       execute: async ({ name, projectName, startDate, endDate, status }) => {
         const { data: project } = await supabase

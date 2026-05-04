@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     name: sprintDefaults.name,
     startDate: sprintDefaults.startDate,
     endDate: sprintDefaults.endDate,
-    status: "planning",
+    status: "upcoming",
     updatedAt: new Date().toISOString(),
   });
 

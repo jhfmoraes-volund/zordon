@@ -130,7 +130,7 @@ export default async function OverviewPage() {
     supabase
       .from("Sprint")
       .select("id, name, startDate, endDate, status, projectId, project:Project(id, name)")
-      .in("status", ["active", "planning"])
+      .in("status", ["active", "upcoming"])
       .order("startDate"),
     supabase
       .from("sprint_capacity_overview")

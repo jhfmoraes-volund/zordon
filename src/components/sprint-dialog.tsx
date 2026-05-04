@@ -70,7 +70,7 @@ export function SprintDialog({
   projects, allSprints,
 }: Props) {
   const [form, setForm] = useState<SprintFormData>({
-    name: "", startDate: "", endDate: "", status: "planning", projectId: "",
+    name: "", startDate: "", endDate: "", status: "upcoming", projectId: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -104,7 +104,7 @@ export function SprintDialog({
         name: defaults.name,
         startDate: defaults.startDate,
         endDate: defaults.endDate,
-        status: "planning",
+        status: "upcoming",
         projectId: "",
       });
     }
@@ -209,17 +209,34 @@ export function SprintDialog({
               Sprints sempre vão de segunda a domingo (7 dias). Use ← / → pra navegar.
             </p>
           </div>
-          <div className="grid gap-2">
-            <Label>Status</Label>
-            <Select value={form.status} onValueChange={(v) => v && setForm({ ...form, status: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="planning">Planning</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {editing && form.status === "active" ? (
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                Ativa
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pra trocar de sprint ativa, ative outra a partir da lista.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <Select
+                value={form.status === "active" ? "upcoming" : form.status}
+                onValueChange={(v) => v && setForm({ ...form, status: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="upcoming">A iniciar</SelectItem>
+                  <SelectItem value="completed">Concluída</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Use o botão "Ativar sprint" na lista pra promover esta sprint a ativa.
+              </p>
+            </div>
+          )}
         </ResponsiveDialogBody>
         <ResponsiveDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

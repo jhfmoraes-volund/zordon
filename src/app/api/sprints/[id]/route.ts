@@ -11,6 +11,14 @@ export async function PUT(
 
   const { id } = await params;
   const body = await req.json();
+
+  if (body.status === "active") {
+    return NextResponse.json(
+      { error: "Use POST /api/sprints/[id]/activate para ativar uma sprint" },
+      { status: 400 }
+    );
+  }
+
   const { data: sprint, error } = await db()
     .from("Sprint")
     .update(body)

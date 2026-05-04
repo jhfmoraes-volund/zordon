@@ -29,6 +29,8 @@ type Props = {
   onJumpToActive?: () => void;
   onSelectSprint?: (sprintId: string) => void;
   onPromoteDeploy?: () => void;
+  onActivateSprint?: () => void;
+  onCompleteSprint?: () => void;
   /** Top offset for sticky positioning. Defaults to the app shell header height. */
   className?: string;
 };
@@ -53,6 +55,8 @@ export function SprintRibbon({
   onJumpToActive,
   onSelectSprint,
   onPromoteDeploy,
+  onActivateSprint,
+  onCompleteSprint,
   className,
 }: Props) {
   const [openTab, setOpenTab] = useState<RibbonTab | null>(null);
@@ -120,6 +124,8 @@ export function SprintRibbon({
             active={openTab === "info"}
             onToggle={() => toggle("info")}
             onJumpToActive={onJumpToActive}
+            onActivate={onActivateSprint}
+            onComplete={onCompleteSprint}
           />
 
           <Divider />

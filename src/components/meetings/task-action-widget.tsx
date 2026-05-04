@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -14,36 +13,36 @@ import {
   ResponsiveDialogFooter,
   ResponsiveDialogBody,
 } from "@/components/ui/responsive-dialog";
-import {
-  Sparkles, Plus, ChevronDown, ChevronRight, Loader2, AlertCircle,
-  CheckCircle2, XCircle, Clock,
-} from "lucide-react";
+import { Sparkles, Plus, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { MeetingTaskActionSheet, type MeetingTaskAction } from "./meeting-task-action-sheet";
 import { toast } from "sonner";
 import { showErrorToast } from "@/lib/optimistic/toast";
+import {
+  MeetingTaskList,
+  actionToRow,
+  buildStoryRefMap,
+  type ActionRow,
+  type RawTaskForRow,
+} from "./meeting-task-list";
+import {
+  adaptMember,
+  adaptModule,
+  adaptStory,
+  type AdaptedStory,
+} from "@/components/story-hierarchy/adapters";
+import type {
+  AcceptanceCriterionRow,
+  ModuleRow,
+  StoryWithRelations,
+} from "@/lib/dal/story-hierarchy";
+import type { Member, Module, TaskTag } from "@/components/story-hierarchy";
 
 type Project = { id: string; name: string };
-type Sprint = { id: string; name: string; status: string };
-type Task = { id: string; reference: string | null; title: string; status: string };
-
+type SprintLite = { id: string; name: string; status: string };
 type ActionType = "create" | "update" | "delete" | "move" | "review";
 
-const ACTION_LABELS: Record<ActionType, string> = {
-  create: "Criar",
-  update: "Atualizar",
-  delete: "Remover da sprint",
-  move: "Mover sprint",
-  review: "Revisar",
-};
-
-const ACTION_COLORS: Record<ActionType, string> = {
-  create: "bg-green-100 text-green-700",
-  update: "bg-blue-100 text-blue-700",
-  delete: "bg-red-100 text-red-700",
-  move: "bg-purple-100 text-purple-700",
-  review: "bg-amber-100 text-amber-700",
-};
+type LiteTask = { id: string; reference: string | null; title: string; status: string };
 
 export type TaskActionWidgetProps = {
   meetingId: string;
@@ -52,17 +51,18 @@ export type TaskActionWidgetProps = {
 
 export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) {
   const [actions, setActions] = useState<MeetingTaskAction[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [sprint, setSprint] = useState<Sprint | null>(null);
+  const [tasksById, setTasksById] = useState<Map<string, RawTaskForRow>>(new Map());
+  const [pickerTasks, setPickerTasks] = useState<LiteTask[]>([]);
+  const [activeSprint, setActiveSprint] = useState<SprintLite | null>(null);
+  const [sprints, setSprints] = useState<SprintLite[]>([]);
+  const [stories, setStories] = useState<AdaptedStory[]>([]);
+  const [modules, setModules] = useState<Module[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [tags, setTags] = useState<TaskTag[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [suggesting, setSuggesting] = useState(false);
   const [applying, setApplying] = useState(false);
-
-  const [openSections, setOpenSections] = useState({
-    pending: true,
-    approved: true,
-    rejected: false,
-  });
 
   const [activeAction, setActiveAction] = useState<MeetingTaskAction | null>(null);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
@@ -70,42 +70,98 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
   const load = useCallback(async () => {
     setLoading(true);
     const supabase = createClient();
-    const [aRes, sRes] = await Promise.all([
+
+    const [
+      aRes,
+      sprintsRes,
+      tasksRes,
+      storiesRes,
+      modulesRes,
+      tagsRes,
+      pmRes,
+    ] = await Promise.all([
       fetch(`/api/meetings/${meetingId}/task-actions`).then((r) => r.json()),
       supabase
         .from("Sprint")
         .select("id, name, status")
         .eq("projectId", project.id)
-        .eq("status", "active")
-        .maybeSingle(),
+        .order("startDate"),
+      supabase
+        .from("Task")
+        .select(
+          "id, reference, title, description, status, type, scope, complexity, priority, sprintId, userStoryId, functionPoints, billable, dueDate, notes, assignments:TaskAssignment(memberId), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+        )
+        .eq("projectId", project.id),
+      supabase
+        .from("UserStory")
+        .select(
+          "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description), persona:ProjectPersona(id, name, description)",
+        )
+        .eq("projectId", project.id),
+      supabase
+        .from("Module")
+        .select("*")
+        .eq("projectId", project.id)
+        .order("name"),
+      supabase
+        .from("TaskTag")
+        .select("id, name, tone")
+        .eq("projectId", project.id)
+        .order("name"),
+      supabase
+        .from("ProjectMember")
+        .select("member:Member!ProjectMember_memberId_fkey(id, name, role)")
+        .eq("projectId", project.id),
     ]);
 
     const projectActions = (aRes ?? []).filter(
-      (a: MeetingTaskAction & { projectId: string }) => a.projectId === project.id
+      (a: MeetingTaskAction & { projectId: string }) => a.projectId === project.id,
     );
     setActions(projectActions);
 
-    const activeSprint = sRes.data ?? null;
-    setSprint(activeSprint as Sprint | null);
+    const allSprints = (sprintsRes.data ?? []) as SprintLite[];
+    setSprints(allSprints);
+    setActiveSprint(allSprints.find((s) => s.status === "active") ?? null);
 
-    if (activeSprint) {
-      const { data: tk } = await supabase
-        .from("Task")
-        .select("id, reference, title, status")
-        .eq("projectId", project.id)
-        .eq("sprintId", activeSprint.id)
-        .order("priority", { ascending: false });
-      setTasks((tk ?? []) as Task[]);
-    } else {
-      const { data: backlog } = await supabase
-        .from("Task")
-        .select("id, reference, title, status")
-        .eq("projectId", project.id)
-        .eq("status", "backlog")
-        .order("priority", { ascending: false })
-        .limit(20);
-      setTasks((backlog ?? []) as Task[]);
-    }
+    const taskMap = new Map<string, RawTaskForRow>();
+    for (const t of (tasksRes.data ?? []) as RawTaskForRow[]) taskMap.set(t.id, t);
+    setTasksById(taskMap);
+
+    // Picker fallback list — for the legacy NewActionDialog. Prioritize sprint
+    // tasks, fall back to backlog when no active sprint.
+    const active = allSprints.find((s) => s.status === "active");
+    const pickerSource = active
+      ? Array.from(taskMap.values()).filter((t) => t.sprintId === active.id)
+      : Array.from(taskMap.values())
+          .filter((t) => t.status === "backlog")
+          .slice(0, 20);
+    setPickerTasks(
+      pickerSource.map((t) => ({
+        id: t.id,
+        reference: t.reference,
+        title: t.title,
+        status: t.status as string,
+      })),
+    );
+
+    const adaptedStories = (
+      (storiesRes.data ?? []) as unknown as StoryWithRelations[]
+    ).map(adaptStory);
+    setStories(adaptedStories);
+    setModules((modulesRes.data ?? []).map((r) => adaptModule(r as ModuleRow)));
+    setTags((tagsRes.data ?? []) as TaskTag[]);
+
+    const memberRows = (pmRes.data ?? [])
+      .map((pm) => {
+        const m = pm.member as
+          | { id: string; name: string; role: string | null }
+          | { id: string; name: string; role: string | null }[]
+          | null;
+        return Array.isArray(m) ? m[0] ?? null : m;
+      })
+      .filter((m): m is { id: string; name: string; role: string | null } => !!m);
+    setMembers(memberRows.map((m) => adaptMember(m)));
+
     setLoading(false);
   }, [meetingId, project.id]);
 
@@ -122,7 +178,7 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId: project.id }),
-        }
+        },
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "erro");
@@ -147,7 +203,7 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
     try {
       const res = await fetch(
         `/api/meetings/${meetingId}/task-actions/apply`,
-        { method: "POST" }
+        { method: "POST" },
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "erro");
@@ -162,10 +218,68 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
     }
   };
 
-  const pending = actions.filter((a) => a.decision === "pending");
-  const approved = actions.filter((a) => a.decision === "approved");
-  const rejected = actions.filter((a) => a.decision === "rejected");
-  const approvedToApply = approved.filter((a) => a.execution === "pending").length;
+  const decideOne = useCallback(
+    async (id: string, decision: "approved" | "rejected") => {
+      try {
+        const res = await fetch(
+          `/api/meetings/${meetingId}/task-actions/${id}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ decision }),
+          },
+        );
+        if (!res.ok) throw new Error(await res.text());
+        await load();
+      } catch (e) {
+        console.error("decide failed:", e);
+        showErrorToast(e, { label: "Falha ao decidir" });
+      }
+    },
+    [meetingId, load],
+  );
+
+  const bulkDecide = useCallback(
+    async (ids: string[], decision: "approved" | "rejected") => {
+      // Sequential — keeps simple ordering and avoids race on the same row
+      for (const id of ids) {
+        try {
+          const res = await fetch(
+            `/api/meetings/${meetingId}/task-actions/${id}`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ decision }),
+            },
+          );
+          if (!res.ok) throw new Error(await res.text());
+        } catch (e) {
+          console.error("bulk decide failed for", id, e);
+          showErrorToast(e, { label: "Falha em proposta" });
+        }
+      }
+      await load();
+    },
+    [meetingId, load],
+  );
+
+  const rows: ActionRow[] = useMemo(() => {
+    const storyRefById = buildStoryRefMap(
+      stories.map((s) => ({ ...s, __id: s.__id })),
+    );
+    return actions.map((a) =>
+      actionToRow(
+        a,
+        a.taskId ? tasksById.get(a.taskId) ?? null : null,
+        storyRefById,
+        tags,
+      ),
+    );
+  }, [actions, tasksById, stories, tags]);
+
+  const approvedToApply = actions.filter(
+    (a) => a.decision === "approved" && a.execution === "pending",
+  ).length;
 
   return (
     <div className="surface p-4 space-y-4">
@@ -173,9 +287,9 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
         <div>
           <h3 className="font-semibold">{project.name}</h3>
           <p className="text-xs text-muted-foreground">
-            {sprint
-              ? `Sprint ${sprint.name} (${sprint.status}) · ${tasks.length} tasks`
-              : "Sem sprint ativa — mostrando backlog"}
+            {activeSprint
+              ? `Sprint ${activeSprint.name} (${activeSprint.status}) · ${rows.length} ${rows.length === 1 ? "proposta" : "propostas"}`
+              : "Sem sprint ativa"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -196,66 +310,20 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
 
       {loading ? (
         <div className="p-6 text-center text-sm text-muted-foreground">Carregando...</div>
-      ) : actions.length === 0 ? (
-        <div className="p-6 text-center text-sm text-muted-foreground">
-          Nenhuma ação proposta ainda. Use <strong>Sugerir com IA</strong> ou crie manualmente.
-        </div>
       ) : (
-        <div className="space-y-3">
-          <Section
-            title="Pendentes"
-            icon={<Clock className="h-3.5 w-3.5 text-amber-600" />}
-            count={pending.length}
-            open={openSections.pending}
-            onToggle={() => setOpenSections((s) => ({ ...s, pending: !s.pending }))}
-          >
-            {pending.map((a) => (
-              <ActionRow
-                key={a.id}
-                action={a}
-                onOpen={() => setActiveAction(a)}
-                onChange={load}
-                meetingId={meetingId}
-              />
-            ))}
-          </Section>
-
-          <Section
-            title="Aprovadas"
-            icon={<CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
-            count={approved.length}
-            open={openSections.approved}
-            onToggle={() => setOpenSections((s) => ({ ...s, approved: !s.approved }))}
-          >
-            {approved.map((a) => (
-              <ActionRow
-                key={a.id}
-                action={a}
-                onOpen={() => setActiveAction(a)}
-                onChange={load}
-                meetingId={meetingId}
-              />
-            ))}
-          </Section>
-
-          <Section
-            title="Rejeitadas"
-            icon={<XCircle className="h-3.5 w-3.5 text-muted-foreground" />}
-            count={rejected.length}
-            open={openSections.rejected}
-            onToggle={() => setOpenSections((s) => ({ ...s, rejected: !s.rejected }))}
-          >
-            {rejected.map((a) => (
-              <ActionRow
-                key={a.id}
-                action={a}
-                onOpen={() => setActiveAction(a)}
-                onChange={load}
-                meetingId={meetingId}
-              />
-            ))}
-          </Section>
-        </div>
+        <MeetingTaskList
+          rows={rows}
+          stories={stories}
+          modules={modules}
+          members={members}
+          sprints={sprints}
+          availableTags={tags}
+          onOpenAction={setActiveAction}
+          onApprove={(id) => decideOne(id, "approved")}
+          onReject={(id) => decideOne(id, "rejected")}
+          onBulkApprove={(ids) => bulkDecide(ids, "approved")}
+          onBulkReject={(ids) => bulkDecide(ids, "rejected")}
+        />
       )}
 
       {approvedToApply > 0 && (
@@ -287,11 +355,10 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
           onOpenChange={setNewDialogOpen}
           meetingId={meetingId}
           projectId={project.id}
-          tasks={tasks}
+          tasks={pickerTasks}
           onCreated={(action) => {
             setNewDialogOpen(false);
             load();
-            // Abre direto pra edição se for create/update/move/review
             if (action) setActiveAction(action);
           }}
         />
@@ -300,144 +367,9 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
   );
 }
 
-// ─── Section ─────────────────────────────────────────────
-
-function Section({
-  title, icon, count, open, onToggle, children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  count: number;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <button
-        onClick={onToggle}
-        className="flex items-center gap-2 w-full text-left text-sm font-medium"
-      >
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-        )}
-        {icon}
-        <span>{title}</span>
-        <span className="text-xs text-muted-foreground">({count})</span>
-      </button>
-      {open && count > 0 && <div className="pl-1 space-y-1.5">{children}</div>}
-    </div>
-  );
-}
-
-// ─── ActionRow ───────────────────────────────────────────
-
-function ActionRow({
-  action, onOpen, onChange, meetingId,
-}: {
-  action: MeetingTaskAction & { task?: Task | null };
-  onOpen: () => void;
-  onChange: () => void;
-  meetingId: string;
-}) {
-  const [busy, setBusy] = useState(false);
-
-  const decide = async (decision: "approved" | "rejected") => {
-    setBusy(true);
-    try {
-      const res = await fetch(
-        `/api/meetings/${meetingId}/task-actions/${action.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ decision }),
-        }
-      );
-      if (!res.ok) throw new Error(await res.text());
-      onChange();
-    } catch (e) {
-      console.error("decide failed:", e);
-      showErrorToast(e, { label: "Falha ao decidir" });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const desc =
-    action.type === "create"
-      ? (action.payload?.title as string) || "Nova task"
-      : action.task
-        ? `${action.task.reference ?? action.task.id.slice(0, 6)} · ${action.task.title}`
-        : "Task";
-
-  const showActionButtons = action.decision === "pending";
-
-  const execStatus = action.execution;
-  const execBadge =
-    execStatus === "applied" ? "✓ aplicada"
-    : execStatus === "failed" ? "✗ falha"
-    : execStatus === "skipped" ? "skip"
-    : null;
-
-  return (
-    <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/40 group">
-      <Badge variant="secondary" className={`${ACTION_COLORS[action.type]} text-[10px] uppercase shrink-0`}>
-        {ACTION_LABELS[action.type]}
-      </Badge>
-      {action.source === "ai" && (
-        <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
-      )}
-      <span className="text-sm truncate flex-1">{desc}</span>
-      {execBadge && (
-        <span
-          className={`text-[10px] shrink-0 ${
-            execStatus === "applied"
-              ? "text-green-600"
-              : execStatus === "failed"
-                ? "text-red-600"
-                : "text-muted-foreground"
-          }`}
-        >
-          {execBadge}
-        </span>
-      )}
-      {action.errorMessage && (
-        <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-      )}
-      <div className="flex gap-1 shrink-0">
-        {showActionButtons && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => decide("approved")}
-              disabled={busy}
-              className="h-7 px-2 text-xs text-green-700"
-            >
-              Aprovar
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => decide("rejected")}
-              disabled={busy}
-              className="h-7 px-2 text-xs text-red-700"
-            >
-              Rejeitar
-            </Button>
-          </>
-        )}
-        <Button variant="outline" size="sm" onClick={onOpen} className="h-7 px-2 text-xs">
-          Abrir
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ─── New action dialog (manual) ──────────────────────────
+// Kept for now; Fase 6 will replace with direct "Nova task" + in-sheet
+// secondary actions.
 
 function NewActionDialog({
   open, onOpenChange, meetingId, projectId, tasks, onCreated,
@@ -446,7 +378,7 @@ function NewActionDialog({
   onOpenChange: (o: boolean) => void;
   meetingId: string;
   projectId: string;
-  tasks: Task[];
+  tasks: LiteTask[];
   onCreated: (action: MeetingTaskAction | null) => void;
 }) {
   const [type, setType] = useState<ActionType>("create");

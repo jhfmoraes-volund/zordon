@@ -130,7 +130,7 @@ function Body({ action, meetingId, projectId, onChange, onOpenChange }: MeetingT
         .from("Sprint")
         .select("id, name, status")
         .eq("projectId", projectId)
-        .in("status", ["planning", "active"])
+        .in("status", ["upcoming", "active"])
         .order("name"),
     ]).then(([m, s]) => {
       setMembers((m.data ?? []) as Member[]);

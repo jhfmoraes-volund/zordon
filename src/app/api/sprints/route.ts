@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     .order("startDate", { ascending: false });
 
   if (statusParam !== "all") {
-    const statuses = statusParam ? [statusParam] : ["active", "planning"];
+    const statuses = statusParam ? [statusParam] : ["active", "upcoming"];
     query = query.in("status", statuses);
   }
 

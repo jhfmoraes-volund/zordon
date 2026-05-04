@@ -35,8 +35,10 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import {
   hasMinLevel, ADMIN,
-  ROLES, ROLE_LABELS, roleLabel,
   SPECIALTIES, SPECIALTY_LABELS, specialtyLabel,
+  POSITIONS, POSITION_LABELS, positionLabel,
+  MEMBER_ACCESS_LEVELS, ACCESS_LEVEL_LABELS, mapPositionToAccessLevel,
+  type AccessLevel,
 } from "@/lib/roles";
 import { SkillProfileSheet } from "@/components/skill-assessment/skill-profile-sheet";
 import { PixelBar, pixelTone, PixelHud } from "@/components/ui/pixel-bar";
@@ -230,7 +232,7 @@ function MemberCardMobile({
       <div className="pr-10 space-y-1.5">
         <h3 className="font-medium text-base leading-tight truncate">{m.name}</h3>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline" className="text-[10px]">{roleLabel(m.position)}</Badge>
+          <Badge variant="outline" className="text-[10px]">{positionLabel(m.position)}</Badge>
           {m.primaryTower && (
             <Badge variant="secondary" className="text-[10px]">
               {towerLabel(m.primaryTower)}
@@ -284,8 +286,19 @@ export default function MembersPage() {
   const memberMutate = membersCollection.mutate;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
-  const [form, setForm] = useState({
-    name: "", email: "", role: "product-builder", specialty: "fullstack",
+  const [form, setForm] = useState<{
+    name: string;
+    email: string;
+    position: string;
+    accessLevel: AccessLevel;
+    specialty: string;
+    githubUsername: string;
+    fpCapacity: string;
+    password: string;
+    isExternal: boolean;
+  }>({
+    name: "", email: "", position: "product-builder", accessLevel: "builder",
+    specialty: "fullstack",
     githubUsername: "", fpCapacity: "50", password: "", isExternal: false,
   });
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -377,17 +390,34 @@ export default function MembersPage() {
   const openNew = () => {
     setEditing(null);
     setSaveError(null);
-    setForm({ name: "", email: "", role: "product-builder", specialty: "fullstack", githubUsername: "", fpCapacity: "50", password: generatePassword(), isExternal: false });
+    setForm({
+      name: "",
+      email: "",
+      position: "product-builder",
+      accessLevel: "builder",
+      specialty: "fullstack",
+      githubUsername: "",
+      fpCapacity: "50",
+      password: generatePassword(),
+      isExternal: false,
+    });
     setOpen(true);
   };
 
   const openEdit = (m: Member) => {
     setEditing(m);
     setSaveError(null);
+    const memberPosition = (m.position ?? m.role) as string;
     setForm({
       name: m.name,
       email: m.email || "",
-      role: m.role,
+      position: memberPosition,
+      // Edit defaults: derive accessLevel from position. The UI doesn't load
+      // the user's real `app_metadata.access_level` (that lives in auth.users),
+      // so an admin who promoted someone manually will see the derived value
+      // here. Submitting only changes accessLevel if the admin picks a different
+      // value — see the PUT handler.
+      accessLevel: mapPositionToAccessLevel(memberPosition),
       specialty: m.specialty || "fullstack",
       githubUsername: m.githubUsername || "",
       fpCapacity: String(m.fpCapacity),
@@ -403,7 +433,8 @@ export default function MembersPage() {
     const baseBody: Record<string, unknown> = {
       name: form.name,
       email: form.email || null,
-      role: form.role,
+      position: form.position,
+      accessLevel: form.accessLevel,
       specialty: form.specialty || null,
       githubUsername: form.githubUsername || null,
       fpCapacity: parseInt(form.fpCapacity) || 50,
@@ -508,7 +539,7 @@ export default function MembersPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{roleLabel(m.position)}</Badge>
+                    <Badge variant="outline">{positionLabel(m.position)}</Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -708,24 +739,71 @@ export default function MembersPage() {
                 Membro externo <span className="text-muted-foreground font-normal">(cedido por outra empresa, ex: Extreme Group)</span>
               </Label>
             </div>
-            <div className="grid gap-2">
-              <Label>Role</Label>
-              <Select value={form.role} onValueChange={(v) => v && setForm({ ...form, role: v })}>
-                <SelectTrigger>
-                  <SelectValue>
-                    {(value: string | null) => roleLabel(value)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">
-                A especialidade do membro é definida pelo Perfil de skills (auto-avaliação por torres).
-              </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Cargo</Label>
+                <Select
+                  value={form.position}
+                  onValueChange={(v) =>
+                    v &&
+                    setForm({
+                      ...form,
+                      position: v,
+                      // Auto-suggest accessLevel from cargo, but only when the
+                      // admin hasn't picked a non-derived value yet (i.e., it
+                      // still matches the prior position's mapping).
+                      accessLevel:
+                        form.accessLevel ===
+                        mapPositionToAccessLevel(form.position)
+                          ? mapPositionToAccessLevel(v)
+                          : form.accessLevel,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue>
+                      {(value: string | null) => positionLabel(value)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {POSITIONS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {POSITION_LABELS[p]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Nível de acesso</Label>
+                <Select
+                  value={form.accessLevel}
+                  onValueChange={(v) =>
+                    v && setForm({ ...form, accessLevel: v as AccessLevel })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue>
+                      {(value: string | null) =>
+                        value ? ACCESS_LEVEL_LABELS[value as AccessLevel] : "—"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEMBER_ACCESS_LEVELS.map((al) => (
+                      <SelectItem key={al} value={al}>
+                        {ACCESS_LEVEL_LABELS[al]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            <p className="text-[10px] text-muted-foreground">
+              Cargo é o título do membro; nível de acesso controla o que ele pode
+              fazer na plataforma. Por padrão sugerimos um nível baseado no
+              cargo, mas você pode promover (ex: dar admin a um Principal Engineer).
+            </p>
             <div className="grid gap-2">
               <Label>Especialidade declarada <span className="text-muted-foreground font-normal text-[10px]">(legacy — preenchido no onboarding)</span></Label>
               <Select value={form.specialty} onValueChange={(v) => v && setForm({ ...form, specialty: v })}>

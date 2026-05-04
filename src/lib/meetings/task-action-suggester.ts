@@ -128,12 +128,12 @@ export async function buildSuggestionContext(
       .filter((n: string | undefined): n is string => Boolean(n)),
   }));
 
-  // Sprints alternativas pra MOVE (planning ou active, exceto a atual)
+  // Sprints alternativas pra MOVE (upcoming ou active, exceto a atual)
   const { data: otherSprints } = await supabase
     .from("Sprint")
     .select("id, name, status")
     .eq("projectId", projectId)
-    .in("status", ["planning", "active"])
+    .in("status", ["upcoming", "active"])
     .neq("id", sprint?.id ?? "");
 
   return {

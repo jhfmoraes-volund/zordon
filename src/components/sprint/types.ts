@@ -1,7 +1,7 @@
 // Sprint domain types — independent of story-hierarchy but designed to work
 // alongside it (Task carries `sprintId`).
 
-export type SprintStatus = "planning" | "active" | "completed";
+export type SprintStatus = "upcoming" | "active" | "completed";
 
 export type Sprint = {
   id: string;

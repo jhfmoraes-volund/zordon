@@ -8,7 +8,6 @@ import {
   BookOpen,
   FileText,
   Lightbulb,
-  ListTodo,
   Pencil,
   Plus,
   Settings as SettingsIcon,
@@ -58,7 +57,9 @@ import {
   findCurrentSprint,
   SprintDetail,
   SprintNavigator,
+  SprintActionDialog,
   SprintRibbon,
+  type NavValue,
   type Sprint as SprintView,
   type SprintMemberCapacity,
 } from "@/components/sprint";
@@ -78,7 +79,6 @@ import { suggestFunctionPoints } from "@/lib/function-points";
 
 type TabKey =
   | "stories"
-  | "tasks"
   | "sprints"
   | "sessions"
   | "wiki"
@@ -156,7 +156,6 @@ type RawProjectMember = {
 
 const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
-  { key: "tasks", label: "Tasks", icon: ListTodo },
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
   { key: "wiki", label: "Wiki", icon: FileText },
@@ -176,11 +175,27 @@ export default function ProjectDetailPage({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab") as TabKey | null;
+  const rawTabParam = searchParams.get("tab");
+  // Legacy: `?tab=tasks` agora aponta pra Sprints → Todas. Mantém deep-links antigos vivos.
+  const tabParam: TabKey | null =
+    rawTabParam === "tasks"
+      ? "sprints"
+      : (rawTabParam as TabKey | null);
   const sprintParam = searchParams.get("sprint");
+  const viewParam = searchParams.get("view");
   const taskParam = searchParams.get("task");
 
   const [activeTab, setActiveTab] = useState<TabKey>(tabParam ?? "stories");
+  // View dentro da aba Sprints: id de sprint real OU "backlog" / "all".
+  // Init: respeita ?view= explícito; senão ?sprint=…; senão null (resolvido pra
+  // sprint ativa quando carregar — ver useEffect abaixo).
+  const initialSprintView: NavValue | null =
+    rawTabParam === "tasks"
+      ? "all"
+      : viewParam === "backlog" || viewParam === "all"
+        ? viewParam
+        : sprintParam ?? null;
+  const [sprintView, setSprintView] = useState<NavValue | null>(initialSprintView);
   const [project, setProject] = useState<ProjectMeta | null>(null);
 
   const [rawModules, setRawModules] = useState<ModuleRow[]>([]);
@@ -214,6 +229,11 @@ export default function ProjectDetailPage({
   const [accessOpen, setAccessOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [sprintDialogOpen, setSprintDialogOpen] = useState(false);
+  const [sprintAction, setSprintAction] = useState<
+    | { mode: "activate-replacing" | "activate-fresh"; targetId: string }
+    | { mode: "complete"; targetId: string }
+    | null
+  >(null);
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [editingStory, setEditingStory] = useState(false);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(taskParam);
@@ -230,20 +250,32 @@ export default function ProjectDetailPage({
   const [cloneTaskRef, setCloneTaskRef] = useState<string | null>(null);
   const [targetProjects, setTargetProjects] = useState<ProjectLite[]>([]);
 
-  const [focusSprintId, setFocusSprintId] = useState<string | null>(sprintParam);
+  // Sprint focada (id de sprint real) derivada do sprintView.
+  // null quando view sintética ("backlog"/"all") ou ainda não resolvida.
+  const focusSprintId =
+    sprintView && sprintView !== "backlog" && sprintView !== "all"
+      ? sprintView
+      : null;
 
-  // Sync activeTab + focusSprintId → URL search params (?tab=...&sprint=...).
+  // Sync activeTab + sprintView → URL search params.
+  // Sprint real: ?sprint=<id>.  View sintética: ?view=backlog|all.
   // Allows deep-link from /profile, weekly-allocation widget, etc.
   useEffect(() => {
     const params = new URLSearchParams();
     if (activeTab !== "stories") params.set("tab", activeTab);
-    if (activeTab === "sprints" && focusSprintId) params.set("sprint", focusSprintId);
+    if (activeTab === "sprints" && sprintView) {
+      if (sprintView === "backlog" || sprintView === "all") {
+        params.set("view", sprintView);
+      } else {
+        params.set("sprint", sprintView);
+      }
+    }
     const qs = params.toString();
     const next = qs ? `${pathname}?${qs}` : pathname;
     if (next !== window.location.pathname + window.location.search) {
       router.replace(next, { scroll: false });
     }
-  }, [activeTab, focusSprintId, pathname, router]);
+  }, [activeTab, sprintView, pathname, router]);
 
   // ─── Loaders ───────────────────────────────────────────────────────────────
 
@@ -415,6 +447,14 @@ export default function ProjectDetailPage({
     return rawTasks.map((t) => adaptTask(t, ctx));
   }, [rawTasks, stories, taskAcRows]);
 
+  // View "Backlog" da aba Sprints: tasks sem sprint OU com status=backlog
+  // (uma task pode estar em ambas — backlog do projeto e dentro de uma sprint
+  //  com status=backlog é intencional).
+  const backlogTasks = useMemo(
+    () => tasks.filter((t) => t.sprintId === null || t.status === "backlog"),
+    [tasks],
+  );
+
   const members = useMemo(() => rawMembers.map(adaptMember), [rawMembers]);
 
   const sprints: SprintView[] = useMemo(
@@ -424,7 +464,7 @@ export default function ProjectDetailPage({
         name: s.name,
         startDate: s.startDate.slice(0, 10),
         endDate: s.endDate.slice(0, 10),
-        status: s.status as "planning" | "active" | "completed",
+        status: s.status as "upcoming" | "active" | "completed",
         deployedToStagingAt: s.deployedToStagingAt,
         deployedToProductionAt: s.deployedToProductionAt,
       })),
@@ -499,11 +539,14 @@ export default function ProjectDetailPage({
     [sprints],
   );
 
+  // Default da aba Sprints: sprint ativa. Aplica só na primeira resolução
+  // (sprintView == null) — usuário pode ter escolhido "backlog"/"all" ou outra
+  // sprint depois e a gente respeita.
   useEffect(() => {
-    if (focusSprintId === null && activeSprintId !== null) {
-      setFocusSprintId(activeSprintId);
+    if (sprintView === null && activeSprintId !== null) {
+      setSprintView(activeSprintId);
     }
-  }, [activeSprintId, focusSprintId]);
+  }, [activeSprintId, sprintView]);
 
   const selectedStory =
     stories.find((s) => s.reference === selectedStoryRef) ?? null;
@@ -535,6 +578,42 @@ export default function ProjectDetailPage({
       return;
     }
     await loadTasksAndSprints();
+  }
+
+  function requestActivateSprint(targetId: string) {
+    const hasActive = sprints.some((s) => s.status === "active");
+    setSprintAction({
+      mode: hasActive ? "activate-replacing" : "activate-fresh",
+      targetId,
+    });
+  }
+
+  function requestCompleteSprint(targetId: string) {
+    setSprintAction({ mode: "complete", targetId });
+  }
+
+  async function handleActivateSprint(targetId: string) {
+    try {
+      await fetchOrThrow(`/api/sprints/${targetId}/activate`, { method: "POST" });
+      toast.success("Sprint ativada");
+      await loadTasksAndSprints();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao ativar sprint" });
+    }
+  }
+
+  async function handleCompleteSprint(targetId: string) {
+    try {
+      await fetchOrThrow(`/api/sprints/${targetId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      toast.success("Sprint concluída");
+      await loadTasksAndSprints();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao concluir sprint" });
+    }
   }
 
   async function handleCreateStory(input: StoryCreateInput) {
@@ -1390,6 +1469,11 @@ export default function ProjectDetailPage({
   const activeSprint = sprints.find((s) => s.status === "active");
   const focused = sprints.find((s) => s.id === focusSprintId) ?? activeSprint ?? sprints[0];
 
+  // Estamos numa view sintética dentro da aba Sprints?
+  const isSyntheticView = sprintView === "backlog" || sprintView === "all";
+  const backlogCount = backlogTasks.length;
+  const allCount = tasks.length;
+
   return (
     <div className="space-y-6">
       <PageTitle
@@ -1488,11 +1572,13 @@ export default function ProjectDetailPage({
           tasks={tasks}
           members={members}
           capacities={capacities}
-          onJumpToActive={() => setFocusSprintId(activeSprintId)}
+          onJumpToActive={() => activeSprintId && setSprintView(activeSprintId)}
           onSelectSprint={(sid) => {
-            setFocusSprintId(sid);
+            setSprintView(sid);
             setActiveTab("sprints");
           }}
+          onActivateSprint={() => requestActivateSprint(focused.id)}
+          onCompleteSprint={() => requestCompleteSprint(focused.id)}
           className="-mx-3 md:-mx-6"
         />
       ) : null}
@@ -1517,7 +1603,7 @@ export default function ProjectDetailPage({
                 {stories.length}
               </Badge>
             ) : null}
-            {tab.key === "tasks" ? (
+            {tab.key === "sprints" ? (
               <Badge variant="secondary" className="ml-1 h-5 text-xs">
                 {tasks.length}
               </Badge>
@@ -1538,83 +1624,116 @@ export default function ProjectDetailPage({
           }}
           onCreateStory={() => setStoryCreateOpen(true)}
         />
-      ) : activeTab === "tasks" ? (
-        <TasksList
-          tasks={tasks}
-          stories={stories}
-          modules={modules}
-          members={members}
-          sprints={sprints}
-          availableTags={projectTags}
-          onOpenTask={(ref) => setSelectedTaskRef(ref)}
-          onCreateTask={() => handleCreateTask()}
-          onChangeStatus={handleInlineStatusChange}
-          onChangeAssignee={handleInlineAssigneeChange}
-          onChangeSprint={handleInlineSprintChange}
-          onDuplicate={openDuplicateDialog}
-          onClone={openCloneDialog}
-          onCopyRef={handleCopyTaskRef}
-          onDelete={handleDeleteTask}
-          onBulkUpdate={handleBulkUpdate}
-          onBulkDelete={handleBulkDelete}
-          onBulkDuplicate={handleBulkDuplicate}
-          onBulkAddTag={handleBulkAddTag}
-          onBulkRemoveTag={handleBulkRemoveTag}
-        />
       ) : activeTab === "sprints" ? (
         <div className="space-y-5">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Sprints
             </h3>
-            <Button size="sm" onClick={() => setSprintDialogOpen(true)}>
-              <Plus className="size-3.5" />
-              Novo sprint
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  handleCreateTask(
+                    focused && !isSyntheticView
+                      ? { sprintId: focused.id }
+                      : undefined,
+                  )
+                }
+              >
+                <Plus className="size-3.5" />
+                Nova task
+              </Button>
+              <Button size="sm" onClick={() => setSprintDialogOpen(true)}>
+                <Plus className="size-3.5" />
+                Novo sprint
+              </Button>
+            </div>
           </div>
 
-          {focused ? (
-            <>
-              <SprintNavigator
-                sprints={sprints}
-                currentId={focused.id}
-                activeId={activeSprintId}
-                tasks={tasks}
-                onChange={setFocusSprintId}
-                onJumpToActive={() => setFocusSprintId(activeSprintId)}
-              />
-              <SprintDetail
-                sprint={focused}
-                tasks={tasks}
-                stories={stories}
-                modules={modules}
-                members={members}
-                onOpenTask={(ref) => setSelectedTaskRef(ref)}
-                allSprints={sprints}
-                onChangeTaskStatus={handleInlineStatusChange}
-                onChangeTaskAssignee={handleInlineAssigneeChange}
-                onChangeTaskSprint={handleInlineSprintChange}
-                onDuplicateTask={openDuplicateDialog}
-                onCloneTask={openCloneDialog}
-                onCopyTaskRef={handleCopyTaskRef}
-                onDeleteTask={handleDeleteTask}
-                onBulkUpdate={handleBulkUpdate}
-                onBulkDelete={handleBulkDelete}
-                onBulkDuplicate={handleBulkDuplicate}
-                onBulkAddTag={handleBulkAddTag}
-                onBulkRemoveTag={handleBulkRemoveTag}
-                availableTags={projectTags}
-              />
-            </>
-          ) : (
+          {sprints.length === 0 && !isSyntheticView ? (
             <Card>
               <CardHeader>
                 <CardTitle>Nenhum sprint cadastrado</CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Crie o primeiro sprint pra começar a planejar.
+                Crie o primeiro sprint pra começar a planejar — ou navegue pro
+                Backlog/Todas pra ver tasks soltas.
               </CardContent>
             </Card>
+          ) : (
+            <>
+              <SprintNavigator
+                sprints={sprints}
+                currentId={
+                  isSyntheticView
+                    ? sprintView!
+                    : focused?.id ?? "all"
+                }
+                activeId={activeSprintId}
+                tasks={tasks}
+                onChange={(v) => setSprintView(v)}
+                onJumpToActive={() =>
+                  activeSprintId && setSprintView(activeSprintId)
+                }
+                showSyntheticViews
+                backlogCount={backlogCount}
+                allCount={allCount}
+              />
+
+              {isSyntheticView ? (
+                <section className="space-y-2">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {sprintView === "backlog" ? "Backlog" : "Todas as tasks"}
+                  </h3>
+                  <TasksList
+                    tasks={sprintView === "backlog" ? backlogTasks : tasks}
+                    stories={stories}
+                    modules={modules}
+                    members={members}
+                    sprints={sprints}
+                    availableTags={projectTags}
+                    onOpenTask={(ref) => setSelectedTaskRef(ref)}
+                    onChangeStatus={handleInlineStatusChange}
+                    onChangeAssignee={handleInlineAssigneeChange}
+                    onChangeSprint={handleInlineSprintChange}
+                    onDuplicate={openDuplicateDialog}
+                    onClone={openCloneDialog}
+                    onCopyRef={handleCopyTaskRef}
+                    onDelete={handleDeleteTask}
+                    onBulkUpdate={handleBulkUpdate}
+                    onBulkDelete={handleBulkDelete}
+                    onBulkDuplicate={handleBulkDuplicate}
+                    onBulkAddTag={handleBulkAddTag}
+                    onBulkRemoveTag={handleBulkRemoveTag}
+                  />
+                </section>
+              ) : focused ? (
+                <SprintDetail
+                  sprint={focused}
+                  tasks={tasks}
+                  stories={stories}
+                  modules={modules}
+                  members={members}
+                  onOpenTask={(ref) => setSelectedTaskRef(ref)}
+                  allSprints={sprints}
+                  onChangeTaskStatus={handleInlineStatusChange}
+                  onChangeTaskAssignee={handleInlineAssigneeChange}
+                  onChangeTaskSprint={handleInlineSprintChange}
+                  onDuplicateTask={openDuplicateDialog}
+                  onCloneTask={openCloneDialog}
+                  onCopyTaskRef={handleCopyTaskRef}
+                  onDeleteTask={handleDeleteTask}
+                  onBulkUpdate={handleBulkUpdate}
+                  onBulkDelete={handleBulkDelete}
+                  onBulkDuplicate={handleBulkDuplicate}
+                  onBulkAddTag={handleBulkAddTag}
+                  onBulkRemoveTag={handleBulkRemoveTag}
+                  availableTags={projectTags}
+                />
+              ) : null}
+            </>
           )}
         </div>
       ) : activeTab === "sessions" ? (
@@ -1741,6 +1860,40 @@ export default function ProjectDetailPage({
         existingSprints={rawSprints.map((s) => ({ endDate: s.endDate }))}
         onSave={handleCreateSprint}
       />
+
+      {/* Sprint activate / complete confirmation */}
+      {sprintAction ? (() => {
+        const target = sprints.find((s) => s.id === sprintAction.targetId);
+        if (!target) return null;
+        const previousActive = sprintAction.mode === "activate-replacing"
+          ? sprints.find((s) => s.status === "active") ?? null
+          : null;
+        const previousActiveTaskStats = previousActive
+          ? {
+              total: tasks.filter((t) => t.sprintId === previousActive.id).length,
+              done: tasks.filter(
+                (t) => t.sprintId === previousActive.id && t.status === "done",
+              ).length,
+            }
+          : undefined;
+        return (
+          <SprintActionDialog
+            open
+            onOpenChange={(open) => !open && setSprintAction(null)}
+            mode={sprintAction.mode}
+            target={target}
+            previousActive={previousActive}
+            previousActiveTaskStats={previousActiveTaskStats}
+            onConfirm={async () => {
+              if (sprintAction.mode === "complete") {
+                await handleCompleteSprint(sprintAction.targetId);
+              } else {
+                await handleActivateSprint(sprintAction.targetId);
+              }
+            }}
+          />
+        );
+      })() : null}
 
       {/* Task duplicate / clone dialogs */}
       <TaskDuplicateDialog

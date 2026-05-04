@@ -104,9 +104,9 @@ export async function POST(req: NextRequest) {
 
     const supabase = db();
 
-    if (type === "daily" && projectIds.length === 0) {
+    if (type === "daily" && projectIds.length !== 1) {
       return NextResponse.json(
-        { error: "Daily requer ao menos um projeto vinculado." },
+        { error: "Daily requer exatamente um projeto vinculado." },
         { status: 400 }
       );
     }
@@ -159,6 +159,28 @@ export async function POST(req: NextRequest) {
       if (resolvedAttendees.length === 0 && pmMemberIds.length > 0) {
         resolvedAttendees = pmMemberIds.map((id) => ({ memberId: id, role: "pm" }));
       }
+    }
+
+    // Daily/super_planning: if caller didn't pass attendees, default to the
+    // ProjectMember squad of the linked project(s). Defense against quick clicks
+    // that skip the picker — UI normally sends the explicit list.
+    if (
+      (type === "daily" || type === "super_planning") &&
+      resolvedAttendees.length === 0 &&
+      projectIds.length > 0
+    ) {
+      const { data: pms } = await supabase
+        .from("ProjectMember")
+        .select("memberId")
+        .in("projectId", projectIds);
+      const seen = new Set<string>();
+      resolvedAttendees = (pms ?? [])
+        .filter((p) => {
+          if (seen.has(p.memberId)) return false;
+          seen.add(p.memberId);
+          return true;
+        })
+        .map((p) => ({ memberId: p.memberId, role: "attendee" }));
     }
 
     // Carry over pending actions from the most recent past meeting (any type).

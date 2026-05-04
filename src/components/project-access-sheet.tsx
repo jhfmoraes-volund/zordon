@@ -33,8 +33,9 @@ type AccessRow = {
   fpAllocation: number | null;
   grantedAt: string;
   isManager: boolean;
-  managerRole: string | null;
-  managerRoleLabel: string | null;
+  managerPosition: string | null;
+  managerPositionLabel: string | null;
+  managerAccessLevel: string | null;
 };
 
 const ROLE_OPTIONS = [
@@ -259,9 +260,9 @@ function Section({
                     {r.email}
                   </div>
                 )}
-                {r.isManager && r.managerRoleLabel && (
+                {r.isManager && r.managerPositionLabel && (
                   <div className="text-[11px] text-muted-foreground mt-0.5">
-                    {r.managerRoleLabel} · acesso total
+                    {r.managerPositionLabel} · acesso total
                   </div>
                 )}
                 {!r.isManager &&
@@ -279,8 +280,8 @@ function Section({
                 )}
               </div>
               {r.isManager ? (
-                <span className="text-xs text-muted-foreground px-2 py-1 rounded-md border bg-muted/40">
-                  {r.managerRoleLabel ?? "Manager"}
+                <span className="text-xs text-muted-foreground px-2 py-1 rounded-md border bg-muted/40 capitalize">
+                  {r.managerAccessLevel ?? "manager"}
                 </span>
               ) : (
                 <>

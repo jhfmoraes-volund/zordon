@@ -2,7 +2,11 @@ import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { OPEN_STATUSES } from "@/lib/function-points";
 import { getUser, requireRole, ForbiddenError } from "@/lib/dal";
-import { ADMIN_ROLE_NAMES } from "@/lib/roles";
+import {
+  ADMIN_ROLE_NAMES,
+  mapPositionToAccessLevel,
+  type AccessLevel,
+} from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -78,7 +82,18 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, email, password, role, specialty, githubUsername, fpCapacity, isExternal } = body;
+  const {
+    name,
+    email,
+    password,
+    role,
+    position,
+    accessLevel,
+    specialty,
+    githubUsername,
+    fpCapacity,
+    isExternal,
+  } = body;
 
   if (!name || typeof name !== "string") {
     return NextResponse.json({ error: "name required" }, { status: 400 });
@@ -98,7 +113,16 @@ export async function POST(req: NextRequest) {
   // Allocate the Member id upfront so we can embed it in app_metadata
   // on the auth user — RLS reads member_id from the JWT with zero lookups.
   const memberId = crypto.randomUUID();
-  const effectiveRole = role ?? "product-builder";
+
+  // Resolve the two axes independently:
+  //   - position (cargo): from `position` (new), or `role` (legacy alias).
+  //   - accessLevel (authz): from `accessLevel` (new), or derived from position.
+  // Writing both `role` and `position` keeps the trigger-mirrored coexistence
+  // window working; `access_level` is the new authoritative authz field.
+  const effectivePosition: string = position ?? role ?? "product-builder";
+  const effectiveAccessLevel: AccessLevel =
+    (accessLevel as AccessLevel | undefined) ??
+    mapPositionToAccessLevel(effectivePosition);
 
   // 1. Create the auth user — already confirmed, with role + member_id + name
   const { data: createData, error: createError } =
@@ -107,7 +131,11 @@ export async function POST(req: NextRequest) {
       password,
       email_confirm: true, // skip email verification — admin-provisioned
       user_metadata: { name }, // display only; never used for authz
-      app_metadata: { role: effectiveRole, member_id: memberId },
+      app_metadata: {
+        role: effectivePosition,
+        access_level: effectiveAccessLevel,
+        member_id: memberId,
+      },
     });
   if (createError || !createData.user) {
     console.error("[members POST] createUser failed:", createError?.message);
@@ -125,7 +153,8 @@ export async function POST(req: NextRequest) {
       id: memberId,
       name,
       email,
-      role: effectiveRole,
+      role: effectivePosition,
+      position: effectivePosition,
       specialty: specialty ?? "fullstack",
       githubUsername: githubUsername ?? null,
       fpCapacity: fpCapacity ?? 125,

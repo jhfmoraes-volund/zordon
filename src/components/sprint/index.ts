@@ -20,11 +20,13 @@ export { SprintCapacity } from "./sprint-capacity";
 export { SprintCapacityCard } from "./sprint-capacity-card";
 export { SprintDetail } from "./sprint-detail";
 export { SprintNavigator } from "./sprint-navigator";
+export type { NavValue, SyntheticViewId } from "./sprint-navigator";
 export { SprintPulse } from "./sprint-pulse";
 export {
   SprintPulseNotes,
   SprintPulseVitals,
 } from "./sprint-pulse-overview";
+export { SprintActionDialog } from "./sprint-action-dialog";
 export { SprintRibbon } from "./sprint-ribbon";
 export type { RibbonTab } from "./sprint-ribbon";
 export { SprintSummaryStats } from "./sprint-summary-stats";

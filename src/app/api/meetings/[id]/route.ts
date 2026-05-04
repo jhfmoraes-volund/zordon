@@ -341,9 +341,9 @@ export async function PUT(
         { status: 400 },
       );
     }
-    if (type === "daily" && body.projectIds.length === 0) {
+    if (type === "daily" && body.projectIds.length !== 1) {
       return NextResponse.json(
-        { error: "Daily requer ao menos um projeto vinculado." },
+        { error: "Daily requer exatamente um projeto vinculado." },
         { status: 400 },
       );
     }

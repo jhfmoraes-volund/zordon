@@ -84,7 +84,7 @@ export const SPRINTS_INITIAL: Sprint[] = [
     name: "Sprint 9",
     startDate: "2026-05-06",
     endDate: "2026-05-12",
-    status: "planning",
+    status: "upcoming",
     deployedToStagingAt: null,
     deployedToProductionAt: null,
   },

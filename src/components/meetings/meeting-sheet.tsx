@@ -24,7 +24,7 @@ const TYPE_DESCRIPTIONS: Record<MeetingType, string> = {
   general:
     "Reunião sem revisão estruturada. Você pode juntar projetos relacionados (opcional) e registrar pontos de ação.",
   daily:
-    "Daily de um ou mais projetos. Discuta progresso, blockers e plano de ação sobre as tasks da sprint atual.",
+    "Daily de um projeto. Discuta progresso, blockers e plano de ação sobre as tasks da sprint atual. Para pautas que cruzam projetos, use Reunião geral.",
   super_planning:
     "Planejamento da sprint atual de um projeto (segundas-feiras). Sugestões de IA + aprovação manual de criação/edição/movimentação de tasks.",
 };
@@ -96,6 +96,10 @@ export function MeetingSheet({
 
   const [pmIds, setPmIds] = useState<Set<string>>(new Set());
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
+  // Squad of the currently selected project(s), for daily/super_planning. Drives
+  // the "Squad" vs "Convidados" UI grouping and gets merged into memberIds when
+  // the project changes.
+  const [autoSelectedIds, setAutoSelectedIds] = useState<Set<string>>(new Set());
   const [projectIds, setProjectIds] = useState<Set<string>>(new Set());
   const [externals, setExternals] = useState<ExternalAttendee[]>([]);
   const [extName, setExtName] = useState("");
@@ -177,6 +181,7 @@ export function MeetingSheet({
       setNotes("");
       setPmIds(new Set());
       setMemberIds(new Set());
+      setAutoSelectedIds(new Set());
       setProjectIds(new Set());
       setExternals([]);
       setExtName("");
@@ -184,6 +189,69 @@ export function MeetingSheet({
       setExtRole("");
     }
   }, [open, mode, meeting, defaultType]);
+
+  // Auto-select the project's squad as attendees for daily/super_planning.
+  // When the linked project changes, swap the old squad out of memberIds and
+  // bring the new one in. Manual additions (guests not in any squad) and
+  // manual removals (members the PM unchecked) survive the swap.
+  const projectKey = useMemo(
+    () => Array.from(projectIds).sort().join("|"),
+    [projectIds],
+  );
+  useEffect(() => {
+    if (!open) return;
+    if (type !== "daily" && type !== "super_planning") {
+      if (autoSelectedIds.size > 0) setAutoSelectedIds(new Set());
+      return;
+    }
+    if (projectIds.size === 0) {
+      if (autoSelectedIds.size > 0) {
+        setMemberIds((prev) => {
+          const next = new Set(prev);
+          for (const id of autoSelectedIds) next.delete(id);
+          return next;
+        });
+        setAutoSelectedIds(new Set());
+      }
+      return;
+    }
+
+    let cancelled = false;
+    const ids = Array.from(projectIds);
+    Promise.all(
+      ids.map((id) =>
+        fetch(`/api/projects/${id}/members`).then((r) =>
+          r.ok ? (r.json() as Promise<{ id: string }[]>) : [],
+        ),
+      ),
+    ).then((lists) => {
+      if (cancelled) return;
+      const fresh = new Set<string>();
+      for (const list of lists) for (const m of list) fresh.add(m.id);
+
+      // On edit hydration, don't auto-add — just record what the squad currently
+      // is so the UI can group, but leave memberIds alone (PM's historical
+      // decision wins).
+      const isInitialEditHydration =
+        mode === "edit" && autoSelectedIds.size === 0 && memberIds.size > 0;
+
+      if (!isInitialEditHydration) {
+        setMemberIds((prev) => {
+          const next = new Set(prev);
+          for (const id of autoSelectedIds) {
+            if (!fresh.has(id)) next.delete(id);
+          }
+          for (const id of fresh) next.add(id);
+          return next;
+        });
+      }
+      setAutoSelectedIds(fresh);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, type, projectKey, mode]);
 
   const pms = useMemo(() => members.filter((m) => m.role === "pm"), [members]);
 
@@ -222,6 +290,7 @@ export function MeetingSheet({
     setProjectIds(new Set());
     setPmIds(new Set());
     setMemberIds(new Set());
+    setAutoSelectedIds(new Set());
     setExternals([]);
     setTitle("");
   };
@@ -255,7 +324,7 @@ export function MeetingSheet({
   const canSubmit = () => {
     if (!date) return false;
     if (type === "pm_review") return pmIds.size > 0;
-    if (type === "daily") return projectIds.size > 0;
+    if (type === "daily") return projectIds.size === 1;
     if (type === "super_planning") {
       if (projectIds.size !== 1) return false;
       const pid = Array.from(projectIds)[0];
@@ -458,11 +527,9 @@ export function MeetingSheet({
           {showProjectPicker && (
             <div className="grid gap-2">
               <Label>
-                {type === "super_planning"
-                  ? "Projeto (1)"
-                  : type === "daily"
-                    ? "Projetos (1+)"
-                    : "Projetos vinculados (opcional)"}
+                {type === "super_planning" || type === "daily"
+                  ? "Projeto"
+                  : "Projetos vinculados (opcional)"}
                 {projectsLocked && (
                   <span className="ml-2 text-xs text-muted-foreground">(travado)</span>
                 )}
@@ -482,7 +549,7 @@ export function MeetingSheet({
                       type="button"
                       disabled={projectsLocked}
                       onClick={() =>
-                        type === "super_planning"
+                        type === "super_planning" || type === "daily"
                           ? selectSingleProject(p.id)
                           : toggleProject(p.id)
                       }
@@ -512,29 +579,13 @@ export function MeetingSheet({
 
           {/* Membros internos */}
           {showMemberPicker && (
-            <div className="grid gap-2">
-              <Label>
-                {type === "general"
-                  ? "Membros participantes"
-                  : "Participantes (opcional)"}
-              </Label>
-              <div className="flex flex-wrap gap-2">
-                {members.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => toggleMember(m.id)}
-                    className={`px-3 py-1.5 rounded-md border text-sm transition-colors ${
-                      memberIds.has(m.id)
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background hover:bg-accent"
-                    }`}
-                  >
-                    {m.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <MemberPicker
+              type={type}
+              members={members}
+              memberIds={memberIds}
+              autoSelectedIds={autoSelectedIds}
+              onToggle={toggleMember}
+            />
           )}
 
           {/* Externos (general) */}
@@ -631,5 +682,117 @@ export function MeetingSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ─── MemberPicker ─────────────────────────────────────────────────────────────
+
+function MemberChip({
+  member,
+  selected,
+  onToggle,
+}: {
+  member: Member;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`px-3 py-1.5 rounded-md border text-sm transition-colors ${
+        selected
+          ? "bg-primary text-primary-foreground border-primary"
+          : "bg-background hover:bg-accent"
+      }`}
+    >
+      {member.name}
+    </button>
+  );
+}
+
+function MemberPicker({
+  type,
+  members,
+  memberIds,
+  autoSelectedIds,
+  onToggle,
+}: {
+  type: MeetingType;
+  members: Member[];
+  memberIds: Set<string>;
+  autoSelectedIds: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  const isSquadType = type === "daily" || type === "super_planning";
+  if (!isSquadType) {
+    return (
+      <div className="grid gap-2">
+        <Label>
+          {type === "general" ? "Membros participantes" : "Participantes (opcional)"}
+        </Label>
+        <div className="flex flex-wrap gap-2">
+          {members.map((m) => (
+            <MemberChip
+              key={m.id}
+              member={m}
+              selected={memberIds.has(m.id)}
+              onToggle={() => onToggle(m.id)}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // daily/super_planning: split into squad (auto) and guests (everyone else)
+  const squad = members.filter((m) => autoSelectedIds.has(m.id));
+  const others = members.filter((m) => !autoSelectedIds.has(m.id));
+  const guestSelected = others.filter((m) => memberIds.has(m.id));
+
+  return (
+    <div className="grid gap-2">
+      <Label>
+        Squad do projeto
+        {squad.length === 0 && (
+          <span className="ml-2 text-xs text-muted-foreground">
+            (selecione um projeto primeiro)
+          </span>
+        )}
+      </Label>
+      {squad.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {squad.map((m) => (
+            <MemberChip
+              key={m.id}
+              member={m}
+              selected={memberIds.has(m.id)}
+              onToggle={() => onToggle(m.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {others.length > 0 && (
+        <details className="text-sm mt-1" open={guestSelected.length > 0}>
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+            Adicionar convidado de fora do squad
+            {guestSelected.length > 0 && (
+              <span className="ml-1 text-foreground">({guestSelected.length})</span>
+            )}
+          </summary>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {others.map((m) => (
+              <MemberChip
+                key={m.id}
+                member={m}
+                selected={memberIds.has(m.id)}
+                onToggle={() => onToggle(m.id)}
+              />
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
   );
 }

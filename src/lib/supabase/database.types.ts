@@ -1631,7 +1631,7 @@ export type Database = {
           isExternal?: boolean
           name: string
           onboardedAt?: string | null
-          position?: string
+          position: string
           role?: string
           seniority?: string | null
           specialty?: string | null
@@ -3624,6 +3624,27 @@ export type Database = {
       }
     }
     Functions: {
+      activate_sprint: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          createdAt: string
+          deployedToProductionAt: string | null
+          deployedToStagingAt: string | null
+          endDate: string
+          id: string
+          name: string
+          projectId: string
+          startDate: string
+          status: string
+          updatedAt: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "Sprint"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       can_access_session: { Args: { p_session_id: string }; Returns: boolean }
       can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_edit_session: { Args: { p_session_id: string }; Returns: boolean }
@@ -3672,6 +3693,7 @@ export type Database = {
         Args: { p_member_id: string; p_provider: string }
         Returns: string
       }
+      get_my_access_level: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
