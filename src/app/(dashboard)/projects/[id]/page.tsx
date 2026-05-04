@@ -6,10 +6,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   BookOpen,
+  CheckCircle2,
   FileText,
   Lightbulb,
+  MoreHorizontal,
   Pencil,
+  Play,
   Plus,
+  RotateCcw,
   Settings as SettingsIcon,
   Shield,
   Zap,
@@ -17,6 +21,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageTitle } from "@/components/app-shell";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { ProjectEditSheet } from "@/components/project-edit-sheet";
@@ -231,6 +241,7 @@ export default function ProjectDetailPage({
   const [sprintDialogOpen, setSprintDialogOpen] = useState(false);
   const [sprintAction, setSprintAction] = useState<
     | { mode: "activate-replacing" | "activate-fresh"; targetId: string }
+    | { mode: "reopen-replacing" | "reopen-fresh"; targetId: string }
     | { mode: "complete"; targetId: string }
     | null
   >(null);
@@ -592,6 +603,14 @@ export default function ProjectDetailPage({
     setSprintAction({ mode: "complete", targetId });
   }
 
+  function requestReopenSprint(targetId: string) {
+    const hasActive = sprints.some((s) => s.status === "active");
+    setSprintAction({
+      mode: hasActive ? "reopen-replacing" : "reopen-fresh",
+      targetId,
+    });
+  }
+
   async function handleActivateSprint(targetId: string) {
     try {
       await fetchOrThrow(`/api/sprints/${targetId}/activate`, { method: "POST" });
@@ -613,6 +632,16 @@ export default function ProjectDetailPage({
       await loadTasksAndSprints();
     } catch (e) {
       showErrorToast(e, { label: "Falha ao concluir sprint" });
+    }
+  }
+
+  async function handleReopenSprint(targetId: string) {
+    try {
+      await fetchOrThrow(`/api/sprints/${targetId}/reopen`, { method: "POST" });
+      toast.success("Sprint reaberta");
+      await loadTasksAndSprints();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao reabrir sprint" });
     }
   }
 
@@ -1577,8 +1606,6 @@ export default function ProjectDetailPage({
             setSprintView(sid);
             setActiveTab("sprints");
           }}
-          onActivateSprint={() => requestActivateSprint(focused.id)}
-          onCompleteSprint={() => requestCompleteSprint(focused.id)}
           className="-mx-3 md:-mx-6"
         />
       ) : null}
@@ -1649,6 +1676,72 @@ export default function ProjectDetailPage({
                 <Plus className="size-3.5" />
                 Novo sprint
               </Button>
+
+              {focused && !isSyntheticView ? (
+                <>
+                  <span aria-hidden className="mx-1 h-5 w-px bg-border/70" />
+
+                  {focused.status === "upcoming" ? (
+                    <Button
+                      size="sm"
+                      onClick={() => requestActivateSprint(focused.id)}
+                    >
+                      <Play className="size-3.5" />
+                      Ativar sprint
+                    </Button>
+                  ) : focused.status === "active" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => requestCompleteSprint(focused.id)}
+                    >
+                      <CheckCircle2 className="size-3.5" />
+                      Concluir
+                    </Button>
+                  ) : null}
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          aria-label="Mais ações da sprint"
+                          className="px-2"
+                        />
+                      }
+                    >
+                      <MoreHorizontal className="size-3.5" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {focused.status === "completed" ? (
+                        <DropdownMenuItem
+                          onClick={() => requestReopenSprint(focused.id)}
+                        >
+                          <RotateCcw className="size-3.5" />
+                          Reabrir sprint
+                        </DropdownMenuItem>
+                      ) : null}
+                      {focused.status === "active" ? (
+                        <DropdownMenuItem
+                          onClick={() => requestCompleteSprint(focused.id)}
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          Concluir sprint
+                        </DropdownMenuItem>
+                      ) : null}
+                      {focused.status === "upcoming" ? (
+                        <DropdownMenuItem
+                          onClick={() => requestActivateSprint(focused.id)}
+                        >
+                          <Play className="size-3.5" />
+                          Ativar sprint
+                        </DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : null}
             </div>
           </div>
 
@@ -1861,11 +1954,14 @@ export default function ProjectDetailPage({
         onSave={handleCreateSprint}
       />
 
-      {/* Sprint activate / complete confirmation */}
+      {/* Sprint activate / complete / reopen confirmation */}
       {sprintAction ? (() => {
         const target = sprints.find((s) => s.id === sprintAction.targetId);
         if (!target) return null;
-        const previousActive = sprintAction.mode === "activate-replacing"
+        const isReplacing =
+          sprintAction.mode === "activate-replacing" ||
+          sprintAction.mode === "reopen-replacing";
+        const previousActive = isReplacing
           ? sprints.find((s) => s.status === "active") ?? null
           : null;
         const previousActiveTaskStats = previousActive
@@ -1887,6 +1983,11 @@ export default function ProjectDetailPage({
             onConfirm={async () => {
               if (sprintAction.mode === "complete") {
                 await handleCompleteSprint(sprintAction.targetId);
+              } else if (
+                sprintAction.mode === "reopen-replacing" ||
+                sprintAction.mode === "reopen-fresh"
+              ) {
+                await handleReopenSprint(sprintAction.targetId);
               } else {
                 await handleActivateSprint(sprintAction.targetId);
               }

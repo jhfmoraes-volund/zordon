@@ -12,17 +12,22 @@ import {
 } from "@/components/ui/responsive-dialog";
 import type { Sprint } from "./types";
 
-type Mode = "activate-replacing" | "activate-fresh" | "complete";
+type Mode =
+  | "activate-replacing"
+  | "activate-fresh"
+  | "complete"
+  | "reopen-replacing"
+  | "reopen-fresh";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: Mode;
-  /** Sprint sendo ativada/concluída */
+  /** Sprint sendo ativada/concluída/reaberta */
   target: Sprint;
-  /** Sprint que será marcada como concluída (só em activate-replacing) */
+  /** Sprint que será marcada como concluída (em activate-replacing OU reopen-replacing) */
   previousActive?: Sprint | null;
-  /** Contagem de tasks da sprint anterior (só em activate-replacing) */
+  /** Contagem de tasks da sprint anterior */
   previousActiveTaskStats?: { total: number; done: number };
   onConfirm: () => Promise<void>;
 };
@@ -56,11 +61,18 @@ export function SprintActionDialog({
     }
   };
 
+  const isReopen = mode === "reopen-replacing" || mode === "reopen-fresh";
+  const isReplacing = mode === "activate-replacing" || mode === "reopen-replacing";
+
   const title =
-    mode === "complete" ? `Concluir ${target.name}?` : `Ativar ${target.name}?`;
+    mode === "complete"
+      ? `Concluir ${target.name}?`
+      : isReopen
+        ? `Reabrir ${target.name}?`
+        : `Ativar ${target.name}?`;
 
   const primaryLabel =
-    mode === "complete" ? "Concluir" : "Ativar";
+    mode === "complete" ? "Concluir" : isReopen ? "Reabrir" : "Ativar";
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
@@ -69,7 +81,18 @@ export function SprintActionDialog({
           <ResponsiveDialogTitle>{title}</ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody className="space-y-3 py-2 text-sm">
-          {mode === "activate-replacing" && previousActive ? (
+          {isReopen ? (
+            <p className="text-muted-foreground">
+              Esta sprint foi concluída em{" "}
+              {new Intl.DateTimeFormat("pt-BR", {
+                day: "2-digit",
+                month: "short",
+              }).format(new Date(target.endDate))}
+              . Reabrir vai marcá-la como ativa novamente.
+            </p>
+          ) : null}
+
+          {isReplacing && previousActive ? (
             <>
               <p>
                 A sprint <strong>{previousActive.name}</strong>{" "}
@@ -90,6 +113,12 @@ export function SprintActionDialog({
           {mode === "activate-fresh" ? (
             <p>
               <strong>{target.name}</strong> passará a ser a sprint ativa do projeto.
+            </p>
+          ) : null}
+
+          {mode === "reopen-fresh" ? (
+            <p>
+              <strong>{target.name}</strong> voltará a ser a sprint ativa do projeto.
             </p>
           ) : null}
 

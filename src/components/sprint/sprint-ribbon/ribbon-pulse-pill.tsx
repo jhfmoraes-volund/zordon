@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { PixelBar, PixelHud } from "@/components/ui/pixel-bar";
 
 type Props = {
@@ -13,26 +12,13 @@ type Props = {
 };
 
 /**
- * Pulse compacto — duas mini PixelBars (Work primary, Tempo amber/contract)
- * + readout do Δ. Click abre drawer "vitais".
+ * Pulse compacto — apenas a mini PixelBar de Work (Tempo e Δ ficam no drawer "vitais").
  */
 export function RibbonPulsePill({
   workPct,
-  timePct,
-  deltaPp,
   active,
   onToggle,
 }: Props) {
-  const deltaTone =
-    deltaPp >= 5
-      ? "text-green-700 dark:text-green-300"
-      : deltaPp <= -5
-        ? "text-amber-700 dark:text-amber-300"
-        : "text-muted-foreground";
-  const DeltaIcon =
-    deltaPp >= 5 ? ArrowUpRight : deltaPp <= -5 ? ArrowDownRight : null;
-  const deltaSign = deltaPp > 0 ? "+" : "";
-
   return (
     <button
       type="button"
@@ -40,20 +26,12 @@ export function RibbonPulsePill({
       aria-expanded={active}
       aria-controls="sprint-ribbon-drawer"
       className={[
-        "inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1.5 transition-colors md:gap-3 md:px-2",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1.5 transition-colors md:px-2",
         "hover:bg-muted/50",
         active ? "bg-muted/40" : "",
       ].join(" ")}
     >
       <MiniBar label="Work" pct={workPct} variant="skill" />
-      <MiniBar label="Tempo" pct={timePct} variant="contract" />
-      <span
-        className={`hidden items-center gap-0.5 font-mono text-[11px] tabular-nums leading-none sm:inline-flex ${deltaTone}`}
-      >
-        {DeltaIcon ? <DeltaIcon className="size-3" /> : null}
-        {deltaSign}
-        {deltaPp}pp
-      </span>
     </button>
   );
 }

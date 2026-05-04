@@ -3704,6 +3704,27 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: string
       }
+      reopen_sprint: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          createdAt: string
+          deployedToProductionAt: string | null
+          deployedToStagingAt: string | null
+          endDate: string
+          id: string
+          name: string
+          projectId: string
+          startDate: string
+          status: string
+          updatedAt: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "Sprint"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_member_integration: {
         Args: {
           p_member_id: string

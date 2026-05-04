@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Flag, Locate, Play } from "lucide-react";
+import { Flag, Locate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PixelDot, PixelHud } from "@/components/ui/pixel-bar";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -15,10 +15,6 @@ type Props = {
   active: boolean;
   onToggle: () => void;
   onJumpToActive?: () => void;
-  /** Trigger pra ativar a sprint atual (só faz sentido em status=upcoming). */
-  onActivate?: () => void;
-  /** Trigger pra concluir a sprint atual (só faz sentido em status=active). */
-  onComplete?: () => void;
 };
 
 /**
@@ -32,8 +28,6 @@ export function RibbonIdentityPill({
   active,
   onToggle,
   onJumpToActive,
-  onActivate,
-  onComplete,
 }: Props) {
   const statusChip = lookupChip(SPRINT_STATUS, sprint.status);
 
@@ -81,33 +75,6 @@ export function RibbonIdentityPill({
         >
           <Locate className="size-3" />
           <span className="hidden md:inline">Ir pro vigente</span>
-        </Button>
-      ) : null}
-
-      {sprint.status === "upcoming" && onActivate ? (
-        <Button
-          size="sm"
-          variant="default"
-          onClick={onActivate}
-          aria-label="Ativar sprint"
-          className="h-7 shrink-0 gap-1 px-2 text-[10px] uppercase tracking-wider"
-        >
-          <Play className="size-3" />
-          <span className="hidden md:inline">Ativar sprint</span>
-          <span className="md:hidden">Ativar</span>
-        </Button>
-      ) : null}
-
-      {sprint.status === "active" && !isViewing && onComplete ? (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onComplete}
-          aria-label="Concluir sprint"
-          className="h-7 shrink-0 gap-1 px-1.5 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground md:px-2"
-        >
-          <CheckCircle2 className="size-3" />
-          <span className="hidden md:inline">Concluir</span>
         </Button>
       ) : null}
     </div>

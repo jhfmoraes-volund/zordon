@@ -35,6 +35,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import {
   hasMinLevel, ADMIN,
+  hasMinAccessLevel,
   SPECIALTIES, SPECIALTY_LABELS, specialtyLabel,
   POSITIONS, POSITION_LABELS, positionLabel,
   MEMBER_ACCESS_LEVELS, ACCESS_LEVEL_LABELS, mapPositionToAccessLevel,
@@ -174,12 +175,14 @@ const roleDetails: Record<string, {
 function MemberCardMobile({
   m,
   isAdmin,
+  canViewCapacity,
   onOpenSkills,
   onEdit,
   onDelete,
 }: {
   m: Member;
   isAdmin: boolean;
+  canViewCapacity: boolean;
   onOpenSkills: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -188,11 +191,13 @@ function MemberCardMobile({
   const pct = Math.min(usage * 100, 999);
   const tone = pixelTone(pct, "load");
 
-  return (
-    <Link
-      href={`/members/${m.id}`}
-      className="surface block p-4 space-y-3 relative active:bg-accent/40 transition-colors"
-    >
+  // Builder doesn't get to drill into the per-member capacity page; the card
+  // renders as a non-clickable container in that case.
+  const wrapperClass =
+    "surface block p-4 space-y-3 relative active:bg-accent/40 transition-colors";
+
+  const inner = (
+    <>
       {/* Menu 3-dots — absolute, stops propagation */}
       <div
         className="absolute top-2 right-2"
@@ -273,13 +278,26 @@ function MemberCardMobile({
           </div>
         </div>
       </div>
-    </Link>
+    </>
   );
+
+  if (canViewCapacity) {
+    return (
+      <Link href={`/members/${m.id}`} className={wrapperClass}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={wrapperClass}>{inner}</div>;
 }
 
 export default function MembersPage() {
-  const { realRole } = useAuth();
+  const { realRole, effectiveAccessLevel } = useAuth();
   const isAdmin = hasMinLevel(realRole, ADMIN);
+  // Builder gets a read-only view: directory listing + skills sheet only.
+  // Capacity drilldown (Gauge → /members/[id]) is manager+ since it shows
+  // FP allocation/commitment data that's planning territory.
+  const canViewCapacity = hasMinAccessLevel(effectiveAccessLevel, "manager");
   const membersCollection = useOptimisticCollection<Member>([]);
   const members = membersCollection.items;
   const setMembers = membersCollection.setCommitted;
@@ -501,6 +519,7 @@ export default function MembersPage() {
             key={m.id}
             m={m}
             isAdmin={isAdmin}
+            canViewCapacity={canViewCapacity}
             onOpenSkills={() => setSkillSheetMemberId(m.id)}
             onEdit={() => openEdit(m)}
             onDelete={() => remove(m.id)}
@@ -591,11 +610,13 @@ export default function MembersPage() {
                       >
                         <Sparkles className="h-4 w-4" />
                       </Button>
-                      <Link href={`/members/${m.id}`}>
-                        <Button variant="ghost" size="icon" title="Ver capacity detalhada">
-                          <Gauge className="h-4 w-4" />
-                        </Button>
-                      </Link>
+                      {canViewCapacity && (
+                        <Link href={`/members/${m.id}`}>
+                          <Button variant="ghost" size="icon" title="Ver capacity detalhada">
+                            <Gauge className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      )}
                       {isAdmin && (
                         <>
                           <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
