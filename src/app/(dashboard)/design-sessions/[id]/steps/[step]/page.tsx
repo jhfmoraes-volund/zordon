@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WizardLayout } from "@/components/design-session/wizard-layout";
 import { PersonaJourneyBoard, Persona, JourneyStep } from "@/components/design-session/persona-journey-board";
@@ -12,6 +13,11 @@ import { RiskGapBoard, type Gap, type Risk } from "@/components/design-session/r
 import { CATEGORY_LABEL, SEVERITY_LABEL, SEVERITY_TONE } from "@/components/design-session/risk-gap-board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
 import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
+import {
+  DesignSessionTree,
+  type TreeAction,
+} from "@/components/design-session/design-session-tree";
+import { StorySheetByRef } from "@/components/story-sheet-by-ref";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -880,6 +886,34 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   const [loading, setLoading] = useState(true);
   const [taskCount, setTaskCount] = useState(0);
   const [briefingOpen, setBriefingOpen] = useState<boolean | null>(null);
+  const sendChatRef = useRef<((text: string) => void) | null>(null);
+  const [treeRefreshKey, setTreeRefreshKey] = useState(0);
+  const [openStoryRef, setOpenStoryRef] = useState<string | null>(null);
+
+  const handleTreeAction = useCallback(
+    async (action: TreeAction) => {
+      // 1. Persist subPhase + targetStoryId BEFORE sending the message so
+      //    Vitor's loadContext reads the new state on the very next request.
+      // Vocabulary lives in @/lib/design-sessions/constants — keep in sync.
+      const subPhase =
+        action.type === "detail-story" ? "story_detail" : "task_breakdown";
+      await fetch(`/api/design-sessions/${sessionId}/sub-phase`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subPhase, targetStoryId: action.storyId }),
+      });
+
+      // 2. Build the natural-language nudge for Vitor.
+      const text =
+        action.type === "detail-story"
+          ? `Vamos detalhar a story ${action.storyRef} ("${action.title}"). Modo story_detail — proponha persona + AC de produto antes de aplicar.`
+          : `Vamos gerar as tasks técnicas da story ${action.storyRef} ("${action.title}"). Modo task_breakdown — proponha o plano de tasks antes de aplicar.`;
+
+      // 3. Send through the chat (parent received sendMessage via onSendReady).
+      sendChatRef.current?.(text);
+    },
+    [sessionId],
+  );
 
   const loadTaskCount = useCallback(async () => {
     try {
@@ -959,7 +993,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   const outItems = priorityItems.filter((i) => i.bucket === "out");
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <Card>
         <button
           type="button"
@@ -983,7 +1017,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
           </div>
         </button>
         {isOpen && (
-        <CardContent className="space-y-6 text-sm">
+        <CardContent className="max-w-4xl space-y-6 text-sm">
           {/* Vision */}
           <section>
             <h3 className="font-semibold mb-2">1. Visao do Produto</h3>
@@ -1161,8 +1195,50 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
         )}
       </Card>
 
-      {/* Chat com Vitor — sempre visível, persistente */}
-      <BriefingTaskChat sessionId={sessionId} onTasksChanged={loadTaskCount} />
+      {/* Árvore Module → Story → Task ao lado do Chat com Vitor.
+          Layout aproveita toda a largura disponível (sem max-w externo). Em telas
+          xl o ratio fica mais generoso pra árvore (1.6/1) porque ela carrega o
+          conteúdo denso (cards de Module/Story/Task). Chat fica sticky no topo
+          em telas grandes — usuário pode rolar a árvore pra ver módulos lá embaixo
+          sem perder o input do chat de vista. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(420px,1fr)] gap-6 items-start">
+        <div className="surface p-5 xl:max-h-[calc(100vh-12rem)] xl:overflow-auto">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Hierarquia (Module → Story → Task)</h3>
+            <Link
+              href={`/design-sessions/${sessionId}/review`}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Revisar antes de exportar →
+            </Link>
+          </div>
+          <DesignSessionTree
+            sessionId={sessionId}
+            refreshKey={treeRefreshKey}
+            onAction={handleTreeAction}
+            onOpenStory={(ref) => setOpenStoryRef(ref)}
+          />
+        </div>
+
+        <div className="xl:sticky xl:top-6">
+          <BriefingTaskChat
+            sessionId={sessionId}
+            onTasksChanged={() => {
+              loadTaskCount();
+              setTreeRefreshKey((k) => k + 1);
+            }}
+            onSendReady={(send) => {
+              sendChatRef.current = send;
+            }}
+          />
+        </div>
+      </div>
+
+      <StorySheetByRef
+        storyRef={openStoryRef}
+        onClose={() => setOpenStoryRef(null)}
+        onAfterChange={() => setTreeRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi } from "@/lib/dal";
+import { requireMinLevelApi, getCurrentMember } from "@/lib/dal";
 import { MANAGER } from "@/lib/roles";
 import {
   approveProposedModule,
   getStoryByReference,
+  promoteTasksForModule,
 } from "@/lib/dal/story-hierarchy";
 
 export async function POST(
@@ -12,6 +13,7 @@ export async function POST(
 ) {
   const denied = await requireMinLevelApi(MANAGER);
   if (denied) return denied;
+  const member = await getCurrentMember();
 
   const { ref } = await params;
   const story = await getStoryByReference(ref);
@@ -28,8 +30,12 @@ export async function POST(
       story.id,
       story.projectId,
       story.proposedModuleName,
+      member?.id ?? null,
     );
-    return NextResponse.json(result);
+    // Promote draft tasks under the (now-approved) module. Idempotent —
+    // subsequent calls for sibling stories see no remaining drafts.
+    const { promoted, totalFp } = await promoteTasksForModule(result.module.id);
+    return NextResponse.json({ ...result, promoted, totalFp });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "approve failed";
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -2,6 +2,12 @@ import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { suggestFunctionPoints } from "@/lib/function-points";
+import {
+  resolveDependencyInputs,
+  setDependenciesForTask,
+  listDependenciesForTask,
+  DEPENDENCY_KINDS,
+} from "@/lib/dal/task-dependencies";
 import type { Database } from "@/lib/supabase/database.types";
 
 type TaskUpdate = Database["public"]["Tables"]["Task"]["Update"];
@@ -17,19 +23,35 @@ const categoryEnum = z.enum(["frontend", "backend", "infra", "integration", "des
 export function listSessionTasksTool(sessionId: string) {
   return tool({
     description:
-      "Lista todas as tasks desta design session (reference, title, status, complexity, scope, functionPoints, notes). Use SEMPRE antes de propor update/delete ou para entender o estado atual.",
+      "Lista todas as tasks desta design session (reference, title, status, complexity, scope, functionPoints, notes, dependsOn). Use SEMPRE antes de propor update/delete ou para entender o estado atual.",
     inputSchema: z.object({}),
     execute: async () => {
       const { data, error } = await db()
         .from("Task")
         .select(
-          "id, reference, title, description, status, complexity, scope, functionPoints, notes, dependencies"
+          "id, reference, title, description, status, complexity, scope, functionPoints, notes",
         )
         .eq("designSessionId", sessionId)
         .order("reference", { ascending: true });
 
       if (error) return { success: false, error: error.message };
-      return { success: true, tasks: data ?? [] };
+
+      // Hidrata dependsOn por task usando refs amigaveis (KEY-T-NNN).
+      const tasks = await Promise.all(
+        (data ?? []).map(async (t) => {
+          const deps = await listDependenciesForTask(t.id);
+          return {
+            ...t,
+            dependsOn: deps.map((d) => ({
+              ref: d.reference ?? d.id,
+              kind: d.kind,
+              title: d.title,
+              status: d.status,
+            })),
+          };
+        }),
+      );
+      return { success: true, tasks };
     },
   });
 }
@@ -84,7 +106,22 @@ export function updateTaskTool(sessionId: string) {
         notes: z.string().optional().nullable(),
         complexity: complexityEnum.optional(),
         scope: scopeEnum.optional(),
-        dependsOn: z.array(z.string()).optional(),
+        dependsOn: z
+          .array(
+            z.union([
+              z.string().min(1),
+              z.object({
+                ref: z.string().min(1),
+                kind: z.enum(DEPENDENCY_KINDS).optional(),
+              }),
+            ]),
+          )
+          .optional()
+          .describe(
+            "Substitui o conjunto de dependencias da task. Refs '<KEY>-T-NNN'. " +
+            "String = kind='blocks'. {ref, kind} pra outros tipos. " +
+            "Array vazio = remove todas.",
+          ),
         category: categoryEnum.optional(),
         module: z.string().optional(),
       }),
@@ -94,7 +131,7 @@ export function updateTaskTool(sessionId: string) {
 
       const { data: existing, error: fetchErr } = await supabase
         .from("Task")
-        .select("id, designSessionId, complexity, scope, notes")
+        .select("id, designSessionId, projectId, complexity, scope, notes")
         .eq("id", taskId)
         .maybeSingle();
 
@@ -108,16 +145,37 @@ export function updateTaskTool(sessionId: string) {
             "Task pertence a outra session — nao pode ser editada daqui. Peca ao usuario para abrir a session de origem.",
         };
 
+      // Resolve deps cedo, antes do update (falha rapido se invalida).
+      let resolvedDeps:
+        | Array<{ dependsOn: string; kind: "blocks" | "relates_to" }>
+        | null = null;
+      if (updates.dependsOn !== undefined) {
+        if (updates.dependsOn.length === 0) {
+          resolvedDeps = [];
+        } else {
+          const { resolved, missing } = await resolveDependencyInputs(
+            existing.projectId,
+            updates.dependsOn,
+          );
+          if (missing.length > 0) {
+            return {
+              success: false,
+              error: `Refs de dependsOn nao encontradas: ${missing.join(", ")}`,
+            };
+          }
+          resolvedDeps = resolved.map((r) => ({
+            dependsOn: r.dependsOn,
+            kind: r.kind,
+          }));
+        }
+      }
+
       const payload: Record<string, unknown> = {
         updatedAt: new Date().toISOString(),
       };
       if (updates.title !== undefined) payload.title = updates.title;
       if (updates.description !== undefined)
         payload.description = updates.description;
-      if (updates.dependsOn !== undefined)
-        payload.dependencies = updates.dependsOn.length
-          ? JSON.stringify(updates.dependsOn)
-          : null;
 
       if (updates.complexity !== undefined) payload.complexity = updates.complexity;
       if (updates.scope !== undefined) payload.scope = updates.scope;
@@ -157,6 +215,17 @@ export function updateTaskTool(sessionId: string) {
         .single();
 
       if (updateErr) return { success: false, error: updateErr.message };
+
+      if (resolvedDeps !== null) {
+        try {
+          await setDependenciesForTask(taskId, resolvedDeps);
+        } catch (e) {
+          return {
+            success: false,
+            error: `Falha ao atualizar dependencias: ${e instanceof Error ? e.message : String(e)}`,
+          };
+        }
+      }
 
       return {
         success: true,

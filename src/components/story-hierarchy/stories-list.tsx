@@ -128,8 +128,8 @@ function StoryGroup({
         }`}
       >
         <div className="overflow-x-auto">
-          <div className="min-w-[1000px]">
-            <div className="grid grid-cols-[110px_minmax(220px,1fr)_120px_110px_140px_110px_110px] gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="min-w-[1040px]">
+            <div className="grid grid-cols-[96px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px] gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               <span>Ref</span>
               <span>Título</span>
               <span>Módulo</span>
@@ -177,7 +177,7 @@ function StoryRow({
     <button
       type="button"
       onClick={onOpen}
-      className={`grid w-full grid-cols-[110px_minmax(220px,1fr)_120px_110px_140px_110px_110px] items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${
+      className={`grid w-full grid-cols-[96px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px] items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${
         !isLast ? "border-b" : ""
       }`}
     >
@@ -192,20 +192,27 @@ function StoryRow({
         ) : null}
       </span>
 
-      {mod ? (
-        <Badge variant="outline" className="w-fit font-mono text-[10px]">
-          {mod.name}
-        </Badge>
-      ) : story.proposedModuleName ? (
-        <Badge
-          variant="outline"
-          className="w-fit border-amber-500/40 font-mono text-[10px] text-amber-700 dark:text-amber-400"
-        >
-          ≈ {story.proposedModuleName}
-        </Badge>
-      ) : (
-        <span className="text-[10px] text-muted-foreground">—</span>
-      )}
+      <span className="flex min-w-0 items-center">
+        {mod ? (
+          <Badge
+            variant="outline"
+            className="block max-w-full truncate font-mono text-[10px]"
+            title={mod.name}
+          >
+            {mod.name}
+          </Badge>
+        ) : story.proposedModuleName ? (
+          <Badge
+            variant="outline"
+            className="block max-w-full truncate border-amber-500/40 font-mono text-[10px] text-amber-700 dark:text-amber-400"
+            title={story.proposedModuleName}
+          >
+            ≈ {story.proposedModuleName}
+          </Badge>
+        ) : (
+          <span className="text-[10px] text-muted-foreground">—</span>
+        )}
+      </span>
 
       <span>
         <RefinementChip status={story.refinementStatus} />

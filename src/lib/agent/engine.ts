@@ -35,8 +35,10 @@ export async function runAgent(req: AgentRunRequest): Promise<AgentRunResult> {
     { role: "user" as const, content: userMessage },
   ];
 
+  const modelId = agent.model ?? DEFAULT_MODEL;
+
   const result = streamText({
-    model: getModel(DEFAULT_MODEL),
+    model: getModel(modelId),
     system: systemPrompt,
     messages,
     tools,
@@ -46,7 +48,7 @@ export async function runAgent(req: AgentRunRequest): Promise<AgentRunResult> {
         agentName: agent.name,
         threadId: thread.id,
         memberId: req.memberId ?? null,
-        modelId: DEFAULT_MODEL,
+        modelId,
         usage,
         providerMetadata,
         generationId: response?.id ?? null,

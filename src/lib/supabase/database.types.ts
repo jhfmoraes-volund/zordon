@@ -1895,6 +1895,8 @@ export type Database = {
       }
       Module: {
         Row: {
+          approvedAt: string | null
+          approvedBy: string | null
           createdAt: string
           description: string | null
           id: string
@@ -1903,6 +1905,8 @@ export type Database = {
           updatedAt: string
         }
         Insert: {
+          approvedAt?: string | null
+          approvedBy?: string | null
           createdAt?: string
           description?: string | null
           id?: string
@@ -1911,6 +1915,8 @@ export type Database = {
           updatedAt?: string
         }
         Update: {
+          approvedAt?: string | null
+          approvedBy?: string | null
           createdAt?: string
           description?: string | null
           id?: string
@@ -1919,6 +1925,13 @@ export type Database = {
           updatedAt?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "Module_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "Module_projectId_fkey"
             columns: ["projectId"]
@@ -2605,7 +2618,6 @@ export type Database = {
           createdAt: string
           createdByAgent: boolean
           createdById: string | null
-          dependencies: Json | null
           description: string | null
           designSessionId: string | null
           doneAt: string | null
@@ -2636,7 +2648,6 @@ export type Database = {
           createdAt?: string
           createdByAgent?: boolean
           createdById?: string | null
-          dependencies?: Json | null
           description?: string | null
           designSessionId?: string | null
           doneAt?: string | null
@@ -2667,7 +2678,6 @@ export type Database = {
           createdAt?: string
           createdByAgent?: boolean
           createdById?: string | null
-          dependencies?: Json | null
           description?: string | null
           designSessionId?: string | null
           doneAt?: string | null
@@ -2761,6 +2771,42 @@ export type Database = {
             columns: ["userStoryId"]
             isOneToOne: false
             referencedRelation: "UserStory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      TaskDependency: {
+        Row: {
+          createdAt: string
+          dependsOn: string
+          kind: string
+          taskId: string
+        }
+        Insert: {
+          createdAt?: string
+          dependsOn: string
+          kind?: string
+          taskId: string
+        }
+        Update: {
+          createdAt?: string
+          dependsOn?: string
+          kind?: string
+          taskId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "TaskDependency_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "Task"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskDependency_dependsOn_fkey"
+            columns: ["dependsOn"]
+            isOneToOne: false
+            referencedRelation: "Task"
             referencedColumns: ["id"]
           },
         ]
@@ -3699,7 +3745,14 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_allocated_to: { Args: { p_project_id: string }; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
-      next_task_reference: { Args: never; Returns: string }
+      next_draft_task_reference: {
+        Args: { p_project_id: string }
+        Returns: string
+      }
+      next_task_reference: {
+        Args: { p_project_id: string }
+        Returns: string
+      }
       next_user_story_reference: {
         Args: { p_project_id: string }
         Returns: string

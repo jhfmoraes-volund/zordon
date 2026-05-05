@@ -34,6 +34,7 @@ import {
 import { suggestFunctionPoints } from "@/lib/function-points";
 import { AcList } from "./ac-list";
 import { TaskFeed } from "./task-feed";
+import { DependenciesBlock } from "./dependencies-block";
 import type {
   Member,
   Module,
@@ -651,16 +652,22 @@ export function TaskSheetInner({
           const dbTaskId = (task as Task & { __id?: string }).__id ?? null;
           if (!dbTaskId) return null;
           return (
-            <TaskFeed
-              taskId={dbTaskId}
-              ctx={{
-                members,
-                sprints: sprints ?? [],
-                stories,
-                projectTags: availableTags ?? [],
-              }}
-              members={members}
-            />
+            <>
+              <Separator />
+              <FieldBlock label="Dependências">
+                <DependenciesBlock taskId={dbTaskId} />
+              </FieldBlock>
+              <TaskFeed
+                taskId={dbTaskId}
+                ctx={{
+                  members,
+                  sprints: sprints ?? [],
+                  stories,
+                  projectTags: availableTags ?? [],
+                }}
+                members={members}
+              />
+            </>
           );
         })()}
       </ResponsiveSheetBody>

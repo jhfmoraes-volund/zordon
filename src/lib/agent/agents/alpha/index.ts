@@ -11,6 +11,7 @@ import type { AgentDefinition, AgentRunRequest } from "../../types";
  */
 export const alphaAgent: AgentDefinition = {
   name: "alpha",
+  model: "anthropic/claude-haiku-4.5",
 
   async loadContext(req: AgentRunRequest) {
     const meetingId = (req.params?.meetingId as string | undefined) || undefined;

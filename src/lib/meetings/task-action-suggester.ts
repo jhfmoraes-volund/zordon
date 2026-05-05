@@ -20,22 +20,32 @@ const SYSTEM_PROMPT = `Você é um assistente de planejamento de sprint.
 A partir do contexto da reunião e do estado atual da sprint, sugira AÇÕES sobre as tasks.
 
 Tipos de ação disponíveis:
-- "create": criar uma task nova (sem taskId; payload com title, description, scope, complexity, priority, type, assigneeIds opcional)
+- "create": criar uma task nova (sem taskId; payload completo da task)
 - "update": editar campos de uma task existente (taskId obrigatório; payload com os campos a alterar)
 - "delete": remover task da sprint atual e devolver pro backlog (taskId obrigatório)
 - "move": mover task pra outra sprint (taskId + targetSprintId obrigatórios)
 - "review": marcar task pra discussão posterior (taskId; reviewReasons[] e reviewNote)
 
+Payload da CREATE:
+- title (obrigatório), description, status, type, scope, complexity, priority
+- userStoryId: id de UserStory (use a lista de stories abaixo) — ancore a task numa story sempre que possível
+- acceptanceCriteria: array de objetos { text } — gere 2-4 critérios objetivos quando o contexto permitir
+- tagIds: array de TaskTag.id da lista de tags do projeto
+- assigneeIds: array de Member.id
+
+Payload da UPDATE: subset dos campos acima. Inclua apenas o que muda. userStoryId e acceptanceCriteria/tagIds, quando presentes, SUBSTITUEM o set inteiro — não use update pra adicionar 1 AC.
+
 Valores válidos:
-- type (create.payload.type): "feature" | "bug" | "chore" | "spike" | "refactor"
-- scope: "small" | "medium" | "large"
-- complexity: "low" | "medium" | "high"
-- status (create.payload.status): "backlog" | "todo"
+- type: "feature" | "bugfix" | "refactor" | "setup" | "component" | "seed" | "management"
+- scope: "micro" | "small" | "medium" | "large"
+- complexity: "trivial" | "low" | "medium" | "high"
+- status: "draft" | "backlog" | "todo" | "in_progress" | "review" | "done"
 - priority: 0-10 (int)
 - reviewReasons: subset de ["scope","acceptance_criteria","dependencies","estimate","assignee","other"]
 
 Regras:
 - Seja conservador. Se não houver evidência clara nas notas da reunião, NÃO sugira ações.
+- Prefira ancorar tasks em UserStory existente (use o id da lista). Só deixe userStoryId=null quando claramente não cabe em nenhuma.
 - Confidence é 0..1 — use 0.5 como threshold mental abaixo do qual a sugestão deveria virar "review" em vez de ação direta.
 - Cada sugestão precisa de uma "reasoning" curta (1-2 frases em pt-BR) explicando o porquê.
 - Retorne APENAS JSON válido no formato { "actions": [ ... ] }. Sem texto antes ou depois.`;
@@ -59,8 +69,18 @@ type SprintContext = {
     priority: number;
     type: string;
     assignees: string[];
+    userStoryRef: string | null;
   }>;
   otherSprints: Array<{ id: string; name: string; status: string }>;
+  modules: Array<{ id: string; name: string; description: string | null }>;
+  stories: Array<{
+    id: string;
+    reference: string;
+    title: string;
+    moduleId: string | null;
+  }>;
+  tags: Array<{ id: string; name: string }>;
+  members: Array<{ id: string; name: string; role: string | null }>;
 };
 
 export async function buildSuggestionContext(
@@ -105,7 +125,7 @@ export async function buildSuggestionContext(
   const tasksQuery = supabase
     .from("Task")
     .select(
-      "id, reference, title, status, scope, complexity, priority, type, assignments:TaskAssignment(member:Member(name))"
+      "id, reference, title, status, scope, complexity, priority, type, userStoryId, assignments:TaskAssignment(member:Member(name))"
     )
     .eq("projectId", projectId)
     .order("priority", { ascending: false });
@@ -113,6 +133,38 @@ export async function buildSuggestionContext(
   const { data: tasksRaw } = sprint
     ? await tasksQuery.eq("sprintId", sprint.id)
     : await tasksQuery.eq("status", "backlog").limit(20);
+
+  // Story hierarchy + tags + project members for the AI to anchor proposals.
+  const [storiesRes, modulesRes, tagsRes, pmRes, otherSprintsRes] = await Promise.all([
+    supabase
+      .from("UserStory")
+      .select("id, reference, title, moduleId")
+      .eq("projectId", projectId)
+      .order("reference"),
+    supabase
+      .from("Module")
+      .select("id, name, description")
+      .eq("projectId", projectId)
+      .order("name"),
+    supabase
+      .from("TaskTag")
+      .select("id, name")
+      .eq("projectId", projectId)
+      .order("name"),
+    supabase
+      .from("ProjectMember")
+      .select("member:Member!ProjectMember_memberId_fkey(id, name, role)")
+      .eq("projectId", projectId),
+    supabase
+      .from("Sprint")
+      .select("id, name, status")
+      .eq("projectId", projectId)
+      .in("status", ["upcoming", "active"])
+      .neq("id", sprint?.id ?? ""),
+  ]);
+
+  const storyRefById = new Map<string, string>();
+  for (const s of storiesRes.data ?? []) storyRefById.set(s.id, s.reference);
 
   const tasks = (tasksRaw ?? []).map((t) => ({
     id: t.id,
@@ -123,18 +175,17 @@ export async function buildSuggestionContext(
     complexity: t.complexity,
     priority: t.priority,
     type: t.type,
+    userStoryRef: t.userStoryId ? storyRefById.get(t.userStoryId) ?? null : null,
     assignees: (t.assignments ?? [])
       .map((a: { member: { name: string } | null }) => a.member?.name)
       .filter((n: string | undefined): n is string => Boolean(n)),
   }));
 
-  // Sprints alternativas pra MOVE (upcoming ou active, exceto a atual)
-  const { data: otherSprints } = await supabase
-    .from("Sprint")
-    .select("id, name, status")
-    .eq("projectId", projectId)
-    .in("status", ["upcoming", "active"])
-    .neq("id", sprint?.id ?? "");
+  const members = ((pmRes.data ?? []) as Array<{
+    member: { id: string; name: string; role: string | null } | { id: string; name: string; role: string | null }[] | null;
+  }>)
+    .map((pm) => (Array.isArray(pm.member) ? pm.member[0] ?? null : pm.member))
+    .filter((m): m is { id: string; name: string; role: string | null } => !!m);
 
   return {
     meeting: {
@@ -146,7 +197,11 @@ export async function buildSuggestionContext(
     project,
     sprint,
     tasks,
-    otherSprints: otherSprints ?? [],
+    otherSprints: otherSprintsRes.data ?? [],
+    modules: modulesRes.data ?? [],
+    stories: storiesRes.data ?? [],
+    tags: tagsRes.data ?? [],
+    members,
   };
 }
 
@@ -161,13 +216,52 @@ function formatContext(ctx: SprintContext): string {
   lines.push(`## Notas da reunião`);
   lines.push(ctx.meeting.notes?.trim() || "(sem notas — IA deve ser cautelosa)");
   lines.push("");
+  lines.push(`## Módulos (${ctx.modules.length})`);
+  if (ctx.modules.length === 0) {
+    lines.push("(nenhum)");
+  } else {
+    for (const m of ctx.modules) {
+      lines.push(`- ${m.name} (id=${m.id})${m.description ? ` — ${m.description}` : ""}`);
+    }
+  }
+  lines.push("");
+  lines.push(`## User Stories (${ctx.stories.length})`);
+  if (ctx.stories.length === 0) {
+    lines.push("(nenhuma — toda task ficará avulsa)");
+  } else {
+    for (const s of ctx.stories) {
+      const moduleName = s.moduleId
+        ? ctx.modules.find((m) => m.id === s.moduleId)?.name ?? "—"
+        : "—";
+      lines.push(`- ${s.reference} (id=${s.id}, módulo=${moduleName}) ${s.title}`);
+    }
+  }
+  lines.push("");
+  lines.push(`## Tags do projeto (${ctx.tags.length})`);
+  if (ctx.tags.length === 0) {
+    lines.push("(nenhuma)");
+  } else {
+    for (const t of ctx.tags) {
+      lines.push(`- ${t.name} (id=${t.id})`);
+    }
+  }
+  lines.push("");
+  lines.push(`## Membros do squad (${ctx.members.length})`);
+  if (ctx.members.length === 0) {
+    lines.push("(nenhum)");
+  } else {
+    for (const m of ctx.members) {
+      lines.push(`- ${m.name} (id=${m.id}${m.role ? `, ${m.role}` : ""})`);
+    }
+  }
+  lines.push("");
   lines.push(`## Tasks atuais (${ctx.tasks.length})`);
   if (ctx.tasks.length === 0) {
     lines.push("(nenhuma)");
   } else {
     for (const t of ctx.tasks) {
       lines.push(
-        `- [${t.reference ?? t.id}] ${t.title} · status=${t.status} · scope=${t.scope}/${t.complexity} · prio=${t.priority} · type=${t.type} · assignees=${t.assignees.join(", ") || "—"}`
+        `- [${t.reference ?? t.id}] ${t.title} · story=${t.userStoryRef ?? "—"} · status=${t.status} · scope=${t.scope}/${t.complexity} · prio=${t.priority} · type=${t.type} · assignees=${t.assignees.join(", ") || "—"}`
       );
     }
   }

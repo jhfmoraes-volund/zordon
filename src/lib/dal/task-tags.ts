@@ -205,3 +205,60 @@ export async function removeTagFromTask(
     .eq("tagId", tagId);
   if (error) throw error;
 }
+
+/**
+ * Upsert tags by name (case-insensitive) and assign to a task.
+ *
+ * Used by the agent's create_task — it receives plain string tags + a tone
+ * heuristic, and we reconcile against existing project tags before creating.
+ * Reuses canonical tags ("Front", "Back", "Bug") whenever the LLM passes a
+ * matching name regardless of case.
+ *
+ * Returns the resolved tags so the caller can echo them back in the tool
+ * response (giving the agent visibility into what got reused vs created).
+ */
+export async function upsertAndAssignTagsByName(input: {
+  projectId: string;
+  taskId: string;
+  tags: Array<{ name: string; tone?: ChipTone }>;
+}): Promise<{ assigned: TaskTag[]; created: TaskTag[]; reused: TaskTag[] }> {
+  const requested = input.tags
+    .map((t) => ({ name: t.name.trim(), tone: t.tone ?? "muted" }))
+    .filter((t) => t.name.length > 0);
+
+  if (requested.length === 0) {
+    return { assigned: [], created: [], reused: [] };
+  }
+  if (requested.length > TASK_TAG_LIMIT) {
+    throw new Error(`Task can have at most ${TASK_TAG_LIMIT} tags`);
+  }
+
+  const existing = await listTagsForProject(input.projectId);
+  const byLower = new Map(existing.map((t) => [t.name.toLowerCase(), t]));
+
+  const reused: TaskTag[] = [];
+  const created: TaskTag[] = [];
+  const dedupedByLower = new Map<string, TaskTag>();
+
+  for (const req of requested) {
+    const key = req.name.toLowerCase();
+    if (dedupedByLower.has(key)) continue;
+    const match = byLower.get(key);
+    if (match) {
+      reused.push(match);
+      dedupedByLower.set(key, match);
+      continue;
+    }
+    const fresh = await createTag({
+      projectId: input.projectId,
+      name: req.name,
+      tone: req.tone,
+    });
+    created.push(fresh);
+    dedupedByLower.set(key, fresh);
+  }
+
+  const assigned = [...dedupedByLower.values()];
+  await setTagsForTask(input.taskId, assigned.map((t) => t.id));
+  return { assigned, created, reused };
+}

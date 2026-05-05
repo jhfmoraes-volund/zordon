@@ -5,31 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
-import { ArrowLeft, BookOpen, CheckCircle2, Loader2, Rocket } from "lucide-react";
-import {
-  SCOPES, COMPLEXITIES, fmtDate,
-} from "@/lib/task-constants";
-import { StatusChip } from "@/components/ui/status-chip";
-import { TASK_TYPE, lookupChip } from "@/lib/status-chips";
-
-type ReviewTask = {
-  id: string;
-  title: string;
-  description: string | null;
-  reference: string | null;
-  status: string;
-  type: string;
-  scope: string;
-  complexity: string;
-  functionPoints: number | null;
-  priority: number;
-  dueDate: string | null;
-  projectId: string;
-};
+import { DesignSessionTree } from "@/components/design-session/design-session-tree";
+import { StorySheetByRef } from "@/components/story-sheet-by-ref";
+import { getStepsForSession } from "@/lib/design-session-steps";
+import { ArrowLeft, BookOpen, CheckCircle2, Loader2, Flag } from "lucide-react";
 
 type Session = {
   id: string;
@@ -39,6 +20,31 @@ type Session = {
   totalSteps: number;
   projectId: string;
   project: { name: string } | null;
+  selectedSteps: string[] | null;
+};
+
+type TreeStats = {
+  totalStories: number;
+  totalTasks: number;
+  draftTasks: number;
+  totalFp: number;
+  proposedModulesCount: number;
+  approvedModulesCount: number;
+};
+
+type TreeData = {
+  tree: Array<{
+    key: string;
+    name: string;
+    approved: boolean;
+    stories: Array<{
+      id: string;
+      reference: string;
+      refinementStatus: string;
+      tasks: Array<{ id: string }>;
+    }>;
+  }>;
+  stats: TreeStats;
 };
 
 export default function ReviewPage({
@@ -50,38 +56,32 @@ export default function ReviewPage({
   const router = useRouter();
 
   const [session, setSession] = useState<Session | null>(null);
-  const [tasks, setTasks] = useState<ReviewTask[]>([]);
+  const [treeData, setTreeData] = useState<TreeData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
-
+  const [completing, setCompleting] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [openStoryRef, setOpenStoryRef] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadError(null);
-    const [sessionR, tasksR] = await Promise.all([
+    const [sessionR, treeR] = await Promise.all([
       fetch(`/api/design-sessions/${id}`),
-      fetch(`/api/design-sessions/${id}/tasks`),
+      fetch(`/api/design-sessions/${id}/tree`),
     ]);
 
     const sessionJson = await sessionR.json();
-    const tasksJson = await tasksR.json();
+    const treeJson = await treeR.json();
 
-    if (!sessionR.ok) {
-      setLoadError(`sessão: ${sessionJson.error ?? sessionR.status}`);
-    }
-    if (!tasksR.ok) {
+    if (!sessionR.ok) setLoadError(`sessão: ${sessionJson.error ?? sessionR.status}`);
+    if (!treeR.ok) {
       setLoadError(
-        (prev) =>
-          `${prev ? prev + " · " : ""}tasks: ${tasksJson.error ?? tasksR.status}`
+        (prev) => `${prev ? prev + " · " : ""}árvore: ${treeJson.error ?? treeR.status}`,
       );
     }
 
-    console.log("[review] session", sessionJson);
-    console.log("[review] tasks", tasksJson);
-
     setSession(sessionJson);
-    setTasks(tasksJson.tasks ?? []);
+    setTreeData(treeJson);
     setLoading(false);
   }, [id]);
 
@@ -89,64 +89,74 @@ export default function ReviewPage({
     load();
   }, [load]);
 
-  const draftTasks = tasks.filter((t) => t.status === "draft");
   const isCompleted = session?.status === "completed";
+  const stats = treeData?.stats;
 
-  const totalFp = draftTasks.reduce(
-    (sum, t) => sum + (t.functionPoints ?? 0),
-    0
-  );
-
-  const byScope = SCOPES.map((s) => ({
-    key: s,
-    count: draftTasks.filter((t) => t.scope === s).length,
-  })).filter((s) => s.count > 0);
-
-  const byComplexity = COMPLEXITIES.map((c) => ({
-    key: c,
-    count: draftTasks.filter((t) => t.complexity === c).length,
-  })).filter((c) => c.count > 0);
-
-  const byType = Array.from(
-    draftTasks.reduce((acc, t) => {
-      acc.set(t.type, (acc.get(t.type) ?? 0) + 1);
-      return acc;
-    }, new Map<string, number>())
-  );
-
-  const handleExport = async () => {
-    if (draftTasks.length === 0) {
-      toast.error("Nenhuma task para exportar");
-      return;
+  // ── Completion gating ────────────────────────────────────────────────────
+  // Tasks are promoted to backlog at module-approval time (not here). To
+  // close the session, every story needs to be wrapped into an approved
+  // module — otherwise its tasks remain `draft` and orphaned.
+  //
+  // Block when:
+  //   1. Any proposed module still pending → its tasks haven't been promoted.
+  //   2. Any module exists but isn't approved → same problem.
+  //   3. Any story has 0 tasks → incomplete breakdown, nothing to promote.
+  const blockers: string[] = [];
+  if (treeData) {
+    if (stats && stats.proposedModulesCount > 0) {
+      blockers.push(
+        `Aprovar ${stats.proposedModulesCount} módulo(s) proposto(s)`,
+      );
     }
-    setExporting(true);
+    const draftModules = treeData.tree.filter(
+      (m) => m.key.startsWith("module:") && !m.approved,
+    );
+    if (draftModules.length > 0) {
+      blockers.push(
+        `Aprovar ${draftModules.length} módulo(s) ainda em rascunho`,
+      );
+    }
+    for (const mod of treeData.tree) {
+      for (const s of mod.stories) {
+        if (
+          (s.refinementStatus === "draft" || s.refinementStatus === "refined") &&
+          s.tasks.length === 0
+        ) {
+          blockers.push(`${s.reference}: gere as tasks ou descarte a story`);
+        }
+      }
+    }
+  }
+  const canComplete = blockers.length === 0;
+
+  const handleComplete = async () => {
+    if (!canComplete) return;
+    setCompleting(true);
     try {
-      const res = await fetch(`/api/design-sessions/${id}/export`, {
+      const res = await fetch(`/api/design-sessions/${id}/complete`, {
         method: "POST",
       });
       const json = await res.json();
       if (!res.ok) {
-        toast.error(json.error || "Falha ao exportar");
+        toast.error(json.message || json.error || "Falha ao concluir sessão");
         return;
       }
-      toast.success(
-        `${json.exported} task(s) exportadas — ${json.totalFp} FP no backlog do projeto`
-      );
+      toast.success("Sessão concluída");
       await load();
       if (session?.projectId) {
         router.push(`/projects/${session.projectId}`);
       }
     } catch (e) {
-      toast.error("Falha ao exportar");
+      toast.error("Falha ao concluir sessão");
       console.error(e);
     } finally {
-      setExporting(false);
+      setCompleting(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="p-6 max-w-5xl mx-auto space-y-4">
+      <div className="p-6 max-w-6xl mx-auto space-y-4">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -155,22 +165,28 @@ export default function ReviewPage({
   }
 
   if (!session) {
-    return (
-      <div className="p-6 text-muted-foreground">Sessão não encontrada.</div>
-    );
+    return <div className="p-6 text-muted-foreground">Sessão não encontrada.</div>;
   }
 
+  // Derive briefing step index from canonical step list — `totalSteps` is a
+  // legacy column that doesn't include the auto-injected `briefing` step.
+  const steps = getStepsForSession({
+    type: session.type,
+    selectedSteps: session.selectedSteps ?? null,
+  });
+  const briefingIndex = Math.max(
+    0,
+    steps.findIndex((s) => s.key === "briefing"),
+  );
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <Link
-              href={`/design-sessions/${id}/steps/${Math.max(
-                0,
-                (session.totalSteps ?? 1) - 1
-              )}`}
+              href={`/design-sessions/${id}/steps/${briefingIndex}`}
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft className="h-3 w-3" />
@@ -186,25 +202,28 @@ export default function ReviewPage({
           </div>
           <h1 className="text-2xl font-semibold">{session.title}</h1>
           <p className="text-sm text-muted-foreground">
-            Revisão das tasks antes de exportar para {session.project?.name ?? "o projeto"}
+            Revisão final — tasks já entram no backlog de{" "}
+            {session.project?.name ?? "o projeto"} no momento que você aprova
+            cada módulo. Aqui é só o fechamento da sessão.
           </p>
         </div>
         {isCompleted ? (
           <Badge className="bg-green-500/20 text-green-400 gap-1.5">
-            <CheckCircle2 className="h-3 w-3" /> Sessão exportada
+            <CheckCircle2 className="h-3 w-3" /> Sessão concluída
           </Badge>
         ) : (
           <Button
             size="lg"
-            onClick={handleExport}
-            disabled={exporting || draftTasks.length === 0}
+            onClick={handleComplete}
+            disabled={completing || !canComplete}
+            title={blockers.join(" · ") || "Marcar sessão como concluída"}
           >
-            {exporting ? (
+            {completing ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
-              <Rocket className="h-4 w-4 mr-2" />
+              <Flag className="h-4 w-4 mr-2" />
             )}
-            Exportar para o projeto
+            Concluir sessão
           </Button>
         )}
       </div>
@@ -215,137 +234,53 @@ export default function ReviewPage({
         </div>
       )}
 
-      {!loadError && tasks.length > 0 && draftTasks.length === 0 && !isCompleted && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 px-3 py-2 text-sm">
-          {tasks.length} task(s) vinculada(s) a esta sessão, mas nenhuma está em
-          status <code className="font-mono text-xs">draft</code>. Status atuais:{" "}
-          {Array.from(new Set(tasks.map((t) => t.status))).join(", ")}.
+      {/* ── Blockers ── */}
+      {!isCompleted && blockers.length > 0 && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 px-3 py-2 text-sm space-y-1">
+          <p className="font-semibold">Pendências para concluir a sessão:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            {blockers.slice(0, 8).map((b, i) => (
+              <li key={i}>{b}</li>
+            ))}
+            {blockers.length > 8 && (
+              <li className="text-muted-foreground">
+                ... +{blockers.length - 8} pendência(s)
+              </li>
+            )}
+          </ul>
         </div>
       )}
 
-      {/* ── Dashboard ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Tasks" value={draftTasks.length} />
-        <StatCard label="Function Points" value={totalFp} />
-        <StatCard
-          label="Por escopo"
-          value={
-            byScope.length > 0
-              ? byScope.map((s) => `${s.count} ${s.key}`).join(" · ")
-              : "—"
-          }
-          small
-        />
-        <StatCard
-          label="Por complexidade"
-          value={
-            byComplexity.length > 0
-              ? byComplexity.map((c) => `${c.count} ${c.key}`).join(" · ")
-              : "—"
-          }
-          small
-        />
-      </div>
+      {/* ── Tree (read-only: no onAction) ── */}
+      <DesignSessionTree
+        sessionId={id}
+        refreshKey={refreshKey}
+        onOpenStory={(ref) => setOpenStoryRef(ref)}
+      />
 
-      {byType.length > 0 && (
-        <div className="flex flex-wrap gap-2 text-xs">
-          {byType.map(([type, count]) => {
-            const chip = lookupChip(TASK_TYPE, type);
-            return (
-              <StatusChip key={type} tone={chip.tone}>
-                {count} {chip.label}
-              </StatusChip>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Task list ── */}
-      <Card>
-        <CardContent className="p-0">
-          {draftTasks.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              {isCompleted
-                ? "Tasks desta sessão já foram exportadas para o backlog."
-                : "Nenhuma task gerada ainda. Volte ao Briefing e peça ao Vitor para gerar."}
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {draftTasks.map((task) => (
-                <li key={task.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenTaskId(task.id)}
-                    className="w-full flex items-center gap-4 px-4 py-3 hover:bg-accent/40 text-left"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium truncate">
-                          {task.title}
-                        </span>
-                        <StatusChip {...lookupChip(TASK_TYPE, task.type)} />
-                      </div>
-                      {task.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
-                          {task.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
-                      <span className="tabular-nums">
-                        {task.functionPoints ?? 0} FP
-                      </span>
-                      <span>
-                        {task.scope} · {task.complexity}
-                      </span>
-                      {task.dueDate && <span>{fmtDate(task.dueDate)}</span>}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <StorySheetByRef
+        storyRef={openStoryRef}
+        onClose={() => setOpenStoryRef(null)}
+        onAfterChange={() => setRefreshKey((k) => k + 1)}
+      />
 
       {!isCompleted && (
-        <p className="text-xs text-muted-foreground">
-          As tasks ficam em rascunho até o export. Nenhuma delas aparece no backlog
-          do projeto ainda. Ao exportar, cada task recebe um identificador TASK-NNN
-          e a sessão é marcada como concluída.
-        </p>
-      )}
-
-      <TaskSheetByRef
-        taskId={openTaskId}
-        onClose={() => setOpenTaskId(null)}
-        onAfterChange={load}
-      />
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  small,
-}: {
-  label: string;
-  value: string | number;
-  small?: boolean;
-}) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div
-          className={
-            small ? "text-sm font-medium mt-1" : "text-2xl font-semibold mt-1 tabular-nums"
-          }
-        >
-          {value}
+        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span>
+            Tasks viram <code className="font-mono">backlog</code> com TASK-NNN
+            no momento em que você aprova o módulo correspondente — não tem
+            "exportação em massa". Concluir a sessão só marca o status; pode ser
+            feito quando todos os módulos estiverem aprovados.
+          </span>
+          <button
+            type="button"
+            onClick={() => setRefreshKey((k) => k + 1)}
+            className="text-xs underline hover:text-foreground shrink-0"
+          >
+            Atualizar
+          </button>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }

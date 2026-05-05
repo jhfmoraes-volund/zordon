@@ -325,7 +325,6 @@ function ListHeader({
       <SortHead k="sprint" label="Sprint" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <SortHead k="status" label="Status" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <SortHead k="assignee" label="Assignee" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-      <span className="text-right">Decisão</span>
       <span className="text-right" />
     </div>
   );
@@ -495,29 +494,16 @@ function Row({
         {assigneeName ?? <span className="opacity-50">—</span>}
       </span>
 
-      <span className="flex justify-end">
-        {action.decision === "pending" ? (
-          <StatusChip tone="amber" label="Pendente" />
-        ) : action.decision === "approved" ? (
-          <StatusChip
-            tone={action.execution === "applied" ? "green" : "blue"}
-            label={
-              action.execution === "applied"
-                ? "Aplicada"
-                : action.execution === "failed"
-                ? "Falhou"
-                : "Aprovada"
-            }
-          />
-        ) : (
-          <StatusChip tone="muted" label="Rejeitada" />
-        )}
-      </span>
-
       <span
         className="flex items-center justify-end gap-1"
         onClick={(e) => e.stopPropagation()}
       >
+        {action.decision === "approved" && action.execution === "applied" && (
+          <StatusChip tone="green" label="Aplicada" />
+        )}
+        {action.decision === "approved" && action.execution === "failed" && (
+          <StatusChip tone="red" label="Falhou" />
+        )}
         {isPending && (
           <>
             <Button
@@ -605,10 +591,14 @@ function FilterSelect({
   );
 }
 
-// 9 cols (no bulk) or 10 (bulk): [bulk?] action ref title story sprint status assignee decision actions
+// 8 cols (no bulk) or 9 (bulk): [bulk?] action ref title story sprint status assignee actions
+//
+// Title gets the lion's share (3fr); story/sprint stay tight (max-content) so
+// "—" placeholders don't waste space. Status uses 110px fixed to fit the
+// largest TaskStatusChip ("In progress") without jitter.
 const GRID_STYLE: React.CSSProperties = {
   gridTemplateColumns:
-    "auto minmax(96px, max-content) 84px minmax(180px, 2fr) 80px minmax(110px, 1fr) auto 110px auto auto",
+    "auto 92px 70px minmax(200px, 3fr) minmax(56px, max-content) minmax(80px, max-content) 110px minmax(90px, 1fr) auto",
 };
 
 // Re-export adapter types for callers

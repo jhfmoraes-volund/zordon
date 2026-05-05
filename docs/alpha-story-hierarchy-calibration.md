@@ -586,3 +586,330 @@ Pra quem pega esse runbook:
 6. Ondas 3 → 4 → 5 sequencial
 7. Onda 6 (ribbon) em paralelo após 4
 8. Onda 7 (calibração) é gate — não pular
+
+---
+
+## 15. Sprint Planner Mode (Onda 8)
+
+**Status:** plano · não iniciado
+**Pré-requisito:** Ondas 1–5 completas (Alpha conhece Module/UserStory/Task/AC e o Vitor já fechou o backlog).
+**Audience:** mesmo agente (humano ou IA) que tocar a calibragem.
+
+### 15.0 Quando o modo dispara
+
+Não tem flag, nem botão. **Entra automaticamente** quando o contexto do projeto satisfaz:
+
+- ≥ 10 tasks com `status = 'backlog'` e `userStoryId IS NOT NULL` e `functionPoints IS NOT NULL` (backlog "pronto")
+- ≥ 1 `ProjectMember` com `fpAllocation > 0`
+
+Sem isso, Alpha continua no modo normal (chat + tools de leitura/escrita pontuais). Com isso, o context loader injeta o bloco "Capacidade do projeto" e o prompt habilita as regras de §15.5.
+
+### 15.1 Princípio
+
+PM diz "alpha, organiza o backlog" → Alpha:
+
+1. Lê capacidade real (já existe no banco, não inventa).
+2. **Pergunta** preferências (não persistidas — vivem só na sessão).
+3. **Dimensiona** o projeto: estima quantos sprints precisam, propõe **criar os que faltam**.
+4. Propõe alocação: cada task → (sprintId, assigneeId, status='todo').
+5. Após confirmação do PM, executa **bulk atomic**.
+
+Preferências de skill/disponibilidade são **conversa de sessão**, não vão pra banco. Se o PM repetir o pedido em outra sessão, repete a pergunta.
+
+### 15.2 Capacity model — recap (já no banco, não criar)
+
+| Camada | Tabela.coluna | Significado |
+|---|---|---|
+| Global | `Member.fpCapacity` | FP/sprint contratual do builder |
+| Projeto | `ProjectMember.fpAllocation` | Quanto desse total vai pra ESTE projeto |
+| Sprint | `SprintMember.fpAllocation` | Override por sprint (opcional) |
+
+**Views já existindo (usar):**
+- `member_commitment_overview` — capacity / committed / remaining / projectCount por member
+- `sprint_member_capacity` — fp_allocation efetiva (COALESCE Sprint→Project) + fp_used + has_sprint_override por (sprint, member)
+
+Assignment é M:N via `TaskAssignment(taskId, memberId)`. Não há `Task.assigneeId`.
+
+### 15.3 Context loader — bloco "Capacidade do projeto"
+
+Em `src/lib/agent/agents/alpha/context.ts`, quando o gate de §15.0 for true, injetar:
+
+```markdown
+## Capacidade do projeto (planning mode)
+
+### Builders alocados (4)
+- João Moraes (senior fullstack)
+  fpCapacity: 500 · committed em outros projetos: 200 · disponível pra ESTE: 150
+- Lucas Silva (mid backend)
+  fpCapacity: 425 · committed: 0 · alocado neste projeto: 100
+- ...
+
+### Sprints existentes
+- Sprint 7 (active, 2026-05-04 → 2026-05-10): 38 FP planejado, 12 done
+- Sprint 8 (upcoming, 2026-05-11 → 2026-05-17): vazio
+- (sem mais sprints criados)
+
+### Backlog pronto pra alocar
+- 47 tasks com status=backlog, userStory setado, FP estimado
+- Distribuição por module: LOGIN (12) · BILLING (18) · AUDIT (10) · outros (7)
+- Total FP: 312
+- Capacidade total/sprint disponível: 390 FP (somando os 4 builders)
+- Estimativa: ~ceil(312 / 390) = 1 sprint, com folga
+  (mas se PM impuser restrições — férias, módulo prioritário —, recalcular)
+```
+
+Helper novo no DAL: `getPlanningSnapshot(projectId)` que retorna esse shape estruturado.
+
+### 15.4 Tools novas
+
+#### Leitura
+
+| Tool | Args | Retorno |
+|---|---|---|
+| `get_project_capacity` | `projectId?` | members[] (com fpCapacity, projectAllocation, remaining) + sprints[] (com fpPlanned/fpCapacityTotal) — lê das views |
+| `list_unplanned_tasks` | `projectId?` `moduleId?` `limit?` | tasks `backlog` sem sprintId, com FP / module / story / current assignees |
+
+#### Escrita: `create_sprint` — **já existe** em `tools.ts:491`. Reusar.
+
+#### Escrita nova: `bulk_update_tasks`
+
+```ts
+bulk_update_tasks({
+  projectId: string,
+  updates: Array<{
+    taskRef: string,           // ex: "ZRDN-141"
+    sprintId?: string | null,  // null = volta pro backlog (sem sprint)
+    assigneeIds?: string[],    // M:N — substitui assignments existentes (set replace)
+    status?: 'backlog' | 'todo' | 'doing' | 'review' | 'done',
+  }>,
+  reasoning: string,           // log/auditoria
+})
+```
+
+**Comportamento:**
+- Regra 0 (`alpha-calibration-plan.md`): propõe primeiro como **draft** com tabela em texto, PM confirma, aí executa.
+- Validações server-side (no RPC):
+  - `taskRef` pertence a `projectId`
+  - cada `assigneeId` é `ProjectMember` ativo do `projectId`
+  - `sprintId` (se presente) pertence ao `projectId`
+- **Atomic:** vira RPC `bulk_update_tasks(p_project_id uuid, p_updates jsonb, p_actor_id uuid)`. Se qualquer item falhar, rollback total — retorna `{ ok: false, errors: [...] }`. PM revê e tenta de novo.
+- `assigneeIds` semantics: **set replace**. Vazio `[]` = limpar todos. Ausente = não mexe em assignments.
+- Loga em `AgentUsage` com count + reasoning.
+
+**Por que tool única:** PM normalmente seta `(sprint, assignee, status)` de uma vez ("aloca essas 12 no Sprint 8 com Lucas, status todo"). 1 confirmação, 1 transação. Tools separadas geram N confirmações sequenciais e erro parcial é dor.
+
+### 15.5 RPC
+
+`supabase/migrations/<YYYYMMDD>_bulk_update_tasks.sql`:
+
+```sql
+CREATE OR REPLACE FUNCTION bulk_update_tasks(
+  p_project_id uuid,
+  p_updates jsonb,
+  p_actor_id uuid
+) RETURNS jsonb AS $$
+DECLARE
+  upd jsonb;
+  v_task_id uuid;
+  v_assignee_ids uuid[];
+  v_results jsonb := '[]'::jsonb;
+BEGIN
+  FOR upd IN SELECT * FROM jsonb_array_elements(p_updates) LOOP
+    -- 1) resolve taskRef → id, valida projectId
+    SELECT id INTO v_task_id
+    FROM "Task"
+    WHERE reference = upd->>'taskRef' AND "projectId" = p_project_id;
+    IF v_task_id IS NULL THEN
+      RAISE EXCEPTION 'Task % não pertence ao projeto', upd->>'taskRef';
+    END IF;
+
+    -- 2) UPDATE Task (sprintId, status) — só os campos presentes
+    UPDATE "Task" SET
+      "sprintId" = CASE WHEN upd ? 'sprintId' THEN (upd->>'sprintId')::uuid ELSE "sprintId" END,
+      status = CASE WHEN upd ? 'status' THEN upd->>'status' ELSE status END,
+      "updatedAt" = now()
+    WHERE id = v_task_id;
+
+    -- 3) Replace TaskAssignment se assigneeIds presente
+    IF upd ? 'assigneeIds' THEN
+      DELETE FROM "TaskAssignment" WHERE "taskId" = v_task_id;
+      v_assignee_ids := ARRAY(SELECT jsonb_array_elements_text(upd->'assigneeIds'))::uuid[];
+      INSERT INTO "TaskAssignment" ("taskId", "memberId")
+      SELECT v_task_id, unnest(v_assignee_ids)
+      WHERE EXISTS (
+        SELECT 1 FROM "ProjectMember"
+        WHERE "projectId" = p_project_id AND "memberId" = ANY(v_assignee_ids)
+      );
+    END IF;
+
+    v_results := v_results || jsonb_build_object('taskRef', upd->>'taskRef', 'ok', true);
+  END LOOP;
+
+  RETURN jsonb_build_object('ok', true, 'updated', jsonb_array_length(v_results), 'results', v_results);
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('ok', false, 'error', SQLERRM);
+END;
+$$ LANGUAGE plpgsql;
+```
+
+(Esqueleto — refinar nomes de coluna conforme migration final.)
+
+### 15.6 Prompt — seção nova "Sprint Planning"
+
+Adicionar em `src/lib/agent/agents/alpha/prompt.ts`, após "Hierarquia de produto" (Onda 5):
+
+```
+## Sprint Planning
+
+Quando o backlog está pronto e capacidade dos builders carregada
+(ver "Capacidade do projeto" no contexto), você atua como sprint planner.
+
+### Fluxo obrigatório
+
+1. PERGUNTAS ANTES DE PROPOR
+   Antes de qualquer alocação, faça estas 4 perguntas (uma mensagem só):
+   - "Tem preferência de quem pega o quê? Ex: Lucas só backend, João full-stack."
+   - "Quer priorizar algum module/feature primeiro?"
+   - "Algum builder fora do ar / com capacidade reduzida em algum sprint?"
+   - "Quer que eu cubra todo o backlog ou só os próximos N sprints?"
+   NUNCA chute nenhuma das quatro.
+
+2. DIMENSIONAMENTO
+   Calcule: total_fp_backlog ÷ capacidade_efetiva_por_sprint = sprints_necessários.
+   Capacidade efetiva considera as restrições do passo 1 (férias, dedicação parcial).
+   Se sprints_necessários > sprints_existentes, **proponha criar** os que faltam
+   via `create_sprint` (datas seg→dom, 7 dias, sequencial — ver memória).
+
+3. RESPEITO DE CAPACIDADE
+   - Soma de FP por (member, sprint) ≤ allocation efetiva (`sprint_member_capacity`).
+   - Se não cabe, NUNCA force. Empurre tasks pro próximo sprint.
+   - Se cap total < backlog mesmo com todos os sprints planejados, alerte:
+     "Backlog ultrapassa capacidade — falta um builder ou sprint adicional?"
+
+4. SEGMENTAÇÃO POR ASSIGNEE
+   - Você não conhece skill por task. Use SÓ o que o PM disser nas preferências.
+   - Sem preferência → distribua proporcional ao remaining FP de cada builder.
+   - Tasks sem assignee óbvio: `assigneeIds: []`, PM resolve depois.
+   - Múltiplos assignees por task são permitidos (M:N) — só use se o PM pedir.
+
+5. PROPOSTA EM TEXTO + CONFIRMAÇÃO
+   Mostre tabela em texto antes de chamar tools:
+   ```
+   Proposta — 2 sprints novos + 32 tasks alocadas
+
+   [criar] Sprint 9 (2026-05-18 → 2026-05-24)
+   [criar] Sprint 10 (2026-05-25 → 2026-05-31)
+
+   Sprint 8 (existente):
+     João — 145/150  → 8 tasks (LOGIN-1, LOGIN-2, ...)
+     Lucas — 95/100  → 5 tasks (BILLING backend)
+   Sprint 9:
+     ...
+   Sprint 10:
+     ...
+
+   Total: 312 FP em 32 tasks. 0 ficam no backlog.
+   Confirma?
+   ```
+   Após "confirma": chame `create_sprint` (uma por sprint novo) → depois
+   `bulk_update_tasks` (1 chamada com todos os 32 updates).
+
+6. STATUS
+   Em planejamento, status default vai pra `'todo'` (planejado, não iniciado).
+   NUNCA mexa em status `doing/review/done` sem ordem direta do PM.
+```
+
+### 15.7 Sequência de uma sessão típica
+
+```
+PM: "alpha, o Vitor fechou o backlog. organiza tudo."
+
+Alpha: [chama get_project_capacity + list_unplanned_tasks]
+       "47 tasks (312 FP) no backlog. 4 builders neste projeto:
+        João 150 · Lucas 100 · Pedro 80 · Ana 60 (FP/sprint disponíveis).
+        Capacidade total: 390/sprint. Você tem o Sprint 7 ativo
+        e o Sprint 8 vazio. Antes de propor, 4 perguntas:
+        1. Preferências de quem pega o quê?
+        2. Algum module pra priorizar?
+        3. Alguém fora do ar em algum sprint?
+        4. Cobrir todo o backlog ou só os próximos N sprints?"
+
+PM: "Lucas e Pedro só backend. João e Ana qualquer coisa.
+     Prioriza LOGIN. Ana de férias na semana do Sprint 9.
+     Cobre tudo."
+
+Alpha: "Beleza. Calculei: 312 FP ÷ ~330 FP/sprint efetivo = 1 sprint dá conta,
+        mas com Ana fora no Sprint 9 (cap cai pra 270), preciso de 2 sprints
+        pra distribuir confortável.
+
+        Proposta:
+          [criar] Sprint 9 (2026-05-18 → 2026-05-24)
+
+          Sprint 8 (2026-05-11 → 2026-05-17):
+            João — 148/150  → LOGIN frontend (8 tasks)
+            Ana — 58/60     → AUDIT frontend (4 tasks)
+            Lucas — 98/100  → BILLING backend (5 tasks)
+            Pedro — 78/80   → LOGIN backend (4 tasks)
+                              total: 382/390 FP, 21 tasks
+
+          Sprint 9 (sem Ana):
+            João — 142/150  → BILLING/AUDIT frontend (7 tasks)
+            Lucas — 95/100  → BILLING backend resto (4 tasks)
+            Pedro — 75/80   → AUDIT backend (3 tasks)
+                              total: 312/330 FP, 14 tasks (-Ana férias)
+
+          Backlog após: 0 tasks.
+
+        Confirma?"
+
+PM: "manda"
+
+Alpha: [create_sprint Sprint 9]
+       [bulk_update_tasks com 35 updates: sprint+assignees+status='todo']
+       "Done. Sprint 9 criado. 35 tasks alocadas."
+```
+
+### 15.8 Cenários de calibração — adicionar à Onda 7
+
+Acrescentar 5 cenários em §9.1, após o #8:
+
+| # | Input | Output esperado |
+|---|---|---|
+| 9 | "organiza o backlog em sprints" | Alpha **pergunta** as 4 antes de propor — não pula |
+| 10 | "aloca tudo no Sprint 8" (estoura cap) | Alpha alerta + propõe split em 2 sprints (cria Sprint 9) |
+| 11 | "Lucas só backend, João full" | Tasks de frontend não vão pro Lucas na proposta |
+| 12 | Backlog > capacidade total mesmo com N sprints | Alpha avisa "falta um builder ou sprint extra?" — NÃO força |
+| 13 | "Ana de férias no próximo sprint" | Capacidade do Sprint X recalculada sem Ana; tasks redistribuídas |
+
+### 15.9 Riscos
+
+| Risco | Mitigação |
+|---|---|
+| Alpha aloca task fora do skill do builder | Prompt §4 (sem skill data, depende do PM dizer) + cenários 11/13 |
+| Bulk falha no meio (task inválida) | RPC em transação; rollback total + erro retornado |
+| PM esquece de mencionar férias | Pergunta #3 é obrigatória — Alpha não pula |
+| Capacity stale durante sessão (PM editou ProjectMember) | RPC revalida `ProjectMember` em cada `bulk_update_tasks` |
+| Alpha cria sprint com data errada (não-segunda) | CHECK constraint do DB rejeita; memória já registra Mon→Sun |
+| Alpha decide "modo planner" em projeto pequeno (5 tasks) | Gate §15.0 exige ≥10 tasks backlog prontos — abaixo disso, modo normal |
+| Múltiplos assignees viram zona cinza | Prompt §4 explícito — só com pedido do PM |
+
+### 15.10 Definition of done (Onda 8)
+
+- ✅ Migration `bulk_update_tasks` rodada via psql, smoke test ok
+- ✅ Tools `get_project_capacity`, `list_unplanned_tasks`, `bulk_update_tasks` adicionadas em `tools.ts`
+- ✅ Context loader injeta bloco "Capacidade do projeto" quando gate de §15.0 satisfeito
+- ✅ Prompt seção "Sprint Planning" mergeada
+- ✅ 5 cenários adicionais (9–13) passam ≥ 90% em 3 runs cada
+- ✅ Smoke E2E em projeto piloto: backlog real é organizado em sprints, PM aprova, `bulk_update_tasks` aplica corretamente, `sprint_member_capacity` reflete a alocação
+
+### 15.11 Tempo estimado
+
+| Sub-onda | Escopo | Tempo |
+|---|---|---|
+| 8a | Migration RPC `bulk_update_tasks` + smoke | 1h |
+| 8b | DAL `getPlanningSnapshot` + context loader | 1h |
+| 8c | Tools `get_project_capacity` + `list_unplanned_tasks` + `bulk_update_tasks` | 2h |
+| 8d | Prompt "Sprint Planning" + ajustes | 1h |
+| 8e | Calibração 5 cenários novos | 2h |
+
+**Total Onda 8:** ~7h. Pode rodar **em paralelo à Onda 6** (ribbon), depende só da Onda 4.

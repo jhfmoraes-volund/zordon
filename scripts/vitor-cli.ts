@@ -86,21 +86,49 @@ async function main() {
   console.log(dim(`  ${message.slice(0, 200).replace(/\n/g, " ")}…`));
   console.log();
 
-  // 2. Thread + persist user message
+  // 2. Thread + briefing marker + persist user message (mirror webConnector order).
   const threadId = await ensureThread(args.session, "web");
+
+  if (currentStepKey === "briefing") {
+    const { data: stepRow } = await db()
+      .from("DesignSessionStepData")
+      .select("id, data")
+      .eq("sessionId", args.session)
+      .eq("stepKey", "briefing")
+      .maybeSingle();
+    const stepData = (stepRow?.data ?? {}) as Record<string, unknown>;
+    if (!stepData.firstMessageAt) {
+      const markerIso = new Date(Date.now() - 1).toISOString();
+      const nextData = { ...stepData, firstMessageAt: markerIso };
+      if (stepRow) {
+        await db()
+          .from("DesignSessionStepData")
+          .update({ data: nextData, updatedAt: new Date().toISOString() })
+          .eq("id", stepRow.id);
+      } else {
+        await db().from("DesignSessionStepData").insert({
+          sessionId: args.session,
+          stepKey: "briefing",
+          stepIndex: session.currentStep ?? 0,
+          data: nextData,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
   await persistUserMessage(threadId, message);
   console.log(dim(`▸ Thread: ${threadId} (user msg persistido)`));
   console.log();
 
-  // 3. Capabilities — mirror webConnector (no createTasks unless briefing)
+  // 3. Capabilities — mirror webConnector: createTasks gated to briefing step.
   const capabilities: Capabilities = {
     maxSteps: 30,
     writeTools: true,
     readTools: true,
     webSearch: true,
     projectId: session.projectId ?? undefined,
-    // Intentionally NOT enabling createTasks even on briefing — user wants to
-    // review the briefing summary before any task generation in this run.
+    createTasks: currentStepKey === "briefing",
   };
 
   // 4. Run agent

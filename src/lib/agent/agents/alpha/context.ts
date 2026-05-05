@@ -390,7 +390,15 @@ async function buildProjectFocus(
 ): Promise<{ block: string; activeSprintId: string | null }> {
   const supabase = db();
 
-  const [{ data: project }, { data: sprints }, { data: backlog }, { data: members }] = await Promise.all([
+  const [
+    { data: project },
+    { data: sprints },
+    { data: backlog },
+    { data: members },
+    { data: modules },
+    { data: personas },
+    { count: storyCount },
+  ] = await Promise.all([
     supabase
       .from("Project")
       .select("id, name, status, startDate, endDate, pm:Member!Project_pmId_fkey(id, name)")
@@ -415,6 +423,20 @@ async function buildProjectFocus(
     supabase
       .from("ProjectMember")
       .select("fpAllocation, member:Member(id, name, role, position, fpCapacity)")
+      .eq("projectId", projectId),
+    supabase
+      .from("Module")
+      .select("name, approvedAt")
+      .eq("projectId", projectId)
+      .order("name"),
+    supabase
+      .from("ProjectPersona")
+      .select("name")
+      .eq("projectId", projectId)
+      .order("name"),
+    supabase
+      .from("UserStory")
+      .select("id", { count: "exact", head: true })
       .eq("projectId", projectId),
   ]);
 
@@ -508,6 +530,31 @@ async function buildProjectFocus(
       ].join("\n")
     : "_Backlog vazio._";
 
+  // Taxonomy minimal block — names only. Tools (list_modules / list_personas /
+  // list_stories / get_story) load full payload on demand. The point of this
+  // block is making Alpha *aware these entities exist* so it stops hallucinating
+  // ("personas don't exist in Zordon", etc.).
+  const moduleList = modules || [];
+  const personaList = personas || [];
+  const taxonomyLine = (() => {
+    const parts: string[] = [];
+    parts.push(`${moduleList.length} módulo(s)`);
+    parts.push(`${personaList.length} persona(s)`);
+    parts.push(`${storyCount ?? 0} user stor${(storyCount ?? 0) === 1 ? "y" : "ies"}`);
+    return parts.join(" · ");
+  })();
+
+  const taxonomyBlock = [
+    `**Taxonomia do projeto:** ${taxonomyLine}`,
+    moduleList.length > 0
+      ? `- Módulos: ${moduleList.map((m) => (m.approvedAt ? m.name : `${m.name} (não aprovado)`)).join(", ")}`
+      : "- Módulos: nenhum",
+    personaList.length > 0
+      ? `- Personas: ${personaList.map((p) => p.name).join(", ")}`
+      : "- Personas: nenhuma",
+    `_Use \`list_modules\`, \`list_personas\`, \`list_stories\` ou \`get_story\` para detalhes completos._`,
+  ].join("\n");
+
   const pm = (project.pm as { name: string } | null)?.name ?? "(sem PM)";
 
   const block = [
@@ -519,6 +566,8 @@ async function buildProjectFocus(
     ...(activeSprintBlock ? ["", activeSprintBlock] : []),
     "",
     membersBlock,
+    "",
+    taxonomyBlock,
     "",
     backlogBlock,
     "",

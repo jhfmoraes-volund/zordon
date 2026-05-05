@@ -3,17 +3,22 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogFooter,
-  ResponsiveDialogBody,
-} from "@/components/ui/responsive-dialog";
-import { Sparkles, Plus, Loader2 } from "lucide-react";
+  Sparkles,
+  Plus,
+  Loader2,
+  ChevronDown,
+  Pencil,
+  ArrowRightLeft,
+  ArrowDownToLine,
+  HelpCircle,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { MeetingTaskActionSheet, type MeetingTaskAction } from "./meeting-task-action-sheet";
 import { toast } from "sonner";
@@ -29,20 +34,26 @@ import {
   adaptMember,
   adaptModule,
   adaptStory,
-  type AdaptedStory,
 } from "@/components/story-hierarchy/adapters";
 import type {
-  AcceptanceCriterionRow,
   ModuleRow,
   StoryWithRelations,
 } from "@/lib/dal/story-hierarchy";
-import type { Member, Module, TaskTag } from "@/components/story-hierarchy";
+import type {
+  Member,
+  Module,
+  TaskStatus,
+  TaskTag,
+} from "@/components/story-hierarchy";
+import type { AdaptedStory } from "@/components/story-hierarchy/adapters";
+import {
+  TaskPickerSheet,
+  type PickerAction,
+  type PickerTask,
+} from "./task-picker-sheet";
 
 type Project = { id: string; name: string };
 type SprintLite = { id: string; name: string; status: string };
-type ActionType = "create" | "update" | "delete" | "move" | "review";
-
-type LiteTask = { id: string; reference: string | null; title: string; status: string };
 
 export type TaskActionWidgetProps = {
   meetingId: string;
@@ -52,7 +63,6 @@ export type TaskActionWidgetProps = {
 export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) {
   const [actions, setActions] = useState<MeetingTaskAction[]>([]);
   const [tasksById, setTasksById] = useState<Map<string, RawTaskForRow>>(new Map());
-  const [pickerTasks, setPickerTasks] = useState<LiteTask[]>([]);
   const [activeSprint, setActiveSprint] = useState<SprintLite | null>(null);
   const [sprints, setSprints] = useState<SprintLite[]>([]);
   const [stories, setStories] = useState<AdaptedStory[]>([]);
@@ -63,9 +73,10 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
   const [loading, setLoading] = useState(true);
   const [suggesting, setSuggesting] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [creatingType, setCreatingType] = useState<MeetingTaskAction["type"] | null>(null);
 
   const [activeAction, setActiveAction] = useState<MeetingTaskAction | null>(null);
-  const [newDialogOpen, setNewDialogOpen] = useState(false);
+  const [pickerAction, setPickerAction] = useState<PickerAction | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,23 +137,6 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
     const taskMap = new Map<string, RawTaskForRow>();
     for (const t of (tasksRes.data ?? []) as RawTaskForRow[]) taskMap.set(t.id, t);
     setTasksById(taskMap);
-
-    // Picker fallback list — for the legacy NewActionDialog. Prioritize sprint
-    // tasks, fall back to backlog when no active sprint.
-    const active = allSprints.find((s) => s.status === "active");
-    const pickerSource = active
-      ? Array.from(taskMap.values()).filter((t) => t.sprintId === active.id)
-      : Array.from(taskMap.values())
-          .filter((t) => t.status === "backlog")
-          .slice(0, 20);
-    setPickerTasks(
-      pickerSource.map((t) => ({
-        id: t.id,
-        reference: t.reference,
-        title: t.title,
-        status: t.status as string,
-      })),
-    );
 
     const adaptedStories = (
       (storiesRes.data ?? []) as unknown as StoryWithRelations[]
@@ -241,7 +235,6 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
 
   const bulkDecide = useCallback(
     async (ids: string[], decision: "approved" | "rejected") => {
-      // Sequential — keeps simple ordering and avoids race on the same row
       for (const id of ids) {
         try {
           const res = await fetch(
@@ -261,6 +254,77 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
       await load();
     },
     [meetingId, load],
+  );
+
+  /**
+   * Create a manual proposal of the given type and open the sheet for editing.
+   * For non-create types, taskId comes from the picker; targetSprintId is the
+   * meeting's active sprint by default for "move".
+   */
+  const createAction = useCallback(
+    async (type: MeetingTaskAction["type"], taskId: string | null) => {
+      setCreatingType(type);
+      try {
+        const body: Record<string, unknown> = {
+          type,
+          projectId: project.id,
+          source: "manual",
+          taskId,
+        };
+        if (type === "create") {
+          body.payload = {
+            status: "todo",
+            scope: "small",
+            complexity: "medium",
+            type: "feature",
+            priority: 0,
+            sprintId: activeSprint?.id ?? null,
+          };
+        } else if (type === "move") {
+          // Default destination = meeting's active sprint. PM can change.
+          body.targetSprintId = activeSprint?.id ?? null;
+          body.payload = {};
+        } else {
+          body.payload = {};
+        }
+        const res = await fetch(`/api/meetings/${meetingId}/task-actions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error ?? "erro");
+        await load();
+        setActiveAction(data as MeetingTaskAction);
+      } catch (e) {
+        console.error("create action failed:", e);
+        showErrorToast(e, { label: "Falha ao criar proposta" });
+      } finally {
+        setCreatingType(null);
+      }
+    },
+    [meetingId, project.id, activeSprint?.id, load],
+  );
+
+  const handleNewTask = () => createAction("create", null);
+
+  const handlePickerPick = (taskId: string) => {
+    if (!pickerAction) return;
+    const type = pickerAction;
+    setPickerAction(null);
+    createAction(type, taskId);
+  };
+
+  const pickerTasks: PickerTask[] = useMemo(
+    () =>
+      Array.from(tasksById.values()).map((t) => ({
+        id: t.id,
+        reference: t.reference,
+        title: t.title,
+        status: t.status as TaskStatus,
+        sprintId: t.sprintId,
+      })),
+    [tasksById],
   );
 
   const rows: ActionRow[] = useMemo(() => {
@@ -301,10 +365,44 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
             )}
             Sugerir com IA
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setNewDialogOpen(true)}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Nova ação
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="outline" size="sm" disabled={creatingType !== null}>
+                  {creatingType !== null ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  Nova ação
+                  <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem onClick={handleNewTask}>
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                Criar nova task
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setPickerAction("update")}>
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Atualizar task existente
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPickerAction("move")}>
+                <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
+                Mover task entre sprints
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPickerAction("delete")}>
+                <ArrowDownToLine className="mr-2 h-3.5 w-3.5" />
+                Tirar task da sprint
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPickerAction("review")}>
+                <HelpCircle className="mr-2 h-3.5 w-3.5" />
+                Marcar pra revisar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -349,120 +447,17 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
         />
       )}
 
-      {newDialogOpen && (
-        <NewActionDialog
-          open={newDialogOpen}
-          onOpenChange={setNewDialogOpen}
-          meetingId={meetingId}
-          projectId={project.id}
+      {pickerAction && (
+        <TaskPickerSheet
+          open={!!pickerAction}
+          onOpenChange={(o) => !o && setPickerAction(null)}
+          action={pickerAction}
           tasks={pickerTasks}
-          onCreated={(action) => {
-            setNewDialogOpen(false);
-            load();
-            if (action) setActiveAction(action);
-          }}
+          sprints={sprints.map((s) => ({ id: s.id, name: s.name }))}
+          activeSprintId={activeSprint?.id ?? null}
+          onPick={handlePickerPick}
         />
       )}
     </div>
-  );
-}
-
-// ─── New action dialog (manual) ──────────────────────────
-// Kept for now; Fase 6 will replace with direct "Nova task" + in-sheet
-// secondary actions.
-
-function NewActionDialog({
-  open, onOpenChange, meetingId, projectId, tasks, onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  meetingId: string;
-  projectId: string;
-  tasks: LiteTask[];
-  onCreated: (action: MeetingTaskAction | null) => void;
-}) {
-  const [type, setType] = useState<ActionType>("create");
-  const [taskId, setTaskId] = useState<string>("");
-  const [busy, setBusy] = useState(false);
-
-  const create = async () => {
-    if (type !== "create" && !taskId) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/meetings/${meetingId}/task-actions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type,
-          projectId,
-          taskId: type !== "create" ? taskId : null,
-          source: "manual",
-          payload: type === "create" ? { status: "todo", scope: "small", complexity: "medium", type: "feature", priority: 0 } : {},
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "erro");
-      onCreated(data);
-    } catch (e) {
-      console.error("create action failed:", e);
-      showErrorToast(e, { label: "Falha ao criar ação" });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent>
-        <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Nova ação</ResponsiveDialogTitle>
-        </ResponsiveDialogHeader>
-        <ResponsiveDialogBody className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Tipo</label>
-            <Select value={type} onValueChange={(v) => v && setType(v as ActionType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="create">Criar nova task</SelectItem>
-                <SelectItem value="update">Atualizar task</SelectItem>
-                <SelectItem value="delete">Remover task da sprint</SelectItem>
-                <SelectItem value="move">Mover task pra outra sprint</SelectItem>
-                <SelectItem value="review">Marcar pra revisar</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {type !== "create" && (
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Task</label>
-              <Select value={taskId} onValueChange={(v) => v && setTaskId(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tasks.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.reference ?? t.id.slice(0, 6)} · {t.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </ResponsiveDialogBody>
-        <ResponsiveDialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={create}
-            disabled={busy || (type !== "create" && !taskId)}
-          >
-            Continuar
-          </Button>
-        </ResponsiveDialogFooter>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
   );
 }

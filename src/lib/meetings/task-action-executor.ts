@@ -78,9 +78,30 @@ export async function applyApprovedActions(
 async function applyCreate(supabase: Supabase, action: ActionRow) {
   const p = (action.payload ?? {}) as Record<string, unknown>;
 
-  const { data: reference, error: rpcErr } = await supabase.rpc("next_task_reference");
+  const { data: reference, error: rpcErr } = await supabase.rpc(
+    "next_task_reference",
+    { p_project_id: action.projectId },
+  );
   if (rpcErr || !reference) {
     throw new Error(`Failed to get next task reference: ${rpcErr?.message ?? "no value"}`);
+  }
+
+  // Validate userStoryId belongs to this project (fail-soft: link null + log)
+  let userStoryId: string | null = null;
+  if (typeof p.userStoryId === "string" && p.userStoryId) {
+    const { data: story } = await supabase
+      .from("UserStory")
+      .select("id")
+      .eq("id", p.userStoryId)
+      .eq("projectId", action.projectId)
+      .maybeSingle();
+    if (story) {
+      userStoryId = p.userStoryId;
+    } else {
+      console.warn(
+        `applyCreate: userStoryId ${p.userStoryId} not found in project ${action.projectId}, linking null`,
+      );
+    }
   }
 
   const taskId = crypto.randomUUID();
@@ -100,6 +121,7 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
     dueDate: (p.dueDate as string) ?? null,
     projectId: action.projectId,
     sprintId: (p.sprintId as string | null) ?? null,
+    userStoryId,
     createdById: action.decidedById,
     createdByAgent: action.source === "ai",
     updatedAt: new Date().toISOString(),
@@ -119,6 +141,40 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
     if (aErr) throw new Error(`Assignments failed: ${aErr.message}`);
   }
 
+  // Acceptance criteria
+  const acs = Array.isArray(p.acceptanceCriteria)
+    ? (p.acceptanceCriteria as Array<{ text: string }>)
+    : [];
+  const validAcs = acs.filter((a) => a && typeof a.text === "string" && a.text.trim());
+  if (validAcs.length > 0) {
+    const { error: acErr } = await supabase.from("AcceptanceCriterion").insert(
+      validAcs.map((ac, i) => ({
+        id: crypto.randomUUID(),
+        taskId,
+        text: ac.text.trim(),
+        order: i,
+      })),
+    );
+    if (acErr) throw new Error(`AC insert failed: ${acErr.message}`);
+  }
+
+  // Tags — validate tagIds belong to project before inserting
+  const tagIds = Array.isArray(p.tagIds) ? (p.tagIds as string[]) : [];
+  if (tagIds.length > 0) {
+    const { data: validTags } = await supabase
+      .from("TaskTag")
+      .select("id")
+      .eq("projectId", action.projectId)
+      .in("id", tagIds);
+    const okIds = (validTags ?? []).map((t) => t.id);
+    if (okIds.length > 0) {
+      const { error: tagErr } = await supabase.from("TaskTagAssignment").insert(
+        okIds.map((tagId) => ({ taskId, tagId })),
+      );
+      if (tagErr) throw new Error(`Tag assign failed: ${tagErr.message}`);
+    }
+  }
+
   // Linka taskId no action pra rastreamento
   await supabase
     .from("MeetingTaskAction")
@@ -128,19 +184,41 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
 
 async function applyUpdate(supabase: Supabase, action: ActionRow) {
   if (!action.taskId) throw new Error("update requires taskId");
+  const taskId = action.taskId;
   const p = (action.payload ?? {}) as Record<string, unknown>;
 
   const allowed = [
     "title", "description", "status", "type", "scope", "complexity",
     "priority", "billable", "functionPoints",
-    "notes", "dueDate",
+    "notes", "dueDate", "sprintId",
   ] as const;
   const patch: TaskUpdate = { updatedAt: new Date().toISOString() };
   for (const k of allowed) {
     if (k in p) (patch as Record<string, unknown>)[k] = p[k];
   }
 
-  const { error } = await supabase.from("Task").update(patch).eq("id", action.taskId);
+  // userStoryId: validate against project (project unchanged on update)
+  if ("userStoryId" in p) {
+    if (p.userStoryId === null) {
+      patch.userStoryId = null;
+    } else if (typeof p.userStoryId === "string" && p.userStoryId) {
+      const { data: story } = await supabase
+        .from("UserStory")
+        .select("id")
+        .eq("id", p.userStoryId)
+        .eq("projectId", action.projectId)
+        .maybeSingle();
+      if (story) {
+        patch.userStoryId = p.userStoryId;
+      } else {
+        console.warn(
+          `applyUpdate: userStoryId ${p.userStoryId} invalid for project ${action.projectId}, skipping`,
+        );
+      }
+    }
+  }
+
+  const { error } = await supabase.from("Task").update(patch).eq("id", taskId);
   if (error) throw new Error(`Update task failed: ${error.message}`);
 
   // Assignments — se vierem, substitui o set
@@ -149,18 +227,69 @@ async function applyUpdate(supabase: Supabase, action: ActionRow) {
     const { error: dErr } = await supabase
       .from("TaskAssignment")
       .delete()
-      .eq("taskId", action.taskId);
+      .eq("taskId", taskId);
     if (dErr) throw new Error(`Clear assignments failed: ${dErr.message}`);
 
     if (ids.length > 0) {
       const { error: iErr } = await supabase.from("TaskAssignment").insert(
         ids.map((memberId) => ({
           id: crypto.randomUUID(),
-          taskId: action.taskId!,
+          taskId,
           memberId,
         }))
       );
       if (iErr) throw new Error(`Set assignments failed: ${iErr.message}`);
+    }
+  }
+
+  // Tags — when payload.tagIds present, replace the set
+  if (Array.isArray(p.tagIds)) {
+    const ids = p.tagIds as string[];
+    const { error: dErr } = await supabase
+      .from("TaskTagAssignment")
+      .delete()
+      .eq("taskId", taskId);
+    if (dErr) throw new Error(`Clear tags failed: ${dErr.message}`);
+
+    if (ids.length > 0) {
+      const { data: validTags } = await supabase
+        .from("TaskTag")
+        .select("id")
+        .eq("projectId", action.projectId)
+        .in("id", ids);
+      const okIds = (validTags ?? []).map((t) => t.id);
+      if (okIds.length > 0) {
+        const { error: iErr } = await supabase.from("TaskTagAssignment").insert(
+          okIds.map((tagId) => ({ taskId, tagId })),
+        );
+        if (iErr) throw new Error(`Set tags failed: ${iErr.message}`);
+      }
+    }
+  }
+
+  // AC — when payload.acceptanceCriteria present, replace the set wholesale.
+  // Granular reconciliation (keep checked state on text edits) is a future
+  // refinement; for now treat the proposal as the source of truth.
+  if (Array.isArray(p.acceptanceCriteria)) {
+    const acs = (p.acceptanceCriteria as Array<{ text: string }>).filter(
+      (a) => a && typeof a.text === "string" && a.text.trim(),
+    );
+    const { error: dErr } = await supabase
+      .from("AcceptanceCriterion")
+      .delete()
+      .eq("taskId", taskId);
+    if (dErr) throw new Error(`Clear AC failed: ${dErr.message}`);
+
+    if (acs.length > 0) {
+      const { error: iErr } = await supabase.from("AcceptanceCriterion").insert(
+        acs.map((ac, i) => ({
+          id: crypto.randomUUID(),
+          taskId,
+          text: ac.text.trim(),
+          order: i,
+        })),
+      );
+      if (iErr) throw new Error(`Set AC failed: ${iErr.message}`);
     }
   }
 }

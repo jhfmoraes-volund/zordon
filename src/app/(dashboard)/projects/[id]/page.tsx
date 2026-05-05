@@ -326,11 +326,16 @@ export default function ProjectDetailPage({
   }, [id, supabase]);
 
   const loadStoryHierarchy = useCallback(async () => {
+    // Project view shows only APPROVED modules (Module.approvedAt IS NOT NULL).
+    // Stories whose moduleId points to a draft module — or whose moduleId is
+    // null (still in proposedModuleName) — are excluded. Drafts live exclusively
+    // in the Design Session briefing tree until approved.
     const [modulesRes, personasRes, storiesRes, taskAcRes] = await Promise.all([
       supabase
         .from("Module")
         .select("*")
         .eq("projectId", id)
+        .not("approvedAt", "is", null)
         .order("name"),
       supabase
         .from("ProjectPersona")
@@ -340,9 +345,10 @@ export default function ProjectDetailPage({
       supabase
         .from("UserStory")
         .select(
-          "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description), persona:ProjectPersona(id, name, description)",
+          "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module!inner(id, name, description, approvedAt), persona:ProjectPersona(id, name, description)",
         )
         .eq("projectId", id)
+        .not("module.approvedAt", "is", null)
         .order("createdAt", { ascending: false }),
       supabase
         .from("AcceptanceCriterion")

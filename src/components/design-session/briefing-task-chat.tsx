@@ -18,27 +18,35 @@ function mapToolState(state: string): "partial-call" | "call" | "result" {
   return "result";
 }
 
-const GENERATE_PROMPT =
-  "Gere as tasks técnicas para este projeto. Comece pelo Passo 1: apresente o mapa funcional das funcionalidades MVP para eu validar antes de criar as tasks.";
-
 const WELCOME_TEXT =
-  "Oi! Sou o Vitor. Já estudei o briefing desta session e posso gerar as tasks técnicas para o time — ou refinar as que já existem com base em novas regras de negócio e gaps que surgirem.\n\nQuando estiver pronto, clique em **Gerar tasks** abaixo. Ou, se já existem tasks, me diga o que quer ajustar e eu mexo cirurgicamente no que precisa.";
+  "Oi! Sou o Vitor. Estudei o briefing desta session e vou te ajudar a transformar tudo em backlog acionável.\n\nMeu fluxo tem 4 etapas, sempre conversadas antes de eu mexer em nada:\n\n1. **Mapear módulos** — leio o brainstorm, escopo e personas, e proponho como dividir o produto em módulos coesos. Você valida.\n2. **Gerar user stories** — pra cada módulo, escrevo as stories considerando todas as personas que tocam aquele fluxo, ancoradas nos cards de brainstorm que você já mapeou.\n3. **Refinar uma story** — quando você apontar uma, defino persona + critérios de aceite verificáveis.\n4. **Decompor em tasks** — quebro a story refinada em tasks técnicas autossuficientes pro time executar.\n\nPra começar, me diga algo como **\"liste os módulos que você identifica no brainstorm\"** ou **\"como você divide esse produto em módulos?\"** — e eu sigo daí.";
 
 export function BriefingTaskChat({
   sessionId,
   onTasksChanged,
+  onSendReady,
 }: {
   sessionId: string;
   onTasksChanged?: () => void;
+  /** Hands the parent a `sendMessage(text)` function once the chat is mounted.
+   *  Used by sibling tree to drive the chat from action buttons (Detalhar /
+   *  Gerar tasks) without duplicating the streaming/transport stack. */
+  onSendReady?: (sendMessage: (text: string) => void) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [existingTaskCount, setExistingTaskCount] = useState<number | null>(null);
-  const [hasTriggeredGeneration, setHasTriggeredGeneration] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const oldestLoadedAtRef = useRef<string | null>(null);
   const threadIdRef = useRef<string | null>(null);
   threadIdRef.current = threadId;
 
+  // Canal "web" unificado: mesmo thread dos outros steps. Vitor herda contexto.
+  // Visual fica limpo na entrada do briefing porque o GET filtra por
+  // `allFromBriefing=1` (só mensagens >= DesignSessionStepData.briefing.firstMessageAt).
+  // Histórico anterior é acessível via botão "Carregar mensagens anteriores".
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -46,7 +54,7 @@ export function BriefingTaskChat({
         body: {
           sessionId,
           currentStepKey: "briefing",
-          channel: "briefing",
+          channel: "web",
           get threadId() {
             return threadIdRef.current;
           },
@@ -69,6 +77,16 @@ export function BriefingTaskChat({
     },
   });
 
+  // Expose sendMessage to parent (DesignSessionTree button handlers).
+  useEffect(() => {
+    if (!onSendReady) return;
+    onSendReady((text: string) => {
+      sendMessage({ text });
+    });
+    // sendMessage identity is stable across renders for useChat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onSendReady]);
+
   const isStreaming = status === "streaming" || status === "submitted";
 
   const refreshTaskCount = async () => {
@@ -82,28 +100,42 @@ export function BriefingTaskChat({
     }
   };
 
-  // Load chat history + task count on mount
+  // Mount: load only briefing-era messages (filter by firstMessageAt marker).
+  // The thread is shared with previous steps; the marker keeps the briefing
+  // chat visually clean while preserving Vitor's full context server-side.
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/design-sessions/${sessionId}/chat?channel=briefing`)
-      .then((r) => (r.ok ? r.json() : { threadId: null, messages: [] }))
+    fetch(
+      `/api/design-sessions/${sessionId}/chat?channel=web&allFromBriefing=1&limit=30`,
+    )
+      .then((r) => (r.ok ? r.json() : { threadId: null, messages: [], hasMore: false }))
       .then((result) => {
         if (cancelled) return;
         if (result.threadId) setThreadId(result.threadId);
-        if (result.messages?.length) {
-          const restored = result.messages
-            .filter(
-              (m: { role: string }) =>
-                m.role === "user" || m.role === "assistant"
-            )
-            .map((m: { id: string; role: string; content: string }) => ({
+        const briefingMessages: Array<{
+          id: string;
+          role: string;
+          content: string;
+          createdAt?: string;
+        }> = result.messages ?? [];
+        if (briefingMessages.length > 0) {
+          const restored = briefingMessages
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({
               id: m.id,
               role: m.role as "user" | "assistant",
               content: m.content,
               parts: [{ type: "text" as const, text: m.content }],
             }));
           setMessages([initialMsg, ...restored]);
-          setHasTriggeredGeneration(true);
+          oldestLoadedAtRef.current = briefingMessages[0]?.createdAt ?? null;
+          setHasMoreHistory(true); // briefing-era pode ter mais; pre-briefing definitivamente tem
+        } else {
+          // Briefing ainda não começou: nada na thread sob a regra do marker.
+          // Mas a thread compartilhada PODE ter mensagens dos steps anteriores.
+          // Sinaliza hasMore baseado no campo briefingPending: quando true, o usuário
+          // ainda pode carregar histórico anterior se quiser ver conversas dos steps anteriores.
+          setHasMoreHistory(result.briefingPending === true);
         }
       })
       .catch(() => {});
@@ -113,6 +145,62 @@ export function BriefingTaskChat({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Load older messages on demand. Each click fetches a chunk of 30 from
+  // the shared `web` thread, ignoring the briefing marker so the user
+  // can see what was discussed in pre-work / vision / brainstorm.
+  // Preserves visual scroll position so the user doesn't "lose their spot".
+  const loadMoreHistory = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    // Pin scroll-from-bottom so prepending keeps the visible content stable.
+    stickToBottomRef.current = false;
+    const scrollEl = scrollRef.current;
+    const beforeScrollHeight = scrollEl?.scrollHeight ?? 0;
+    const beforeScrollTop = scrollEl?.scrollTop ?? 0;
+    try {
+      const params = new URLSearchParams({ channel: "web", limit: "30" });
+      if (oldestLoadedAtRef.current) params.set("before", oldestLoadedAtRef.current);
+      const r = await fetch(
+        `/api/design-sessions/${sessionId}/chat?${params.toString()}`,
+      );
+      if (!r.ok) return;
+      const result: {
+        messages: Array<{
+          id: string;
+          role: string;
+          content: string;
+          createdAt?: string;
+        }>;
+        hasMore: boolean;
+      } = await r.json();
+      if (!result.messages?.length) {
+        setHasMoreHistory(false);
+        return;
+      }
+      const olderMsgs = result.messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          parts: [{ type: "text" as const, text: m.content }],
+        }));
+      // Prepend AFTER the welcome message; new messages stay at bottom.
+      setMessages((current) => [current[0], ...olderMsgs, ...current.slice(1)]);
+      oldestLoadedAtRef.current = result.messages[0]?.createdAt ?? oldestLoadedAtRef.current;
+      setHasMoreHistory(result.hasMore);
+      // Restore scroll position on next paint — virtualizer will have re-laid out.
+      requestAnimationFrame(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const delta = el.scrollHeight - beforeScrollHeight;
+        el.scrollTop = beforeScrollTop + delta;
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   // Virtualizer pra renderizar so mensagens visiveis
   const showAnalyzing =
@@ -160,15 +248,6 @@ export function BriefingTaskChat({
     sendMessage({ text });
   };
 
-  const handleGenerate = () => {
-    if (isStreaming) return;
-    setHasTriggeredGeneration(true);
-    sendMessage({ text: GENERATE_PROMPT });
-  };
-
-  const showGenerateButton =
-    existingTaskCount === 0 && !hasTriggeredGeneration && !isStreaming;
-
   return (
     <div className="surface flex flex-col h-[60vh] min-h-[480px] overflow-hidden">
       {/* Messages */}
@@ -180,6 +259,22 @@ export function BriefingTaskChat({
           ref={scrollRef}
           className="h-full overflow-y-auto scroll-smooth"
         >
+          {hasMoreHistory && (
+            <div className="flex justify-center py-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={loadingMore}
+                onClick={loadMoreHistory}
+                className="text-xs text-muted-foreground hover:text-foreground gap-1.5 h-7"
+              >
+                {loadingMore ? (
+                  <Sparkles className="h-3 w-3 animate-pulse" />
+                ) : null}
+                {loadingMore ? "Carregando..." : "Carregar mensagens anteriores"}
+              </Button>
+            </div>
+          )}
           <div
             className="relative w-full"
             style={{ height: `${totalSize}px` }}
@@ -216,20 +311,6 @@ export function BriefingTaskChat({
         </div>
       </div>
 
-      {/* Generate button */}
-      {showGenerateButton && (
-        <div className="flex justify-center px-4 py-2 border-t border-border/50">
-          <Button
-            variant="outline"
-            className="gap-2 border-primary/30 text-primary hover:bg-primary/5"
-            onClick={handleGenerate}
-          >
-            <Sparkles className="h-4 w-4" />
-            Gerar tasks
-          </Button>
-        </div>
-      )}
-
       {/* Input */}
       <div className="flex items-end gap-2 px-4 py-3 border-t border-border/50">
         <Textarea
@@ -244,7 +325,7 @@ export function BriefingTaskChat({
           placeholder={
             existingTaskCount && existingTaskCount > 0
               ? 'Refine: "Quebre a VLD-042 em duas", "A regra X mudou"...'
-              : "Converse com o Vitor ou clique em Gerar tasks..."
+              : 'Liste os módulos que você identifica no brainstorm…'
           }
           rows={1}
           className="resize-none text-sm min-h-[40px] max-h-[120px]"

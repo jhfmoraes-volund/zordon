@@ -76,6 +76,48 @@ export const webConnector = {
       member?.id
     );
 
+    // Briefing scope marker: the first time the user sends a message while
+    // in step=briefing, stamp DesignSessionStepData[briefing].data.firstMessageAt.
+    // Stamped BEFORE persistUserMessage so the marker is older than the message
+    // we're about to insert — the GET endpoint uses `>=` to include the message.
+    // The briefing chat UI uses this to render only briefing-era messages by
+    // default, even when the underlying thread is the same `web` channel
+    // shared across earlier steps.
+    if (currentStepKey === "briefing") {
+      const { data: stepRow } = await db()
+        .from("DesignSessionStepData")
+        .select("id, data")
+        .eq("sessionId", sessionId)
+        .eq("stepKey", "briefing")
+        .maybeSingle();
+      const stepData = (stepRow?.data ?? {}) as Record<string, unknown>;
+      if (!stepData.firstMessageAt) {
+        // Use a slightly-earlier timestamp so the row we insert next satisfies `>=`.
+        const markerIso = new Date(Date.now() - 1).toISOString();
+        const nextData = { ...stepData, firstMessageAt: markerIso };
+        if (stepRow) {
+          await db()
+            .from("DesignSessionStepData")
+            .update({ data: nextData, updatedAt: new Date().toISOString() })
+            .eq("id", stepRow.id);
+        } else {
+          // Lookup currentStep for stepIndex (NOT NULL).
+          const { data: sess } = await db()
+            .from("DesignSession")
+            .select("currentStep")
+            .eq("id", sessionId)
+            .single();
+          await db().from("DesignSessionStepData").insert({
+            sessionId,
+            stepKey: "briefing",
+            stepIndex: sess?.currentStep ?? 0,
+            data: nextData,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
     // Persist user message
     await persistUserMessage(threadId, message);
 

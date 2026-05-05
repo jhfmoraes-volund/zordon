@@ -1,9 +1,73 @@
 import { db } from "@/lib/db";
 
 /**
- * Loads all step data from a Design Session and formats it for the prompt.
+ * Verbosity level controls how much of each step is rendered into the system
+ * prompt. Tuned per sub-phase to keep the prompt cacheable and compact:
+ *
+ *   - "full"        — everything. Used in pre_work, debugging.
+ *   - "discovery"   — brainstorm full + prioritization full + hypotheses (trim)
+ *                     + tech specs. Used in module_discovery.
+ *   - "refinement"  — MVP cards compact (title+howItSolves+targetPersona+
+ *                     painPointRef), no `next`/`out`, no hypotheses, no
+ *                     tech specs. Used in story_tree.
+ *   - "execution"   — zero brainstorm / prioritization / hypotheses. Only
+ *                     vision + scope + personas + tech specs. Used in
+ *                     story_detail, task_breakdown.
  */
-export async function buildSessionContext(sessionId: string): Promise<string> {
+export type SessionContextVerbosity =
+  | "full"
+  | "discovery"
+  | "refinement"
+  | "execution";
+
+interface BrainstormCard {
+  id?: string;
+  title: string;
+  howItSolves: string;
+  targetPersona?: string;
+  keyScreens?: string;
+  userFlows?: string;
+  painPointRef?: string;
+  technicalNotes?: string;
+}
+
+interface PrioritizationItem {
+  id?: string;
+  title: string;
+  bucket: string;
+  targetPersona?: string;
+  howItSolves?: string;
+  keyScreens?: string;
+  userFlows?: string;
+  painPointRef?: string;
+  technicalNotes?: string;
+}
+
+function renderCardFull(c: BrainstormCard | PrioritizationItem): string {
+  const idSuffix = c.id ? ` <!-- bs#${c.id} -->` : "";
+  const parts = [`- **${c.title}**${idSuffix}`];
+  if (c.targetPersona) parts.push(`  - Persona: ${c.targetPersona}`);
+  if (c.howItSolves) parts.push(`  - Como resolve: ${c.howItSolves}`);
+  if (c.keyScreens) parts.push(`  - Telas: ${c.keyScreens}`);
+  if (c.userFlows) parts.push(`  - Fluxos: ${c.userFlows}`);
+  if (c.painPointRef) parts.push(`  - Dor que resolve: ${c.painPointRef}`);
+  if (c.technicalNotes) parts.push(`  - Técnico: ${c.technicalNotes}`);
+  return parts.join("\n");
+}
+
+function renderCardCompact(c: BrainstormCard | PrioritizationItem): string {
+  const idSuffix = c.id ? ` <!-- bs#${c.id} -->` : "";
+  const parts = [`- **${c.title}**${idSuffix}`];
+  if (c.targetPersona) parts.push(`  - Persona: ${c.targetPersona}`);
+  if (c.howItSolves) parts.push(`  - Como resolve: ${c.howItSolves}`);
+  if (c.painPointRef) parts.push(`  - Dor: ${c.painPointRef}`);
+  return parts.join("\n");
+}
+
+export async function buildSessionContext(
+  sessionId: string,
+  verbosity: SessionContextVerbosity = "full",
+): Promise<string> {
   const { data: session } = await db()
     .from("DesignSession")
     .select("*, project:Project(name, id), stepData:DesignSessionStepData(*)")
@@ -19,7 +83,7 @@ export async function buildSessionContext(sessionId: string): Promise<string> {
 
   const sections: string[] = [];
 
-  // Product Vision
+  // Product Vision — always included (cheap, anchors everything else)
   const vision = stepMap["product_vision"] as Record<string, string> | undefined;
   if (vision) {
     sections.push(`## Visão do Produto
@@ -30,7 +94,7 @@ export async function buildSessionContext(sessionId: string): Promise<string> {
 - **Métricas de impacto:** ${vision.impactMetrics || "N/A"}`);
   }
 
-  // Scope Definition (E / NAO E / FAZ / NAO FAZ)
+  // Scope Definition — always included (small, defines fronteira)
   const scope = stepMap["scope_definition"] as {
     is?: Array<{ text: string }>;
     isNot?: Array<{ text: string }>;
@@ -51,10 +115,14 @@ ${fmt(scope.does)}
 ${fmt(scope.doesNot)}`);
   }
 
-  // Personas & Journeys
+  // Personas & Journeys — always included (anchors stories regardless of phase)
   const personas = stepMap["personas_journeys"] as { personas?: Array<{ name: string; role: string; context: string; asIsSteps?: Array<{ description: string; painOrGain: string }>; toBeSteps?: Array<{ description: string; painOrGain: string }> }> } | undefined;
   if (personas?.personas?.length) {
+    const wantsJourneys = verbosity === "full" || verbosity === "discovery";
     const personaTexts = personas.personas.map((p) => {
+      if (!wantsJourneys) {
+        return `### ${p.name} (${p.role})\n${p.context}`;
+      }
       const pains = p.asIsSteps?.map((s) => `  - ${s.description} (dor: ${s.painOrGain})`).join("\n") || "  Nenhum";
       const gains = p.toBeSteps?.map((s) => `  - ${s.description} (ganho: ${s.painOrGain})`).join("\n") || "  Nenhum";
       return `### ${p.name} (${p.role})
@@ -67,37 +135,32 @@ ${gains}`;
     sections.push(`## Personas & Jornadas\n${personaTexts.join("\n\n")}`);
   }
 
-  // Brainstorm Solutions
-  const brainstorm = stepMap["brainstorm"] as { solutions?: Array<{ title: string; howItSolves: string; targetPersona?: string; keyScreens?: string; userFlows?: string; painPointRef?: string; technicalNotes?: string }> } | undefined;
+  // Brainstorm — heaviest section. Drop entirely in execution; compact in
+  // refinement (MVP-bound cards already live in prioritization); full elsewhere.
+  const brainstorm = stepMap["brainstorm"] as { solutions?: BrainstormCard[] } | undefined;
   if (brainstorm?.solutions?.length) {
-    const solTexts = brainstorm.solutions.map((s) => {
-      const parts = [`- **${s.title}**`];
-      if (s.targetPersona) parts.push(`  - Persona: ${s.targetPersona}`);
-      if (s.howItSolves) parts.push(`  - Como resolve: ${s.howItSolves}`);
-      if (s.keyScreens) parts.push(`  - Telas: ${s.keyScreens}`);
-      if (s.userFlows) parts.push(`  - Fluxos: ${s.userFlows}`);
-      if (s.painPointRef) parts.push(`  - Dor que resolve: ${s.painPointRef}`);
-      if (s.technicalNotes) parts.push(`  - Técnico: ${s.technicalNotes}`);
-      return parts.join("\n");
-    }).join("\n\n");
-    sections.push(`## Soluções Levantadas\n${solTexts}`);
+    if (verbosity === "full" || verbosity === "discovery") {
+      const text = brainstorm.solutions.map(renderCardFull).join("\n\n");
+      sections.push(`## Soluções Levantadas\n${text}`);
+    }
+    // refinement & execution: skip raw brainstorm — refinement reads via
+    // prioritization (MVP-only), execution doesn't need brainstorm at all.
   }
 
-  // Prioritization
-  const prioritization = stepMap["prioritization"] as { items?: Array<{ title: string; bucket: string; targetPersona?: string; howItSolves?: string; keyScreens?: string; userFlows?: string; painPointRef?: string; technicalNotes?: string }> } | undefined;
-  if (prioritization?.items?.length) {
+  // Prioritization — drives story_tree filtering. In refinement we keep ONLY
+  // MVP and render compact. Execution skips entirely.
+  const prioritization = stepMap["prioritization"] as { items?: PrioritizationItem[] } | undefined;
+  if (prioritization?.items?.length && verbosity !== "execution") {
     const buckets: Record<string, string[]> = { mvp: [], next: [], out: [] };
     for (const item of prioritization.items) {
-      const parts = [`- **${item.title}**`];
-      if (item.targetPersona) parts.push(`  - Persona: ${item.targetPersona}`);
-      if (item.howItSolves) parts.push(`  - Como resolve: ${item.howItSolves}`);
-      if (item.keyScreens) parts.push(`  - Telas: ${item.keyScreens}`);
-      if (item.userFlows) parts.push(`  - Fluxos: ${item.userFlows}`);
-      if (item.painPointRef) parts.push(`  - Dor que resolve: ${item.painPointRef}`);
-      if (item.technicalNotes) parts.push(`  - Técnico: ${item.technicalNotes}`);
-      (buckets[item.bucket] || []).push(parts.join("\n"));
+      const renderer = verbosity === "refinement" ? renderCardCompact : renderCardFull;
+      (buckets[item.bucket] || []).push(renderer(item));
     }
-    sections.push(`## Priorização
+    if (verbosity === "refinement") {
+      sections.push(`## Priorização — MVP (única lista relevante para esta fase)
+${buckets.mvp.join("\n\n") || "Nenhum"}`);
+    } else {
+      sections.push(`## Priorização
 ### MVP (fazer agora)
 ${buckets.mvp.join("\n\n") || "Nenhum"}
 
@@ -106,9 +169,11 @@ ${buckets.next.join("\n\n") || "Nenhum"}
 
 ### Fora do escopo
 ${buckets.out.join("\n\n") || "Nenhum"}`);
+    }
   }
 
-  // Technical Specs
+  // Technical Specs — needed in execution (task_breakdown reads stack/rules)
+  // and discovery; skip in refinement (story_tree foca em produto, não técnico).
   const techSpecs = stepMap["technical_specs"] as {
     stack?: string;
     integrations?: Array<{ text: string }>;
@@ -116,7 +181,7 @@ ${buckets.out.join("\n\n") || "Nenhum"}`);
     performance?: string;
     notes?: string;
   } | undefined;
-  if (techSpecs) {
+  if (techSpecs && verbosity !== "refinement") {
     const parts = [];
     if (techSpecs.stack) parts.push(`**Stack:** ${techSpecs.stack}`);
     if (techSpecs.integrations?.length) {
@@ -130,9 +195,9 @@ ${buckets.out.join("\n\n") || "Nenhum"}`);
     sections.push(`## Especificações Técnicas\n${parts.join("\n")}`);
   }
 
-  // Hypotheses & Metrics
+  // Hypotheses — only in full/discovery. Refinement & execution descartam.
   const hypotheses = stepMap["hypotheses"] as { hypotheses?: Array<{ hypothesis: string; indicator: string; target: string; expectedResult: string; evidence: string }> } | undefined;
-  if (hypotheses?.hypotheses?.length) {
+  if (hypotheses?.hypotheses?.length && (verbosity === "full" || verbosity === "discovery")) {
     const hTexts = hypotheses.hypotheses.map((h, i) => {
       const parts = [`### Hipótese ${i + 1}: ${h.hypothesis}`];
       if (h.indicator) parts.push(`- **Indicador:** ${h.indicator}`);
@@ -146,4 +211,3 @@ ${buckets.out.join("\n\n") || "Nenhum"}`);
 
   return sections.join("\n\n---\n\n");
 }
-

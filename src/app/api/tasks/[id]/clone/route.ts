@@ -91,7 +91,9 @@ export async function POST(
   let reference: string | null = null;
 
   for (let attempt = 0; attempt < 5; attempt++) {
-    const { data: ref } = await supabase.rpc("next_task_reference");
+    const { data: ref } = await supabase.rpc("next_task_reference", {
+      p_project_id: targetProjectId,
+    });
     reference = ref ?? null;
     if (!reference) {
       return NextResponse.json(

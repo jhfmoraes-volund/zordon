@@ -19,6 +19,19 @@ export async function POST(
 
   const supabase = db();
 
+  const { data: session, error: sessionErr } = await supabase
+    .from("DesignSession")
+    .select("projectId")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (sessionErr || !session) {
+    return NextResponse.json(
+      { error: sessionErr?.message ?? "session not found" },
+      { status: 404 },
+    );
+  }
+  const projectId = session.projectId;
+
   const { data: drafts, error: draftsError } = await supabase
     .from("Task")
     .select("id, reference, functionPoints")
@@ -34,10 +47,14 @@ export async function POST(
   let totalFp = 0;
 
   for (const task of drafts ?? []) {
-    // Preserve an existing reference (e.g. tasks backfilled from before the
-    // draft status existed). Only generate a new one when reference is null.
-    // The RPC is volatile and uniqueness is indexed, so collisions surface as
-    // 23505 — retry a few times to absorb races with parallel creations.
+    // Promocao draft->backlog: SEMPRE substitui reference por <KEY>-T-NNN
+    // (drafts vivem em <KEY>-D-NNN). Se ja for T-NNN (caso raro de task que
+    // entrou como draft direto via API REST), preserva.
+    // Race de UNIQUE: 23505 -> retry com nova ref.
+    const isDraftRef = task.reference
+      ? /^[A-Z]+-D-\d+$/.test(task.reference)
+      : true;
+
     let success = false;
     for (let attempt = 0; attempt < 5; attempt++) {
       const update: { status: string; updatedAt: string; reference?: string } = {
@@ -45,9 +62,10 @@ export async function POST(
         updatedAt: new Date().toISOString(),
       };
 
-      if (!task.reference) {
+      if (isDraftRef) {
         const { data: ref, error: refError } = await supabase.rpc(
-          "next_task_reference"
+          "next_task_reference",
+          { p_project_id: projectId },
         );
         if (refError || !ref) {
           return NextResponse.json(

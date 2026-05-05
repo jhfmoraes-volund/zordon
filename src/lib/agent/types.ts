@@ -49,6 +49,8 @@ export interface PromptContext {
  */
 export interface AgentDefinition {
   name: string;
+  /** Optional per-agent model override. Falls back to DEFAULT_MODEL when absent. */
+  model?: string;
   /** Builds the system prompt given runtime context */
   buildPrompt: (ctx: PromptContext) => string;
   /** Assembles tools for this run */

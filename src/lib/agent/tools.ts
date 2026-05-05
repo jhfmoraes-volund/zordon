@@ -3,6 +3,15 @@ import { z } from "zod";
 import { getStepData, updateStepData } from "./context";
 import { createWebSearchTool } from "./tools/web-search";
 import { createTaskTool } from "./tools/create-task";
+import { createUserStoryTool } from "./tools/create-user-story";
+import { listProjectTagsTool } from "./tools/list-project-tags";
+import { proposeModulesTool } from "./tools/propose-modules";
+import { syncProjectPersonasTool } from "./tools/sync-personas";
+import {
+  listStoriesTool,
+  approveModuleTool,
+  setStoryRefinementTool,
+} from "./tools/manage-stories";
 import {
   listSessionTasksTool,
   listProjectTasksTool,
@@ -174,9 +183,20 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
     tools.web_search = createWebSearchTool(sessionId, capabilities.projectId);
   }
 
-  // Task creation & management (briefing step)
+  // Story + Task creation & management (briefing step)
   if (capabilities?.createTasks && capabilities?.projectId) {
+    tools.propose_modules = proposeModulesTool(capabilities.projectId);
+    tools.sync_project_personas = syncProjectPersonasTool(capabilities.projectId);
+    tools.create_user_story = createUserStoryTool(
+      sessionId,
+      capabilities.projectId,
+      capabilities.memberId,
+    );
+    tools.list_stories = listStoriesTool(sessionId, capabilities.projectId);
+    tools.approve_module = approveModuleTool(capabilities.projectId);
+    tools.set_story_refinement = setStoryRefinementTool(capabilities.projectId);
     tools.create_task = createTaskTool(sessionId, capabilities.projectId, capabilities.memberId);
+    tools.list_project_tags = listProjectTagsTool(capabilities.projectId);
     tools.list_tasks = listSessionTasksTool(sessionId);
     tools.list_project_tasks = listProjectTasksTool(sessionId, capabilities.projectId);
     tools.update_task = updateTaskTool(sessionId);

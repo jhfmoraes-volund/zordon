@@ -1,8 +1,40 @@
 import { buildSystemPrompt } from "../../prompt";
 import { assembleTools } from "../../tools";
-import { buildSessionContext, getStepData } from "../../context";
+import {
+  buildSessionContext,
+  getStepData,
+  type SessionContextVerbosity,
+} from "../../context";
 import { db } from "@/lib/db";
+import {
+  getModulesForProject,
+  getPersonasForProject,
+  getRecentStoriesForProject,
+} from "@/lib/dal/story-hierarchy";
+import {
+  BRIEFING_SUB_PHASES,
+  DEFAULT_BRIEFING_SUB_PHASE,
+} from "@/lib/design-sessions/constants";
 import type { AgentDefinition, AgentRunRequest } from "../../types";
+
+function pickVerbosity(
+  currentStepKey: string,
+  subPhase: string | undefined,
+): SessionContextVerbosity {
+  if (currentStepKey !== "briefing") return "full";
+  const phase = subPhase ?? DEFAULT_BRIEFING_SUB_PHASE;
+  switch (phase) {
+    case BRIEFING_SUB_PHASES.MODULE_DISCOVERY:
+      return "discovery";
+    case BRIEFING_SUB_PHASES.STORY_TREE:
+      return "refinement";
+    case BRIEFING_SUB_PHASES.STORY_DETAIL:
+    case BRIEFING_SUB_PHASES.TASK_BREAKDOWN:
+      return "execution";
+    default:
+      return "full";
+  }
+}
 
 /**
  * Vitor — Design Session agent.
@@ -22,18 +54,27 @@ export const vitorAgent: AgentDefinition = {
 
     if (!session) throw new Error("Session not found");
 
+    const isBriefing = currentStepKey === "briefing";
+
+    // Load step data first so we can pick context verbosity from subPhase.
+    // Cheap (single row) and unblocks the parallel fan-out below.
+    const currentStepData = await getStepData(sessionId, currentStepKey);
+    const subPhase = (currentStepData as { subPhase?: string } | null)?.subPhase;
+    const verbosity = pickVerbosity(currentStepKey, subPhase);
+
     const [
       sessionContext,
-      currentStepData,
       activeDecisions,
       openQuestions,
       businessContext,
       project,
       sessionIndex,
       transcripts,
+      existingModules,
+      existingStories,
+      existingPersonas,
     ] = await Promise.all([
-      buildSessionContext(sessionId),
-      getStepData(sessionId, currentStepKey),
+      buildSessionContext(sessionId, verbosity),
       db()
         .from("DesignDecision")
         .select("id, statement, rationale, confidence, status, tags, createdAt")
@@ -71,6 +112,16 @@ export const vitorAgent: AgentDefinition = {
         )
         .eq("sessionId", sessionId)
         .order("meetingStart", { ascending: false }),
+      // Hierarchy context — only loaded on briefing to keep prompt token budget tight.
+      isBriefing
+        ? getModulesForProject(session.projectId)
+        : Promise.resolve([]),
+      isBriefing
+        ? getRecentStoriesForProject(session.projectId, { limit: 50 })
+        : Promise.resolve([]),
+      isBriefing
+        ? getPersonasForProject(session.projectId)
+        : Promise.resolve([]),
     ]);
 
     return {
@@ -90,6 +141,9 @@ export const vitorAgent: AgentDefinition = {
       projectMemoryVersion: project.data?.memoryVersion ?? 0,
       sessionIndex: sessionIndex.data ?? [],
       transcripts: transcripts.data ?? [],
+      existingModules,
+      existingStories,
+      existingPersonas,
     };
   },
 
@@ -108,6 +162,9 @@ export const vitorAgent: AgentDefinition = {
       projectMemoryMd: agentContext.projectMemoryMd as string | null,
       sessionIndex: agentContext.sessionIndex as SessionIndexEntry[],
       transcripts: agentContext.transcripts as TranscriptContextItem[],
+      existingModules: agentContext.existingModules as ExistingModule[],
+      existingStories: agentContext.existingStories as ExistingStory[],
+      existingPersonas: agentContext.existingPersonas as ExistingPersona[],
     });
   },
 
@@ -166,4 +223,27 @@ export interface TranscriptContextItem {
   summary: string | null;
   actionItems: { title: string; description: string }[];
   fullText: string;
+}
+
+export interface ExistingModule {
+  id: string;
+  name: string;
+  description: string | null;
+  approvedAt: string | null;
+}
+
+export interface ExistingStory {
+  id: string;
+  reference: string;
+  title: string;
+  refinementStatus: string;
+  moduleId: string | null;
+  proposedModuleName: string | null;
+  designSessionId: string | null;
+}
+
+export interface ExistingPersona {
+  id: string;
+  name: string;
+  description: string | null;
 }

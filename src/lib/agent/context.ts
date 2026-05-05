@@ -1,5 +1,8 @@
 import { db } from "@/lib/db";
-import { buildSessionContext } from "@/lib/task-generator";
+import {
+  buildSessionContext,
+  type SessionContextVerbosity,
+} from "@/lib/task-generator";
 import type { ModelMessage, UIMessage } from "ai";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -9,7 +12,7 @@ type SupabaseJson = Json;
  * Loads full session context as formatted text.
  * Re-exports from task-generator for agent use.
  */
-export { buildSessionContext };
+export { buildSessionContext, type SessionContextVerbosity };
 
 /**
  * Loads detailed data for a specific step.

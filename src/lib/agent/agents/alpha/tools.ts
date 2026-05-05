@@ -5,6 +5,17 @@ import { suggestFunctionPoints, OPEN_STATUSES } from "@/lib/function-points";
 import { TASK_STATUSES, TASK_TYPES, SCOPES, COMPLEXITIES } from "@/lib/task-constants";
 import { RoamClient, cuesToText } from "@/lib/roam";
 import { loadAgentHeuristic, loadFpMatrix } from "../../config";
+import {
+  listModulesForOpsTool,
+  listPersonasForOpsTool,
+  listStoriesForOpsTool,
+  getStoryForOpsTool,
+  createStoryForOpsTool,
+  updateStoryForOpsTool,
+  setStoryRefinementForOpsTool,
+  approveModuleForOpsTool,
+  manageStoryAcForOpsTool,
+} from "../../tools/alpha-hierarchy";
 import { ALPHA_AGENT_ID } from "./context";
 import type { Capabilities } from "../../types";
 
@@ -485,9 +496,33 @@ export function assembleAlphaTools(
     },
   });
 
+  // ─── Hierarchy read tools (Module / UserStory / Persona) ──
+  // Available only when the route resolves to a project — these wrappers are
+  // alpha-only and do not interfere with Vitor's session-bound factories.
+  if (routeProjectId) {
+    tools.list_modules = listModulesForOpsTool(routeProjectId);
+    tools.list_personas = listPersonasForOpsTool(routeProjectId);
+    tools.list_stories = listStoriesForOpsTool(routeProjectId);
+    tools.get_story = getStoryForOpsTool(routeProjectId);
+  }
+
   // ─── Write tools ─────────────────────────────────────────
 
   if (capabilities.writeTools) {
+    if (routeProjectId && currentMemberId) {
+      tools.create_user_story = createStoryForOpsTool(
+        routeProjectId,
+        currentMemberId,
+      );
+      tools.update_user_story = updateStoryForOpsTool(routeProjectId);
+      tools.set_story_refinement = setStoryRefinementForOpsTool(routeProjectId);
+      tools.approve_module = approveModuleForOpsTool(
+        routeProjectId,
+        currentMemberId,
+      );
+      tools.manage_story_ac = manageStoryAcForOpsTool(routeProjectId);
+    }
+
     tools.create_sprint = tool({
       description:
         "Cria um novo sprint vinculado a um projeto. Retorna o sprint criado com estatisticas zeradas.",
@@ -572,7 +607,9 @@ export function assembleAlphaTools(
         }
 
         // Generate reference
-        const { data: ref } = await supabase.rpc("next_task_reference");
+        const { data: ref } = await supabase.rpc("next_task_reference", {
+          p_project_id: resolvedProjectId,
+        });
         if (!ref) return { error: "Falha ao gerar referencia da task." };
 
         const { data: task, error } = await supabase

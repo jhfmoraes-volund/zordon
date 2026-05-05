@@ -115,28 +115,6 @@ export async function deletePersona(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/**
- * Seed the 3 default personas (Builder/PM/Cliente) for an existing project.
- * Idempotent — uses ON CONFLICT to skip if already present. Useful for
- * projects created before the trigger existed.
- */
-export async function seedDefaultPersonas(projectId: string): Promise<void> {
-  const rows = [
-    { projectId, name: "Builder", description: "Membro do time que executa tasks" },
-    { projectId, name: "PM", description: "Gestor do projeto, define prioridades e valida entregas" },
-    { projectId, name: "Cliente", description: "Stakeholder externo / usuário final do produto" },
-  ];
-  for (const row of rows) {
-    const { error } = await db()
-      .from("ProjectPersona")
-      .insert(row)
-      .select("id");
-    if (error && !/duplicate|persona_unique_per_project/.test(error.message)) {
-      throw error;
-    }
-  }
-}
-
 // ─── Stories ─────────────────────────────────────────────────────────────────
 
 export type StoryWithRelations = UserStoryRow & {
@@ -369,27 +347,211 @@ export async function validateStoryAc(
  * Approve a `proposedModuleName`: create the Module and re-attach the story.
  * Atomic-ish — if Module already exists with same name, reuse it.
  */
+/**
+ * Normalize a free-form proposed name into the UPPERCASE_SNAKE form required
+ * by the `Module.name` CHECK constraint (`^[A-Z][A-Z0-9_]*$`). The agent often
+ * proposes natural names like "Autenticação & Onboarding"; we only enforce
+ * the Module shape at promotion time.
+ */
+export function normalizeModuleName(name: string): string {
+  return (
+    name
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "") // strip combining diacritics
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_") // any run of non-alphanum → single underscore
+      .replace(/^_+|_+$/g, "") // trim leading/trailing underscores
+      .replace(/^([0-9])/, "M_$1") || "MODULE" // ensure starts with letter
+  );
+}
+
 export async function approveProposedModule(
   storyId: string,
   projectId: string,
   proposedName: string,
+  approverId: string | null,
 ): Promise<{ module: ModuleRow; story: UserStoryRow }> {
+  const normalized = normalizeModuleName(proposedName);
+
   const existing = await db()
     .from("Module")
     .select("*")
     .eq("projectId", projectId)
-    .eq("name", proposedName)
+    .eq("name", normalized)
     .maybeSingle();
   if (existing.error) throw existing.error;
 
-  const mod =
-    existing.data ?? (await createModule({ projectId, name: proposedName }));
+  let mod =
+    existing.data ?? (await createModule({ projectId, name: normalized }));
+
+  // Idempotent: re-promoting a story whose proposed name matches an already-
+  // approved module reuses the module without resetting approvedAt.
+  if (!mod.approvedAt) {
+    const updated = await db()
+      .from("Module")
+      .update({
+        approvedAt: new Date().toISOString(),
+        approvedBy: approverId,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("id", mod.id)
+      .select("*")
+      .single();
+    if (updated.error) throw updated.error;
+    if (updated.data) mod = updated.data;
+  }
 
   const story = await updateStory(storyId, {
     moduleId: mod.id,
     proposedModuleName: null,
   });
   return { module: mod, story };
+}
+
+// ─── Cascading task promotion (Module approval) ──────────────────────────────
+
+/**
+ * Promote all draft tasks under a Module's stories into the project backlog.
+ * For each draft task, generates a TASK-NNN reference and flips status to
+ * 'backlog'. Idempotent — already-promoted tasks are skipped.
+ *
+ * Why: approving a Module is the user's commitment that the breakdown is good.
+ * From this point on, tasks are real work in the project, not session drafts.
+ */
+export async function promoteTasksForModule(
+  moduleId: string,
+): Promise<{ promoted: number; totalFp: number }> {
+  const supabase = db();
+
+  // 0. Resolve projectId for the module (needed for next_task_reference).
+  const { data: moduleRow, error: moduleErr } = await supabase
+    .from("Module")
+    .select("projectId")
+    .eq("id", moduleId)
+    .maybeSingle();
+  if (moduleErr) throw moduleErr;
+  if (!moduleRow) throw new Error(`Module ${moduleId} not found`);
+  const projectId = moduleRow.projectId;
+
+  // 1. Find all stories under this module.
+  const { data: stories, error: storiesErr } = await supabase
+    .from("UserStory")
+    .select("id")
+    .eq("moduleId", moduleId);
+  if (storiesErr) throw storiesErr;
+  const storyIds = (stories ?? []).map((s) => s.id);
+  if (storyIds.length === 0) return { promoted: 0, totalFp: 0 };
+
+  // 2. Find their draft tasks (those still in design-session state).
+  const { data: drafts, error: draftsErr } = await supabase
+    .from("Task")
+    .select("id, reference, functionPoints")
+    .in("userStoryId", storyIds)
+    .eq("status", "draft")
+    .order("createdAt", { ascending: true });
+  if (draftsErr) throw draftsErr;
+
+  let promoted = 0;
+  let totalFp = 0;
+
+  for (const task of drafts ?? []) {
+    // Promocao draft->backlog: SEMPRE substitui ref D-NNN por T-NNN.
+    // Se reference ja eh T-NNN (caso raro), preserva.
+    const isDraftRef = task.reference
+      ? /^[A-Z]+-D-\d+$/.test(task.reference)
+      : true;
+
+    let success = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const update: { status: string; updatedAt: string; reference?: string } = {
+        status: "backlog",
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (isDraftRef) {
+        const { data: ref, error: refErr } = await supabase.rpc(
+          "next_task_reference",
+          { p_project_id: projectId },
+        );
+        if (refErr || !ref) {
+          throw new Error(refErr?.message || "reference generation failed");
+        }
+        update.reference = ref;
+      }
+
+      const { error: updateErr } = await supabase
+        .from("Task")
+        .update(update)
+        .eq("id", task.id);
+
+      if (!updateErr) {
+        success = true;
+        break;
+      }
+      const code = (updateErr as { code?: string }).code;
+      if (code === "23505") continue; // unique collision — retry with new ref
+      throw updateErr;
+    }
+
+    if (!success) {
+      throw new Error("could not assign a unique TASK reference after 5 attempts");
+    }
+
+    promoted += 1;
+    totalFp += task.functionPoints ?? 0;
+  }
+
+  return { promoted, totalFp };
+}
+
+/**
+ * Reverse promotion when a Module is unapproved. Backlog tasks under this
+ * module's stories revert to status='draft'. References are PRESERVED — once
+ * a task has TASK-NNN, the reference sticks even through draft round-trips,
+ * which keeps URLs/comments stable.
+ *
+ * Throws if any task is past 'backlog' (todo / in_progress / review / done) —
+ * caller is expected to resolve those before unapproving.
+ */
+export async function revertTasksForModule(
+  moduleId: string,
+): Promise<{ reverted: number; blocking: Array<{ reference: string | null; status: string }> }> {
+  const supabase = db();
+
+  const { data: stories, error: storiesErr } = await supabase
+    .from("UserStory")
+    .select("id")
+    .eq("moduleId", moduleId);
+  if (storiesErr) throw storiesErr;
+  const storyIds = (stories ?? []).map((s) => s.id);
+  if (storyIds.length === 0) return { reverted: 0, blocking: [] };
+
+  // Pre-flight: any task past 'backlog' blocks the unapprove.
+  const { data: active, error: activeErr } = await supabase
+    .from("Task")
+    .select("reference, status")
+    .in("userStoryId", storyIds)
+    .in("status", ["todo", "in_progress", "review", "done"]);
+  if (activeErr) throw activeErr;
+  if ((active ?? []).length > 0) {
+    return {
+      reverted: 0,
+      blocking: (active ?? []).map((t) => ({
+        reference: t.reference,
+        status: t.status,
+      })),
+    };
+  }
+
+  const { data: reverted, error: revertErr } = await supabase
+    .from("Task")
+    .update({ status: "draft", updatedAt: new Date().toISOString() })
+    .in("userStoryId", storyIds)
+    .eq("status", "backlog")
+    .select("id");
+  if (revertErr) throw revertErr;
+
+  return { reverted: (reverted ?? []).length, blocking: [] };
 }
 
 // ─── Acceptance Criteria ─────────────────────────────────────────────────────

@@ -128,7 +128,10 @@ export function PreWorkStep({
   // Load existing chat history on mount (and when navigating back)
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/design-sessions/${sessionId}/chat`)
+    // limit=100 é suficiente pro pre_work em uso normal; thread mesma do
+    // briefing (canal web), mas mensagens ficam aqui mesmo quando o usuário
+    // avança pro briefing — Vitor vê tudo via context window.
+    fetch(`/api/design-sessions/${sessionId}/chat?channel=web&limit=100`)
       .then((r) => {
         if (!r.ok) throw new Error(`Chat history fetch failed: ${r.status}`);
         return r.json();

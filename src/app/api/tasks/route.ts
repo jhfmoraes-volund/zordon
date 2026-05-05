@@ -79,7 +79,9 @@ export async function POST(req: NextRequest) {
   // Auto-generate reference using RPC, retry on collision
   for (let attempt = 0; attempt < 5; attempt++) {
     if (!data.reference || attempt > 0) {
-      const { data: ref } = await supabase.rpc("next_task_reference");
+      const { data: ref } = await supabase.rpc("next_task_reference", {
+        p_project_id: data.projectId,
+      });
       data.reference = ref;
     }
 
