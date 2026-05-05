@@ -15,6 +15,7 @@ import {
   deleteAc,
   normalizeModuleName,
 } from "@/lib/dal/story-hierarchy";
+import { logAgentQuality } from "@/lib/agent/quality-log";
 
 const REFINEMENT_STATUSES = ["draft", "refined", "committed"] as const;
 
@@ -255,6 +256,21 @@ export function createStoryForOpsTool(projectId: string, createdById: string) {
         createdByAgent: true,
       });
 
+      // Quality log — fire-and-forget, doesn't block return
+      void logAgentQuality({
+        projectId,
+        memberId: createdById,
+        category: input.moduleId ? "story_created" : "module_proposed",
+        payload: {
+          storyRef: story.reference,
+          moduleId: story.moduleId,
+          proposedModuleName: story.proposedModuleName,
+          personaId: input.personaId,
+          acCount: input.acceptanceCriteria.length,
+          reasoning: input.reasoning,
+        },
+      });
+
       return {
         success: true,
         story: {
@@ -372,7 +388,7 @@ export function approveModuleForOpsTool(projectId: string, approverId: string) {
         .describe("Reference da story que tem proposedModuleName."),
       reasoning: z.string().min(10),
     }),
-    execute: async ({ storyReference }) => {
+    execute: async ({ storyReference, reasoning }) => {
       const story = await getStoryByReference(storyReference);
       if (!story) {
         return {
@@ -396,6 +412,19 @@ export function approveModuleForOpsTool(projectId: string, approverId: string) {
         story.proposedModuleName,
         approverId,
       );
+
+      void logAgentQuality({
+        projectId,
+        memberId: approverId,
+        category: "module_classified",
+        payload: {
+          storyRef: result.story.reference,
+          moduleId: result.module.id,
+          moduleName: result.module.name,
+          reasoning,
+        },
+      });
+
       return {
         success: true,
         module: { id: result.module.id, name: result.module.name },
@@ -489,6 +518,20 @@ export function manageStoryAcForOpsTool(projectId: string) {
           applied.push({ op: "remove", acId: op.acId });
         }
       }
+
+      void logAgentQuality({
+        projectId,
+        category: "ac_managed",
+        payload: {
+          storyRef: reference,
+          opCount: operations.length,
+          breakdown: {
+            add: operations.filter((o) => o.op === "add").length,
+            edit: operations.filter((o) => o.op === "edit").length,
+            remove: operations.filter((o) => o.op === "remove").length,
+          },
+        },
+      });
 
       return { success: true, reference, applied };
     },

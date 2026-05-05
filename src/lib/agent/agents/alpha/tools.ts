@@ -16,6 +16,11 @@ import {
   approveModuleForOpsTool,
   manageStoryAcForOpsTool,
 } from "../../tools/alpha-hierarchy";
+import {
+  getProjectCapacityForOpsTool,
+  listUnplannedTasksForOpsTool,
+  bulkUpdateTasksForOpsTool,
+} from "../../tools/alpha-planner";
 import { ALPHA_AGENT_ID } from "./context";
 import type { Capabilities } from "../../types";
 
@@ -35,6 +40,13 @@ export function assembleAlphaTools(
     routeProjectId?: string;
     routeSprintId?: string;
     currentMemberId?: string;
+    /**
+     * Per-project kill switch for hierarchy + planner write tools.
+     * When false, only read tools are exposed for this project — writes
+     * (create_user_story, bulk_update_tasks, etc.) are silently skipped.
+     * Defaults to true (Project.alphaHierarchyEnabled column default).
+     */
+    alphaHierarchyEnabled?: boolean;
   } = {},
 ): ToolSet {
   const supabase = db();
@@ -44,6 +56,7 @@ export function assembleAlphaTools(
   const routeProjectId = opts.routeProjectId;
   const routeSprintId = opts.routeSprintId;
   const currentMemberId = opts.currentMemberId;
+  const alphaHierarchyEnabled = opts.alphaHierarchyEnabled ?? true;
   const NO_ROAM_TOKEN =
     "Roam nao conectado. Peca ao PM para conectar em Configuracoes > Integracoes.";
 
@@ -504,12 +517,18 @@ export function assembleAlphaTools(
     tools.list_personas = listPersonasForOpsTool(routeProjectId);
     tools.list_stories = listStoriesForOpsTool(routeProjectId);
     tools.get_story = getStoryForOpsTool(routeProjectId);
+
+    // Sprint Planner read tools — aggregate views for planning
+    tools.get_project_capacity = getProjectCapacityForOpsTool(routeProjectId);
+    tools.list_unplanned_tasks = listUnplannedTasksForOpsTool(routeProjectId);
   }
 
   // ─── Write tools ─────────────────────────────────────────
 
   if (capabilities.writeTools) {
-    if (routeProjectId && currentMemberId) {
+    // Hierarchy + planner writes — gated by per-project kill switch.
+    // Reads stay available regardless (they're safe & non-mutating).
+    if (routeProjectId && currentMemberId && alphaHierarchyEnabled) {
       tools.create_user_story = createStoryForOpsTool(
         routeProjectId,
         currentMemberId,
@@ -521,6 +540,12 @@ export function assembleAlphaTools(
         currentMemberId,
       );
       tools.manage_story_ac = manageStoryAcForOpsTool(routeProjectId);
+
+      // Sprint Planner write — atomic bulk via RPC
+      tools.bulk_update_tasks = bulkUpdateTasksForOpsTool(
+        routeProjectId,
+        currentMemberId,
+      );
     }
 
     tools.create_sprint = tool({

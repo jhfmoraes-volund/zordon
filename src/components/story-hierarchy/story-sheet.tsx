@@ -113,7 +113,6 @@ function StorySheetView({
   tasks,
   modules,
   personas,
-  definitionOfDone,
   onEdit,
   onClose,
   onApproveProposedModule,
@@ -329,16 +328,6 @@ function StorySheetView({
           </dl>
         </section>
 
-        <div className="rounded-md border border-dashed bg-muted/30 p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Definition of Done · projeto
-          </div>
-          <ul className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
-            {definitionOfDone.map((d, i) => (
-              <li key={i}>· {d}</li>
-            ))}
-          </ul>
-        </div>
       </ResponsiveSheetBody>
     </>
   );

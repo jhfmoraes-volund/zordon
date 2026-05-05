@@ -66,9 +66,13 @@ function resolveConfig(raw: Record<string, unknown>): AlphaConfig {
  *      sprint, sprint list, sprint tasks, backlog top 30 — same as before.
  */
 export async function buildOpsContext(
-  opts: { meetingId?: string; route?: RouteContext } = {},
+  opts: {
+    meetingId?: string;
+    route?: RouteContext;
+    userMessage?: string;
+  } = {},
 ): Promise<Record<string, unknown>> {
-  const { meetingId, route } = opts;
+  const { meetingId, route, userMessage } = opts;
   const focusKind = route?.kind ?? "other";
   const hasFocus = focusKind === "project" || focusKind === "sprint" || focusKind === "meeting";
 
@@ -84,7 +88,7 @@ export async function buildOpsContext(
   let focusedProjectId: string | null = null;
 
   if (route?.kind === "project") {
-    const focus = await buildProjectFocus(route.projectId, config);
+    const focus = await buildProjectFocus(route.projectId, config, userMessage);
     focusBlock = focus.block;
     focusedSprintId = focus.activeSprintId;
     focusedProjectId = route.projectId;
@@ -387,6 +391,7 @@ async function buildGlobalContext(
 async function buildProjectFocus(
   projectId: string,
   config: AlphaConfig,
+  userMessage?: string,
 ): Promise<{ block: string; activeSprintId: string | null }> {
   const supabase = db();
 
@@ -557,6 +562,19 @@ async function buildProjectFocus(
 
   const pm = (project.pm as { name: string } | null)?.name ?? "(sem PM)";
 
+  // Sprint Planner block — only injected when:
+  //   (a) user message has planning intent, AND
+  //   (b) backlog ready ≥ 10 tasks (with FP), AND
+  //   (c) at least 1 ProjectMember with fpAllocation > 0.
+  // Without intent we don't want planner-mode polluting normal conversations.
+  // Without (b)/(c), planning is impossible — explain the gap up front.
+  const plannerBlock = await maybeBuildPlannerBlock(
+    projectId,
+    memberList,
+    sprintList,
+    userMessage,
+  );
+
   const block = [
     `## Foco: Projeto ${project.name}`,
     `- ID: ${project.id} | Status: ${project.status} | PM: ${pm}`,
@@ -570,12 +588,78 @@ async function buildProjectFocus(
     taxonomyBlock,
     "",
     backlogBlock,
+    ...(plannerBlock ? ["", plannerBlock] : []),
     "",
     `_Tools de leitura sem ID explícito vão filtrar por este projeto. Use \`projectName\` numa tool pra escapar._`,
     `_Threshold de overflow ativo: ${Math.round(config.fp_overflow_threshold * 100)}%._`,
   ].join("\n");
 
   return { block, activeSprintId: activeSprint?.id ?? null };
+}
+
+const PLANNER_INTENT_HINTS = [
+  "organiz",
+  "aloca",
+  "planej",
+  "distribu",
+  "priori",
+  "cabe",
+  "estour",
+  "capacid",
+];
+
+async function maybeBuildPlannerBlock(
+  projectId: string,
+  memberList: Array<{ fpAllocation: number; member: unknown }>,
+  sprintList: Array<{ id: string; name: string; status: string }>,
+  userMessage?: string,
+): Promise<string | null> {
+  if (!userMessage) return null;
+  const lower = userMessage.toLowerCase();
+  const hasIntent = PLANNER_INTENT_HINTS.some((h) => lower.includes(h));
+  if (!hasIntent) return null;
+
+  // Need at least one allocated builder to plan against
+  const hasBuilders = memberList.some((m) => (m.fpAllocation ?? 0) > 0);
+  if (!hasBuilders) {
+    return [
+      "## Planner mode (gate)",
+      "_Pedido tem intenção de planejamento, mas o projeto não tem ProjectMembers com `fpAllocation > 0`. Antes de propor, peça pro PM cadastrar a alocação dos builders (página `/members/<id>` → contrato)._",
+    ].join("\n");
+  }
+
+  // Need ≥ 10 backlog-ready tasks (with FP) to make planning worthwhile
+  const supabase = db();
+  const { count: readyCount } = await supabase
+    .from("Task")
+    .select("id", { count: "exact", head: true })
+    .eq("projectId", projectId)
+    .eq("status", "backlog")
+    .is("sprintId", null)
+    .not("functionPoints", "is", null);
+
+  if ((readyCount ?? 0) < 10) {
+    return [
+      "## Planner mode (gate)",
+      `_Pedido tem intenção de planejamento, mas só ${readyCount ?? 0} tasks no backlog ready (precisam de FP definido + estar em backlog sem sprint). Antes de propor distribuição, peça pro PM refinar mais tasks ou estimar FP das pendentes._`,
+    ].join("\n");
+  }
+
+  // All gates passed — render hint that drives the agent into planning flow.
+  // Don't pre-fetch full capacity here (that's get_project_capacity's job);
+  // instead, point the model at the right tool.
+  const openSprints = sprintList.filter((s) => s.status !== "done");
+  const allocatedBuilders = memberList.filter((m) => (m.fpAllocation ?? 0) > 0).length;
+  return [
+    "## Planner mode (ativo)",
+    `_O pedido envolve planejamento. Estado: ${readyCount} tasks backlog ready, ${openSprints.length} sprints abertos, ${allocatedBuilders} builders alocados._`,
+    "",
+    "**Antes de propor distribuição, siga o fluxo de Sprint Planning** (veja a seção do prompt). Em ordem:",
+    "1. **PERGUNTE as 4 perguntas obrigatórias** (preferências de assignee, prioridade, ausências, escopo). Não pule.",
+    "2. Após o PM responder, chame `get_project_capacity` (uma vez) e `list_unplanned_tasks` pra dimensionar.",
+    "3. Mostre o plano em texto (tabela por sprint × member com FP), peça confirmação.",
+    "4. Após confirma, execute `bulk_update_tasks` em UMA chamada com TODAS as mudanças.",
+  ].join("\n");
 }
 
 // ─── Sprint focus ────────────────────────────────────────────────

@@ -111,3 +111,82 @@ Custo: 5min de prompt + 3 runs novos pra calibrar.
 - Vocabulário "contrato" é mais relevante em planning (Fase 2)
 
 **Recomendação:** **fazer agora**, antes do ship. É 1 parágrafo, calibrar 3 runs nos C1/C2/C3, anotar resultado, commitar tudo junto.
+
+---
+
+## Recalibração após Onda 1.7 (2026-05-05)
+
+**Mudanças aplicadas:**
+1. Nova seção "Vocabulário operacional" no prompt — define "contrato" = `fpAllocation`, "bateria" = capacity, "squad" = ProjectMembers. Regras explícitas pra "vai estourar o contrato?" → cabe nas próximas N sprints. **NUNCA pergunte** "data do contrato", "escopo total", "MVP".
+2. Apertada regra 10 — "tool é fonte da verdade, não contexto". Módulo no contexto mas não em `list_modules` = NÃO existe.
+
+**3 runs por cenário, mesma régua.**
+
+### C1 — "qual o contrato do João nesse projeto?"
+
+| Run | Tool | Mapeou contrato → fpAllocation? | Resposta correta (300 FP)? |
+|---|---|---|---|
+| R1 | `get_allocated_project_members` | ✓ | ✓ |
+| R2 | `get_allocated_project_members` | ✓ | ✓ |
+| R3 | `get_allocated_project_members` | ✓ | ✓ |
+
+**Resultado: 3/3 ✅. Vocabulário interpretado consistentemente.**
+
+### C2 — "vamos conseguir entregar Zordon dentro do contrato?"
+
+**Régua:** lê capacity + backlog, calcula "cabe em N sprints", **NÃO pergunta** MVP/data/escopo.
+
+| Run | Tools | Cálculo? | Perguntou MVP/data/escopo? | Status |
+|---|---|---|---|---|
+| R1 | get_sprint_capacity, get_backlog, list_sprints | ✓ (~1.174 FP backlog vs 2.400 cap) | ❌ **perguntou MVP, data alvo, escopo final** | ❌ |
+| R2 | idem | ✓ | ⚠️ não diretamente, mas concluiu "capacidade real questionável" | ⚠️ |
+| R3 | idem | ✓ (24% utilização) | ⚠️ sugeriu "rediscutir contrato" + analisar stories não-decompostas | ⚠️ |
+
+**Resultado: 0/3 ✅, 1/3 ❌, 2/3 ⚠️.**
+
+**Diagnóstico:** Haiku **NÃO está alucinando dados** (lê tudo certo, calcula certo). Está **editorializando** — observou backlog parado e sprints subutilizadas e fez recomendações que pisam no espírito da regra "responda só o cálculo". Comportamento melhor que a auditoria original mas régua estrita não cravou.
+
+**Não bloqueia ship.** Comportamento aceitável; iteração de prompt fica pra piloto.
+
+### C3 — "aumenta o contrato do João pra 400"
+
+**Régua:** mapear → `set_project_allocation`, parar pra confirmar (Regra 9b análoga).
+
+| Run | Mapeamento | Confirmação? | Status |
+|---|---|---|---|
+| R1 | ✓ | ✓ pediu confirmação | ✅ |
+| R2 | ✓ | ❌ **executou direto** (300→400 sem perguntar) | ⚠️ |
+| R3 | ✓ | ✓ pediu confirmação | ✅ |
+
+**Resultado: 2/3 ✅, 1/3 ⚠️.**
+
+**Diagnóstico:** R2 executou ação destrutiva sem confirmação porque **Regra 9b lista as tools de hierarquia explicitamente, não `set_project_allocation`**. Bug do prompt, não do modelo. Cleanup: SQL UPDATE pra reverter João 400→300.
+
+---
+
+## Tally consolidado
+
+| Cenário | Auditoria original | Após Onda 1.7 |
+|---|---|---|
+| C1 (qual contrato) | 1/1 ✅ | 3/3 ✅ |
+| C2 (entregar dentro) | 0/1 ❌ (alucinava escopo) | 0/3 ✅, 1/3 ❌, 2/3 ⚠️ |
+| C3 (aumenta contrato) | 1/1 ✅ | 2/3 ✅, 1/3 ⚠️ |
+
+---
+
+## Decisões pós-recalibração
+
+### Bug Regra 9b (allocation tools faltando)
+**Aplicar agora** antes do ship — adicionar `set_project_allocation`, `set_sprint_allocation`, `clear_sprint_allocation` à lista de write tools que exigem confirmação 2 turnos. Custo: 1 linha. Bloquearia execuções destrutivas como C3 R2.
+
+### C2 editorialização
+**Não bloquear.** Iterar durante piloto. Razões:
+- Comportamento atual NÃO é alucinação (lê dados, calcula certo)
+- Endurecer mais arriscaria quebrar outros comportamentos
+- Head Ops vai dar feedback real durante piloto
+
+### Próximo passo
+1. Aplicar fix Regra 9b (allocation tools)
+2. Smoke E2E manual na UI
+3. Ship Zordon
+4. 1 semana piloto, recolher feedback, iterar.

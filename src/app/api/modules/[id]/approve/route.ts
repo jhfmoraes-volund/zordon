@@ -11,8 +11,9 @@ import {
  * POST /api/modules/[id]/approve
  * Marks a Module as approved (`approvedAt = now()`, `approvedBy = current member`)
  * AND promotes its draft tasks into the project backlog (status='draft' →
- * 'backlog', generates TASK-NNN reference for each). Stories+tasks become
- * visible in /projects/[id] from this point on.
+ * 'backlog'). References (`<KEY>-T-NNN`) are stable since creation, so promotion
+ * is purely a state transition. Stories+tasks become visible in /projects/[id]
+ * from this point on.
  *
  * DELETE /api/modules/[id]/approve
  * Reverses approval. Pre-flight blocks if any task under this module is past
@@ -54,6 +55,14 @@ export async function POST(
   // Cascade: promote draft tasks under this module to backlog.
   try {
     const { promoted, totalFp } = await promoteTasksForModule(id);
+
+    await supabase.from("ModuleActivity").insert({
+      moduleId: id,
+      type: "approved",
+      payload: { promoted, totalFp },
+      actorMemberId: memberId,
+    });
+
     return NextResponse.json({ ...data, promoted, totalFp });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "task promotion failed";
@@ -68,6 +77,7 @@ export async function DELETE(
   const { id } = await params;
   const auth = await authorize();
   if (auth instanceof Response) return auth;
+  const memberId = auth.memberId;
 
   // Pre-flight: revert backlog tasks back to draft, OR fail with detail.
   try {
@@ -97,6 +107,14 @@ export async function DELETE(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Module not found" }, { status: 404 });
+
+    await supabase.from("ModuleActivity").insert({
+      moduleId: id,
+      type: "reopened",
+      payload: { reverted },
+      actorMemberId: memberId,
+    });
+
     return NextResponse.json({ ...data, reverted });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unapprove failed";

@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      _backup_d_refs_20260505: {
+        Row: {
+          createdAt: string | null
+          id: string | null
+          projectId: string | null
+          reference: string | null
+          status: string | null
+        }
+        Insert: {
+          createdAt?: string | null
+          id?: string | null
+          projectId?: string | null
+          reference?: string | null
+          status?: string | null
+        }
+        Update: {
+          createdAt?: string | null
+          id?: string | null
+          projectId?: string | null
+          reference?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
+      _backup_task_dependencies_20260505: {
+        Row: {
+          dependencies: Json | null
+          id: string | null
+          updatedAt: string | null
+        }
+        Insert: {
+          dependencies?: Json | null
+          id?: string | null
+          updatedAt?: string | null
+        }
+        Update: {
+          dependencies?: Json | null
+          id?: string | null
+          updatedAt?: string | null
+        }
+        Relationships: []
+      }
+      _backup_zordon_refs_20260505: {
+        Row: {
+          createdAt: string | null
+          id: string | null
+          reference: string | null
+        }
+        Insert: {
+          createdAt?: string | null
+          id?: string | null
+          reference?: string | null
+        }
+        Update: {
+          createdAt?: string | null
+          id?: string | null
+          reference?: string | null
+        }
+        Relationships: []
+      }
       _prisma_migrations: {
         Row: {
           applied_steps_count: number
@@ -247,6 +307,91 @@ export type Database = {
             columns: ["agentId"]
             isOneToOne: false
             referencedRelation: "Agent"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      AgentQualityLog: {
+        Row: {
+          agentSlug: string
+          category: string
+          createdAt: string
+          humanVerdict: string | null
+          id: string
+          memberId: string | null
+          payload: Json
+          projectId: string | null
+          threadId: string | null
+          verdictAt: string | null
+          verdictSource: string | null
+        }
+        Insert: {
+          agentSlug?: string
+          category: string
+          createdAt?: string
+          humanVerdict?: string | null
+          id?: string
+          memberId?: string | null
+          payload: Json
+          projectId?: string | null
+          threadId?: string | null
+          verdictAt?: string | null
+          verdictSource?: string | null
+        }
+        Update: {
+          agentSlug?: string
+          category?: string
+          createdAt?: string
+          humanVerdict?: string | null
+          id?: string
+          memberId?: string | null
+          payload?: Json
+          projectId?: string | null
+          threadId?: string | null
+          verdictAt?: string | null
+          verdictSource?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "AgentQualityLog_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentQualityLog_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentQualityLog_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentQualityLog_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentQualityLog_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentQualityLog_threadId_fkey"
+            columns: ["threadId"]
+            isOneToOne: false
+            referencedRelation: "ChatThread"
             referencedColumns: ["id"]
           },
         ]
@@ -1933,10 +2078,94 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "Module_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Module_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Module_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "Module_projectId_fkey"
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ModuleActivity: {
+        Row: {
+          actorMemberId: string | null
+          createdAt: string
+          id: string
+          moduleId: string
+          payload: Json
+          type: string
+        }
+        Insert: {
+          actorMemberId?: string | null
+          createdAt?: string
+          id?: string
+          moduleId: string
+          payload?: Json
+          type: string
+        }
+        Update: {
+          actorMemberId?: string | null
+          createdAt?: string
+          id?: string
+          moduleId?: string
+          payload?: Json
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ModuleActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ModuleActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ModuleActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ModuleActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ModuleActivity_moduleId_fkey"
+            columns: ["moduleId"]
+            isOneToOne: false
+            referencedRelation: "Module"
             referencedColumns: ["id"]
           },
         ]
@@ -1999,6 +2228,7 @@ export type Database = {
       }
       Project: {
         Row: {
+          alphaHierarchyEnabled: boolean
           clientId: string
           createdAt: string
           definitionOfDone: Json
@@ -2019,6 +2249,7 @@ export type Database = {
           updatedAt: string
         }
         Insert: {
+          alphaHierarchyEnabled?: boolean
           clientId: string
           createdAt?: string
           definitionOfDone?: Json
@@ -2039,6 +2270,7 @@ export type Database = {
           updatedAt: string
         }
         Update: {
+          alphaHierarchyEnabled?: boolean
           clientId?: string
           createdAt?: string
           definitionOfDone?: Json
@@ -2775,42 +3007,6 @@ export type Database = {
           },
         ]
       }
-      TaskDependency: {
-        Row: {
-          createdAt: string
-          dependsOn: string
-          kind: string
-          taskId: string
-        }
-        Insert: {
-          createdAt?: string
-          dependsOn: string
-          kind?: string
-          taskId: string
-        }
-        Update: {
-          createdAt?: string
-          dependsOn?: string
-          kind?: string
-          taskId?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "TaskDependency_taskId_fkey"
-            columns: ["taskId"]
-            isOneToOne: false
-            referencedRelation: "Task"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "TaskDependency_dependsOn_fkey"
-            columns: ["dependsOn"]
-            isOneToOne: false
-            referencedRelation: "Task"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       TaskActivity: {
         Row: {
           actorMemberId: string | null
@@ -3003,6 +3199,42 @@ export type Database = {
           },
           {
             foreignKeyName: "TaskComment_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "Task"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      TaskDependency: {
+        Row: {
+          createdAt: string
+          dependsOn: string
+          kind: string
+          taskId: string
+        }
+        Insert: {
+          createdAt?: string
+          dependsOn: string
+          kind?: string
+          taskId: string
+        }
+        Update: {
+          createdAt?: string
+          dependsOn?: string
+          kind?: string
+          taskId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "TaskDependency_dependsOn_fkey"
+            columns: ["dependsOn"]
+            isOneToOne: false
+            referencedRelation: "Task"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskDependency_taskId_fkey"
             columns: ["taskId"]
             isOneToOne: false
             referencedRelation: "Task"
@@ -3691,6 +3923,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      bulk_update_tasks: {
+        Args: { p_actor_id: string; p_project_id: string; p_updates: Json }
+        Returns: Json
+      }
       can_access_session: { Args: { p_session_id: string }; Returns: boolean }
       can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_edit_session: { Args: { p_session_id: string }; Returns: boolean }
@@ -3745,14 +3981,7 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_allocated_to: { Args: { p_project_id: string }; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
-      next_draft_task_reference: {
-        Args: { p_project_id: string }
-        Returns: string
-      }
-      next_task_reference: {
-        Args: { p_project_id: string }
-        Returns: string
-      }
+      next_task_reference: { Args: { p_project_id: string }; Returns: string }
       next_user_story_reference: {
         Args: { p_project_id: string }
         Returns: string

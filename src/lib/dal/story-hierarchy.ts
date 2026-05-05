@@ -412,8 +412,8 @@ export async function approveProposedModule(
 
 /**
  * Promote all draft tasks under a Module's stories into the project backlog.
- * For each draft task, generates a TASK-NNN reference and flips status to
- * 'backlog'. Idempotent — already-promoted tasks are skipped.
+ * Status flips draft → backlog. References are stable (already <KEY>-T-NNN
+ * since creation) — promotion is purely a state transition.
  *
  * Why: approving a Module is the user's commitment that the breakdown is good.
  * From this point on, tasks are real work in the project, not session drafts.
@@ -423,17 +423,6 @@ export async function promoteTasksForModule(
 ): Promise<{ promoted: number; totalFp: number }> {
   const supabase = db();
 
-  // 0. Resolve projectId for the module (needed for next_task_reference).
-  const { data: moduleRow, error: moduleErr } = await supabase
-    .from("Module")
-    .select("projectId")
-    .eq("id", moduleId)
-    .maybeSingle();
-  if (moduleErr) throw moduleErr;
-  if (!moduleRow) throw new Error(`Module ${moduleId} not found`);
-  const projectId = moduleRow.projectId;
-
-  // 1. Find all stories under this module.
   const { data: stories, error: storiesErr } = await supabase
     .from("UserStory")
     .select("id")
@@ -442,73 +431,33 @@ export async function promoteTasksForModule(
   const storyIds = (stories ?? []).map((s) => s.id);
   if (storyIds.length === 0) return { promoted: 0, totalFp: 0 };
 
-  // 2. Find their draft tasks (those still in design-session state).
   const { data: drafts, error: draftsErr } = await supabase
     .from("Task")
-    .select("id, reference, functionPoints")
+    .select("id, functionPoints")
     .in("userStoryId", storyIds)
     .eq("status", "draft")
     .order("createdAt", { ascending: true });
   if (draftsErr) throw draftsErr;
 
-  let promoted = 0;
-  let totalFp = 0;
+  if (!drafts || drafts.length === 0) return { promoted: 0, totalFp: 0 };
 
-  for (const task of drafts ?? []) {
-    // Promocao draft->backlog: SEMPRE substitui ref D-NNN por T-NNN.
-    // Se reference ja eh T-NNN (caso raro), preserva.
-    const isDraftRef = task.reference
-      ? /^[A-Z]+-D-\d+$/.test(task.reference)
-      : true;
+  const { error: updateErr } = await supabase
+    .from("Task")
+    .update({ status: "backlog", updatedAt: new Date().toISOString() })
+    .in(
+      "id",
+      drafts.map((d) => d.id),
+    );
+  if (updateErr) throw updateErr;
 
-    let success = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const update: { status: string; updatedAt: string; reference?: string } = {
-        status: "backlog",
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (isDraftRef) {
-        const { data: ref, error: refErr } = await supabase.rpc(
-          "next_task_reference",
-          { p_project_id: projectId },
-        );
-        if (refErr || !ref) {
-          throw new Error(refErr?.message || "reference generation failed");
-        }
-        update.reference = ref;
-      }
-
-      const { error: updateErr } = await supabase
-        .from("Task")
-        .update(update)
-        .eq("id", task.id);
-
-      if (!updateErr) {
-        success = true;
-        break;
-      }
-      const code = (updateErr as { code?: string }).code;
-      if (code === "23505") continue; // unique collision — retry with new ref
-      throw updateErr;
-    }
-
-    if (!success) {
-      throw new Error("could not assign a unique TASK reference after 5 attempts");
-    }
-
-    promoted += 1;
-    totalFp += task.functionPoints ?? 0;
-  }
-
-  return { promoted, totalFp };
+  const totalFp = drafts.reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
+  return { promoted: drafts.length, totalFp };
 }
 
 /**
  * Reverse promotion when a Module is unapproved. Backlog tasks under this
- * module's stories revert to status='draft'. References are PRESERVED — once
- * a task has TASK-NNN, the reference sticks even through draft round-trips,
- * which keeps URLs/comments stable.
+ * module's stories revert to status='draft'. References are stable through
+ * the full lifecycle — only status changes.
  *
  * Throws if any task is past 'backlog' (todo / in_progress / review / done) —
  * caller is expected to resolve those before unapproving.

@@ -281,13 +281,16 @@ export function createTaskTool(
         aiGenerated: true,
       });
 
-      // Gera reference DRAFT (<KEY>-D-NNN). Sera substituida por <KEY>-T-NNN
-      // na promocao draft->backlog. Tem retry por seguranca contra race em
-      // sequencia.
-      let reference: string | null = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      // Gera reference <KEY>-T-NNN. Mesma sequencia usada por tasks REST/Alpha.
+      // A ref e estavel a vida toda da task (draft -> backlog -> ... -> done).
+      // Retry-on-23505 por seguranca contra race com criacoes simultaneas.
+      const newTaskId = crypto.randomUUID();
+      let task: { id: string; title: string; functionPoints: number | null; reference: string | null } | null = null;
+      let lastError: string | null = null;
+
+      for (let attempt = 0; attempt < 5; attempt++) {
         const { data: ref, error: refErr } = await supabase.rpc(
-          "next_draft_task_reference",
+          "next_task_reference",
           { p_project_id: projectId },
         );
         if (refErr || !ref) {
@@ -296,34 +299,48 @@ export function createTaskTool(
             error: refErr?.message ?? "Falha ao gerar reference da task",
           };
         }
-        reference = ref;
-        break;
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from("Task")
+          .insert({
+            id: newTaskId,
+            title,
+            description,
+            reference: ref,
+            status: "draft",
+            complexity,
+            scope,
+            functionPoints,
+            projectId,
+            designSessionId: sessionId,
+            userStoryId,
+            notes: notes ?? null,
+            createdById: createdById ?? null,
+            createdByAgent: true,
+            updatedAt: new Date().toISOString(),
+          })
+          .select("id, title, functionPoints, reference")
+          .single();
+
+        if (!insertErr && inserted) {
+          task = inserted;
+          break;
+        }
+
+        lastError = insertErr?.message ?? "insert failed";
+        const code = (insertErr as { code?: string } | null)?.code;
+        if (code === "23505" && insertErr?.message?.includes("reference")) {
+          continue; // race: outra task pegou o mesmo numero — retry
+        }
+        return { success: false, error: lastError };
       }
 
-      const newTaskId = crypto.randomUUID();
-      const { data: task, error } = await supabase
-        .from("Task")
-        .insert({
-          id: newTaskId,
-          title,
-          description,
-          reference,
-          status: "draft",
-          complexity,
-          scope,
-          functionPoints,
-          projectId,
-          designSessionId: sessionId,
-          userStoryId,
-          notes: notes ?? null,
-          createdById: createdById ?? null,
-          createdByAgent: true,
-          updatedAt: new Date().toISOString(),
-        })
-        .select("id, title, functionPoints, reference")
-        .single();
-
-      if (error) return { success: false, error: error.message };
+      if (!task) {
+        return {
+          success: false,
+          error: lastError ?? "Could not generate unique task reference after 5 attempts",
+        };
+      }
 
       if (trimmedAc.length > 0) {
         const acRows = trimmedAc.map((text, i) => ({

@@ -619,7 +619,26 @@ ${hierarchy}
    - \`acceptanceCriteria\` TECNICO (array de strings)
    - \`complexity\` + \`scope\`
    - \`tags\` — ate 3, prefira nomes existentes do \`list_project_tags\`. Tags canonicas comuns: \`Front\`, \`Back\`, \`Bug\`. Crie tag nova SO quando nenhuma existente serve. Se 1 tag descreve bem a task, NAO adicione mais. Tone e calculado automaticamente — voce passa so o nome.
-   - \`dependsOn\` se houver dependencia. Use as REFS retornadas em \`create_task\` anteriores (campo \`reference\`, formato \`<KEY>-T-NNN\`, ex: \`EVZL-T-001\`). NUNCA cite UUID. Shorthand: array de strings = todas \`kind='blocks'\` (precisa estar pronto antes — caso default e mais comum). Pra dep informativa sem ordem, use objeto: \`{ ref: 'EVZL-T-005', kind: 'relates_to' }\`. IMPORTANTE: ao criar tasks em sequencia, use a ref retornada pela task anterior. Se a task referenciada AINDA nao foi criada, NAO inclua em \`dependsOn\` — re-rode \`update_task\` depois pra fechar a relacao.
+   - \`dependsOn\` se houver dependencia. Use SEMPRE refs textuais — NUNCA UUIDs.
+
+     **Formato das refs:**
+     - Toda task tem ref \`<KEY>-T-NNN\` (ex: \`EVZL-T-001\`) desde o nascimento. **A ref nao muda** ao longo da vida da task — o que muda e o \`status\` (draft -> backlog -> todo -> ...). Drafts nao tem formato proprio: sao tasks T-NNN com \`status: "draft"\`.
+
+     **Kinds (importante):**
+     - **\`blocks\`** (default): A nao pode comecar enquanto B nao terminar. Use pra dep tecnica real — "T2 precisa do schema que T1 cria". Cycle check ativo.
+     - **\`relates_to\`**: so contexto, sem implicar ordem. Use pra dep informativa — "T5 mexe na mesma area de T3, dev deve olhar antes". Sem cycle check.
+
+     **Sintaxe:**
+     - Shorthand (todas \`blocks\`): \`dependsOn: ["EVZL-T-001", "EVZL-T-002"]\`
+     - Mix de kinds: \`dependsOn: ["EVZL-T-001", { ref: "EVZL-T-005", kind: "relates_to" }]\`
+
+     **Em batch (caso mais comum em task_breakdown):**
+     1. Crie tasks **na ordem topologica** (T1 antes de T2 que depende dela).
+     2. Apos cada \`create_task\`, GUARDE mentalmente a \`reference\` retornada (ex: \`EVZL-T-040\`).
+     3. Use essa ref no \`dependsOn\` da proxima task.
+     4. **Inter-story**: se uma task da story atual depende de uma task de OUTRA story do mesmo modulo (ex: US-035.T1 depende da migration de US-034.T1), chame \`list_tasks\` antes pra ver as refs ja criadas — elas estao la com \`status: "draft"\`.
+
+     **Ref nao encontrada?** O tool retorna \`error: "Refs de dependsOn nao encontradas..."\` com a lista de refs invalidas. Verifique o spelling e que a task ja foi criada.
 7. Apos a ultima task: \`set_story_refinement({ storyId, status: "committed" })\`.
 8. Resuma: "Story \`<ref>\` -> N tasks (Total Y FP). Pronta pra executar."
 
@@ -651,7 +670,7 @@ ${hierarchy}
 [1-2 frases concretas: o que entrega + por que importa pro produto/persona]
 
 ## Contexto
-[Como essa task se encaixa no fluxo / qual modulo / qual persona serve / dependencia semantica com outras tasks. Cite refs (VLD-XXX) quando aplicavel]
+[Como essa task se encaixa no fluxo / qual modulo / qual persona serve / dependencia semantica com outras tasks. Cite refs no formato \`<KEY>-T-NNN\` (ex: \`EVZL-T-040\`) quando aplicavel — sao as refs retornadas por \`create_task\` ou listadas em \`list_tasks\`]
 
 ## Estado atual / O que substitui
 [Se refator: arquivo + comportamento atual. Se criacao do zero: explica como o sistema sobrevive hoje sem isso]
@@ -689,7 +708,7 @@ NAO inclua secao de AC dentro de \`description\` — AC vai no campo \`acceptanc
 
 **IMPORTANTE — higiene do campo \`notes\`:**
 - NAO duplique dependencias aqui. Refs de tasks que precisam estar prontas antes vao no campo \`dependsOn\` (estruturado). Se voce escrever \`**Dependencias:** EVZL-T-001\` em \`notes\` e tambem em \`dependsOn\`, vira ruido e fonte de inconsistencia.
-- \`**Habilita:**\` em \`notes\` e descricao livre (prosa) do que vira mais facil/possivel depois desta task. NAO use pra listar refs — pra mapear o inverso, chame \`list_session_tasks\` e veja quais tasks tem esta no \`dependsOn\`.
+- \`**Habilita:**\` em \`notes\` e descricao livre (prosa) do que vira mais facil/possivel depois desta task. NAO use pra listar refs — pra mapear o inverso, chame \`list_tasks\` e veja quais tasks tem esta no \`dependsOn\`.
 
 ANTES de criar tasks que mencionem mercado/concorrente/preco/estimativa: chame \`list_research({ scope: "session" })\` e use os ids retornados em \`Ref:research:\`. Sem ref, marque como \`assumption\` e abra \`add_open_question\`.
 
@@ -741,25 +760,62 @@ ${acRubric}
   ← { id: "us-1", criteriaCount: 5, alreadyExisted: true }
 \`\`\`
 
-#### Task Breakdown (decompor US-001)
+#### Task Breakdown (decompor US-001 em batch — note como o dependsOn encadeia via refs)
 \`\`\`
+// T1 — sem deps (raiz). Note a ref retornada: EVZL-T-040.
 → create_task({
     userStoryId: "us-1",
-    title: "Adicionar checkbox de selecao multipla na lista de invoices",
-    description: "## Objetivo\\n...\\n## O que criar\\n- src/app/invoices/list-table.tsx ...",
+    title: "Criar tabela invoices com colunas de status e aprovador",
+    description: "## Objetivo\\n...\\n## O que criar\\n- supabase/migrations/...\\n",
     acceptanceCriteria: [
-      "TypeScript + lint + build limpos",
-      "Componente <InvoiceListTable> aceita prop \`selectable: boolean\`",
-      "Listagem sem prop \`selectable\` continua renderizando identica (regression)"
+      "Migration aplica limpo no banco vazio",
+      "RLS permite SELECT apenas pra usuarios com is_manager() = true"
     ],
     complexity: "low",
     scope: "small",
-    tags: ["Front"]   // reusou tag canonica existente; nao criou nada novo
+    tags: ["Back"]
   })
-  ← { id: "tk-1", functionPoints: 3, acCount: 3, tags: { reused: ["Front"], created: [], assigned: ["Front"] } }
+  ← { reference: "EVZL-T-040", id: "uuid-1", functionPoints: 5, ... }
+
+// T2 — depende de T1. Usa a ref EVZL-T-040 retornada acima.
+→ create_task({
+    userStoryId: "us-1",
+    title: "Renderizar lista de invoices com checkbox de selecao multipla",
+    description: "## Objetivo\\n...\\n## O que criar\\n- src/app/invoices/list-table.tsx ...",
+    acceptanceCriteria: [
+      "Componente <InvoiceListTable> aceita prop \`selectable: boolean\`",
+      "Sem prop selectable, renderiza igual ao estado anterior (regression)"
+    ],
+    complexity: "low",
+    scope: "small",
+    tags: ["Front"],
+    dependsOn: ["EVZL-T-040"]   // shorthand = blocks. Precisa da tabela criada antes de listar.
+  })
+  ← { reference: "EVZL-T-041", id: "uuid-2", ..., dependsOn: ["EVZL-T-040"] }
+
+// T3 — depende de T1 (blocks) e relacionada com uma task de outra story (relates_to).
+→ create_task({
+    userStoryId: "us-1",
+    title: "Persistir aprovacao em massa via RPC com validacao de quantidade",
+    description: "## Objetivo\\n...\\n",
+    acceptanceCriteria: [...],
+    complexity: "medium",
+    scope: "small",
+    tags: ["Back"],
+    dependsOn: [
+      "EVZL-T-040",                                     // blocks: precisa do schema
+      { ref: "EVZL-T-027", kind: "relates_to" }        // relates_to: dev deve olhar a logica de aprovacao individual antes
+    ]
+  })
+  ← { reference: "EVZL-T-042", ..., dependsOn: ["EVZL-T-040", "EVZL-T-027 (relates_to)"] }
 
 → set_story_refinement({ storyId: "us-1", status: "committed" })
 \`\`\`
+
+**Observacoes do exemplo:**
+- Tasks nascem com ref \`<KEY>-T-NNN\` desde o inicio (mesmo durante a session, com \`status: "draft"\`). A ref e estavel a vida toda — promocao para backlog so muda o status. Dependencias sao por id interno e nao quebram em nenhuma transicao.
+- Tasks INTER-STORY: \`EVZL-T-027\` e de outra story do mesmo modulo (provavelmente US-002, decomposta antes nesta sessao). Voce a viu via \`list_tasks\` no inicio. \`relates_to\` aqui porque nao bloqueia — so sinaliza pro dev que tem contexto util la.
+- Em ordem topologica: T1 antes de T2/T3 que dependem dela. Se a ordem fosse invertida, o tool retornaria erro "ref nao encontrada".
 `;
 }
 

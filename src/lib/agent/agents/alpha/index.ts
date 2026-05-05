@@ -3,6 +3,7 @@ import { assembleAlphaTools } from "./tools";
 import { buildOpsContext } from "./context";
 import { parseRoute, routeProjectId, routeSprintId, type RouteContext } from "./route-context";
 import { getComposioTools } from "@/lib/composio/client";
+import { db } from "@/lib/db";
 import type { AgentDefinition, AgentRunRequest } from "../../types";
 
 /**
@@ -16,7 +17,11 @@ export const alphaAgent: AgentDefinition = {
   async loadContext(req: AgentRunRequest) {
     const meetingId = (req.params?.meetingId as string | undefined) || undefined;
     const route: RouteContext = (req.params?.route as RouteContext | undefined) ?? parseRoute(undefined);
-    const ctx = await buildOpsContext({ meetingId, route });
+    const ctx = await buildOpsContext({
+      meetingId,
+      route,
+      userMessage: req.userMessage,
+    });
     return {
       ...ctx,
       route,
@@ -35,11 +40,28 @@ export const alphaAgent: AgentDefinition = {
     const routeProjectIdValue = (agentContext.routeProjectId as string | undefined) ?? undefined;
     const routeSprintIdValue = (agentContext.routeSprintId as string | undefined) ?? undefined;
     const currentMemberId = (agentContext.currentMemberId as string | null) ?? undefined;
+
+    // Per-project kill switch for hierarchy + planner write tools.
+    // Read tools always available — writes (create_user_story, bulk_update_tasks, etc.)
+    // gated by Project.alphaHierarchyEnabled. Default true on schema.
+    let alphaHierarchyEnabled = true;
+    if (routeProjectIdValue) {
+      const { data: project } = await db()
+        .from("Project")
+        .select("alphaHierarchyEnabled")
+        .eq("id", routeProjectIdValue)
+        .maybeSingle();
+      if (project && project.alphaHierarchyEnabled === false) {
+        alphaHierarchyEnabled = false;
+      }
+    }
+
     const nativeTools = assembleAlphaTools(capabilities, {
       activeMeetingId,
       routeProjectId: routeProjectIdValue,
       routeSprintId: routeSprintIdValue,
       currentMemberId,
+      alphaHierarchyEnabled,
     });
 
     // Merge Composio tools if configured

@@ -267,10 +267,11 @@ export default function ReviewPage({
       {!isCompleted && (
         <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span>
-            Tasks viram <code className="font-mono">backlog</code> com TASK-NNN
-            no momento em que você aprova o módulo correspondente — não tem
-            "exportação em massa". Concluir a sessão só marca o status; pode ser
-            feito quando todos os módulos estiverem aprovados.
+            Tasks viram <code className="font-mono">backlog</code> no momento
+            em que você aprova o módulo correspondente — não tem "exportação em
+            massa". Refs <code className="font-mono">{"<KEY>-T-NNN"}</code> são
+            estáveis desde a criação. Concluir a sessão só marca o status; pode
+            ser feito quando todos os módulos estiverem aprovados.
           </span>
           <button
             type="button"
