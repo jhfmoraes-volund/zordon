@@ -63,7 +63,7 @@ export function TodoSheet({ todo, open, onOpenChange, onChange }: TodoSheetProps
         side={isMobile ? "bottom" : "right"}
         className={
           isMobile
-            ? "h-[80dvh] max-h-[80dvh] gap-0 rounded-t-xl p-0"
+            ? "h-[90dvh] max-h-[90dvh] gap-0 rounded-t-xl p-0"
             : "w-full !sm:max-w-[520px] gap-0 p-0"
         }
       >

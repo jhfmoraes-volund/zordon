@@ -17,7 +17,7 @@ const TASK_STATUSES = [
 export function getProjectCapacityForOpsTool(projectId: string) {
   return tool({
     description:
-      "Retorna a capacidade COMPLETA do projeto em uma chamada: members do squad (com fpAllocation, capacity total, committed, remaining cross-project) + sprints (cap, planejado, disponível). Use ANTES de planejar — substitui múltiplas chamadas de get_member_commitments + get_sprint_capacity. IMPORTANTE: members vêm com `noContract: true` quando estão no squad mas com fpAllocation=0 — nesse caso, peça ao PM pra definir contrato antes de planejar.",
+      "Retorna a capacidade COMPLETA do projeto em uma chamada: members do squad (com fpAllocation, capacity total, committed, remaining cross-project) + sprints (cap, planejado, disponível). Use ANTES de planejar. IMPORTANTE: members vêm com `noContract: true` quando estão no squad mas com fpAllocation=0 — nesse caso, peça ao PM pra definir contrato antes de planejar.",
     inputSchema: z.object({}),
     execute: async () => {
       const supabase = db();
@@ -271,6 +271,158 @@ export function listUnplannedTasksForOpsTool(projectId: string) {
         totalFp,
         byModule,
         tasks,
+      };
+    },
+  });
+}
+
+// ─── Verify (read, calcula totais server-side) ───────────────────────────────
+
+/**
+ * Recebe a distribuição planejada e devolve totais agregados por sprint e
+ * assignee, calculados via SQL — sem confiar na aritmética do modelo.
+ * Mata o bug "alucina soma" descoberto no audit 2026-05-06.
+ *
+ * Use ANTES de mostrar tabela resumo ao PM em planos com >20 tasks. Os
+ * números retornados aqui são canonical — qualquer divergência da tabela
+ * é alucinação do modelo.
+ */
+export function verifySprintDistributionForOpsTool(projectId: string) {
+  return tool({
+    description:
+      "Calcula totais reais por sprint e assignee a partir de uma distribuição planejada. Retorna FP somado server-side via SQL — NUNCA confie em soma manual em planos com mais de 20 tasks. Use ANTES de mostrar tabela resumo ao PM. Resolve o bug histórico de alucinar totais.",
+    inputSchema: z.object({
+      updates: z
+        .array(
+          z.object({
+            taskRef: z.string().min(3),
+            sprintId: z.string().uuid().nullable().optional(),
+            assigneeIds: z.array(z.string().uuid()).optional(),
+          }),
+        )
+        .min(1)
+        .max(300),
+    }),
+    execute: async ({ updates }) => {
+      const supabase = db();
+
+      const taskRefs = updates.map((u) => u.taskRef);
+      const { data: tasks, error } = await supabase
+        .from("Task")
+        .select("reference, functionPoints")
+        .eq("projectId", projectId)
+        .in("reference", taskRefs);
+
+      if (error) return { success: false, error: error.message };
+
+      const fpByRef = new Map(
+        (tasks ?? []).map((t) => [t.reference, t.functionPoints ?? 0]),
+      );
+      const missingRefs = taskRefs.filter((r) => !fpByRef.has(r));
+
+      const sprintIds = Array.from(
+        new Set(
+          updates
+            .map((u) => u.sprintId)
+            .filter((s): s is string => s != null && s !== ""),
+        ),
+      );
+      const memberIds = Array.from(
+        new Set(updates.flatMap((u) => u.assigneeIds ?? [])),
+      );
+
+      const [{ data: sprints }, { data: members }] = await Promise.all([
+        sprintIds.length > 0
+          ? supabase
+              .from("Sprint")
+              .select("id, name, projectId")
+              .in("id", sprintIds)
+          : Promise.resolve({ data: [] as { id: string; name: string; projectId: string }[] }),
+        memberIds.length > 0
+          ? supabase.from("Member").select("id, name").in("id", memberIds)
+          : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      ]);
+
+      const sprintById = new Map(
+        (sprints ?? []).map((s) => [s.id, s]),
+      );
+      const memberById = new Map((members ?? []).map((m) => [m.id, m.name]));
+
+      const wrongSprintRefs = updates
+        .filter((u) => u.sprintId && sprintById.get(u.sprintId)?.projectId !== projectId)
+        .map((u) => ({ taskRef: u.taskRef, sprintId: u.sprintId }));
+
+      type SprintAgg = {
+        sprintId: string | null;
+        sprintName: string;
+        totalFp: number;
+        taskCount: number;
+        byAssignee: Record<string, { name: string; fp: number; tasks: number }>;
+        unassignedFp: number;
+        unassignedTasks: number;
+      };
+
+      const bySprint = new Map<string, SprintAgg>();
+      const ensure = (sprintId: string | null): SprintAgg => {
+        const key = sprintId ?? "__backlog__";
+        let agg = bySprint.get(key);
+        if (!agg) {
+          agg = {
+            sprintId,
+            sprintName: sprintId
+              ? sprintById.get(sprintId)?.name ?? "(sprint inválido)"
+              : "(backlog)",
+            totalFp: 0,
+            taskCount: 0,
+            byAssignee: {},
+            unassignedFp: 0,
+            unassignedTasks: 0,
+          };
+          bySprint.set(key, agg);
+        }
+        return agg;
+      };
+
+      for (const u of updates) {
+        const fp = fpByRef.get(u.taskRef) ?? 0;
+        const agg = ensure(u.sprintId ?? null);
+        agg.totalFp += fp;
+        agg.taskCount += 1;
+        const assignees = u.assigneeIds ?? [];
+        if (assignees.length === 0) {
+          agg.unassignedFp += fp;
+          agg.unassignedTasks += 1;
+        } else {
+          for (const memberId of assignees) {
+            const name = memberById.get(memberId) ?? "(member desconhecido)";
+            const row = agg.byAssignee[memberId] ?? {
+              name,
+              fp: 0,
+              tasks: 0,
+            };
+            row.fp += fp;
+            row.tasks += 1;
+            agg.byAssignee[memberId] = row;
+          }
+        }
+      }
+
+      const sprintRows = Array.from(bySprint.values()).sort((a, b) =>
+        a.sprintName.localeCompare(b.sprintName),
+      );
+
+      const grandTotalFp = sprintRows.reduce((acc, s) => acc + s.totalFp, 0);
+      const grandTotalTasks = updates.length;
+
+      return {
+        success: true,
+        sprints: sprintRows,
+        grandTotalFp,
+        grandTotalTasks,
+        warnings: {
+          tasksNotFound: missingRefs,
+          sprintsNotInProject: wrongSprintRefs,
+        },
       };
     },
   });

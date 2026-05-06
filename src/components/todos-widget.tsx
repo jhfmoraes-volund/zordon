@@ -83,7 +83,7 @@ export function TodosWidget() {
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-2">
+        <CardContent className="px-3 pb-3 pt-0">
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Carregando...</p>
           ) : visible.length === 0 ? (
@@ -100,18 +100,30 @@ export function TodosWidget() {
               )}
             </div>
           ) : (
-            <ul className="divide-y">
-              {visible.map((t) => {
+            <div className="overflow-hidden rounded-xl border bg-card">
+              {visible.map((t, i) => {
                 const overdue = isOverdue(t.dueDate, t.status);
                 const isDone = t.status === "done";
+                const isLast = i === visible.length - 1;
                 return (
-                  <li
+                  <div
                     key={t.id}
-                    className="py-2.5 px-2 -mx-2 cursor-pointer rounded-md hover:bg-muted/50 transition-colors flex items-start gap-3"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       setEditing(t);
                       setSheetOpen(true);
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setEditing(t);
+                        setSheetOpen(true);
+                      }
+                    }}
+                    className={`flex w-full cursor-pointer items-start gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-muted/40 ${
+                      !isLast ? "border-b" : ""
+                    }`}
                   >
                     <StatusChip
                       tone={lookupChip(ACTION_ITEM_STATUS, t.status).tone}
@@ -119,13 +131,13 @@ export function TodosWidget() {
                     />
                     <div className="flex-1 min-w-0">
                       <p
-                        className={`text-sm leading-snug ${isDone ? "line-through text-muted-foreground" : ""}`}
+                        className={`text-sm leading-snug break-words [overflow-wrap:anywhere] ${isDone ? "line-through text-muted-foreground" : ""}`}
                       >
                         {t.description}
                       </p>
-                      <div className="mt-1 flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                         {t.meeting && (
-                          <span className="truncate">
+                          <span className="break-words [overflow-wrap:anywhere]">
                             de reunião{t.meeting.title ? ` · ${t.meeting.title}` : ""}
                           </span>
                         )}
@@ -142,28 +154,28 @@ export function TodosWidget() {
                         )}
                       </div>
                     </div>
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
-          )}
 
-          {done.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowDone((v) => !v)}
-              className="w-full flex items-center justify-center gap-1.5 pt-1 text-[11px] uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showDone ? (
-                <>
-                  <ChevronUp className="h-3 w-3" /> Ocultar concluídas
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="h-3 w-3" /> Ver concluídas ({done.length})
-                </>
+              {done.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowDone((v) => !v)}
+                  className="flex w-full items-center justify-center gap-1.5 border-t bg-muted/20 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                >
+                  {showDone ? (
+                    <>
+                      <ChevronUp className="h-3 w-3" /> Ocultar concluídas
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3" /> Ver concluídas ({done.length})
+                    </>
+                  )}
+                </button>
               )}
-            </button>
+            </div>
           )}
         </CardContent>
       </Card>

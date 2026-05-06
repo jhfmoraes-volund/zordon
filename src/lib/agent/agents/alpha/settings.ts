@@ -7,15 +7,10 @@ import type { SettingsSchema } from "../../settings-schema";
  */
 export const ALPHA_TOOL_NAMES = [
   "create_task",
-  "assign_task",
-  "update_task_status",
-  "update_task_priority",
-  "update_task_estimate",
-  "move_task_to_sprint",
-  "remove_task_from_sprint",
-  "delete_task",
-  "bulk_move_tasks",
-  "split_task",
+  "update_task",
+  "bulk_update_tasks",
+  "create_sprint",
+  "manage_allocation",
 ] as const;
 
 export const ALPHA_SETTINGS: SettingsSchema = {

@@ -1098,7 +1098,7 @@ async function renderDailyMeeting(m: MeetingRow, pendingBlock: string): Promise<
     renderAttendees(m),
     renderProjectLinks(m),
     "",
-    "**Fluxo da Daily:** ler estado da sprint atual de cada projeto vinculado. Propor mudanças em Task via `propose_task_action` (criar/mover/atualizar/marcar pra review). Ações operacionais → `create_todo`. **NUNCA** chame tools de execução direta de Task (create_task, move_task_to_sprint, update_task_*, assign_task) durante a reunião.",
+    "**Fluxo da Daily:** ler estado da sprint atual de cada projeto vinculado. Propor mudanças em Task via `propose_task_action` (criar/mover/atualizar/marcar pra review). Ações operacionais → `create_todo`. **NUNCA** chame tools de execução direta de Task (create_task, update_task, bulk_update_tasks) durante a reunião.",
     "",
     renderNotes(m),
     "",

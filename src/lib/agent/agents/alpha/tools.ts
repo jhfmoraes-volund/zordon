@@ -19,6 +19,7 @@ import {
 import {
   getProjectCapacityForOpsTool,
   listUnplannedTasksForOpsTool,
+  verifySprintDistributionForOpsTool,
   bulkUpdateTasksForOpsTool,
 } from "../../tools/alpha-planner";
 import { ALPHA_AGENT_ID } from "./context";
@@ -126,77 +127,6 @@ export function assembleAlphaTools(
         tasks: tasks || [],
         members: members || [],
         retrospective,
-      };
-    },
-  });
-
-  tools.get_member_commitments = tool({
-    description:
-      "Retorna a bateria de cada membro: capacidade total, committed (soma das alocações em projetos), e restante. Use pra saber quem tem espaço para novos projetos.",
-    inputSchema: z.object({}),
-    execute: async () => {
-      const { data } = await supabase
-        .from("member_commitment_overview")
-        .select("*")
-        .order("name");
-      return {
-        members: (data || []).map((m) => ({
-          name: m.name,
-          role: m.position,
-          capacity: m.capacity,
-          committed: m.committed,
-          remaining: m.remaining,
-          projectCount: m.project_count,
-          overcommit: (Number(m.committed) || 0) > (Number(m.capacity) || 0),
-        })),
-      };
-    },
-  });
-
-  tools.get_sprint_capacity = tool({
-    description:
-      "Retorna a capacidade real de um sprint (soma das alocações dos membros no projeto, respeitando overrides) e quanto já foi alocado em tasks ativas. Se sprintId for omitido, usa o ativo.",
-    inputSchema: z.object({
-      sprintId: z.string().optional().describe("UUID do sprint (opcional — default: ativo)"),
-    }),
-    execute: async ({ sprintId }) => {
-      let targetId = sprintId;
-      if (!targetId) {
-        const { data: active } = await supabase
-          .from("Sprint")
-          .select("id")
-          .neq("status", "done")
-          .order("startDate", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (!active) return { error: "Nenhum sprint ativo." };
-        targetId = active.id;
-      }
-
-      const [{ data: cap }, { data: members }] = await Promise.all([
-        supabase
-          .from("sprint_capacity_overview")
-          .select("*")
-          .eq("sprintId", targetId)
-          .maybeSingle(),
-        supabase
-          .from("sprint_member_capacity")
-          .select("*")
-          .eq("sprintId", targetId)
-          .order("member_name"),
-      ]);
-
-      return {
-        sprintId: targetId,
-        capacity: cap?.capacity ?? 0,
-        allocated: cap?.open ?? 0,
-        remaining: (cap?.capacity ?? 0) - (cap?.open ?? 0),
-        members: (members || []).map((m) => ({
-          name: m.member_name,
-          allocation: m.fp_allocation,
-          used: m.fp_open,
-          hasOverride: m.has_sprint_override,
-        })),
       };
     },
   });
@@ -543,6 +473,8 @@ export function assembleAlphaTools(
     // Sprint Planner read tools — aggregate views for planning
     tools.get_project_capacity = getProjectCapacityForOpsTool(routeProjectId);
     tools.list_unplanned_tasks = listUnplannedTasksForOpsTool(routeProjectId);
+    tools.verify_sprint_distribution =
+      verifySprintDistributionForOpsTool(routeProjectId);
   }
 
   // ─── Write tools ─────────────────────────────────────────
@@ -706,302 +638,373 @@ export function assembleAlphaTools(
       },
     });
 
-    tools.assign_task = tool({
+    // ── update_task — unificada (substitui 8 granulares: assign, move, remove,
+    //    update_status, update_priority, update_estimate, update_title, update_description)
+    tools.update_task = tool({
       description:
-        "Atribui um membro a uma task existente. Valida se o membro tem capacidade restante.",
-      inputSchema: z.object({
-        taskReference: z.string().describe("Referencia da task (ex: TSK-042)"),
-        memberName: z.string().describe("Nome do membro"),
-      }),
-      execute: async ({ taskReference, memberName }) => {
-        const { data: task } = await supabase
-          .from("Task")
-          .select("id, title, functionPoints")
-          .eq("reference", taskReference)
-          .maybeSingle();
-
-        if (!task) return { error: `Task "${taskReference}" nao encontrada.` };
-
-        const { data: member } = await supabase
-          .from("Member")
-          .select("id, name, fpCapacity")
-          .ilike("name", `%${memberName}%`)
-          .limit(1)
-          .maybeSingle();
-
-        if (!member) return { error: `Membro "${memberName}" nao encontrado.` };
-
-        // Check capacity
-        const { data: capacity } = await supabase
-          .from("member_capacity_overview")
-          .select("fp_allocated, fp_capacity")
-          .eq("id", member.id)
-          .maybeSingle();
-
-        const allocated = Number(capacity?.fp_allocated) || 0;
-        const cap = Number(capacity?.fp_capacity) || 0;
-        const taskFP = task.functionPoints || 0;
-        const willExceed = cap > 0 && (allocated + taskFP) > cap;
-
-        // Remove existing assignments
-        await supabase.from("TaskAssignment").delete().eq("taskId", task.id);
-
-        // Create new assignment
-        await supabase.from("TaskAssignment").insert({
-          id: crypto.randomUUID(),
-          taskId: task.id,
-          memberId: member.id,
-        });
-
-        return {
-          assigned: true,
-          task: { reference: taskReference, title: task.title },
-          member: member.name,
-          ...(willExceed && {
-            warning: `${member.name} ficara sobrecarregado: ${allocated + taskFP}/${cap} FP apos esta atribuicao.`,
-          }),
-        };
-      },
-    });
-
-    tools.update_task_priority = tool({
-      description:
-        "Atualiza a prioridade de uma task. Valores de 0 (baixa) a 10 (critica).",
-      inputSchema: z.object({
-        taskReference: z.string().describe("Referencia da task (ex: TSK-042)"),
-        priority: z.number().int().min(0).max(10).describe("Nova prioridade (0=baixa, 10=critica)"),
-      }),
-      execute: async ({ taskReference, priority }) => {
-        const { data: task } = await supabase
-          .from("Task")
-          .select("id, title, priority")
-          .eq("reference", taskReference)
-          .maybeSingle();
-
-        if (!task) return { error: `Task "${taskReference}" nao encontrada.` };
-
-        const { error } = await supabase
-          .from("Task")
-          .update({ priority, updatedAt: new Date().toISOString() })
-          .eq("id", task.id);
-
-        if (error) return { error: `Erro ao atualizar prioridade: ${error.message}` };
-
-        return {
-          updated: true,
-          task: { reference: taskReference, title: task.title },
-          from: task.priority,
-          to: priority,
-        };
-      },
-    });
-
-    tools.update_task_estimate = tool({
-      description:
-        "Atualiza scope e complexity de uma task, recalculando os Function Points automaticamente.",
-      inputSchema: z.object({
-        taskReference: z.string().describe("Referencia da task (ex: TSK-042)"),
-        scope: z.enum(SCOPES).describe("Novo scope (micro, small, medium, large)"),
-        complexity: z.enum(COMPLEXITIES).describe("Nova complexity (trivial, low, medium, high)"),
-      }),
-      execute: async ({ taskReference, scope, complexity }) => {
-        const { data: task } = await supabase
-          .from("Task")
-          .select("id, title, scope, complexity, functionPoints")
-          .eq("reference", taskReference)
-          .maybeSingle();
-
-        if (!task) return { error: `Task "${taskReference}" nao encontrada.` };
-
-        const matrix = await loadFpMatrix(ALPHA_AGENT_ID);
-        const newFP = suggestFunctionPoints(scope, complexity, matrix);
-
-        const { error } = await supabase
-          .from("Task")
-          .update({ scope, complexity, functionPoints: newFP, updatedAt: new Date().toISOString() })
-          .eq("id", task.id);
-
-        if (error) return { error: `Erro ao atualizar estimativa: ${error.message}` };
-
-        return {
-          updated: true,
-          task: { reference: taskReference, title: task.title },
-          from: { scope: task.scope, complexity: task.complexity, fp: task.functionPoints },
-          to: { scope, complexity, fp: newFP },
-        };
-      },
-    });
-
-    tools.update_task_title = tool({
-      description:
-        "Renomeia uma task existente. Use quando o título não reflete mais o escopo ou ficou ambíguo. Não mexe em outros campos.",
+        "Atualiza UMA task em UMA chamada — qualquer subset de campos. Substitui as antigas tools granulares (assign_task, update_task_status, update_task_priority, update_task_estimate, update_task_title, update_task_description, move_task_to_sprint, remove_task_from_sprint). Para múltiplas tasks de uma vez (planning), use bulk_update_tasks.",
       inputSchema: z.object({
         taskReference: z.string().describe("Referência da task (ex: TASK-042)"),
-        newTitle: z.string().min(1).describe("Novo título — curto, acionável, em pt-BR"),
+        title: z.string().min(1).optional().describe("Novo título"),
+        description: z
+          .string()
+          .optional()
+          .describe("Nova descrição. String vazia limpa o campo."),
+        status: z.enum(TASK_STATUSES).optional().describe("Novo status"),
+        priority: z.number().int().min(0).max(10).optional(),
+        scope: z
+          .enum(SCOPES)
+          .optional()
+          .describe("Novo scope — junto com complexity recalcula FP"),
+        complexity: z
+          .enum(COMPLEXITIES)
+          .optional()
+          .describe("Nova complexity — junto com scope recalcula FP"),
+        sprintName: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "Nome parcial do sprint alvo. null move pra backlog. Omitido = não mexe.",
+          ),
+        assigneeNames: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Lista de nomes de membros (substitui assignments existentes). Array vazio remove todos.",
+          ),
       }),
-      execute: async ({ taskReference, newTitle }) => {
+      execute: async (input) => {
+        const { taskReference } = input;
         const { data: task } = await supabase
           .from("Task")
-          .select("id, title")
+          .select(
+            "id, title, description, status, priority, scope, complexity, functionPoints, projectId, sprintId",
+          )
           .eq("reference", taskReference)
           .maybeSingle();
-
-        if (!task) return { error: `Task "${taskReference}" não encontrada.` };
-        if (task.title === newTitle) {
-          return { error: `Título já é "${newTitle}" — nada a alterar.` };
-        }
-
-        const { error } = await supabase
-          .from("Task")
-          .update({ title: newTitle, updatedAt: new Date().toISOString() })
-          .eq("id", task.id);
-
-        if (error) return { error: `Erro ao atualizar título: ${error.message}` };
-
-        return {
-          updated: true,
-          task: { reference: taskReference },
-          from: task.title,
-          to: newTitle,
-        };
-      },
-    });
-
-    tools.update_task_description = tool({
-      description:
-        "Atualiza ou substitui a descrição de uma task. A descrição é o detalhamento do que entregar e por que. Use também pra adicionar contexto que faltava. Passar string vazia limpa o campo.",
-      inputSchema: z.object({
-        taskReference: z.string().describe("Referência da task (ex: TASK-042)"),
-        newDescription: z.string().describe("Nova descrição. Use string vazia pra limpar."),
-      }),
-      execute: async ({ taskReference, newDescription }) => {
-        const { data: task } = await supabase
-          .from("Task")
-          .select("id, title, description")
-          .eq("reference", taskReference)
-          .maybeSingle();
-
         if (!task) return { error: `Task "${taskReference}" não encontrada.` };
 
-        const value = newDescription.trim() === "" ? null : newDescription;
-        if (task.description === value) {
-          return { error: "Descrição já está com esse valor — nada a alterar." };
+        const updates: Record<string, unknown> = {};
+        const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+        if (input.title !== undefined && input.title !== task.title) {
+          updates.title = input.title;
+          changes.title = { from: task.title, to: input.title };
         }
 
-        const { error } = await supabase
-          .from("Task")
-          .update({ description: value, updatedAt: new Date().toISOString() })
-          .eq("id", task.id);
+        if (input.description !== undefined) {
+          const value =
+            input.description.trim() === "" ? null : input.description;
+          if (value !== task.description) {
+            updates.description = value;
+            changes.description = {
+              from: task.description ? `${task.description.length} chars` : "vazio",
+              to: value ? `${value.length} chars` : "vazio",
+            };
+          }
+        }
 
-        if (error) return { error: `Erro ao atualizar descrição: ${error.message}` };
+        if (input.status !== undefined && input.status !== task.status) {
+          updates.status = input.status;
+          changes.status = { from: task.status, to: input.status };
+        }
 
-        const previewLen = (s: string | null) => s ? `${s.length} chars` : "vazio";
-        return {
-          updated: true,
-          task: { reference: taskReference, title: task.title },
-          from: previewLen(task.description),
-          to: previewLen(value),
-        };
-      },
-    });
+        if (input.priority !== undefined && input.priority !== task.priority) {
+          updates.priority = input.priority;
+          changes.priority = { from: task.priority, to: input.priority };
+        }
 
-    tools.set_project_allocation = tool({
-      description:
-        "Define o teto padrão de FP por sprint que um membro dedica a um projeto (ProjectMember.fpAllocation). Cria o ProjectMember se não existir.",
-      inputSchema: z.object({
-        projectName: z.string().describe("Nome parcial do projeto"),
-        memberName: z.string().describe("Nome parcial do membro"),
-        fpAllocation: z.number().int().min(0).max(500).describe("FP por sprint dedicados a esse projeto"),
-      }),
-      execute: async ({ projectName, memberName, fpAllocation }) => {
-        const { data: project } = await supabase
-          .from("Project")
-          .select("id, name")
-          .ilike("name", `%${projectName}%`)
-          .limit(1)
-          .maybeSingle();
-        if (!project) return { error: `Projeto "${projectName}" não encontrado.` };
+        // FP recalc only if scope or complexity changed
+        if (input.scope !== undefined || input.complexity !== undefined) {
+          const newScope = input.scope ?? task.scope;
+          const newComplexity = input.complexity ?? task.complexity;
+          if (
+            newScope !== task.scope ||
+            newComplexity !== task.complexity
+          ) {
+            const matrix = await loadFpMatrix(ALPHA_AGENT_ID);
+            const newFP = suggestFunctionPoints(newScope, newComplexity, matrix);
+            updates.scope = newScope;
+            updates.complexity = newComplexity;
+            updates.functionPoints = newFP;
+            changes.estimate = {
+              from: {
+                scope: task.scope,
+                complexity: task.complexity,
+                fp: task.functionPoints,
+              },
+              to: { scope: newScope, complexity: newComplexity, fp: newFP },
+            };
+          }
+        }
 
-        const { data: member } = await supabase
-          .from("Member")
-          .select("id, name, fpCapacity")
-          .ilike("name", `%${memberName}%`)
-          .limit(1)
-          .maybeSingle();
-        if (!member) return { error: `Membro "${memberName}" não encontrado.` };
+        // Sprint move (or remove from sprint)
+        let resolvedSprintName: string | null = null;
+        if (input.sprintName !== undefined) {
+          if (input.sprintName === null) {
+            if (task.sprintId !== null) {
+              updates.sprintId = null;
+              // Going back to backlog — reset status to backlog unless caller set status
+              if (input.status === undefined) {
+                updates.status = "backlog";
+              }
+              changes.sprintId = { from: task.sprintId, to: null };
+            }
+          } else {
+            const { data: sprint } = await supabase
+              .from("Sprint")
+              .select("id, name, projectId")
+              .ilike("name", `%${input.sprintName}%`)
+              .eq("projectId", task.projectId)
+              .limit(1)
+              .maybeSingle();
+            if (!sprint) {
+              return {
+                error: `Sprint "${input.sprintName}" não encontrado no projeto da task.`,
+              };
+            }
+            if (sprint.id !== task.sprintId) {
+              updates.sprintId = sprint.id;
+              resolvedSprintName = sprint.name;
+              changes.sprintId = {
+                from: task.sprintId,
+                to: { id: sprint.id, name: sprint.name },
+              };
+            }
+          }
+        }
 
-        const { data: existing } = await supabase
-          .from("ProjectMember")
-          .select("id")
-          .eq("projectId", project.id)
-          .eq("memberId", member.id)
-          .maybeSingle();
-
-        if (existing) {
+        // Apply task update if there's anything to change
+        if (Object.keys(updates).length > 0) {
+          updates.updatedAt = new Date().toISOString();
           const { error } = await supabase
-            .from("ProjectMember")
-            .update({ fpAllocation })
-            .eq("id", existing.id);
-          if (error) return { error: error.message };
-        } else {
-          const { error } = await supabase.from("ProjectMember").insert({
-            id: crypto.randomUUID(),
-            projectId: project.id,
-            memberId: member.id,
-            fpAllocation,
-          });
-          if (error) return { error: error.message };
+            .from("Task")
+            .update(updates as never)
+            .eq("id", task.id);
+          if (error) return { error: `Erro ao atualizar task: ${error.message}` };
         }
 
-        // Check bateria for overcommit after change
-        const { data: commit } = await supabase
-          .from("member_commitment_overview")
-          .select("committed, capacity")
-          .eq("id", member.id)
-          .maybeSingle();
+        // Replace assignment set (if provided)
+        let assigneeResult:
+          | { applied: string[]; missing: string[] }
+          | undefined;
+        if (input.assigneeNames !== undefined) {
+          const requested = input.assigneeNames;
+          const applied: string[] = [];
+          const missing: string[] = [];
+          let resolvedIds: string[] = [];
 
-        const overcommit = commit
-          ? Number(commit.committed) > Number(commit.capacity)
-          : false;
+          if (requested.length > 0) {
+            const candidates = await Promise.all(
+              requested.map(async (name) => {
+                const { data: m } = await supabase
+                  .from("Member")
+                  .select("id, name")
+                  .ilike("name", `%${name}%`)
+                  .limit(1)
+                  .maybeSingle();
+                if (m) {
+                  applied.push(m.name);
+                  return m.id;
+                }
+                missing.push(name);
+                return null;
+              }),
+            );
+            resolvedIds = candidates.filter((id): id is string => id !== null);
+          }
+
+          await supabase
+            .from("TaskAssignment")
+            .delete()
+            .eq("taskId", task.id);
+          if (resolvedIds.length > 0) {
+            await supabase.from("TaskAssignment").insert(
+              resolvedIds.map((memberId) => ({
+                id: crypto.randomUUID(),
+                taskId: task.id,
+                memberId,
+              })),
+            );
+          }
+          assigneeResult = { applied, missing };
+          changes.assignees = {
+            from: "(replaced)",
+            to: applied.length === 0 ? "(none)" : applied.join(", "),
+          };
+        }
+
+        if (Object.keys(changes).length === 0) {
+          return {
+            updated: false,
+            task: { reference: taskReference, title: task.title },
+            note: "Nenhum campo foi alterado.",
+          };
+        }
 
         return {
           updated: true,
-          project: project.name,
-          member: member.name,
-          fpAllocation,
-          ...(overcommit && {
-            warning: `${member.name} ficou em overcommit (${commit?.committed}/${commit?.capacity} FP).`,
-          }),
+          task: { reference: taskReference, title: task.title },
+          changes,
+          ...(resolvedSprintName ? { resolvedSprintName } : {}),
+          ...(assigneeResult ? { assignees: assigneeResult } : {}),
         };
       },
     });
 
-    tools.set_sprint_allocation = tool({
+    // ── manage_allocation — unificada (substitui set_project_allocation,
+    //    set_sprint_allocation, clear_sprint_allocation)
+    tools.manage_allocation = tool({
       description:
-        "Sobrescreve a alocação de FP de um membro para um sprint específico (SprintMember). Use para férias, crunch, redistribuição pontual. Se omitir, cai na ProjectMember.fpAllocation padrão.",
+        "Gerencia o 'contrato' (fpAllocation) de um membro num projeto. Use scope='project' pro teto padrão (ProjectMember.fpAllocation) ou scope='sprint' pra override pontual (SprintMember). Use action='clear' com scope='sprint' pra remover override. Sujeito à Regra 9b (confirmação 2 turnos).",
       inputSchema: z.object({
-        sprintName: z.string().describe("Nome parcial do sprint"),
+        scope: z
+          .enum(["project", "sprint"])
+          .describe("project = teto padrão; sprint = override pontual"),
+        action: z
+          .enum(["set", "clear"])
+          .default("set")
+          .describe(
+            "set aplica o fpAllocation; clear remove (só faz sentido com scope='sprint')",
+          ),
         memberName: z.string().describe("Nome parcial do membro"),
-        fpAllocation: z.number().int().min(0).max(500).describe("FP nesse sprint (override)"),
+        projectName: z
+          .string()
+          .optional()
+          .describe("Nome parcial do projeto (obrigatório se scope='project')"),
+        sprintName: z
+          .string()
+          .optional()
+          .describe(
+            "Nome parcial do sprint (obrigatório se scope='sprint'). Resolve projeto via sprint.",
+          ),
+        fpAllocation: z
+          .number()
+          .int()
+          .min(0)
+          .max(500)
+          .optional()
+          .describe("FP/sprint dedicados (obrigatório se action='set')"),
       }),
-      execute: async ({ sprintName, memberName, fpAllocation }) => {
+      execute: async ({
+        scope,
+        action,
+        memberName,
+        projectName,
+        sprintName,
+        fpAllocation,
+      }) => {
+        if (action === "set" && fpAllocation === undefined) {
+          return { error: "fpAllocation é obrigatório quando action='set'." };
+        }
+        if (action === "clear" && scope === "project") {
+          return {
+            error:
+              "action='clear' só funciona com scope='sprint' — pra zerar projeto, use action='set' com fpAllocation=0.",
+          };
+        }
+
+        const { data: member } = await supabase
+          .from("Member")
+          .select("id, name")
+          .ilike("name", `%${memberName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!member) {
+          return { error: `Membro "${memberName}" não encontrado.` };
+        }
+
+        if (scope === "project") {
+          if (!projectName) {
+            return {
+              error: "projectName é obrigatório quando scope='project'.",
+            };
+          }
+          const { data: project } = await supabase
+            .from("Project")
+            .select("id, name")
+            .ilike("name", `%${projectName}%`)
+            .limit(1)
+            .maybeSingle();
+          if (!project) {
+            return { error: `Projeto "${projectName}" não encontrado.` };
+          }
+
+          const { data: existing } = await supabase
+            .from("ProjectMember")
+            .select("id")
+            .eq("projectId", project.id)
+            .eq("memberId", member.id)
+            .maybeSingle();
+
+          if (existing) {
+            const { error } = await supabase
+              .from("ProjectMember")
+              .update({ fpAllocation })
+              .eq("id", existing.id);
+            if (error) return { error: error.message };
+          } else {
+            const { error } = await supabase.from("ProjectMember").insert({
+              id: crypto.randomUUID(),
+              projectId: project.id,
+              memberId: member.id,
+              fpAllocation,
+            });
+            if (error) return { error: error.message };
+          }
+
+          const { data: commit } = await supabase
+            .from("member_commitment_overview")
+            .select("committed, capacity")
+            .eq("id", member.id)
+            .maybeSingle();
+          const overcommit = commit
+            ? Number(commit.committed) > Number(commit.capacity)
+            : false;
+
+          return {
+            updated: true,
+            scope: "project",
+            project: project.name,
+            member: member.name,
+            fpAllocation,
+            ...(overcommit && {
+              warning: `${member.name} ficou em overcommit (${commit?.committed}/${commit?.capacity} FP).`,
+            }),
+          };
+        }
+
+        // scope === 'sprint'
+        if (!sprintName) {
+          return { error: "sprintName é obrigatório quando scope='sprint'." };
+        }
         const { data: sprint } = await supabase
           .from("Sprint")
           .select("id, name, projectId")
           .ilike("name", `%${sprintName}%`)
           .limit(1)
           .maybeSingle();
-        if (!sprint) return { error: `Sprint "${sprintName}" não encontrado.` };
+        if (!sprint) {
+          return { error: `Sprint "${sprintName}" não encontrado.` };
+        }
 
-        const { data: member } = await supabase
-          .from("Member")
-          .select("id, name")
-          .ilike("name", `%${memberName}%`)
-          .limit(1)
-          .maybeSingle();
-        if (!member) return { error: `Membro "${memberName}" não encontrado.` };
+        if (action === "clear") {
+          const { error } = await supabase
+            .from("SprintMember")
+            .delete()
+            .eq("sprintId", sprint.id)
+            .eq("memberId", member.id);
+          if (error) return { error: error.message };
+          return {
+            cleared: true,
+            scope: "sprint",
+            sprint: sprint.name,
+            member: member.name,
+          };
+        }
 
-        // Validate member is in the project
+        // action === 'set' on sprint — validate member is in project first
         const { data: pm } = await supabase
           .from("ProjectMember")
           .select("id")
@@ -1009,14 +1012,16 @@ export function assembleAlphaTools(
           .eq("memberId", member.id)
           .maybeSingle();
         if (!pm) {
-          return { error: `${member.name} não está alocado ao projeto desse sprint — use set_project_allocation primeiro.` };
+          return {
+            error: `${member.name} não está alocado ao projeto desse sprint — chame manage_allocation com scope='project' primeiro.`,
+          };
         }
 
         const { error } = await supabase.from("SprintMember").upsert(
           {
             sprintId: sprint.id,
             memberId: member.id,
-            fpAllocation,
+            fpAllocation: fpAllocation as number,
             updatedAt: new Date().toISOString(),
           },
           { onConflict: "sprintId,memberId" },
@@ -1025,155 +1030,11 @@ export function assembleAlphaTools(
 
         return {
           updated: true,
+          scope: "sprint",
           sprint: sprint.name,
           member: member.name,
           fpAllocation,
           note: "Override ativo só para este sprint — outros sprints continuam com ProjectMember.fpAllocation.",
-        };
-      },
-    });
-
-    tools.clear_sprint_allocation = tool({
-      description:
-        "Remove o override de SprintMember, voltando o membro à alocação padrão do ProjectMember naquele sprint.",
-      inputSchema: z.object({
-        sprintName: z.string().describe("Nome parcial do sprint"),
-        memberName: z.string().describe("Nome parcial do membro"),
-      }),
-      execute: async ({ sprintName, memberName }) => {
-        const { data: sprint } = await supabase
-          .from("Sprint")
-          .select("id, name")
-          .ilike("name", `%${sprintName}%`)
-          .limit(1)
-          .maybeSingle();
-        if (!sprint) return { error: `Sprint "${sprintName}" não encontrado.` };
-
-        const { data: member } = await supabase
-          .from("Member")
-          .select("id, name")
-          .ilike("name", `%${memberName}%`)
-          .limit(1)
-          .maybeSingle();
-        if (!member) return { error: `Membro "${memberName}" não encontrado.` };
-
-        const { error } = await supabase
-          .from("SprintMember")
-          .delete()
-          .eq("sprintId", sprint.id)
-          .eq("memberId", member.id);
-        if (error) return { error: error.message };
-
-        return {
-          cleared: true,
-          sprint: sprint.name,
-          member: member.name,
-        };
-      },
-    });
-
-    tools.move_task_to_sprint = tool({
-      description:
-        "Move uma task existente para um sprint (por nome parcial). Funciona para tasks no backlog ou já em outro sprint. Use ao replanejar.",
-      inputSchema: z.object({
-        taskReference: z.string().describe("Referência da task (ex: TSK-042)"),
-        sprintName: z.string().describe("Nome parcial do sprint alvo (case-insensitive)"),
-      }),
-      execute: async ({ taskReference, sprintName }) => {
-        const { data: task } = await supabase
-          .from("Task")
-          .select("id, title, sprintId, projectId")
-          .eq("reference", taskReference)
-          .maybeSingle();
-
-        if (!task) return { error: `Task "${taskReference}" não encontrada.` };
-
-        const { data: sprint } = await supabase
-          .from("Sprint")
-          .select("id, name, projectId")
-          .ilike("name", `%${sprintName}%`)
-          .eq("projectId", task.projectId)
-          .limit(1)
-          .maybeSingle();
-
-        if (!sprint) {
-          return { error: `Sprint "${sprintName}" não encontrado no mesmo projeto da task.` };
-        }
-
-        const { error } = await supabase
-          .from("Task")
-          .update({ sprintId: sprint.id, updatedAt: new Date().toISOString() })
-          .eq("id", task.id);
-
-        if (error) return { error: `Erro ao mover task: ${error.message}` };
-
-        return {
-          moved: true,
-          task: { reference: taskReference, title: task.title },
-          fromSprintId: task.sprintId,
-          toSprint: { id: sprint.id, name: sprint.name },
-        };
-      },
-    });
-
-    tools.remove_task_from_sprint = tool({
-      description:
-        "Remove uma task do sprint atual (seta sprintId como null). A task volta ao backlog geral do projeto.",
-      inputSchema: z.object({
-        taskReference: z.string().describe("Referencia da task (ex: TSK-042)"),
-      }),
-      execute: async ({ taskReference }) => {
-        const { data: task } = await supabase
-          .from("Task")
-          .select("id, title, sprintId")
-          .eq("reference", taskReference)
-          .maybeSingle();
-
-        if (!task) return { error: `Task "${taskReference}" nao encontrada.` };
-        if (!task.sprintId) return { error: `Task "${taskReference}" ja nao esta em nenhum sprint.` };
-
-        const { error } = await supabase
-          .from("Task")
-          .update({ sprintId: null, status: "backlog", updatedAt: new Date().toISOString() })
-          .eq("id", task.id);
-
-        if (error) return { error: `Erro ao remover do sprint: ${error.message}` };
-
-        return {
-          removed: true,
-          task: { reference: taskReference, title: task.title },
-        };
-      },
-    });
-
-    tools.update_task_status = tool({
-      description:
-        "Atualiza o status de uma task. Transicoes validas: backlog → todo → in_progress → review → done.",
-      inputSchema: z.object({
-        taskReference: z.string().describe("Referencia da task (ex: TSK-042)"),
-        newStatus: z.enum(TASK_STATUSES).describe("Novo status"),
-      }),
-      execute: async ({ taskReference, newStatus }) => {
-        const { data: task } = await supabase
-          .from("Task")
-          .select("id, title, status")
-          .eq("reference", taskReference)
-          .maybeSingle();
-
-        if (!task) return { error: `Task "${taskReference}" nao encontrada.` };
-
-        const { error } = await supabase
-          .from("Task")
-          .update({ status: newStatus, updatedAt: new Date().toISOString() })
-          .eq("id", task.id);
-
-        if (error) return { error: `Erro ao atualizar status: ${error.message}` };
-
-        return {
-          updated: true,
-          task: { reference: taskReference, title: task.title },
-          from: task.status,
-          to: newStatus,
         };
       },
     });
@@ -1752,7 +1613,7 @@ export function assembleAlphaTools(
 
     tools.propose_task_action = tool({
       description:
-        "Propõe uma mudança em Task no contexto de uma reunião — NÃO executa, só registra como proposta pendente em MeetingTaskAction. O PM aprova/edita/rejeita pela UI da reunião e o sistema aplica em batch. Use SEMPRE em vez de create_task/update_task_*/move_task_to_sprint quando houver reunião ativa do tipo daily, super_planning ou pm_review.",
+        "Propõe uma mudança em Task no contexto de uma reunião — NÃO executa, só registra como proposta pendente em MeetingTaskAction. O PM aprova/edita/rejeita pela UI da reunião e o sistema aplica em batch. Use SEMPRE em vez de create_task/update_task/bulk_update_tasks quando houver reunião ativa do tipo daily, super_planning ou pm_review.",
       inputSchema: z.object({
         meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
         type: z.enum(["create", "update", "delete", "move", "review"]).describe(
