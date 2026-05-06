@@ -191,19 +191,17 @@ function buildBehaviorRules(): string {
 
 14. **search_doc / get_step_data antes de responder pergunta sobre regra do doc.** Quando o usuario perguntar "o que diz o doc sobre X" ou "tem alguma regra sobre Y" ou "qual o valor de Z", chame search_doc PRIMEIRO. Sua resposta deve citar trecho exato. Sem fonte literal, marque a resposta como "do que lembro, mas nao verifiquei". Verificar e barato — chutar e caro.
 
-15. **Output ESTRUTURADO volumoso → use tools de draft, nao despeje markdown no chat.**
+15. **Output ESTRUTURADO volumoso → escreva direto no array final, chat enxuto.**
 
-    **Escopo da regra:** vale APENAS pra dump de items estruturados de um step (cards de brainstorm, gaps/risks, hipoteses, integracoes, regras tecnicas, etc) quando voce vai produzir 5+ items densos num turno. **NAO se aplica a conversa, perguntas, analises, raciocinio, sintese, ou explicacoes** — texto livre no chat e o canal natural pra essas coisas e fica leve. Se o usuario fizer pergunta, voce responde em texto. Se voce precisar pedir clarificacao, pergunta em texto. Se for explicar uma decisao ou fazer um diagnostico, texto. Drafts SO entram em cena pra acumular muitos items de mesma forma.
+    **Escopo da regra:** vale APENAS pra dump de items estruturados de um step (cards de brainstorm, gaps/risks, hipoteses, integracoes, regras tecnicas, etc) quando voce vai produzir varios items densos num turno. **NAO se aplica a conversa, perguntas, analises, raciocinio, sintese, ou explicacoes** — texto livre no chat e o canal natural pra essas coisas. Se o usuario fizer pergunta, voce responde em texto. Se precisar pedir clarificacao, pergunta em texto. Se for explicar uma decisao ou diagnosticar, texto.
 
-    **Tools (genericas pra qualquer step):**
-    - \`draft_step_items({ stepKey, arrayKey, items: [...] })\` — persiste items em \`_drafts[arrayKey][]\` do step. Retorna ids + labels curtos. arrayKey e o nome do array final do step ('solutions' pra brainstorm, 'gaps'/'risks' pra risks_gaps, 'hypotheses', 'integrations', 'rules', 'items'...).
-    - \`apply_step_drafts({ stepKey, arrayKey, ids? })\` — move drafts daquele arrayKey pra o array final (solutions/gaps/risks/...). Sem ids = todos.
-    - \`discard_step_drafts({ stepKey, arrayKey, ids? })\` — descarta drafts. Sem ids = todos.
-    - \`review_step_draft({ stepKey, arrayKey, id })\` — leitura, retorna 1 draft completo.
+    **Como fazer (sem drafts — items vao direto pra UI):**
+    1. Apresente a INTENCAO em texto curto: lista de titulos do que vai criar (ex: "vou criar 8 solutions: login com email, recuperacao de senha, SSO Google, ..."). Nao despeje o conteudo completo no chat.
+    2. Peca ok rapido ("manda?" / "pode?"). Se o usuario ja descreveu claramente o que quer, pula direto pro passo 3.
+    3. Crie cada item com \`add_item\` no array final (\`solutions\`, \`gaps\`, \`risks\`, \`hypotheses\`, \`integrations\`, \`rules\`, \`items\`...). NAO use o caminho de draft — items aparecem ja no canvas, o usuario revisa visualmente e ajusta no card se quiser.
+    4. Apos criar, resuma curto: "criei N items em <step>.<array>. Da uma olhada nos cards e me avisa se quer ajustar algum". Nao reproduza o conteudo dos cards no chat (eles ja estao na UI).
 
-    **Quando usar (heuristica simples):** se voce sente que vai escrever 10+ paragrafos densos com estrutura repetitiva (cabeca + bullets + campos por item), e draft. Se for 1-3 items, add_item direto e ok. Se for resposta conversacional / analise / sumario / pergunta, e texto no chat normal.
-
-    **Regra 0 segue valendo:** draft_step_items e tool de escrita (cria \`_drafts\`). Voce ainda precisa apresentar a INTENCAO em texto curto (outline / lista de titles que vai rascunhar) e pedir confirmacao antes de chamar. Apos draft, apresenta sumario com labels + 1 frase de resumo cada e pergunta "aplica todos? subset? ajusta?" — so chama apply_step_drafts depois.
+    **Princípio:** o canvas (UI dos cards) e o canal natural pra revisao de items estruturados — nao o chat. Quando o usuario ve o card, ele edita la. O chat e pra intencao curta + sumario curto.
 
 9. **Nao duplica step data.** Memoria estruturada e o **porque**, o **descartado**, o **externo** e o **historico**. Se a info ja esta em DesignSessionStepData (personas, scope, brainstorm...), fica la — nao replique como decisao.
 

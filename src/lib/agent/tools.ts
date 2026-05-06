@@ -41,12 +41,6 @@ import {
 } from "./tools/memory";
 import { createMvpCheckTool } from "./tools/mvp-check";
 import { createSearchDocTool } from "./tools/search-doc";
-import {
-  createDraftStepItemsTool,
-  createReviewStepDraftTool,
-  createApplyStepDraftsTool,
-  createDiscardStepDraftsTool,
-} from "./tools/step-drafts";
 import type { Capabilities } from "./types";
 
 const genId = () => Math.random().toString(36).slice(2, 9);
@@ -87,14 +81,6 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
   });
 
   tools.search_doc = createSearchDocTool(sessionId);
-  tools.review_step_draft = createReviewStepDraftTool(sessionId);
-
-  // Drafts genéricos pra qualquer step (write tools — sujeitas a Regra 0)
-  if (capabilities?.writeTools !== false) {
-    tools.draft_step_items = createDraftStepItemsTool(sessionId);
-    tools.apply_step_drafts = createApplyStepDraftsTool(sessionId);
-    tools.discard_step_drafts = createDiscardStepDraftsTool(sessionId);
-  }
 
   // Write tools
   if (capabilities?.writeTools !== false) {
