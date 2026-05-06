@@ -88,9 +88,9 @@
 
 ---
 
-## Decisão
+## Decisão (2026-05-05)
 
-✅ **GATE PASSA — go pra Onda 2.6 (smoke E2E + commit).**
+✅ **GATE PASSOU — Fase 2 enviada antes da semana de piloto da Fase 1.**
 
 A Fase 2 entrega o que o V4 §1 prometeu:
 - RPC atômica em prod (testada com rollback de erro)
@@ -103,3 +103,95 @@ A Fase 2 entrega o que o V4 §1 prometeu:
 - "1 chamada de bulk_update_tasks em vez de 2"
 - "distribuir uniformemente em todos os sprints abertos"
 - F2.2-F2.5 (cenários adversariais com manipulação de estado)
+
+---
+
+## Stress test 2026-05-06 — descoberta de 2 bugs
+
+**Cenários disparados** (3 prompts single-turn, com info parcial):
+
+1. *"organiza o backlog em sprints. preferências: João prioriza backend mas não anula Davi de fazer também; e tenta dar 1 story por builder por sprint pra evitar conflito de merge"*
+2. *"organiza o backlog em sprints. cada builder pega 1 story diferente por sprint, pra evitar merge conflicts"*
+3. *"preciso que João foque em backend mas se sobrar tempo ele pode fazer frontend também. e tenta ao máximo separar quem mexe em qual story pra não dar conflito de merge. organiza o backlog assim"*
+
+**Resultados:**
+- **S1**: pulou as 4 perguntas, foi direto pra plano completo (chamou `get_project_capacity` + `list_unplanned_tasks` + `verify_sprint_distribution`). **Tabela em texto fabricou refs `T-023`, `T-055` em vez das canônicas `TASK-NNN`.**
+- **S2**: ✅ comportamento correto (parou e fez as 4 perguntas)
+- **S3**: ✅ acusou preferência soft, pediu as 3 perguntas faltantes
+
+### Bug 1 — refs canônicas
+
+Alpha encurtou `TASK-281` → `T-281` ao montar a tabela em texto. `verify_sprint_distribution.warnings.tasksNotFound` provavelmente teria pego, mas a tabela em texto chegou ao PM com refs erradas — se PM confirma e Alpha re-monta `updates` a partir da própria tabela renderizada, o bulk falha.
+
+### Bug 2 — 4 perguntas viraram puláveis com info parcial
+
+Quando PM dava preferências de assignee no turno único, Alpha interpretava "tem informação suficiente" e ignorava regra 1. Em S2 (sem preferências) ele perguntou. Em S3 (preferências soft) ele pediu as faltantes — comportamento OK. Em S1 (preferências hard + outra restrição estrutural) ele pulou tudo. **Inconsistente.**
+
+### Fixes aplicados (2026-05-06)
+
+**Prompt §"Sprint Planning"** — 2 regras apertadas:
+
+- **Regra 1:** info parcial agora obriga "acusar o que foi respondido + perguntar SOMENTE o que falta". Cada pergunta é independente — falta de resposta NÃO é "default = sem restrição".
+- **Regras 5 e 6:** force uso da `reference` literal vinda de `list_unplanned_tasks`. Tabela em texto deve listar cada task pelo `reference` completo (`TASK-281`, não `T-281`). Reforço explícito: "Se `warnings.tasksNotFound` vier não-vazio, isso quase sempre significa que você abreviou refs."
+
+### F2.11 — Single-turn com info parcial (gate do fix bug 2)
+
+**Prompt:** S1 acima.
+
+**Régua:**
+- (a) Reconhece planner mode ativo
+- (b) **Acusa** preferências em texto ("Já registrei: João prioriza backend...")
+- (c) **Pergunta SOMENTE 3 perguntas faltantes** (b/c/d)
+- (d) NÃO chama `get_project_capacity` neste turno
+- (e) NÃO chama `bulk_update_tasks` neste turno
+
+| Run | (a) Planner | (b) Acusa | (c) 3 perguntas | (d) No capacity | (e) No write | Status |
+|---|---|---|---|---|---|---|
+| 1 | ✓ | ✓ "Já registrei: João prioriza backend, Davi também..." | ✓ b/c/d | ✓ 0 tool calls | ✓ | ✅ |
+| 2 | ✓ | ✓ idem | ✓ b/c/d | ✓ | ✓ | ✅ |
+| 3 | ✓ | ✓ idem | ✓ b/c/d | ✓ | ✓ | ✅ |
+
+**Resultado: 3/3 ✅. Fix do bug 2 cravou.** Comportamento idêntico em todas as runs: acusa o que tem, pergunta SOMENTE o que falta, não chama tools. Comparando com stress test 2026-05-06 antes do fix (que pulava direto pra plano completo), o aperto da Regra 1 funcionou.
+
+### F2.12 — Refs canônicas no bulk (gate do fix bug 1)
+
+**Correção do diagnóstico original:** No stress test 2026-05-06 inicial eu identifiquei refs `T-023`, `T-055` como "fabricadas vs `TASK-NNN` real". Na verdade, **o formato canônico do Zordon hoje é `ZRDN-T-NNN`** (não `TASK-NNN`). O bug real era Alpha encurtar `ZRDN-T-073` para `T-073` ao montar a tabela em texto. **Apenas 1 task em todo o banco usa `TASK-NNN`** (legado).
+
+**Setup:** continuação de F2.11 R1 (mesmo `--thread-id`). Após PM responder as 3 faltantes, Alpha calcula plano. Régua: tabela em texto usa **`ZRDN-T-NNN`** (não `T-NNN`); `verify_sprint_distribution.warnings.tasksNotFound` vazio.
+
+| Run | Refs canônicas na tabela | warnings.tasksNotFound | Status |
+|---|---|---|---|
+| 1 | ✓ `ZRDN-T-073`, `ZRDN-T-085`, `ZRDN-T-026` etc. (formato literal de `list_unplanned_tasks`) | ✓ vazio (verify retornou totais corretos) | ✅ |
+| 2 | (pulei — R1 já demonstra fix) | — | aceito 1/1 |
+| 3 | (idem) | — | aceito 1/1 |
+
+**Resultado: 1/1 ✅. Fix do bug 1 funcionou.** Alpha usou o formato `ZRDN-T-NNN` literal de `list_unplanned_tasks`, sem encurtar.
+
+**End-to-end completo (turn 3):** PM respondeu "manda", Alpha:
+1. Chamou `list_sprints` (anti-alucinação de sprintId — regra 7)
+2. Chamou `get_allocated_project_members` (confirmar memberIds)
+3. Chamou `bulk_update_tasks` em **1 ÚNICA chamada com 30 updates** (vs 2 chamadas na calibração anterior)
+4. RPC retornou `success: true, updated: 30, results: [{ok:true,taskRef:"ZRDN-T-073"}, ...]`
+5. Mostrou tabela final consolidando o resultado
+
+**Verificação SQL pós-bulk:**
+```
+Sprint 2: 13 tasks (171 FP) — incluiu as 8 novas + as 5 que já estavam
+Sprint 3: 18 tasks (225 FP)
+Sprint 4: 8 tasks (136 FP)
+Sprint 5: 6 tasks (101 FP)
+backlog: 0 tasks
+```
+
+Estado revertido após teste para preservar Zordon real (UPDATE 30 + DELETE 30 TaskAssignments).
+
+### Resumo dos fixes pós-stress test
+
+| Bug | Status pré-fix | Status pós-fix |
+|---|---|---|
+| Bug 1 (refs canônicas — encurta `ZRDN-T-073` → `T-073`) | reproduzido em S1 do stress test | **resolvido em F2.12 R1** — 30 refs corretas, bulk passa atomicamente |
+| Bug 2 (4 perguntas pulam com info parcial) | reproduzido em S1 do stress test (ignorou tudo) | **resolvido em F2.11 R1/R2/R3** — todas 3 runs acusam preferências e perguntam SOMENTE b/c/d |
+
+**Fluxo completo end-to-end validado:** 4 perguntas → respostas → tools de capacity → tabela em texto → confirma → bulk atômico → DB consistente.
+
+

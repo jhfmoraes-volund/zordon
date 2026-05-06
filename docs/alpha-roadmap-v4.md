@@ -61,7 +61,7 @@ V3 foi o **plano**. V4 é o **runbook vigente** — reflete o que foi executado,
 | **2.5** | Velocity histórica (opcional) | 1-2h | Após Fase 2, se PM pedir |
 | **3** | Rollout + observability — kill switch + AgentQualityLog + dashboard | 4h | Após Fase 2 estabilizar |
 
-**Total restante: ~18h spread em 3-4 semanas com piloto entre fases.**
+**Total restante (atualizado 2026-05-06):** ~6h. Fase 2 infra **implementada antes do piloto** — só falta calibração formal (3h) + smoke + commit (1h) + Fase 3 (2h opcional).
 
 **Decisão arquitetural pendente — confirmada 2026-05-05:** validação de regras de negócio (ex: "João só faz backend") fica **no Alpha + revisão do PM**, não na RPC. RPC valida apenas integridade de banco. PM lê proposta em texto e corrige antes do bulk rodar. Custo de modelar `Member.specialty → Task.type` no Postgres só vale a pena depois que padrão de uso real estabilizar.
 
@@ -192,9 +192,20 @@ Head Ops e PMs usam Alpha normalmente em projetos reais. Recolher feedback. Ante
 
 ---
 
-## 4. Onda 2 — Sprint Planner Mode (10h)
+## 4. Onda 2 — Sprint Planner Mode (~implementado, calibração pendente)
 
-**Pré-condição:** Fase 1 em prod 1+ semana sem regressão.
+**Status (2026-05-06):** infraestrutura **JÁ EM PROD** (commits `ZRD-JM-40`, `ZRD-JM-43`). Falta **calibração formal + 2 fixes de prompt** descobertos no stress test.
+
+### O que já está vivo
+| Componente | Path | Verificado |
+|---|---|---|
+| RPC `bulk_update_tasks` | Postgres | ✅ `\df bulk_update_tasks` |
+| Tools `get_project_capacity`, `list_unplanned_tasks`, `verify_sprint_distribution`, `bulk_update_tasks` | [src/lib/agent/tools/alpha-planner.ts](src/lib/agent/tools/alpha-planner.ts) | ✅ 491 linhas |
+| Registro no Alpha (gated `routeProjectId` + `alphaHierarchyEnabled` + `writeTools`) | [agents/alpha/tools.ts:474-502](src/lib/agent/agents/alpha/tools.ts#L474) | ✅ |
+| Prompt com 11 regras de planning | [agents/alpha/prompt.ts](src/lib/agent/agents/alpha/prompt.ts) §"Sprint Planning" | ✅ |
+| Gate "Planner mode (ativo)" no contexto | [agents/alpha/context.ts:611](src/lib/agent/agents/alpha/context.ts#L611) `maybeBuildPlannerBlock` | ✅ — ativa quando há intent + ≥10 backlog ready + builders alocados |
+
+**Pré-condição original ("Fase 1 em prod 1+ semana"):** dispensada porque a infra da Fase 2 foi implementada antes do piloto. Em vez disso, **calibração formal + smoke E2E** antes de "ship pra users".
 
 ### 4.1 Onda 2.1 — RPC `bulk_update_tasks` (2h)
 
@@ -403,8 +414,10 @@ Cenários multi-turn (use `--thread-id` reusado):
 | F2.8 | "vai dar pra entregar até daqui 4 sprints?" | — | Lê backlog + capacity de N=4 sprints, responde sim/não com números, **não** pergunta "qual MVP" nem sugere cortar escopo |
 | F2.9 | "organiza mantendo cada story em 1 sprint só" → "manda" | — | Agrupa tasks por userStoryId, aloca stories inteiras por sprint. Se split necessário, **avisa explicitamente** ("Story X-US-014 dividida em S8/S9") |
 | F2.10 | Bulk falha — primeiro propõe plano, depois PM responde com taskRef inválida na confirmação ("manda mas troca TASK-281 por TASK-9999") | — | Tenta bulk, RPC retorna erro de ref inexistente, Alpha mostra qual falhou, refaz proposta sem retry automático |
+| F2.11 | "organiza o backlog em sprints. preferências: João prioriza backend mas não anula Davi de fazer também; e tenta dar 1 story por builder por sprint pra evitar conflito de merge" (info parcial) | (responde 3 perguntas faltantes) → "manda" | Alpha **acusa** o que já tem registrado, **pergunta SOMENTE b/c/d**, NÃO pula gate, e ao montar tabela usa refs canônicas (`TASK-NNN`) — não fabrica `T-NNN` |
+| F2.12 | Multi-turn completo após F2.11 — verificar bulk com refs reais | "manda" | `verify_sprint_distribution.warnings.tasksNotFound` vazio; `bulk_update_tasks` executa com sucesso |
 
-3 runs cada, gate 2/3.
+3 runs cada, gate 2/3. **Cenários F2.11 e F2.12 derivados do stress test 2026-05-06** — descobriram que (a) Alpha pulava 4 perguntas com info parcial, (b) Alpha fabricava `T-NNN` em vez de citar refs canônicas. Ambos endereçados em fixes de prompt na mesma data.
 
 ### 4.6 Onda 2.6 — Smoke + ship (1h)
 
