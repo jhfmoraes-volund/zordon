@@ -752,12 +752,13 @@ export function assembleAlphaTools(
               changes.sprintId = { from: task.sprintId, to: null };
             }
           } else {
+            // Match exato — sprints renumeram cronologicamente, ilike "%Sprint 1%"
+            // pegaria "Sprint 10", "Sprint 11" etc. Nome canônico é "Sprint N".
             const { data: sprint } = await supabase
               .from("Sprint")
               .select("id, name, projectId")
-              .ilike("name", `%${input.sprintName}%`)
+              .eq("name", input.sprintName)
               .eq("projectId", task.projectId)
-              .limit(1)
               .maybeSingle();
             if (!sprint) {
               return {
@@ -872,12 +873,12 @@ export function assembleAlphaTools(
         projectName: z
           .string()
           .optional()
-          .describe("Nome parcial do projeto (obrigatório se scope='project')"),
+          .describe("Nome parcial do projeto (obrigatório se scope='project' ou 'sprint')"),
         sprintName: z
           .string()
           .optional()
           .describe(
-            "Nome parcial do sprint (obrigatório se scope='sprint'). Resolve projeto via sprint.",
+            "Nome do sprint, ex: 'Sprint 1' (obrigatório se scope='sprint'). Sprints renumeram cronologicamente — use o nome atual.",
           ),
         fpAllocation: z
           .number()
@@ -979,14 +980,31 @@ export function assembleAlphaTools(
         if (!sprintName) {
           return { error: "sprintName é obrigatório quando scope='sprint'." };
         }
+        if (!projectName) {
+          return {
+            error:
+              "projectName é obrigatório quando scope='sprint' (sprint names não são únicos entre projetos).",
+          };
+        }
+        const { data: scopedProject } = await supabase
+          .from("Project")
+          .select("id, name")
+          .ilike("name", `%${projectName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!scopedProject) {
+          return { error: `Projeto "${projectName}" não encontrado.` };
+        }
         const { data: sprint } = await supabase
           .from("Sprint")
           .select("id, name, projectId")
-          .ilike("name", `%${sprintName}%`)
-          .limit(1)
+          .eq("name", sprintName)
+          .eq("projectId", scopedProject.id)
           .maybeSingle();
         if (!sprint) {
-          return { error: `Sprint "${sprintName}" não encontrado.` };
+          return {
+            error: `Sprint "${sprintName}" não encontrado no projeto "${scopedProject.name}".`,
+          };
         }
 
         if (action === "clear") {
@@ -1687,15 +1705,14 @@ export function assembleAlphaTools(
           return { error: "Não foi possível determinar projectId da proposta." };
         }
 
-        // Resolver targetSprintId pra move
+        // Resolver targetSprintId pra move — match exato (sprints renumeram cronologicamente)
         let resolvedTargetSprintId: string | null = null;
         if (type === "move" && targetSprintName) {
           const { data: sprint } = await supabase
             .from("Sprint")
             .select("id, name, projectId")
-            .ilike("name", `%${targetSprintName}%`)
+            .eq("name", targetSprintName)
             .eq("projectId", resolvedProjectId)
-            .limit(1)
             .maybeSingle();
           if (!sprint) {
             return { error: `Sprint "${targetSprintName}" não encontrado no projeto da task.` };

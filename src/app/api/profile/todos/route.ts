@@ -22,7 +22,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("Todo")
     .select(
-      "id, description, status, dueDate, source, meetingId, sourceReviewId, createdAt, resolvedAt, " +
+      "id, description, status, dueDate, notes, source, meetingId, sourceReviewId, createdAt, resolvedAt, " +
         "meeting:Meeting(id, date, title), " +
         "sourceReview:MeetingProjectReview(project:Project(name))",
     )
@@ -66,6 +66,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const notesRaw = typeof body.notes === "string" ? body.notes.trim() : null;
+  const notes = notesRaw && notesRaw !== "" ? notesRaw : null;
+
   const supabase = db();
   const { data: todo, error } = await supabase
     .from("Todo")
@@ -74,6 +77,7 @@ export async function POST(req: NextRequest) {
       assigneeId,
       createdById: me.id,
       description: description.slice(0, 500),
+      notes,
       source: "manual",
       meetingId: null,
       sourceReviewId: null,
@@ -82,7 +86,7 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     })
     .select(
-      "id, description, status, dueDate, source, meetingId, sourceReviewId, createdAt, resolvedAt",
+      "id, description, status, dueDate, notes, source, meetingId, sourceReviewId, createdAt, resolvedAt",
     )
     .single();
 

@@ -89,7 +89,7 @@ export function SprintDialog({
     const sprints = hasProjectSelector && form.projectId
       ? sprintsForProject(form.projectId)
       : existingSprints;
-    return getNextSprintDefaults(sprints);
+    return getNextSprintDefaults(sprints, form.startDate || undefined);
   };
 
   useEffect(() => {
@@ -185,8 +185,12 @@ export function SprintDialog({
                 disabled={!form.startDate}
                 onClick={() => {
                   if (!form.startDate) return;
-                  const next = shiftSprintByWeeks(form.startDate, -1);
-                  setForm({ ...form, ...next });
+                  const shifted = shiftSprintByWeeks(form.startDate, -1);
+                  const sprints = hasProjectSelector && form.projectId
+                    ? sprintsForProject(form.projectId)
+                    : existingSprints;
+                  const recomputed = getNextSprintDefaults(sprints, shifted.startDate);
+                  setForm({ ...form, ...shifted, name: editing ? form.name : recomputed.name });
                 }}
               >
                 <ChevronLeft className="size-4" />
@@ -204,8 +208,12 @@ export function SprintDialog({
                 disabled={!form.startDate}
                 onClick={() => {
                   if (!form.startDate) return;
-                  const next = shiftSprintByWeeks(form.startDate, 1);
-                  setForm({ ...form, ...next });
+                  const shifted = shiftSprintByWeeks(form.startDate, 1);
+                  const sprints = hasProjectSelector && form.projectId
+                    ? sprintsForProject(form.projectId)
+                    : existingSprints;
+                  const recomputed = getNextSprintDefaults(sprints, shifted.startDate);
+                  setForm({ ...form, ...shifted, name: editing ? form.name : recomputed.name });
                 }}
               >
                 <ChevronRight className="size-4" />

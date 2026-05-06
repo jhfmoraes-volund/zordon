@@ -37,33 +37,48 @@ export function isMonday(d: Date): boolean {
   return d.getDay() === 1;
 }
 
-export type ExistingSprint = { endDate: string };
+export type ExistingSprint = { startDate: string; endDate: string };
 
 /**
  * Defaults para a próxima sprint de um projeto.
  *
- * - Sem sprints: começa na segunda da semana corrente (ou hoje, se hoje é segunda).
- * - Com sprints: começa na segunda imediatamente após o fim da última sprint.
- *   (Se a última terminou domingo, próxima começa na segunda — sequencial, sem gap.)
+ * - Sem `targetStartDate`: sugere a segunda imediatamente após a última sprint
+ *   (ou a segunda da semana corrente, se não há sprints).
+ * - Com `targetStartDate`: assume que o usuário escolheu uma semana específica
+ *   (ex: antecipou pra antes da Sprint 1) e calcula o número pela posição
+ *   cronológica naquela data — quantas sprints começam antes + 1.
+ *
+ * O número final no banco é garantido pelo trigger Postgres
+ * (renumber_sprints_chronologically); este helper produz só o label inicial
+ * que aparece na UI antes do save.
  */
-export function getNextSprintDefaults(existing: ExistingSprint[]) {
-  const sorted = [...existing].sort(
-    (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime(),
-  );
-  const lastSprint = sorted[0];
-
+export function getNextSprintDefaults(
+  existing: ExistingSprint[],
+  targetStartDate?: string,
+) {
   let monday: Date;
-  if (lastSprint) {
-    const afterLast = new Date(lastSprint.endDate);
-    afterLast.setDate(afterLast.getDate() + 1);
-    monday = mondayOf(afterLast);
+  if (targetStartDate) {
+    monday = mondayOf(new Date(`${targetStartDate}T00:00:00`));
   } else {
-    monday = mondayOf(new Date());
+    const sortedDesc = [...existing].sort(
+      (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime(),
+    );
+    const lastSprint = sortedDesc[0];
+    if (lastSprint) {
+      const afterLast = new Date(lastSprint.endDate);
+      afterLast.setDate(afterLast.getDate() + 1);
+      monday = mondayOf(afterLast);
+    } else {
+      monday = mondayOf(new Date());
+    }
   }
 
+  const startStr = toDateStr(monday);
+  const earlierCount = existing.filter((s) => s.startDate < startStr).length;
+
   return {
-    name: `Sprint ${sorted.length + 1}`,
-    startDate: toDateStr(monday),
+    name: `Sprint ${earlierCount + 1}`,
+    startDate: startStr,
     endDate: toDateStr(sundayOf(monday)),
   };
 }

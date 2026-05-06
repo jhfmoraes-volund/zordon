@@ -65,6 +65,15 @@ export async function PATCH(
     patch.dueDate = body.dueDate ? new Date(body.dueDate).toISOString() : null;
   }
 
+  if (body.notes !== undefined) {
+    if (body.notes === null) {
+      patch.notes = null;
+    } else {
+      const trimmed = String(body.notes).trim();
+      patch.notes = trimmed === "" ? null : trimmed;
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "nada pra atualizar" }, { status: 400 });
   }
@@ -76,7 +85,7 @@ export async function PATCH(
     .update(patch)
     .eq("id", id)
     .select(
-      "id, description, status, dueDate, source, meetingId, sourceReviewId, createdAt, resolvedAt",
+      "id, description, status, dueDate, notes, source, meetingId, sourceReviewId, createdAt, resolvedAt",
     )
     .single();
 

@@ -75,6 +75,15 @@ export async function DELETE(
 
   const { id } = await params;
   const { error } = await db().from("Sprint").delete().eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // Trigger sprint_block_delete_with_tasks levanta P0001 com prefixo "sprint_has_tasks:".
+    if (error.message?.includes("sprint_has_tasks")) {
+      return NextResponse.json(
+        { error: "Sprint tem tasks atribuídas. Mova ou exclua as tasks antes de deletar a sprint." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true, id });
 }

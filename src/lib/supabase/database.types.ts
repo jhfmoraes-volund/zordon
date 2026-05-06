@@ -14,30 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _backup_d_refs_20260505: {
-        Row: {
-          createdAt: string | null
-          id: string | null
-          projectId: string | null
-          reference: string | null
-          status: string | null
-        }
-        Insert: {
-          createdAt?: string | null
-          id?: string | null
-          projectId?: string | null
-          reference?: string | null
-          status?: string | null
-        }
-        Update: {
-          createdAt?: string | null
-          id?: string | null
-          projectId?: string | null
-          reference?: string | null
-          status?: string | null
-        }
-        Relationships: []
-      }
       _backup_task_dependencies_20260505: {
         Row: {
           dependencies: Json | null
@@ -71,39 +47,6 @@ export type Database = {
           createdAt?: string | null
           id?: string | null
           reference?: string | null
-        }
-        Relationships: []
-      }
-      _prisma_migrations: {
-        Row: {
-          applied_steps_count: number
-          checksum: string
-          finished_at: string | null
-          id: string
-          logs: string | null
-          migration_name: string
-          rolled_back_at: string | null
-          started_at: string
-        }
-        Insert: {
-          applied_steps_count?: number
-          checksum: string
-          finished_at?: string | null
-          id: string
-          logs?: string | null
-          migration_name: string
-          rolled_back_at?: string | null
-          started_at?: string
-        }
-        Update: {
-          applied_steps_count?: number
-          checksum?: string
-          finished_at?: string | null
-          id?: string
-          logs?: string | null
-          migration_name?: string
-          rolled_back_at?: string | null
-          started_at?: string
         }
         Relationships: []
       }
@@ -3481,6 +3424,7 @@ export type Database = {
           dueDate: string | null
           id: string
           meetingId: string | null
+          notes: string | null
           resolvedAt: string | null
           source: string
           sourceReviewId: string | null
@@ -3495,6 +3439,7 @@ export type Database = {
           dueDate?: string | null
           id?: string
           meetingId?: string | null
+          notes?: string | null
           resolvedAt?: string | null
           source?: string
           sourceReviewId?: string | null
@@ -3509,6 +3454,7 @@ export type Database = {
           dueDate?: string | null
           id?: string
           meetingId?: string | null
+          notes?: string | null
           resolvedAt?: string | null
           source?: string
           sourceReviewId?: string | null
@@ -4102,6 +4048,10 @@ export type Database = {
       next_user_story_reference: {
         Args: { p_project_id: string }
         Returns: string
+      }
+      renumber_sprints_chronologically: {
+        Args: { p_project_id: string }
+        Returns: undefined
       }
       reopen_sprint: {
         Args: { p_sprint_id: string }

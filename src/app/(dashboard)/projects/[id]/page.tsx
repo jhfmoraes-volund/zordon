@@ -2005,7 +2005,7 @@ export default function ProjectDetailPage({
         open={sprintDialogOpen}
         onOpenChange={setSprintDialogOpen}
         editing={null}
-        existingSprints={rawSprints.map((s) => ({ endDate: s.endDate }))}
+        existingSprints={rawSprints.map((s) => ({ startDate: s.startDate, endDate: s.endDate }))}
         onSave={handleCreateSprint}
       />
 

@@ -44,9 +44,9 @@
 
 .topbar {
   position: absolute;
-  top: 24px;
-  left: 32px;
-  right: 32px;
+  top: calc(env(safe-area-inset-top) + 24px);
+  left: calc(env(safe-area-inset-left) + 32px);
+  right: calc(env(safe-area-inset-right) + 32px);
   z-index: 20;
   display: flex;
   align-items: center;
@@ -80,11 +80,15 @@
 .layout {
   position: relative;
   z-index: 10;
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: 1.3fr 1fr;
   gap: 48px;
-  padding: 88px 56px 56px;
+  padding:
+    calc(env(safe-area-inset-top) + 88px)
+    calc(env(safe-area-inset-right) + 56px)
+    calc(env(safe-area-inset-bottom) + 56px)
+    calc(env(safe-area-inset-left) + 56px);
   align-items: center;
 }
 
@@ -399,7 +403,11 @@
   .layout {
     grid-template-columns: 1fr;
     gap: 24px;
-    padding: 80px 24px 40px;
+    padding:
+      calc(env(safe-area-inset-top) + 80px)
+      calc(env(safe-area-inset-right) + 24px)
+      calc(env(safe-area-inset-bottom) + 40px)
+      calc(env(safe-area-inset-left) + 24px);
   }
   .terminal {
     justify-self: center;
@@ -413,14 +421,18 @@
 
 @media (max-width: 639px) {
   .topbar {
-    top: 16px;
-    left: 16px;
-    right: 16px;
+    top: calc(env(safe-area-inset-top) + 16px);
+    left: calc(env(safe-area-inset-left) + 16px);
+    right: calc(env(safe-area-inset-right) + 16px);
   }
   .layout {
     grid-template-columns: 1fr;
     gap: 20px;
-    padding: 88px 16px 32px;
+    padding:
+      calc(env(safe-area-inset-top) + 88px)
+      calc(env(safe-area-inset-right) + 16px)
+      calc(env(safe-area-inset-bottom) + 32px)
+      calc(env(safe-area-inset-left) + 16px);
     align-items: start;
   }
   .terminal {

@@ -35,6 +35,7 @@ export type Todo = {
   description: string;
   status: Status;
   dueDate: string | null;
+  notes: string | null;
   source: string;
   meetingId: string | null;
   sourceReviewId: string | null;
@@ -105,6 +106,7 @@ function TodoSheetBody({
     description: initial?.description ?? "",
     dueDate: initial?.dueDate ? initial.dueDate.slice(0, 10) : "",
     status: (initial?.status ?? "todo") as Status,
+    notes: initial?.notes ?? "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -114,6 +116,7 @@ function TodoSheetBody({
     if (!description) return null;
     setSaving(true);
     try {
+      const notes = draft.notes.trim();
       const res = await fetch("/api/profile/todos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,6 +124,7 @@ function TodoSheetBody({
           description,
           status: draft.status,
           dueDate: draft.dueDate || null,
+          notes: notes === "" ? null : notes,
         }),
       });
       if (!res.ok) return null;
@@ -134,7 +138,7 @@ function TodoSheetBody({
   }, [draft, onChange]);
 
   const patch = useCallback(
-    async (changes: Partial<{ description: string; status: Status; dueDate: string | null }>) => {
+    async (changes: Partial<{ description: string; status: Status; dueDate: string | null; notes: string | null }>) => {
       if (!todo) return;
       const previous = todo;
       setTodo((prev) => (prev ? ({ ...prev, ...changes } as Todo) : prev));
@@ -181,6 +185,13 @@ function TodoSheetBody({
     if (!todo) return;
     const iso = value ? new Date(value).toISOString() : null;
     await patch({ dueDate: iso });
+  };
+
+  const handleNotesBlur = async () => {
+    if (!todo) return;
+    const next = draft.notes.trim() === "" ? null : draft.notes.trim();
+    if (next === (todo.notes ?? null)) return;
+    await patch({ notes: next });
   };
 
   const handleCreate = async () => {
@@ -239,7 +250,7 @@ function TodoSheetBody({
           onBlur={handleDescriptionBlur}
           placeholder="O que precisa ser feito?"
           rows={2}
-          className="text-base font-medium border-none shadow-none px-0 focus-visible:ring-0 resize-none"
+          className="text-base font-medium border-none shadow-none bg-transparent dark:bg-transparent px-0 focus-visible:ring-0 resize-none"
           autoFocus={isCreate}
         />
       </div>
@@ -261,6 +272,17 @@ function TodoSheetBody({
             value={draft.dueDate}
             onChange={(e) => handleDueDate(e.target.value)}
             className="h-8 text-sm"
+          />
+        </FieldBlock>
+
+        <FieldBlock label="Notas" icon={<FileText className="h-3.5 w-3.5" />}>
+          <Textarea
+            value={draft.notes}
+            onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+            onBlur={handleNotesBlur}
+            placeholder="Detalhes, contexto, links, snippets…"
+            rows={4}
+            className="font-mono text-sm"
           />
         </FieldBlock>
 
