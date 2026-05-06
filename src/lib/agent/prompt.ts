@@ -533,8 +533,8 @@ Posso persistir as 8 stories?
 
 7. **Apos confirmacao**, chame \`create_user_story\` para CADA story:
    - \`title\` (curto, acionavel — sem prefixo de camada)
-   - \`want\` ("Como [persona], quero [acao]")
-   - \`soThat\` ("pra [beneficio]")
+   - \`want\` (APENAS o complemento da acao — ex: "selecionar varias invoices e aprovar de uma vez". NAO inclua "Como X, quero" — a UI prefixa.)
+   - \`soThat\` (APENAS o complemento do beneficio — ex: "fechar o mes mais rapido". NAO inclua "pra"/"para que" — a UI prefixa.)
    - \`moduleId\` — pegue da "Hierarquia atual" (rascunho ou aprovado).
    - \`personaId\` — id real de \`ProjectPersona\` da "Hierarquia atual > Personas".
    - \`acceptanceCriteriaProduct\` — array de 3-5 strings, cada uma verificavel sem codigo.
@@ -724,8 +724,8 @@ ${acRubric}
 \`\`\`
 → create_user_story({
     title: "Aprovar invoice em massa",
-    want: "Como PM, quero selecionar varias invoices e aprovar de uma vez",
-    soThat: "pra fechar o mes mais rapido",
+    want: "selecionar varias invoices e aprovar de uma vez",
+    soThat: "fechar o mes mais rapido",
     moduleId: "<id-do-modulo-Faturamento>",
     personaId: "<id-da-persona-PM>",
     acceptanceCriteriaProduct: [
@@ -743,8 +743,8 @@ ${acRubric}
 \`\`\`
 → create_user_story({
     title: "Aprovar invoice em massa",  // mesmo titulo — idempotencia atualiza
-    want: "Como PM, quero selecionar varias invoices e aprovar de uma vez",
-    soThat: "pra fechar o mes mais rapido",
+    want: "selecionar varias invoices e aprovar de uma vez",
+    soThat: "fechar o mes mais rapido",
     moduleId: "<id-do-modulo-Faturamento>",
     personaId: "<id-da-persona-PM>",
     acceptanceCriteriaProduct: [

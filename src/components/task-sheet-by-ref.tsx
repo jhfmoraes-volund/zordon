@@ -51,38 +51,72 @@ type Ctx = {
 };
 
 type Props = {
-  taskId: string | null;
+  /** Open by uuid. Mutually exclusive with taskRef. */
+  taskId?: string | null;
+  /** Open by stable reference (e.g. "ZRDN-T-042"). Resolves to id internally. */
+  taskRef?: string | null;
   onClose: () => void;
   /** Called after any successful mutation so the parent can refresh its list. */
   onAfterChange?: () => void;
+  /** Breadcrumb: clicking the parent story closes this sheet and opens the story. */
+  onOpenStory?: (storyRef: string) => void;
+  /** Dependencies block: clicking a linked task ref navigates to that task. */
+  onOpenTaskByRef?: (taskRef: string) => void;
 };
 
-export function TaskSheetByRef({ taskId, onClose, onAfterChange }: Props) {
-  // Keyed inner: each new taskId remounts a fresh component with clean state.
+export function TaskSheetByRef({
+  taskId,
+  taskRef,
+  onClose,
+  onAfterChange,
+  onOpenStory,
+  onOpenTaskByRef,
+}: Props) {
+  // Keyed inner: each new identity remounts a fresh component with clean state.
+  const key = taskId ?? (taskRef ? `ref:${taskRef}` : "closed");
   return (
     <TaskSheetByRefInner
-      key={taskId ?? "closed"}
-      taskId={taskId}
+      key={key}
+      taskId={taskId ?? null}
+      taskRef={taskRef ?? null}
       onClose={onClose}
       onAfterChange={onAfterChange}
+      onOpenStory={onOpenStory}
+      onOpenTaskByRef={onOpenTaskByRef}
     />
   );
 }
 
-function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
+function TaskSheetByRefInner({
+  taskId,
+  taskRef,
+  onClose,
+  onAfterChange,
+  onOpenStory,
+  onOpenTaskByRef,
+}: {
+  taskId: string | null;
+  taskRef: string | null;
+  onClose: () => void;
+  onAfterChange?: () => void;
+  onOpenStory?: (storyRef: string) => void;
+  onOpenTaskByRef?: (taskRef: string) => void;
+}) {
   const [ctx, setCtx] = useState<Ctx | null>(null);
-  const [loading, setLoading] = useState(taskId !== null);
+  const [loading, setLoading] = useState(taskId !== null || taskRef !== null);
   const supabase = createClient();
 
-  const load = useCallback(async (id: string): Promise<Ctx | null> => {
-    // Step 1 — find the task's project id.
-    const { data: taskRow, error: taskErr } = await supabase
-      .from("Task")
-      .select("projectId")
-      .eq("id", id)
-      .single();
-    if (taskErr || !taskRow) return null;
-    const projectId = taskRow.projectId;
+  const load = useCallback(
+    async (key: { id?: string; ref?: string }): Promise<Ctx | null> => {
+      // Step 1 — find the task's id + project id (by id or by reference).
+      const probe = supabase.from("Task").select("id, projectId");
+      const { data: taskRow, error: taskErr } = await (key.id
+        ? probe.eq("id", key.id)
+        : probe.eq("reference", key.ref!)
+      ).maybeSingle();
+      if (taskErr || !taskRow) return null;
+      const id = taskRow.id;
+      const projectId = taskRow.projectId;
 
     // Step 2 — load project context in parallel.
     const [
@@ -177,9 +211,9 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
   }, [supabase]);
 
   useEffect(() => {
-    if (taskId === null) return;
+    if (taskId === null && taskRef === null) return;
     let cancelled = false;
-    load(taskId)
+    load(taskId !== null ? { id: taskId } : { ref: taskRef! })
       .then((c) => {
         if (cancelled) return;
         setCtx(c);
@@ -190,19 +224,20 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [taskId, load]);
+  }, [taskId, taskRef, load]);
 
   // Refresh just the task + AC after a mutation; keep the rest of the project
   // context intact so the sheet stays open.
   const refreshTask = useCallback(async () => {
-    if (!ctx || !taskId) return;
+    if (!ctx) return;
+    const dbTaskId = ctx.task.__id;
     const [tasksRes, taskAcRes] = await Promise.all([
       supabase
         .from("Task")
         .select(
           "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
         )
-        .eq("id", taskId)
+        .eq("id", dbTaskId)
         .single(),
       supabase
         .from("AcceptanceCriterion")
@@ -541,7 +576,7 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  const isOpen = taskId !== null;
+  const isOpen = taskId !== null || taskRef !== null;
 
   return (
     <ResponsiveSheet open={isOpen} onOpenChange={(o) => !o && onClose()}>
@@ -560,6 +595,8 @@ function TaskSheetByRefInner({ taskId, onClose, onAfterChange }: Props) {
             definitionOfDone={ctx.definitionOfDone}
             availableTags={ctx.projectTags}
             onClose={onClose}
+            onOpenStory={onOpenStory}
+            onOpenTaskByRef={onOpenTaskByRef}
             onSave={(updated) => handleSave(updated as AdaptedTask)}
             onChangeSprint={handleChangeSprint}
             onChangeAssignees={handleChangeAssignees}

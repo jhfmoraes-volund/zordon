@@ -1919,6 +1919,10 @@ export default function ProjectDetailPage({
           setSelectedStoryRef(ref);
           setEditingStory(false);
         }}
+        onOpenTaskByRef={(ref) => {
+          setSelectedTaskRef(null);
+          setTimeout(() => setSelectedTaskRef(ref), 0);
+        }}
       />
 
       {/* Inline taxonomy dialogs (invoked from story-sheet edit form) */}

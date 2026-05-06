@@ -37,8 +37,8 @@ CONTRATO POR refinementStatus:
 EXEMPLO de chamada bem-formada em story_tree (copie e adapte):
 {
   title: "Aprovar invoices em massa",
-  want: "Como Admin, quero aprovar varias invoices de uma vez",
-  soThat: "pra fechar o mes mais rapido",
+  want: "aprovar varias invoices de uma vez",
+  soThat: "fechar o mes mais rapido",
   moduleId: "<COPIE o uuid de id=\`...\` da Hierarquia atual > Modules>",
   personaId: "<COPIE o uuid de id=\`...\` da Hierarquia atual > Personas>",
   acceptanceCriteriaProduct: [
@@ -66,13 +66,13 @@ REGRAS DURAS:
           .string()
           .min(3)
           .describe(
-            "Frase 'como [persona], quero [acao]' (sem o 'pra [...]', que vai em soThat).",
+            "APENAS o complemento da acao (ex: 'aprovar varias invoices de uma vez'). NAO inclua 'Como X, quero ...' — a UI ja prefixa 'Como {persona}, quero ' automaticamente. Comece pelo verbo no infinitivo.",
           ),
         soThat: z
           .string()
           .optional()
           .describe(
-            "Beneficio/motivacao: 'pra [resultado]'. Opcional mas recomendado.",
+            "APENAS o complemento do beneficio (ex: 'fechar o mes mais rapido'). NAO inclua 'para que ' nem 'pra que ' — a UI ja prefixa ', para que '. Opcional mas recomendado.",
           ),
         moduleId: z
           .string()

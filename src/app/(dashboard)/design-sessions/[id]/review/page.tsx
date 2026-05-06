@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DesignSessionTree } from "@/components/design-session/design-session-tree";
 import { StorySheetByRef } from "@/components/story-sheet-by-ref";
+import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
 import { getStepsForSession } from "@/lib/design-session-steps";
 import { ArrowLeft, BookOpen, CheckCircle2, Loader2, Flag } from "lucide-react";
 
@@ -62,6 +63,7 @@ export default function ReviewPage({
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openStoryRef, setOpenStoryRef] = useState<string | null>(null);
+  const [openTaskRef, setOpenTaskRef] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -262,6 +264,24 @@ export default function ReviewPage({
         storyRef={openStoryRef}
         onClose={() => setOpenStoryRef(null)}
         onAfterChange={() => setRefreshKey((k) => k + 1)}
+        onOpenTask={(taskRef) => {
+          setOpenStoryRef(null);
+          setOpenTaskRef(taskRef);
+        }}
+      />
+
+      <TaskSheetByRef
+        taskRef={openTaskRef}
+        onClose={() => setOpenTaskRef(null)}
+        onAfterChange={() => setRefreshKey((k) => k + 1)}
+        onOpenStory={(storyRef) => {
+          setOpenTaskRef(null);
+          setOpenStoryRef(storyRef);
+        }}
+        onOpenTaskByRef={(taskRef) => {
+          setOpenTaskRef(null);
+          setTimeout(() => setOpenTaskRef(taskRef), 0);
+        }}
       />
 
       {!isCompleted && (

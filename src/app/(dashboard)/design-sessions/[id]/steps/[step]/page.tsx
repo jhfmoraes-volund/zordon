@@ -18,6 +18,7 @@ import {
   type TreeAction,
 } from "@/components/design-session/design-session-tree";
 import { StorySheetByRef } from "@/components/story-sheet-by-ref";
+import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -889,6 +890,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   const sendChatRef = useRef<((text: string) => void) | null>(null);
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const [openStoryRef, setOpenStoryRef] = useState<string | null>(null);
+  const [openTaskRef, setOpenTaskRef] = useState<string | null>(null);
 
   const handleTreeAction = useCallback(
     async (action: TreeAction) => {
@@ -1238,6 +1240,25 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
         storyRef={openStoryRef}
         onClose={() => setOpenStoryRef(null)}
         onAfterChange={() => setTreeRefreshKey((k) => k + 1)}
+        onOpenTask={(taskRef) => {
+          setOpenStoryRef(null);
+          setOpenTaskRef(taskRef);
+        }}
+      />
+
+      <TaskSheetByRef
+        taskRef={openTaskRef}
+        onClose={() => setOpenTaskRef(null)}
+        onAfterChange={() => setTreeRefreshKey((k) => k + 1)}
+        onOpenStory={(storyRef) => {
+          setOpenTaskRef(null);
+          setOpenStoryRef(storyRef);
+        }}
+        onOpenTaskByRef={(taskRef) => {
+          setOpenTaskRef(null);
+          // Re-open in next tick so the keyed remount picks up the new ref.
+          setTimeout(() => setOpenTaskRef(taskRef), 0);
+        }}
       />
     </div>
   );

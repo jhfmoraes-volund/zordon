@@ -69,6 +69,8 @@ type TaskSheetProps = {
   onSave: (updated: Task) => void | Promise<void>;
   /** Open the parent story when breadcrumb is clicked. */
   onOpenStory?: (storyRef: string) => void;
+  /** Navigate to a related task (e.g. from the dependencies block). */
+  onOpenTaskByRef?: (taskRef: string) => void;
   /** Sprint picker support. When omitted, the row is read-only. */
   sprints?: SprintLite[];
   onChangeSprint?: (taskRef: string, sprintId: string | null) => void | Promise<void>;
@@ -194,6 +196,7 @@ export function TaskSheetInner({
   onClose,
   onSave,
   onOpenStory,
+  onOpenTaskByRef,
   onChangeSprint,
   onChangeAssignees,
   availableTags,
@@ -655,7 +658,10 @@ export function TaskSheetInner({
             <>
               <Separator />
               <FieldBlock label="Dependências">
-                <DependenciesBlock taskId={dbTaskId} />
+                <DependenciesBlock
+                  taskId={dbTaskId}
+                  onOpenTaskByRef={onOpenTaskByRef}
+                />
               </FieldBlock>
               <TaskFeed
                 taskId={dbTaskId}

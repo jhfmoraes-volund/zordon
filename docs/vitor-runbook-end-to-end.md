@@ -21,67 +21,145 @@ Conduzir Vitor end-to-end nos 6 módulos restantes do `__eval__zelar`, gerando s
 
 ## Pré-requisitos (LEIA ANTES DE COMEÇAR)
 
-Este runbook é executado em duas mãos: **um agente humano** (Claude num chat fresh, contexto limpo) **conduzindo o usuário**, que por sua vez interage com o **Vitor** (agente de design session que vive na UI web em `/design-sessions/<id>/chat`).
+Este runbook é executado **diretamente pelo agente Claude via CLI** — não há humano-no-loop colando prompts em UI web. Vitor é invocado como subprocess.
 
-O agente humano (Claude) **não consegue chamar Vitor diretamente**. O loop é:
+### Separação de papéis (LEIA PRIMEIRO)
+
+- **Vitor é o executor.** Toda mutação de dados de domínio (módulos, stories, tasks, ACs, dependências, refinement status) acontece via **tools dele**, não via SQL. Se você está prestes a rodar `INSERT/UPDATE/DELETE` em `Module`, `UserStory`, `Task`, `TaskDependency`, `AcceptanceCriterion`, `TaskTagAssignment` — pare. Isso é trabalho do Vitor. Mande um turn pedindo pra ele fazer.
+- **Orquestrador (Claude) é o validador + gatilho de aprovação.** Você pode/deve:
+  - Rodar SQL **read-only** pra validar estado entre turns.
+  - Disparar o **endpoint HTTP de aprovação** (`POST /api/modules/[id]/approve`) — esse é o stand-in legítimo do humano clicando "Aprovar" no UI; ele cascateia `Module.approvedAt` E promove `tasks draft→backlog` numa única transação.
+  - Ler logs do CLI pra decidir o próximo turn.
+- **Anti-padrão:** rodar SQL `INSERT INTO Module` ou `UPDATE Task SET status='backlog'` direto. Isso pula auditoria (`ModuleActivity`), pula validações de domínio, e mais importante — **destrói o aprendizado do Vitor sobre o ciclo completo**, que é justamente o que estamos coletando pro Alpha-orquestrador.
+
+### Tools de mutação que o Vitor tem (use estas, não SQL)
+
+| Operação | Tool do Vitor |
+|---|---|
+| Propor módulos novos em batch | `propose_modules` |
+| Criar story | `create_user_story` (aceita `moduleId` ou `proposedModuleName`) |
+| Editar story (title/want/soThat/moduleId/personaId) | `update_user_story` |
+| Criar task | `create_task` (com `userStoryId`, `dependsOn`, tags) |
+| Editar task | `update_task` |
+| Adicionar/editar/remover AC | `manage_story_ac` |
+| Mudar refinement status | `set_story_refinement` |
+| Promover proposedModuleName → Module aprovado (sem promover tasks) | `approve_module` |
+
+**Nota sobre `approve_module`**: marca `Module.approvedAt=now()` e linka stories pendentes, mas **não promove tasks draft→backlog**. A promoção só acontece via endpoint HTTP (próxima seção). Use a sequência: Vitor cria/aprova módulo → orquestrador chama endpoint pra promover tasks. Ou, mais simples: deixe Vitor criar módulo via `propose_modules` (draft) e o orquestrador chama o endpoint, que faz `approvedAt=now() + promote tasks` numa transação só.
+
+### Aprovação cascata via endpoint (o "clique humano" simulado)
+
+```bash
+# Substitua <MODULE_ID> pelo id obtido via SQL read-only
+curl -sS -X POST "http://localhost:3000/api/modules/<MODULE_ID>/approve" \
+  -H "Cookie: $(cat /tmp/vitor-runbook/auth-cookie.txt)" | jq .
+```
+
+Esse endpoint requer auth MANAGER+. Quando estiver rodando local sem servidor de pé, alternativa: chamar diretamente a função DAL via um pequeno script, OU usar o endpoint exposto pela rotina `vitor-cli` se houver. **O importante é não substituir o ciclo por SQL ad-hoc** — preserva a Activity, o cascade, e o aprendizado.
+
+
+
+### Como invocar Vitor
+
+Existe um CLI completo em [scripts/vitor-cli.ts](../scripts/vitor-cli.ts) que espelha exatamente o connector web (mesmas tools, mesmo prompt, mesma persistência em `ChatThread`/`ChatMessage`).
+
+**Comando padrão:**
+
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "<prompt aqui>"
+```
+
+Para mensagens longas (ex: prompt com brainstorm completo):
+```bash
+echo "<prompt longo>" > /tmp/prompt.txt
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message-file /tmp/prompt.txt
+```
+
+**Flags úteis:**
+- `--advance-to <stepIndex>` — só usar se precisar trocar de step (ex: voltar pra brainstorm). Ver § "Steps da sessão".
+- O output do CLI inclui: tool calls com input/output preview, texto do Vitor, resumo final.
+
+### Steps da sessão atual
 
 ```
-Claude (este runbook) → produz prompt
-    ↓
-usuário cola prompt no chat web do Vitor
-    ↓
-Vitor responde (cria stories/tasks no banco)
-    ↓
-usuário relata o resultado pra Claude (ou Claude valida via SQL)
-    ↓
-Claude decide próximo prompt
+0 → pre_work       (skipped)
+1 → product_vision
+2 → scope_definition
+3 → personas_journeys
+4 → brainstorm     (94 cards aqui)
+5 → risks_gaps
+6 → prioritization
+7 → technical_specs
+8 → hypotheses
+9 → briefing       ← step atual, onde criar stories+tasks acontece
 ```
 
-### Antes do primeiro prompt
+`currentStep=9` (briefing) é o único que habilita `createTasks: true` no capabilities. **Não voltar pra outro step durante o runbook.**
 
-1. **Descobrir o memberId do usuário** (necessário pra aprovação de módulo via SQL):
-   ```sql
-   SELECT id, name, "userId"
-   FROM public."Member"
-   WHERE name ILIKE '%joão%' OR name ILIKE '%moraes%';
-   ```
+### Antes do primeiro turn
 
-2. **Confirmar projectId do EVZL**:
-   ```sql
-   SELECT id FROM public."Project" WHERE "referenceKey" = 'EVZL';
-   ```
+Rodar 4 queries iniciais via psql (já feito uma vez — valores documentados aqui):
 
-3. **Confirmar estado atual** (rodar todas as 3 queries em § "Mapa de cobertura" abaixo).
+| Item | Valor |
+|---|---|
+| **memberId (João Moraes)** | `dc4d91f5-0d29-453a-b11e-d42dd6a7b158` |
+| **projectId EVZL** | `ccdd93ec-cf7f-4cc3-bce8-d8a359b3f652` |
+| **sessionId** | `58d05f55-57c6-4b26-86c4-9199a8f67f34` |
+| **Status sessão** | `in_progress` |
+| **currentStep** | `9` (briefing) |
 
-4. **Garantir que a sessão está ativa** (não completed):
-   ```sql
-   SELECT id, title, status, "currentStep" FROM public."DesignSession"
-   WHERE id = '58d05f55-57c6-4b26-86c4-9199a8f67f34';
-   ```
-   `status` deve ser `in_progress`.
+Reconfirmar via SQL antes de começar (estado pode ter mudado entre runs):
 
-### Contexto do sistema que o agente precisa saber
+```bash
+source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql "$DIRECT_URL" -t -c "
+SELECT m.name, m.\"approvedAt\" IS NOT NULL AS approved,
+  count(DISTINCT us.id) AS stories,
+  count(DISTINCT t.id) AS tasks,
+  COALESCE(sum(t.\"functionPoints\"), 0) AS fp
+FROM public.\"Module\" m
+LEFT JOIN public.\"UserStory\" us ON us.\"moduleId\" = m.id
+LEFT JOIN public.\"Task\" t ON t.\"userStoryId\" = us.id
+JOIN public.\"Project\" p ON p.id = m.\"projectId\"
+WHERE p.\"referenceKey\" = 'EVZL'
+GROUP BY m.name, m.\"approvedAt\"
+ORDER BY m.name;
+"
+```
 
-- **Refs de tasks são `<KEY>-T-NNN`** (ex: `EVZL-T-001`) **desde a criação**, status flutua draft→backlog→todo→… mas a ref nunca muda.
+### Contexto do sistema (essencial)
+
+- **Refs de tasks são `<KEY>-T-NNN`** (ex: `EVZL-T-001`) **desde a criação**. Status flutua draft→backlog→todo→… mas a ref nunca muda.
 - **Vitor cria tasks via tool `create_task`** com `userStoryId` obrigatório. Tasks nascem em `status='draft'`.
-- **Aprovar módulo** (UI ou SQL — ver § Fase D) flipa `Module.approvedAt` E muda tasks `draft → backlog` em massa via [promoteTasksForModule](../src/lib/dal/story-hierarchy.ts).
+- **Aprovar módulo** flipa `Module.approvedAt` E muda tasks `draft → backlog` em massa via [promoteTasksForModule](../src/lib/dal/story-hierarchy.ts). Pode ser feito via UI ou SQL direto (ver § Fase D).
 - **Dependências** vivem em `TaskDependency` com `kind ∈ {blocks, relates_to}`. `blocks` tem cycle detection no DB. `relates_to` é informativo.
-- **Brainstorm** é o `stepKey='brainstorm'` da sessão, `data->'solutions'` é array de 94 cards. Cada card tem `id`, `title` (com tag `[MODULO][PERSONA]`), `userFlows`, `keyScreens`, `howItSolves`, `painPointRef`, `targetPersona`, `technicalNotes`. Vitor lê via tool `get_step_data('brainstorm')`.
-- **Prompt do Vitor**: ver [src/lib/agent/prompt.ts](../src/lib/agent/prompt.ts). Sub-fases relevantes pra este runbook: `module_discovery`, `story_tree`, `task_breakdown`.
+- **Brainstorm** é `stepKey='brainstorm'` da sessão, `data->'solutions'` é array de 94 cards. Cada card tem `id`, `title` (com tag `[MODULO][PERSONA]`), `userFlows`, `keyScreens`, `howItSolves`, `painPointRef`, `targetPersona`, `technicalNotes`. Vitor lê via tool `get_step_data('brainstorm')`.
+- **Prompt do Vitor**: [src/lib/agent/prompt.ts](../src/lib/agent/prompt.ts). Sub-fases: `module_discovery`, `story_tree`, `task_breakdown`.
 
-### Quando intervir manualmente
+### Quando interromper o loop e pedir input do usuário
 
-Vitor é capaz de conduzir sozinho a maior parte. Intervenha quando:
-- Ele propor mais de 8 stories num módulo (granularidade errada — pedir agrupamento)
-- Ele criar task com FP=null ou title começando com prefixo de camada (`Frontend:`, `Backend:`)
-- Ele citar UUID em vez de ref textual em `dependsOn`
-- Ele tentar criar antes de você confirmar (Fase B)
+Apesar de automatizado, há decisões que **podem** requerer input humano. No modo "100% autônomo", o orquestrador toma essas decisões com base em contexto do projeto (design session, brainstorm, módulos já aprovados). Pause apenas quando:
+
+- **Vitor produzir output anômalo repetido** (granularidade errada após 2+ turns, alucinação grave, FP=null sistemático).
+- **Conflito interno** (ex: 2 módulos têm o mesmo nome, ou uma story já aprovada precisa ser refeita).
+- **Operação destrutiva** que sai do happy path (ex: renomear módulo já aprovado).
+
+Decisões que **NÃO** precisam pausar em modo autônomo (orquestrador decide):
+- Renomear/criar módulo proposto pelo Vitor (ex: KYC vs PERFIL_PRESTADOR).
+- Unificar/separar módulos (ex: SOLICITACAO_PAGAMENTO + FINANCEIRO_DO_PRESTADOR).
+- Justificar card como fora-de-escopo MVP (com base em prioritization/MoSCoW da própria sessão).
+
+**Regra geral:** se a decisão pode ser inferida do brainstorm/prioritization/personas da sessão, decida. Senão, pause.
 
 ### Comportamento esperado em erro
 
 - **Refs órfãs em `dependsOn`**: Vitor retorna `error: "Refs de dependsOn nao encontradas..."` — ele se recupera sozinho.
 - **23505 (UNIQUE collision em ref)**: handled internamente com retry de 5 tentativas.
-- **Cycle detection**: Vitor detecta antes de chamar a tool (ele tem o grafo em memória da batch); caso passe, o trigger do DB rejeita.
+- **Cycle detection**: Vitor detecta antes de chamar a tool; caso passe, o trigger do DB rejeita.
+- **Agent timeout no CLI**: aumentar `timeout` da Bash call. Default 2min é apertado pra batches grandes — usar 5-10min.
 
 ---
 
@@ -157,39 +235,86 @@ ORDER BY m.name;
 
 Cada módulo passa por 4 fases. Use os prompts abaixo na chat do Vitor (sub-fase `task_breakdown` ou `module_discovery` conforme estado).
 
-### Template por módulo
+### Template por módulo (3 turns + 1 SQL)
 
-#### Fase A — Discovery (se módulo vazio)
+Cada módulo segue uma rotina de **3 turns do Vitor + 1 transação de aprovação SQL**. Substituir `<MODULE_NAME>` e `<TAG>` conforme a seção do módulo.
 
-> "Vitor, vamos trabalhar no módulo **`<MODULE_NAME>`**. Use `get_step_data('brainstorm')` e filtre os cards com tag `[<TAG>]`. Liste os títulos e me proponha as user stories (tipo INVEST) que cobrem cada card. **Não crie nada ainda** — só liste a proposta de stories e quais cards cada uma cobre."
+#### Turn 1 — Discovery (sem criar nada)
 
-#### Fase B — Confirmação humana
-
-Eu vou revisar a lista, dizer "ok pode criar" ou "ajusta X".
-
-#### Fase C — Story creation + task breakdown
-
-> "Pode criar as stories e fazer o task_breakdown completo. Use o fluxo padrão (`create_user_story` → `set_story_refinement(refined)` → `create_task` por story → `set_story_refinement(committed)` no final). Tasks com tags `Front`/`Back`/`Bug`/etc. Dependências inter-story citem refs `EVZL-T-NNN`."
-
-#### Fase D — Aprovação do módulo
-
-Via UI (botão "Aprovar módulo") ou SQL direto:
-
-```sql
-UPDATE public."Module"
-SET "approvedAt" = now(), "approvedBy" = '<member_uuid>', "updatedAt" = now()
-WHERE name = '<MODULE_NAME>'
-  AND "projectId" = (SELECT id FROM public."Project" WHERE "referenceKey" = 'EVZL');
-
--- Promove draft → backlog (refs T-NNN já são estáveis)
-UPDATE public."Task" t
-SET status = 'backlog', "updatedAt" = now()
-WHERE t."userStoryId" IN (
-  SELECT id FROM public."UserStory"
-  WHERE "moduleId" = (SELECT id FROM public."Module" WHERE name = '<MODULE_NAME>')
-)
-AND t.status = 'draft';
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Vamos trabalhar no módulo <MODULE_NAME>. Use get_step_data('brainstorm') e filtre os cards com tag [<TAG>]. Liste títulos dos cards e me proponha as user stories (INVEST) que cobrem cada card. NÃO crie nada ainda — só proposta. Para cada story proposta, indique quais card_ids ela cobre."
 ```
+
+**Validar manualmente o output:**
+- 3-7 stories por módulo (típico)
+- Cada card aparece em ≥1 story
+- Stories no formato "Como {persona}, quero {want}, para que {soThat}"
+- Sem prefixo de camada nos títulos
+
+Se OK → Turn 2. Se não → repetir Turn 1 com correção específica.
+
+#### Turn 2 — Criar stories + task breakdown completo
+
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Aprovado. Crie as stories e faça o task_breakdown completo agora. Fluxo: create_user_story (com moduleId existente do <MODULE_NAME>) → para cada story, create_task em ordem topológica (raízes primeiro) com dependsOn citando refs EVZL-T-NNN retornadas anteriormente → set_story_refinement(committed) ao final de cada story. Tags: Front/Back/Bug/etc. Antes de começar, list_tasks pra ver o que já existe em outros módulos (matching e onboarding) e identificar inter-story deps relates_to."
+```
+
+**Pode ser que precise múltiplos turns** (Vitor pode pausar entre stories). Continue chamando o CLI com mensagens curtas tipo "continue" se ele indicar progresso parcial.
+
+**Validar via SQL após Turn 2:**
+
+```bash
+psql "$DIRECT_URL" -t -c "
+SELECT us.reference, us.title, us.\"refinementStatus\",
+  count(t.id) AS tasks, COALESCE(sum(t.\"functionPoints\"), 0) AS fp
+FROM public.\"UserStory\" us
+JOIN public.\"Module\" m ON m.id = us.\"moduleId\"
+LEFT JOIN public.\"Task\" t ON t.\"userStoryId\" = us.id
+WHERE m.name = '<MODULE_NAME>'
+GROUP BY us.id, us.reference, us.title, us.\"refinementStatus\"
+ORDER BY us.\"createdAt\";
+"
+```
+
+Esperado: todas stories com `refinementStatus='committed'`, ≥2 tasks por story, FP > 0.
+
+#### Turn 3 — Self-audit do módulo (opcional mas recomendado)
+
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Self-audit do módulo <MODULE_NAME>: liste cada card de [<TAG>] no brainstorm e confirme qual story cobre cada um. Algum card não foi coberto? Justifique se for fora-de-escopo MVP. Algum risco visível (story muito grande, task com FP=null, dependência inter-story faltando)?"
+```
+
+#### Aprovação do módulo (endpoint HTTP, NÃO SQL)
+
+**Por que não SQL ad-hoc:** ignora `ModuleActivity`, pula validação de DAL, e — mais importante — não simula o ciclo real do produto, que é "humano clica Aprovar no UI". O endpoint faz tudo numa transação só (set `approvedAt`, promove tasks `draft→backlog`, insere `ModuleActivity` com `type='approved'`).
+
+**Como aprovar:**
+
+1. Pegar o `moduleId` via SQL **read-only**:
+```bash
+source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && \
+psql "$DIRECT_URL" -t -c "
+SELECT id FROM public.\"Module\"
+WHERE name = '<MODULE_NAME>'
+  AND \"projectId\" = 'ccdd93ec-cf7f-4cc3-bce8-d8a359b3f652';
+"
+```
+
+2. Chamar o endpoint:
+```bash
+curl -sS -X POST "http://localhost:3000/api/modules/<MODULE_ID>/approve" \
+  -H "Cookie: $(cat /tmp/vitor-runbook/auth-cookie.txt)" | jq .
+```
+
+3. Validar a resposta — esperado: `{"id":"...","name":"...","approvedAt":"...","promoted":N,"totalFp":NN}`.
+
+**Se o servidor Next não estiver de pé**, levantar com `bun run dev` em background antes de aprovar. Nunca usar SQL como fallback — perde-se Activity, cascade, e o aprendizado do ciclo.
 
 ---
 
@@ -205,16 +330,20 @@ _Pular pra Módulo 2._
 
 ### 2. KYC_VERIFICACAO_DE_PRESTADORES — 4 cards `[PERFIL]`
 
-Cards relevantes (recheck via SQL):
+Cards relevantes:
 - `4gfh9us` Perfil Público do Prestador com Rating Ponderado
 - `6qiftzu` Configuração de Janela de Disponibilidade Semanal
 - `7mnciq9` Dashboard de Performance do Prestador
 - `otghg28` Badge de Prestador Verificado
 
-⚠️ **Observação:** alguns cards `[PERFIL]` parecem mais "perfil do prestador em ops" do que "KYC strict". Ver se faz sentido renomear o módulo pra `PERFIL_PRESTADOR` ou se esses cards vão pra outro lugar (ADMIN_OPERACOES?).
+⚠️ **DECISÃO DE PRODUTO necessária:** alguns cards `[PERFIL]` parecem mais "perfil do prestador em ops" do que "KYC strict". O Turn 1 deve perguntar isso e **pausar pra input do usuário** antes de seguir.
 
-**Prompt fase A:**
-> "Vitor, módulo **`KYC_VERIFICACAO_DE_PRESTADORES`**. `get_step_data('brainstorm')` → filtra `[PERFIL][PRESTADOR]`. Note: o nome do módulo no DB é KYC, mas os cards são sobre perfil público + dashboard. Me diga: (a) os 4 cards cabem nesse módulo ou faz sentido criar um módulo `PERFIL_PRESTADOR` separado? (b) que stories você proporia."
+**Turn 1 — Discovery + decisão:**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Módulo KYC_VERIFICACAO_DE_PRESTADORES. get_step_data('brainstorm') e filtra cards com [PERFIL][PRESTADOR]. Importante: o nome do módulo no DB é KYC, mas pelos títulos os 4 cards parecem mais 'perfil público do prestador'. Me diga: (a) os 4 cards cabem aqui ou faz sentido criar módulo PERFIL_PRESTADOR separado e deixar KYC só pra documentos/facematch? (b) caso B, que cards de outros módulos (ex: [ONBOARDING][PRESTADOR] cards de upload de documento) deveriam migrar pra KYC? (c) propostas de stories pra cada arranjo. NÃO CRIE NADA, só análise."
+```
 
 ---
 
@@ -222,8 +351,12 @@ Cards relevantes (recheck via SQL):
 
 Maior módulo. ~17 cards, ~6-8 stories esperadas.
 
-**Prompt fase A:**
-> "Vitor, módulo **`EXECUCAO_DO_SERVICO`**. `get_step_data('brainstorm')` → filtra `[SERVIÇO]`, `[SERVIÇOS]`, `[HOME]`, `[AVALIAÇÃO]`. Esse é o maior módulo (~17 cards). Agrupa por jornada (busca → solicitação → execução → avaliação) e me propõe ~6-8 stories. Lembre `list_tasks` antes de propor — pode haver coisas em outros módulos que tocam aqui."
+**Turn 1:**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Módulo EXECUCAO_DO_SERVICO (maior módulo, ~17 cards). list_tasks primeiro pra ver o que já existe em outros módulos. get_step_data('brainstorm') → filtra cards com tags [SERVIÇO], [SERVIÇOS], [HOME], [AVALIAÇÃO]. Agrupa por jornada (busca → solicitação → execução → avaliação) e propõe 6-8 stories. Cite quais card_ids cada story cobre. NÃO CRIE NADA."
+```
 
 ---
 
@@ -231,37 +364,53 @@ Maior módulo. ~17 cards, ~6-8 stories esperadas.
 
 Cards: 2 `[SOLICITAÇÃO]` + 3 `[FINANCEIRO]` = 5 cards.
 
-⚠️ **Decisão de produto:** unificar num único módulo `FINANCEIRO` (mais simples, 5 cards é pouco) ou manter separado (cliente paga vs prestador recebe)?
+⚠️ **DECISÃO DE PRODUTO necessária:** unificar num único módulo `FINANCEIRO` (mais simples, 5 cards) ou manter separado (cliente paga vs prestador recebe)?
 
-**Prompt fase A:**
-> "Vitor, módulos **`SOLICITACAO_PAGAMENTO`** e **`FINANCEIRO_DO_PRESTADOR`**. `get_step_data('brainstorm')` → filtra `[SOLICITAÇÃO]` e `[FINANCEIRO]`. Me diga: (a) faz sentido manter separado? Os 2 módulos são opostos da mesma transação (cliente paga, prestador recebe). (b) Stories propostas pra cada arranjo."
+**Turn 1 — Discovery + decisão:**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Módulos SOLICITACAO_PAGAMENTO e FINANCEIRO_DO_PRESTADOR. get_step_data('brainstorm') e filtra [SOLICITAÇÃO] e [FINANCEIRO]. São 5 cards. Decisão de produto: (a) manter separados (cliente paga vs prestador recebe — 2 atores diferentes, fluxos diferentes)? (b) unificar em FINANCEIRO_TRANSACOES (são opostos da mesma transação)? Me dá os pros/cons e propõe stories pra cada cenário. NÃO CRIE NADA."
+```
 
 ---
 
 ### 5. COMUNICACAO_NOTIFICACOES — 6 `[NOTIFICAÇÃO]`
 
-Módulo transversal. Vitor já viu tasks dos outros módulos via `list_tasks`.
+Módulo **transversal**. Stories aqui terão `relates_to` apontando pra tasks de outros módulos (ex: notificação dispara em "matching escolhido", "pagamento aprovado").
 
-**Prompt fase A:**
-> "Vitor, módulo **`COMUNICACAO_NOTIFICACOES`** (transversal). `get_step_data('brainstorm')` → `[NOTIFICAÇÃO]`. Como esse módulo serve os outros, faça `list_tasks` antes — algumas tasks de outros módulos já podem implicar notificações (ex: 'avisar prestador que foi escolhido'). Identifique deps `relates_to` quando disparar de outra story. Stories propostas?"
+**Turn 1:**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Módulo COMUNICACAO_NOTIFICACOES (transversal — serve os outros). list_tasks primeiro pra mapear gatilhos de notificação que já existem em tasks de outros módulos (ex: 'avisar prestador que foi escolhido', 'notificar cliente sobre pagamento'). get_step_data('brainstorm') e filtra [NOTIFICAÇÃO]. Propõe stories agrupando por canal (push/email/in-app) ou por gatilho — você decide o que faz mais sentido. Cada story deve listar quais tasks de outros módulos vão ter dep relates_to apontando pra cá. NÃO CRIE NADA."
+```
 
 ---
 
 ### 6. ADMIN_OPERACOES — 6 `[BACKOFFICE]` + 1 `[SUPORTE]`
 
-Último módulo. Ferramentas internas (aprovar prestador, ver financeiro, etc).
+Último módulo. Ferramentas internas (aprovar prestador, ver financeiro, suporte).
 
-**Prompt fase A:**
-> "Vitor, módulo **`ADMIN_OPERACOES`** (backoffice/ops). `get_step_data('brainstorm')` → `[BACKOFFICE]` e `[SUPORTE]`. Esse é o último — aproveita pra fechar gaps. Stories propostas?"
+**Turn 1:**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Módulo ADMIN_OPERACOES (backoffice/ops, último módulo). get_step_data('brainstorm') e filtra [BACKOFFICE] e [SUPORTE] (7 cards). Como é o último, faça também list_tasks pra ver se há gaps em ações ops que outros módulos pressupõem mas não têm UI (ex: 'aprovar prestador KYC' precisa de tela admin). Propõe stories. NÃO CRIE NADA."
+```
 
 ---
 
 ### 7. Cards-órfãos — distribuir
 
-Cards `[GERAL]` (2), `[GROWTH]` (1) — decidir caso a caso. Provável que `GERAL` seja transversal (UI shell, navegação) e `GROWTH` seja fora-de-escopo MVP.
+Cards `[GERAL]` (2), `[GROWTH]` (1), `[SUPORTE]` (1) — decidir caso a caso. Pode ter sido absorvido nos módulos anteriores; rodar **só se sobrar gap após módulos 1-6**.
 
-**Prompt:**
-> "Vitor, restaram 4 cards: 2 `[GERAL]`, 1 `[SUPORTE]`, 1 `[GROWTH]`. `get_step_data('brainstorm')` e leia esses 4 — pra cada um me diga: (a) pertence a qual módulo já existente, (b) é fora-de-escopo MVP (justifique). Não crie story ainda."
+**Turn 1:**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "Restam 4 cards órfãos: 2 [GERAL], 1 [SUPORTE], 1 [GROWTH]. get_step_data('brainstorm') e leia esses 4. Para cada um: (a) já está coberto por alguma story existente? (list_tasks pra confirmar), (b) pertence a qual módulo existente, (c) é fora-de-escopo MVP (justifique). Não crie nada."
+```
 
 ---
 
@@ -465,102 +614,150 @@ Marcar `N/M` onde N = cobertos, M = total no módulo.
 
 ---
 
-## Como rodar este runbook (instruções pro próximo agente)
+## Como rodar este runbook (instruções pro agente CLI)
 
-> Esta seção é o "manual" pra um agente Claude novo, com contexto limpo, executar o runbook.
+> Esta seção é o "manual" pra um agente Claude novo, com contexto limpo, executar o runbook **automatizado via CLI**.
 
-### Setup (1 vez no início da sessão)
+### Modelo mental
 
-1. **Ler este runbook inteiro**, incluindo §Pré-requisitos.
-2. Rodar as 3 queries de § "Mapa de cobertura" pra confirmar estado atual.
-3. Identificar a "fronteira" — primeiro módulo na ordem que ainda não está aprovado.
-4. **Anunciar o plano ao usuário**: "Vou te conduzir do módulo X ao módulo Y, em ordem. Pra cada módulo, você vai colar prompts no chat do Vitor e me reportar o resultado. Eu valido via SQL e geramos próximo prompt. Topa?"
-
-### Loop por módulo (repetir 6x, na ordem § "Ordem dos módulos")
-
-**Fase A — gerar prompt de discovery:**
+Você é o **orquestrador**. Vitor é o **executor**. Cada chamada do CLI é 1 turn do Vitor — ele lê histórico do thread, executa tools, persiste mensagem assistente. Você dispara a próxima chamada baseado no que ele fez.
 
 ```
-Pegar o template do módulo atual (já tem prompt pronto na seção dele).
-Mostrar pro usuário, pedir pra colar no chat web do Vitor.
+você (Claude orquestrador)
+   ↓ Bash(vitor-cli.ts --message "...")
+Vitor (subprocess, agent SDK)
+   ↓ tool calls + persiste em ChatThread
+banco (postgres)
+   ↑ você valida via SQL
+você decide próximo turn ou avança módulo
 ```
 
-**Fase B — receber resposta da discovery:**
+Não há humano-no-loop **exceto** quando uma decisão muda escopo de produto (ver § "Quando interromper o loop").
 
+### Setup (1 vez no início)
+
+1. Ler este runbook inteiro, especialmente §Pré-requisitos e §Ordem dos módulos.
+2. Rodar a query do estado atual (último bloco do §Pré-requisitos) pra confirmar onde está.
+3. Identificar a "fronteira" — primeiro módulo na ordem que tem `approved=f`.
+4. Anunciar plano ao usuário em 1 frase: "Vou rodar do módulo X ao Y via CLI. ~Z minutos. Confirma que pode rodar autonomamente?"
+5. Aguardar OK do usuário.
+
+### Loop por módulo (repetir 6x)
+
+Para cada módulo na ordem (§ "Ordem dos módulos"):
+
+**Step 1 — Turn 1 (Discovery)**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "<prompt da Fase A do módulo>"
 ```
-Usuário cola o que Vitor respondeu.
-Você analisa:
-  - Stories propostas fazem sentido pra cobertura dos cards?
-  - Granularidade ok (3-7 stories por módulo no típico)?
-  - Cobre todos os cards do módulo?
+Timeout: 5min (`timeout: 300000`).
 
-Se sim: dizer ao usuário "ok pode mandar Vitor criar — cola o prompt da Fase C".
-Se não: refinar o prompt, pedir pra Vitor reagrupar/dividir.
+Ler output: stories propostas, cobertura de cards.
+
+**Step 2 — Decidir:**
+- Se proposta OK (granularidade 3-7 stories, cards cobertos, INVEST seguido) → Step 3.
+- Se borderline (1-2 ajustes pequenos) → outro turn pedindo refino.
+- Se ruim (5+ problemas, alucinação, mudança de escopo) → **pausar e perguntar usuário**.
+
+**Step 3 — Turn 2 (Criação)**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "<prompt da Fase C — criação>"
+```
+Timeout: 10min (`timeout: 600000`) — pode ser batch grande.
+
+Validar via SQL (query de § Turn 2). Se Vitor parou no meio, mandar "continue".
+
+**Step 4 — Turn 3 (Self-audit, opcional)**
+```bash
+bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+  --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+  --message "<prompt do self-audit>"
 ```
 
-**Fase C — task breakdown:**
+Se identificar gaps → mandar criar stories complementares antes de aprovar.
 
+**Step 5 — Aprovação via endpoint HTTP**
+
+Não rodar SQL de mutação. Disparar o endpoint `POST /api/modules/[id]/approve` (ver seção "Aprovação do módulo"). Esse endpoint cascateia: marca módulo aprovado + promove tasks `draft→backlog` + insere `ModuleActivity`.
+
+Validar:
+```bash
+psql "$DIRECT_URL" -t -c "
+SELECT m.name, m.\"approvedAt\" IS NOT NULL AS approved,
+  count(t.id) FILTER (WHERE t.status='backlog') AS in_backlog,
+  count(t.id) FILTER (WHERE t.status='draft') AS still_draft
+FROM public.\"Module\" m
+LEFT JOIN public.\"UserStory\" us ON us.\"moduleId\" = m.id
+LEFT JOIN public.\"Task\" t ON t.\"userStoryId\" = us.id
+WHERE m.name = '<MODULE_NAME>'
+GROUP BY m.name, m.\"approvedAt\";
+"
 ```
-Mostrar prompt da Fase C (template padrão).
-Usuário cola, Vitor cria stories + tasks com deps.
-Usuário relata progresso (ex: "criou 5 stories, 18 tasks, 95 FP").
-```
+Esperado: `approved=t`, `still_draft=0`.
 
-**Fase D — aprovar:**
+**Step 6 — Capturar métricas**
 
-```
-Mostrar query SQL de aprovação (substituindo <MODULE_NAME> e <member_uuid>).
-Usuário roda OU usa UI.
+Rodar query de § "Métricas a coletar". Preencher uma linha na tabela. Adicionar observação curta na seção "Aprendizados pro Alpha-orquestrador".
 
-Validar via SQL:
-  SELECT m."approvedAt", count(t.id) FILTER (WHERE t.status='backlog')
-  FROM "Module" m JOIN "UserStory" us ON us."moduleId"=m.id
-  JOIN "Task" t ON t."userStoryId"=us.id
-  WHERE m.name = '<MODULE_NAME>'
-  GROUP BY m."approvedAt";
+**Step 7 — Atualizar runbook**
 
-Esperado: approvedAt IS NOT NULL, todas tasks em backlog (status flipped).
-```
+Marcar o módulo como ✅ DONE na § "Ordem dos módulos" e na tabela "Cobertura por módulo".
 
-**Pós-fase D — capturar métrica:**
-
-```
-Rodar query da seção "Métricas a coletar".
-Preencher a linha do módulo na tabela.
-Anotar observações em "§ Aprendizados pro Alpha-orquestrador".
-```
+→ Próximo módulo.
 
 ### Audit final (após 6º módulo aprovado)
 
 1. Rodar todas queries da § "Audit final" e preencher tabelas.
-2. Pedir ao Vitor um sweep final de gaps:
-   > "Vitor, agora todos os módulos estão aprovados. Faça `get_step_data('brainstorm')` e cruze cada um dos 56 cards únicos contra as stories existentes (`list_tasks` + `list_stories`). Me dê: (a) cards 100% cobertos, (b) cards parcialmente cobertos, (c) cards não-cobertos. Para os não-cobertos, sugira: criar story complementar OU justificar fora-de-escopo MVP."
 
-3. Preencher seção "Cards não-cobertos" e "Cards fora-de-escopo justificados".
-
-4. **Concluir a sessão**:
-   ```sql
-   UPDATE public."DesignSession"
-   SET status = 'completed', "completedAt" = now(), "updatedAt" = now()
-   WHERE id = '58d05f55-57c6-4b26-86c4-9199a8f67f34';
+2. Sweep final via Vitor:
+   ```bash
+   bun x tsx --require ./scripts/_server-only-shim.cjs scripts/vitor-cli.ts \
+     --session 58d05f55-57c6-4b26-86c4-9199a8f67f34 \
+     --message "Audit final: todos os módulos estão aprovados. get_step_data('brainstorm') + list_tasks. Cruze cada um dos ~56 cards únicos contra as stories existentes. Me dê output em 3 listas: (a) cards 100% cobertos com refs T-NNN, (b) cards parcialmente cobertos com gaps, (c) cards não-cobertos. Para não-cobertos, classifique: 'criar story complementar' OU 'fora-de-escopo MVP justificado'."
    ```
 
-5. Preencher § "Aprendizados pro Alpha-orquestrador" com tudo que foi observado.
+3. Preencher seções "Cards não-cobertos" e "Cards fora-de-escopo justificados".
+
+4. **Se houver não-cobertos que devem ser criados:** rodar mais 1 turn no Vitor pra completar.
+
+5. **Concluir a sessão:**
+   ```bash
+   psql "$DIRECT_URL" -c "
+   UPDATE public.\"DesignSession\"
+   SET status = 'completed', \"completedAt\" = now(), \"updatedAt\" = now()
+   WHERE id = '58d05f55-57c6-4b26-86c4-9199a8f67f34';
+   "
+   ```
+
+6. Preencher § "Aprendizados pro Alpha-orquestrador" com **observações concretas** capturadas durante a execução. Se ficou vazio, você não tava prestando atenção — relê os outputs dos CLI calls e extrai padrões.
 
 ### Critério de "Done" (quando parar)
 
 - [ ] 8/8 módulos com `approvedAt IS NOT NULL`
-- [ ] 0 tasks com status='draft' no projeto EVZL
-- [ ] Cobertura ≥ 90% dos cards do brainstorm (ou justificativa de fora-de-escopo pros restantes)
-- [ ] Tabela "Métricas a coletar" preenchida
+- [ ] 0 tasks com `status='draft'` no projeto EVZL
+- [ ] Cobertura ≥ 90% dos cards do brainstorm (ou justificativa fora-de-escopo)
+- [ ] Tabela "Métricas a coletar por módulo" preenchida
 - [ ] Tabelas "Audit final" preenchidas
 - [ ] Seção "Aprendizados pro Alpha-orquestrador" preenchida com observações concretas
-- [ ] Sessão `58d05f55...` com status='completed'
+- [ ] Sessão `58d05f55...` com `status='completed'`
 
-Quando todos esses ✅, **comitar o runbook atualizado**:
+Quando todos ✅, comitar:
 ```bash
 bash scripts/sync-main.sh -m "ZRD-JM-XX: docs — runbook EVZL completo + aprendizados Alpha"
 ```
+
+### Heurísticas operacionais
+
+- **Quando rodar um turn longo:** `timeout: 600000` (10min) é ok. Vitor com 30+ tool calls em batch pode levar 5-7min reais.
+- **Output muito longo no CLI:** redirecionar pra arquivo e ler com Read tool: `... 2>&1 | tee /tmp/turn-out.log`.
+- **Vitor parar no meio do batch:** mandar "continue" como mensagem. Ele tem o histórico.
+- **Erro de cycle detection:** Vitor já se recupera — só ler o erro e ver se faz sentido.
+- **Tokens custos:** ~50k tokens por turn rico. Self-audit ~30k. ~6 módulos × 3 turns × 50k = ~900k tokens total. Custo aproximado em Sonnet 4.6: ~$3-5.
+- **Antes do primeiro turn de cada módulo:** rodar `list_tasks` e `list_stories` mentalmente via SQL pra Vitor saber o estado. Ele tem `list_tasks` como tool, mas você pode injetar contexto adicional no prompt se identificar.
 
 ---
 

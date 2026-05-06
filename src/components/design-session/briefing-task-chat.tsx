@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/ui/markdown";
 import { ToolCallCard } from "./tool-call-card";
 import { VitorBadge } from "./vitor-badge";
-import { Send, Square, Sparkles } from "lucide-react";
+import { Send, Square, Sparkles, ArrowDown } from "lucide-react";
 
 function mapToolState(state: string): "partial-call" | "call" | "result" {
   if (state === "input-streaming") return "partial-call";
@@ -33,8 +33,6 @@ export function BriefingTaskChat({
    *  Gerar tasks) without duplicating the streaming/transport stack. */
   onSendReady?: (sendMessage: (text: string) => void) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [inputText, setInputText] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [existingTaskCount, setExistingTaskCount] = useState<number | null>(null);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
@@ -149,15 +147,12 @@ export function BriefingTaskChat({
   // Load older messages on demand. Each click fetches a chunk of 30 from
   // the shared `web` thread, ignoring the briefing marker so the user
   // can see what was discussed in pre-work / vision / brainstorm.
-  // Preserves visual scroll position so the user doesn't "lose their spot".
+  // O ResizeObserver do StickToBottom só ancora ao fim quando o usuário
+  // já está colado lá; quando prependamos (load more) com o usuário no topo,
+  // o navegador preserva a posição visual via overflow-anchor por default.
   const loadMoreHistory = async () => {
     if (loadingMore) return;
     setLoadingMore(true);
-    // Pin scroll-from-bottom so prepending keeps the visible content stable.
-    stickToBottomRef.current = false;
-    const scrollEl = scrollRef.current;
-    const beforeScrollHeight = scrollEl?.scrollHeight ?? 0;
-    const beforeScrollTop = scrollEl?.scrollTop ?? 0;
     try {
       const params = new URLSearchParams({ channel: "web", limit: "30" });
       if (oldestLoadedAtRef.current) params.set("before", oldestLoadedAtRef.current);
@@ -190,172 +185,177 @@ export function BriefingTaskChat({
       setMessages((current) => [current[0], ...olderMsgs, ...current.slice(1)]);
       oldestLoadedAtRef.current = result.messages[0]?.createdAt ?? oldestLoadedAtRef.current;
       setHasMoreHistory(result.hasMore);
-      // Restore scroll position on next paint — virtualizer will have re-laid out.
-      requestAnimationFrame(() => {
-        const el = scrollRef.current;
-        if (!el) return;
-        const delta = el.scrollHeight - beforeScrollHeight;
-        el.scrollTop = beforeScrollTop + delta;
-      });
     } finally {
       setLoadingMore(false);
     }
   };
 
-  // Virtualizer pra renderizar so mensagens visiveis
   const showAnalyzing =
     isStreaming &&
     messages.length > 0 &&
     messages[messages.length - 1].role === "user";
-  const itemCount = messages.length + (showAnalyzing ? 1 : 0);
-  const stickToBottomRef = useRef(true);
 
-  const virtualizer = useVirtualizer({
-    count: itemCount,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 140,
-    overscan: 4,
-    measureElement:
-      typeof window !== "undefined" && navigator.userAgent.indexOf("Firefox") === -1
-        ? (el) => el?.getBoundingClientRect().height
-        : undefined,
-  });
+  return (
+    <div className="surface flex flex-col h-[60vh] min-h-[480px] overflow-hidden">
+      {/* Messages.
+          - `initial="instant"`: no primeiro paint o ResizeObserver ancora no
+            fim sem animação visível, então refresh já abre na última mensagem.
+          - `resize="smooth"`: durante streaming, novas mensagens fazem scroll
+            suave acompanhar o conteúdo crescendo.
+          - Não virtualizamos: design sessions têm dezenas-centenas de
+            mensagens; DOM completo é tranquilo e elimina os bugs de
+            scroll-to-bottom dos virtualizers com itens dinâmicos. */}
+      <div className="relative flex-1 min-h-0">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-card to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-6 bg-gradient-to-t from-card to-transparent" />
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      stickToBottomRef.current = distFromBottom < 80;
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+        <StickToBottom
+          className="h-full"
+          initial="instant"
+          resize="smooth"
+        >
+          <StickToBottom.Content className="px-4 pb-4">
+            {hasMoreHistory && (
+              <div className="flex justify-center py-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={loadingMore}
+                  onClick={loadMoreHistory}
+                  className="text-xs text-muted-foreground hover:text-foreground gap-1.5 h-7"
+                >
+                  {loadingMore ? (
+                    <Sparkles className="h-3 w-3 animate-pulse" />
+                  ) : null}
+                  {loadingMore ? "Carregando..." : "Carregar mensagens anteriores"}
+                </Button>
+              </div>
+            )}
 
-  useLayoutEffect(() => {
-    if (itemCount === 0) return;
-    if (!stickToBottomRef.current) return;
-    virtualizer.scrollToIndex(itemCount - 1, { align: "end" });
-  }, [itemCount, virtualizer, messages]);
+            <div className="space-y-4">
+              {messages.map((msg) => (
+                <MessageBubble key={msg.id} message={msg} />
+              ))}
+              {showAnalyzing && (
+                <div className="flex justify-start">
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/[5%] px-2.5 py-1">
+                    <Sparkles className="h-3 w-3 text-primary animate-pulse" />
+                    <span className="shimmer-text text-xs font-medium">
+                      Analisando briefing...
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </StickToBottom.Content>
 
-  const virtualItems = virtualizer.getVirtualItems();
-  const totalSize = virtualizer.getTotalSize();
+          <ScrollToBottomFab />
+        </StickToBottom>
+      </div>
+
+      <ChatInput
+        isStreaming={isStreaming}
+        existingTaskCount={existingTaskCount}
+        onSend={(text) => sendMessage({ text })}
+        onStop={stop}
+      />
+    </div>
+  );
+}
+
+// Input isolado: o estado do textarea fica aqui, então digitar NÃO re-renderiza
+// o parent (e portanto não re-renderiza a lista de mensagens). Sem isso, cada
+// keystroke faz react-markdown reparsar todas as bolhas — trava em chats grandes.
+function ChatInput({
+  isStreaming,
+  existingTaskCount,
+  onSend,
+  onStop,
+}: {
+  isStreaming: boolean;
+  existingTaskCount: number | null;
+  onSend: (text: string) => void;
+  onStop: () => void;
+}) {
+  const [inputText, setInputText] = useState("");
 
   const handleSend = () => {
     if (!inputText.trim() || isStreaming) return;
     const text = inputText.trim();
     setInputText("");
-    sendMessage({ text });
+    onSend(text);
   };
 
   return (
-    <div className="surface flex flex-col h-[60vh] min-h-[480px] overflow-hidden">
-      {/* Messages */}
-      <div className="relative flex-1 min-h-0">
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-card to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-6 bg-gradient-to-t from-card to-transparent" />
-
-        <div
-          ref={scrollRef}
-          className="h-full overflow-y-auto scroll-smooth"
-        >
-          {hasMoreHistory && (
-            <div className="flex justify-center py-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={loadingMore}
-                onClick={loadMoreHistory}
-                className="text-xs text-muted-foreground hover:text-foreground gap-1.5 h-7"
-              >
-                {loadingMore ? (
-                  <Sparkles className="h-3 w-3 animate-pulse" />
-                ) : null}
-                {loadingMore ? "Carregando..." : "Carregar mensagens anteriores"}
-              </Button>
-            </div>
-          )}
-          <div
-            className="relative w-full"
-            style={{ height: `${totalSize}px` }}
-          >
-            {virtualItems.map((virtualItem) => {
-              const idx = virtualItem.index;
-              const isAnalyzingItem = showAnalyzing && idx === messages.length;
-              const msg = !isAnalyzingItem ? messages[idx] : null;
-
-              return (
-                <div
-                  key={virtualItem.key}
-                  ref={virtualizer.measureElement}
-                  data-index={idx}
-                  className="absolute left-0 right-0 px-4 pb-4"
-                  style={{ transform: `translateY(${virtualItem.start}px)` }}
-                >
-                  {isAnalyzingItem ? (
-                    <div className="flex justify-start">
-                      <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/[5%] px-2.5 py-1">
-                        <Sparkles className="h-3 w-3 text-primary animate-pulse" />
-                        <span className="shimmer-text text-xs font-medium">
-                          Analisando briefing...
-                        </span>
-                      </div>
-                    </div>
-                  ) : msg ? (
-                    <MessageBubble message={msg} />
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Input */}
-      <div className="flex items-end gap-2 px-4 py-3 border-t border-border/50">
-        <Textarea
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder={
-            existingTaskCount && existingTaskCount > 0
-              ? 'Refine: "Quebre a VLD-042 em duas", "A regra X mudou"...'
-              : 'Liste os módulos que você identifica no brainstorm…'
+    <div className="flex items-end gap-2 px-4 py-3 border-t border-border/50">
+      <Textarea
+        value={inputText}
+        onChange={(e) => setInputText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
           }
-          rows={1}
-          className="resize-none text-sm min-h-[40px] max-h-[120px]"
-          disabled={isStreaming}
-        />
-        {isStreaming ? (
-          <Button
-            size="icon"
-            variant="destructive"
-            className="h-10 w-10 shrink-0 animate-pulse"
-            onClick={stop}
-          >
-            <Square className="h-3.5 w-3.5" />
-          </Button>
-        ) : (
-          <Button
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            disabled={!inputText.trim()}
-            onClick={handleSend}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
+        }}
+        placeholder={
+          existingTaskCount && existingTaskCount > 0
+            ? 'Refine: "Quebre a VLD-042 em duas", "A regra X mudou"...'
+            : 'Liste os módulos que você identifica no brainstorm…'
+        }
+        rows={1}
+        className="resize-none text-sm min-h-[40px] max-h-[120px]"
+        disabled={isStreaming}
+      />
+      {isStreaming ? (
+        <Button
+          size="icon"
+          variant="destructive"
+          className="h-10 w-10 shrink-0 animate-pulse"
+          onClick={onStop}
+        >
+          <Square className="h-3.5 w-3.5" />
+        </Button>
+      ) : (
+        <Button
+          size="icon"
+          className="h-10 w-10 shrink-0"
+          disabled={!inputText.trim()}
+          onClick={handleSend}
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+      )}
     </div>
   );
 }
 
-function MessageBubble({ message }: { message: UIMessage }) {
+// FAB que aparece quando o usuário rolou pra cima — clique cola de volta no fim.
+// Padrão clássico de chats AI (ChatGPT, Claude, bolt.new).
+function ScrollToBottomFab() {
+  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  if (isAtBottom) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => scrollToBottom()}
+      className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card shadow-md hover:bg-muted transition-colors"
+      aria-label="Ir para o fim"
+    >
+      <ArrowDown className="h-4 w-4" />
+    </button>
+  );
+}
+
+// Memoizado: cada keystroke no input dispara render do parent. Sem memo,
+// react-markdown re-parsea o conteúdo de TODAS as mensagens a cada tecla,
+// o que trava o navegador em chats com 50+ mensagens longas.
+// `useChat` mantém a referência de mensagens antigas estável — só a última
+// (em streaming) muda de identidade — então shallow compare resolve.
+const MessageBubble = memo(function MessageBubble({
+  message,
+}: {
+  message: UIMessage;
+}) {
   const isUser = message.role === "user";
 
   return (
@@ -398,4 +398,4 @@ function MessageBubble({ message }: { message: UIMessage }) {
       </div>
     </div>
   );
-}
+});
