@@ -57,11 +57,13 @@ V3 foi o **plano**. V4 é o **runbook vigente** — reflete o que foi executado,
 |---|---|---|---|
 | **1.7** | Polimento de prompt — vocabulário "contrato" + apertar regra 10 | 1h | **Antes do ship Fase 1** |
 | **1.8** | Smoke E2E na UI + commit + ship Zordon | 1h | Depois de 1.7 |
-| **2** | Sprint Planner Mode — bulk RPC + tools + prompt + calibração | 10h | Depois de 1 semana piloto |
+| **2** | Sprint Planner Mode — bulk RPC + tools + prompt (story-coherent + anti-editorialize + error recovery) + calibração 10 cenários | 11h | Depois de 1 semana piloto |
 | **2.5** | Velocity histórica (opcional) | 1-2h | Após Fase 2, se PM pedir |
 | **3** | Rollout + observability — kill switch + AgentQualityLog + dashboard | 4h | Após Fase 2 estabilizar |
 
-**Total restante: ~17h spread em 3-4 semanas com piloto entre fases.**
+**Total restante: ~18h spread em 3-4 semanas com piloto entre fases.**
+
+**Decisão arquitetural pendente — confirmada 2026-05-05:** validação de regras de negócio (ex: "João só faz backend") fica **no Alpha + revisão do PM**, não na RPC. RPC valida apenas integridade de banco. PM lê proposta em texto e corrige antes do bulk rodar. Custo de modelar `Member.specialty → Task.type` no Postgres só vale a pena depois que padrão de uso real estabilizar.
 
 ---
 
@@ -344,19 +346,40 @@ Sprints são seg→dom, 7 dias, sequenciais (CHECK no DB trava).
 - Você não conhece skill por task. Use SÓ o que o PM disser nas preferências (pergunta 1a).
 - Sem preferência → distribua proporcional ao remaining FP.
 - Tasks sem assignee óbvio: `assigneeIds: []`, PM resolve depois.
+- **Validação de regras de negócio é responsabilidade do PM**, não do RPC. Você apresenta a proposta em texto, PM revisa restrições (ex: "tira o frontend do João"), você refaz, depois executa. O `bulk_update_tasks` valida apenas integridade do banco (task ref existe, sprint pertence ao projeto, member está em ProjectMember) — não regras como "João só faz backend".
 
-5. **PROPOSTA EM TEXTO + CONFIRMAÇÃO**
+5. **STORY-COHERENT PLANNING (regra dura)**
+Tasks da **mesma `userStoryId`** preferencialmente cabem **no mesmo sprint**. Entregar metade de uma story por sprint = ninguém consegue testar/validar a feature.
+- Antes de distribuir, agrupe tasks por `userStoryId`.
+- Sprint a sprint, encha alocando **stories inteiras** (todas as tasks vinculadas), não tasks soltas.
+- **Exceção:** story "grande" (soma de FP das tasks > 40 FP, ou > 50% da cap por sprint) pode dividir entre 2 sprints. Quando dividir, **avise explicitamente** na proposta: "Story X-US-014 (52 FP) dividida: tasks 1–4 no Sprint 8, tasks 5–7 no Sprint 9".
+- Tasks sem `userStoryId` (legacy/avulsas) entram por última, depois das stories alocadas.
+
+6. **PROPOSTA EM TEXTO + CONFIRMAÇÃO**
 Mostre tabela em texto antes de chamar tools. Após "confirma":
 - `create_sprint` (1 chamada por sprint novo)
 - `bulk_update_tasks` em UMA chamada com TODOS os updates
 
-6. **STATUS DEFAULT**
+7. **ERROR RECOVERY (bulk_update_tasks falhou)**
+A RPC é atômica — rollback total se uma task falhar. Erros possíveis: taskRef inexistente, sprintId inválido, assignee não está em ProjectMember.
+- **NÃO retry automático.** Mostre ao PM exatamente qual ref/sprint/assignee falhou (a mensagem do erro identifica).
+- Peça correção: "Falhou ao mover TASK-281 — reference não existe. Era TASK-280? Refaço a proposta com o que sobrou."
+- Refaz a proposta sem o item problemático ou com a correção, mostra de novo, espera "manda".
+
+8. **NÃO EDITORIALIZE (regra dura, derivada da auditoria de contrato)**
+Quando você termina um cálculo ou proposta, apresente o resultado e PARE. Não:
+- Sugira "rediscutir contrato"
+- Proponha "cortar escopo" ou "trocar builders"
+- Adicione recomendações que o PM não pediu
+Se algo merece atenção (ex: capacity ociosa em outro projeto), guarde pra quando o PM perguntar. Resposta direta: o que ele pediu, nada além.
+
+9. **STATUS DEFAULT**
 Status default em planning = 'todo'. NUNCA mexa em doing/review/done sem ordem direta.
 
-7. **PREFERÊNCIAS NÃO PERSISTEM**
+10. **PREFERÊNCIAS NÃO PERSISTEM**
 As respostas das 4 perguntas valem só pra esta sessão. NÃO chame tools de "salvar preferência" — não existem.
 
-8. **ESCOPO DE PLANEJAMENTO**
+11. **ESCOPO DE PLANEJAMENTO**
 Você só entra em planning mode quando:
    (a) o usuário pediu (palavra-chave detectada),
    (b) há ≥ 10 tasks no backlog ready (com FP e story),
@@ -372,11 +395,14 @@ Cenários multi-turn (use `--thread-id` reusado):
 |---|---|---|---|
 | F2.1 | "organiza o backlog em sprints" | (responde 4 perguntas) → "manda" | Pergunta 4 → propõe → executa bulk após confirma |
 | F2.2 | "aloca tudo no Sprint 8" (estoura cap) | — | Alerta + propõe split com create_sprint |
-| F2.3 | "vai estourar o contrato?" | — | Lê capacity + backlog, calcula "cabe em N sprints" sem alucinar |
+| F2.3 | "vai estourar o contrato?" | — | Lê capacity + backlog, calcula "cabe em N sprints" SEM editorializar (sem sugerir cortar escopo, rediscutir contrato, trocar builders) |
 | F2.4 | "Lucas e Pedro só backend, João full" → "manda" | — | Tasks de frontend NÃO vão pro Lucas/Pedro |
-| F2.5 | Backlog 600 FP / cap 390 (não cabe) | — | Alerta "falta builder ou sprint extra" |
+| F2.5 | Backlog 600 FP / cap 390 (não cabe) | — | Alerta "falta builder ou sprint extra" sem sugerir cortar stories |
 | F2.6 | "Ana de férias no Sprint 9" → "manda" | — | Cap recalculada sem Ana |
 | F2.7 | "como tá o sprint?" (controle) | — | Resposta narrativa SEM planner block carregado |
+| F2.8 | "vai dar pra entregar até daqui 4 sprints?" | — | Lê backlog + capacity de N=4 sprints, responde sim/não com números, **não** pergunta "qual MVP" nem sugere cortar escopo |
+| F2.9 | "organiza mantendo cada story em 1 sprint só" → "manda" | — | Agrupa tasks por userStoryId, aloca stories inteiras por sprint. Se split necessário, **avisa explicitamente** ("Story X-US-014 dividida em S8/S9") |
+| F2.10 | Bulk falha — primeiro propõe plano, depois PM responde com taskRef inválida na confirmação ("manda mas troca TASK-281 por TASK-9999") | — | Tenta bulk, RPC retorna erro de ref inexistente, Alpha mostra qual falhou, refaz proposta sem retry automático |
 
 3 runs cada, gate 2/3.
 
