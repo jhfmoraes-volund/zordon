@@ -64,17 +64,19 @@ export function assembleAlphaTools(
 
   tools.get_sprint_overview = tool({
     description:
-      "Retorna o estado completo do sprint ativo: tasks, membros com capacidade, e alertas. Use para ter uma visao atualizada da operacao. Quando o usuário está numa página de projeto/sprint, retorna o sprint daquele escopo automaticamente.",
+      "Retorna o estado completo do sprint ativo: goal (manifesto), tasks, membros com capacidade, e — quando o sprint está completed — a retrospectiva (Quebom/Quepena/Quetal). Use para ter uma visao atualizada da operacao. Quando o usuário está numa página de projeto/sprint, retorna o sprint daquele escopo automaticamente.",
     inputSchema: z.object({}),
     execute: async () => {
+      const SPRINT_COLS =
+        "id, name, startDate, endDate, status, goal, project:Project(name)";
       let sprintQuery = supabase
         .from("Sprint")
-        .select("id, name, startDate, endDate, status, project:Project(name)")
+        .select(SPRINT_COLS)
         .neq("status", "done");
       if (routeSprintId) {
         sprintQuery = supabase
           .from("Sprint")
-          .select("id, name, startDate, endDate, status, project:Project(name)")
+          .select(SPRINT_COLS)
           .eq("id", routeSprintId);
       } else if (routeProjectId) {
         sprintQuery = sprintQuery.eq("projectId", routeProjectId);
@@ -104,7 +106,27 @@ export function assembleAlphaTools(
         .from("member_capacity_overview")
         .select("*");
 
-      return { sprint, tasks: tasks || [], members: members || [] };
+      let retrospective: {
+        goodPoints: string | null;
+        badPoints: string | null;
+        ideas: string | null;
+        completedAt: string;
+      } | null = null;
+      if (sprint.status === "completed") {
+        const { data: retro } = await supabase
+          .from("SprintRetrospective")
+          .select("goodPoints, badPoints, ideas, completedAt")
+          .eq("sprintId", sprint.id)
+          .maybeSingle();
+        retrospective = retro ?? null;
+      }
+
+      return {
+        sprint,
+        tasks: tasks || [],
+        members: members || [],
+        retrospective,
+      };
     },
   });
 

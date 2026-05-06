@@ -136,6 +136,13 @@ com 4 perguntas de planning.
 3. **Turno 3:** PM confirma. Alpha executa **`bulk_update_tasks`** numa
    chamada atômica — se uma task falhar, **reverte tudo**.
 
+**Caso "squad sem contrato":** se `get_project_capacity` retornar members com
+`noContract: true` (= alocados ao projeto mas com `fpAllocation = 0`), Alpha
+**NÃO** diz "ninguém alocado". Ele lista os builders, identifica que falta
+contrato, e pergunta o FP/sprint de cada um — depois aplica via
+`set_project_allocation` (Regra 9b: 2 turnos). Só então segue pro
+dimensionamento.
+
 **Status default:** task movida pra sprint vira `todo`, nunca `in_progress`/
 `done` automático.
 

@@ -2589,6 +2589,7 @@ export type Database = {
           deployedToProductionAt: string | null
           deployedToStagingAt: string | null
           endDate: string
+          goal: string | null
           id: string
           name: string
           projectId: string
@@ -2601,6 +2602,7 @@ export type Database = {
           deployedToProductionAt?: string | null
           deployedToStagingAt?: string | null
           endDate: string
+          goal?: string | null
           id?: string
           name: string
           projectId: string
@@ -2613,6 +2615,7 @@ export type Database = {
           deployedToProductionAt?: string | null
           deployedToStagingAt?: string | null
           endDate?: string
+          goal?: string | null
           id?: string
           name?: string
           projectId?: string
@@ -2761,6 +2764,92 @@ export type Database = {
           },
           {
             foreignKeyName: "SprintMember_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_member_capacity"
+            referencedColumns: ["sprintId"]
+          },
+        ]
+      }
+      SprintRetrospective: {
+        Row: {
+          badPoints: string | null
+          completedAt: string
+          completedBy: string | null
+          createdAt: string
+          goodPoints: string | null
+          id: string
+          ideas: string | null
+          sprintId: string
+          updatedAt: string
+        }
+        Insert: {
+          badPoints?: string | null
+          completedAt?: string
+          completedBy?: string | null
+          createdAt?: string
+          goodPoints?: string | null
+          id?: string
+          ideas?: string | null
+          sprintId: string
+          updatedAt?: string
+        }
+        Update: {
+          badPoints?: string | null
+          completedAt?: string
+          completedBy?: string | null
+          createdAt?: string
+          goodPoints?: string | null
+          id?: string
+          ideas?: string | null
+          sprintId?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "SprintRetrospective_completedBy_fkey"
+            columns: ["completedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintRetrospective_completedBy_fkey"
+            columns: ["completedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintRetrospective_completedBy_fkey"
+            columns: ["completedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintRetrospective_completedBy_fkey"
+            columns: ["completedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintRetrospective_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "Sprint"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintRetrospective_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_capacity_overview"
+            referencedColumns: ["sprintId"]
+          },
+          {
+            foreignKeyName: "SprintRetrospective_sprintId_fkey"
             columns: ["sprintId"]
             isOneToOne: false
             referencedRelation: "sprint_member_capacity"
@@ -2961,6 +3050,20 @@ export type Database = {
             columns: ["createdById"]
             isOneToOne: false
             referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Task_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Task_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
             referencedColumns: ["id"]
           },
           {
@@ -3649,6 +3752,19 @@ export type Database = {
       }
     }
     Views: {
+      agent_quality_metrics: {
+        Row: {
+          agentSlug: string | null
+          category: string | null
+          correct: number | null
+          edited: number | null
+          pct_correct: number | null
+          pending: number | null
+          total: number | null
+          wrong: number | null
+        }
+        Relationships: []
+      }
       client_summary: {
         Row: {
           createdAt: string | null
@@ -3909,6 +4025,7 @@ export type Database = {
           deployedToProductionAt: string | null
           deployedToStagingAt: string | null
           endDate: string
+          goal: string | null
           id: string
           name: string
           projectId: string
@@ -3993,6 +4110,7 @@ export type Database = {
           deployedToProductionAt: string | null
           deployedToStagingAt: string | null
           endDate: string
+          goal: string | null
           id: string
           name: string
           projectId: string

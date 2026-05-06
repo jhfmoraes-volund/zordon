@@ -33,6 +33,7 @@ type Args = {
   message?: string;
   messageFile?: string;
   advanceTo?: number;
+  memberId?: string;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -43,6 +44,7 @@ function parseArgs(argv: string[]): Args {
     else if (a === "--message") out.message = argv[++i];
     else if (a === "--message-file") out.messageFile = argv[++i];
     else if (a === "--advance-to") out.advanceTo = parseInt(argv[++i], 10);
+    else if (a === "--member-id") out.memberId = argv[++i];
     else throw new Error(`Unknown arg: ${a}`);
   }
   if (!out.session) throw new Error("--session required");
@@ -129,6 +131,7 @@ async function main() {
     webSearch: true,
     projectId: session.projectId ?? undefined,
     createTasks: currentStepKey === "briefing",
+    memberId: args.memberId,
   };
 
   // 4. Run agent
@@ -137,7 +140,7 @@ async function main() {
     thread: { id: threadId },
     capabilities,
     userMessage: message,
-    memberId: null,
+    memberId: args.memberId ?? null,
     params: { sessionId: args.session, currentStepKey },
   });
 

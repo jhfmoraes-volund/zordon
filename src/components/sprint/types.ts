@@ -13,6 +13,20 @@ export type Sprint = {
   status: SprintStatus;
   deployedToStagingAt?: string | null;
   deployedToProductionAt?: string | null;
+  /** Sprint Goal — manifesto de objetivo, opcional, max 280 chars. */
+  goal?: string | null;
+};
+
+export const SPRINT_GOAL_MAX_LENGTH = 280;
+
+export type SprintRetrospective = {
+  id: string;
+  sprintId: string;
+  goodPoints: string | null;
+  badPoints: string | null;
+  ideas: string | null;
+  completedAt: string;
+  completedBy: string | null;
 };
 
 export type SprintMemberCapacity = {

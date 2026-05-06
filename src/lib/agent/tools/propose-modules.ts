@@ -37,7 +37,7 @@ export function proposeModulesTool(projectId: string) {
               .string()
               .min(8)
               .describe(
-                "1 linha de escopo: o que ENTRA e o que NAO entra neste modulo. Define a fronteira pra evitar overlap com outros modulos.",
+                "Descricao MACRO do modulo (1-3 frases, ~250 chars). Formato: '<o que o modulo E no nivel de produto>. <Exemplos representativos das principais funcoes>. NAO inclui <exclusao explicita pra fronteira>.' NAO e lista de funcoes — e proposito + exemplos + fronteira. Ex: 'Operacao do dia a dia da plataforma. Da ao time interno visibilidade de saude do produto e ferramentas pra resolver o que esta travado. Inclui KPIs, fila de KYC, fallback manual, gestao de usuarios. NAO inclui logica de matching nem KYC SDK.'",
               ),
           }),
         )

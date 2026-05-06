@@ -1,6 +1,21 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/dal";
+import type { Database } from "@/lib/supabase/database.types";
+
+type SprintUpdate = Database["public"]["Tables"]["Sprint"]["Update"];
+
+const ALLOWED_FIELDS = [
+  "name",
+  "startDate",
+  "endDate",
+  "status",
+  "goal",
+  "deployedToStagingAt",
+  "deployedToProductionAt",
+] as const satisfies readonly (keyof SprintUpdate)[];
+
+const GOAL_MAX_LENGTH = 280;
 
 export async function PUT(
   req: NextRequest,
@@ -19,9 +34,31 @@ export async function PUT(
     );
   }
 
+  if (body.status === "completed") {
+    return NextResponse.json(
+      { error: "Use POST /api/sprints/[id]/complete para concluir uma sprint" },
+      { status: 400 }
+    );
+  }
+
+  const update: SprintUpdate = {};
+  for (const key of ALLOWED_FIELDS) {
+    if (key in body) (update as Record<string, unknown>)[key] = body[key];
+  }
+
+  if (typeof update.goal === "string" && update.goal.length > GOAL_MAX_LENGTH) {
+    return NextResponse.json(
+      { error: `Goal deve ter no máximo ${GOAL_MAX_LENGTH} caracteres` },
+      { status: 400 }
+    );
+  }
+  if (typeof update.goal === "string" && update.goal.trim() === "") {
+    update.goal = null;
+  }
+
   const { data: sprint, error } = await db()
     .from("Sprint")
-    .update(body)
+    .update(update)
     .eq("id", id)
     .select()
     .single();

@@ -4,7 +4,6 @@ import { getUser, getRealRole, requireMinLevelApi } from "@/lib/dal";
 import {
   MANAGER,
   hasMinLevel,
-  hasMinAccessLevel,
   resolveAccessLevel,
   positionLabel,
   type AccessLevel,
@@ -56,8 +55,8 @@ export async function GET(
   const supabase = db();
   const admin = createAdminClient();
 
-  // Pull every auth.user upfront — we need it twice: (1) name/email fallback
-  // for ProjectAccess rows, (2) finding all managers (pm/admin) to inject.
+  // Pull every auth.user upfront for name/email fallback and to resolve the
+  // PM responsável's position/access level for the chip.
   const { data: list, error: listErr } = await admin.auth.admin.listUsers({
     page: 1,
     perPage: 200,
@@ -90,25 +89,54 @@ export async function GET(
     });
   }
 
-  // Managers (manager + admin) get implicit access to every project. Surface
-  // them even without a ProjectAccess row.
-  const managerUserIds = list.users
-    .filter((u) => {
-      const meta = (u.app_metadata as {
-        role?: string;
-        access_level?: string;
-      } | null) ?? null;
-      const level = resolveAccessLevel(meta?.access_level, meta?.role);
-      return hasMinAccessLevel(level, "manager");
-    })
-    .map((u) => u.id);
-
-  const { data: accessRows, error } = await supabase
-    .from("ProjectAccess")
-    .select("userId, role, grantedAt")
-    .eq("projectId", projectId);
+  // Project members allocated to this project (or with historical access),
+  // plus the responsible PM (Project.pmId → Member.id). Other managers/admins
+  // are not surfaced — they have implicit access via is_manager() but aren't
+  // relevant to this project's roster.
+  const [
+    { data: accessRows, error },
+    { data: project, error: projectErr },
+    { data: projectMembers, error: pmErr },
+  ] = await Promise.all([
+    supabase
+      .from("ProjectAccess")
+      .select("userId, role, grantedAt")
+      .eq("projectId", projectId),
+    supabase.from("Project").select("pmId").eq("id", projectId).maybeSingle(),
+    supabase
+      .from("ProjectMember")
+      .select("memberId, fpAllocation")
+      .eq("projectId", projectId),
+  ]);
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
+  if (projectErr)
+    return NextResponse.json({ error: projectErr.message }, { status: 500 });
+  if (pmErr)
+    return NextResponse.json({ error: pmErr.message }, { status: 500 });
+
+  // Resolve member.id → userId for: allocated members, PM responsável, and
+  // anyone with a ProjectAccess row whose Member.userId matches.
+  const allocatedMemberIds = (projectMembers ?? []).map(
+    (p) => p.memberId as string,
+  );
+  const memberIdsToResolve = Array.from(
+    new Set([...allocatedMemberIds, ...(project?.pmId ? [project.pmId] : [])]),
+  );
+
+  const { data: membersByMemberId } = memberIdsToResolve.length
+    ? await supabase
+        .from("Member")
+        .select("id, name, email, userId")
+        .in("id", memberIdsToResolve)
+    : { data: [] as { id: string; name: string | null; email: string | null; userId: string | null }[] };
+
+  const allocatedUserIds = (membersByMemberId ?? [])
+    .filter((m) => allocatedMemberIds.includes(m.id) && m.userId)
+    .map((m) => m.userId as string);
+  const pmUserId =
+    (membersByMemberId ?? []).find((m) => m.id === project?.pmId)?.userId ??
+    null;
 
   const accessByUser = new Map(
     (accessRows ?? []).map((r) => [r.userId as string, r]),
@@ -116,50 +144,52 @@ export async function GET(
   const userIds = Array.from(
     new Set([
       ...(accessRows ?? []).map((r) => r.userId as string),
-      ...managerUserIds,
+      ...allocatedUserIds,
+      ...(pmUserId ? [pmUserId] : []),
     ]),
   );
   if (userIds.length === 0) return NextResponse.json([] as AccessRow[]);
 
-  // Member info (name, fpAllocation) keyed by userId.
-  const [{ data: members }, { data: pms }] = await Promise.all([
-    supabase
-      .from("Member")
-      .select("id, name, email, userId")
-      .in("userId", userIds),
-    supabase
-      .from("ProjectMember")
-      .select("memberId, fpAllocation")
-      .eq("projectId", projectId),
-  ]);
+  // Member info (name, fpAllocation) keyed by userId — pull again to cover
+  // ProjectAccess rows whose user wasn't in the memberId-based fetch above.
+  const { data: members } = await supabase
+    .from("Member")
+    .select("id, name, email, userId")
+    .in("userId", userIds);
 
   const memberByUser = new Map(
     (members ?? []).map((m) => [m.userId as string, m]),
   );
   const pmFp = new Map(
-    (pms ?? []).map((p) => [p.memberId as string, p.fpAllocation ?? 0]),
+    (projectMembers ?? []).map((p) => [
+      p.memberId as string,
+      p.fpAllocation ?? 0,
+    ]),
   );
 
   const result: AccessRow[] = userIds.map((uid) => {
     const member = memberByUser.get(uid);
     const auth = authMap.get(uid);
     const access = accessByUser.get(uid);
-    const isManager = hasMinAccessLevel(auth?.accessLevel, "manager");
+    // Only the project's PM responsável is surfaced as a "manager" row here;
+    // other managers/admins still bypass via is_manager() but aren't part of
+    // this project's roster.
+    const isProjectPm = !!pmUserId && uid === pmUserId;
     return {
       userId: uid,
       email: member?.email ?? auth?.email ?? null,
       name: member?.name ?? auth?.name ?? null,
-      // Managers without ProjectAccess get a synthetic 'lead' for display only;
-      // UI hides the editable control for them anyway.
+      // PM without ProjectAccess gets a synthetic 'lead' for display only;
+      // UI hides the editable control for managers anyway.
       role: (access?.role as AccessRole | undefined) ?? "lead",
       isMember: !!member,
       memberId: member?.id ?? null,
       fpAllocation: member ? pmFp.get(member.id) ?? null : null,
       grantedAt: access?.grantedAt ?? new Date(0).toISOString(),
-      isManager,
-      managerPosition: isManager ? auth?.position ?? null : null,
-      managerPositionLabel: isManager ? positionLabel(auth?.position) : null,
-      managerAccessLevel: isManager ? auth?.accessLevel ?? null : null,
+      isManager: isProjectPm,
+      managerPosition: isProjectPm ? auth?.position ?? null : null,
+      managerPositionLabel: isProjectPm ? positionLabel(auth?.position) : null,
+      managerAccessLevel: isProjectPm ? auth?.accessLevel ?? null : null,
     };
   });
 

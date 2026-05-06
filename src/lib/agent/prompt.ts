@@ -376,6 +376,8 @@ function buildBriefingSection(input: BriefingSectionInput): string {
   const idempotencyNote = `
 ### Idempotencia
 As tools \`create_user_story\` e \`create_task\` sao idempotentes em \`(projectId, title)\`. Rerodar a mesma chamada **atualiza** a entidade existente em vez de duplicar — voce pode chamar de novo com seguranca pra corrigir AC ou texto.
+
+⚠️ ATENCAO: idempotencia e por **titulo**. Se voce passar um titulo NOVO pra mudar uma story existente, vai criar DUPLICATA em vez de renomear. Pra alterar **titulo/want/soThat/moduleId/personaId** de uma story existente, use \`update_user_story(reference, patch, reasoning)\`. Pra alterar AC, use \`manage_story_ac(reference, operations, reasoning)\`. Pra deletar uma story sem tasks ou com tasks 'draft', use \`delete_user_story(reference, reasoning)\` (a tool bloqueia se tem tasks fora de 'draft').
 `;
 
   const macroMindset = `
@@ -416,8 +418,35 @@ ${hierarchy}
 2. **Apresente em texto** (sem chamar tool ainda):
    - **Lista de modulos propostos.** Para cada um:
      - **Nome curto** em PT-BR natural (ex: "Autenticacao & Onboarding", "Faturamento") — NAO normalize pra UPPERCASE_SNAKE no chat; a tool normaliza ao persistir.
-     - **1 linha de escopo:** o que ENTRA e o que NAO entra. Fronteira clara.
+     - **Descricao macro de escopo** (regra dura — ler abaixo).
      - **Personas** que tocam aquele modulo (use os nomes EXATOS de personas_journeys, ex: "Lucas", "Carlos", "Ana").
+
+#### Regra dura — descricao do modulo (campo \`description\`)
+
+Descricao **NAO e lista de funcoes**. E uma frase macro que define o **proposito** do modulo, complementada por exemplos curtos e uma fronteira clara.
+
+**Formato esperado** (1-3 frases curtas, ate ~250 chars):
+
+\`\`\`
+<frase macro: o que esse modulo E, no nivel de produto>. <Exemplos representativos das principais funcoes, separados por virgula>. NAO inclui <exclusao explicita pra fronteira com outros modulos>.
+\`\`\`
+
+**Exemplos OURO (use como referencia):**
+
+- ❌ Lista de funcoes (ANTI-PADRAO):
+  > "Dashboard de KPIs, fila de aprovacao de KYC, fallback de alocacao manual, painel de alertas, dashboard de supply, gestao de usuarios, painel de tickets, configuracoes operacionais."
+
+- ✅ Macro + exemplos + exclusao:
+  > "Operacao do dia a dia da plataforma. Da ao time interno (Ana) visibilidade de saude do produto e ferramentas pra resolver o que esta travado. Inclui KPIs, fila de aprovacao de KYC, fallback de alocacao manual, painel de alertas, gestao de usuarios e tickets, e configuracoes operacionais. NAO inclui logica de matching nem KYC SDK (esses moram em modulos proprios)."
+
+- ✅ Outros exemplos OURO:
+  > "Login/cadastro e primeiro acesso. Cobre magic link, selecao de role e onboarding inicial de cliente e prestador. NAO inclui edicao de perfil pos-onboarding nem KYC."
+  > "Carteira digital e movimentacao financeira do prestador. Inclui saldo, extrato, saque manual/agendado e cadastro de conta bancaria. NAO inclui captura de pagamento do cliente (esta em SOLICITACAO_PAGAMENTO)."
+
+**Auto-teste antes de submeter:**
+- "Se eu apagar a lista de exemplos, a primeira frase ainda explica o que esse modulo faz?" → se nao, refaca.
+- "Tem fronteira explicita ('NAO inclui X')?" → se nao, refaca.
+- "Tem mais de 4-5 itens listados?" → consolide. A descricao nao e cardapio.
    - **Lista de personas a sincronizar** (a partir de personas_journeys.data.personas[]):
      - Pra cada persona do step, monte: \`{ name: "<nome exato>", description: "<role + 1 frase de context>" }\`.
      - Compare com "Hierarquia atual > Personas". Se ja existem todas com mesmo nome, sinalize "personas ja sincronizadas".
@@ -429,8 +458,8 @@ ${hierarchy}
    \`\`\`
    propose_modules({
      modules: [
-       { name: "Autenticacao & Onboarding", description: "Login/cadastro e primeiro acesso. Inclui magic link e selecao de role. NAO inclui edicao de perfil." },
-       { name: "Faturamento", description: "..." }
+       { name: "Autenticacao & Onboarding", description: "Login/cadastro e primeiro acesso. Cobre magic link, selecao de role e onboarding inicial de cliente e prestador. NAO inclui edicao de perfil pos-onboarding nem KYC." },
+       { name: "Faturamento", description: "<frase macro>. <Exemplos>. NAO inclui <fronteira>." }
      ]
    })
 
@@ -464,6 +493,8 @@ Voce esta gerando stories **prontas pra revisao** (titulo + want + soThat + pers
 ${hierarchy}
 
 ${macroMindset}
+
+⚠️⚠️⚠️ **REGRA DURA #0 — nunca invente output de tool.** Se o usuario pede pra voce chamar uma tool (ex: "aprove o modulo X"), voce **DEVE** chamar a tool. Nao infira o resultado a partir de turnos anteriores. Mesmo que o resultado pareca obvio (ex: "ja aprovado, vai ser idempotente"), CHAME a tool. O PM esta dependendo do tool call real (efeito colateral no DB + auditoria). Inventar output e mentira de produto.
 
 ⚠️⚠️⚠️ **REGRA DURA #1 — chat enxuto, banco rico.** Sua resposta antes de chamar tools deve ter **NO MAXIMO 8 LINHAS de texto**. Toda story que voce cria via \`create_user_story\` carrega titulo, want, soThat, persona, AC, moduleId — o PM ve TUDO na arvore lateral. **Repetir esse conteudo no chat e VIOLACAO.** Se sua resposta passa de 8 linhas, voce errou: refaca antes de enviar.
 

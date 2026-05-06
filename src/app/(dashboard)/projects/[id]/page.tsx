@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Settings as SettingsIcon,
   Shield,
+  Target,
   Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,10 @@ import {
   SprintDialog,
   type SprintFormData,
 } from "@/components/sprint-dialog";
+import {
+  SprintContextSheet,
+  type SprintContextSheetMode,
+} from "@/components/sprint/sprint-context-sheet";
 import { StatusChip } from "@/components/ui/status-chip";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -142,6 +147,7 @@ type RawSprint = {
   startDate: string;
   endDate: string;
   status: string;
+  goal: string | null;
   deployedToStagingAt: string | null;
   deployedToProductionAt: string | null;
 };
@@ -242,9 +248,12 @@ export default function ProjectDetailPage({
   const [sprintAction, setSprintAction] = useState<
     | { mode: "activate-replacing" | "activate-fresh"; targetId: string }
     | { mode: "reopen-replacing" | "reopen-fresh"; targetId: string }
-    | { mode: "complete"; targetId: string }
     | null
   >(null);
+  const [sprintContextSheet, setSprintContextSheet] = useState<{
+    sprintId: string;
+    mode: SprintContextSheetMode;
+  } | null>(null);
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [editingStory, setEditingStory] = useState(false);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(taskParam);
@@ -482,6 +491,7 @@ export default function ProjectDetailPage({
         startDate: s.startDate.slice(0, 10),
         endDate: s.endDate.slice(0, 10),
         status: s.status as "upcoming" | "active" | "completed",
+        goal: s.goal,
         deployedToStagingAt: s.deployedToStagingAt,
         deployedToProductionAt: s.deployedToProductionAt,
       })),
@@ -575,6 +585,7 @@ export default function ProjectDetailPage({
   async function handleCreateSprint(form: SprintFormData) {
     const now = new Date().toISOString();
     setSprintDialogOpen(false);
+    const goal = form.goal.trim();
     const { error } = await supabase.from("Sprint").insert({
       id: crypto.randomUUID(),
       projectId: id,
@@ -582,6 +593,7 @@ export default function ProjectDetailPage({
       startDate: form.startDate,
       endDate: form.endDate,
       status: form.status,
+      goal: goal === "" ? null : goal,
       updatedAt: now,
     });
     if (error) {
@@ -606,7 +618,7 @@ export default function ProjectDetailPage({
   }
 
   function requestCompleteSprint(targetId: string) {
-    setSprintAction({ mode: "complete", targetId });
+    setSprintContextSheet({ sprintId: targetId, mode: "complete" });
   }
 
   function requestReopenSprint(targetId: string) {
@@ -624,20 +636,6 @@ export default function ProjectDetailPage({
       await loadTasksAndSprints();
     } catch (e) {
       showErrorToast(e, { label: "Falha ao ativar sprint" });
-    }
-  }
-
-  async function handleCompleteSprint(targetId: string) {
-    try {
-      await fetchOrThrow(`/api/sprints/${targetId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "completed" }),
-      });
-      toast.success("Sprint concluída");
-      await loadTasksAndSprints();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao concluir sprint" });
     }
   }
 
@@ -1659,14 +1657,39 @@ export default function ProjectDetailPage({
         />
       ) : activeTab === "sprints" ? (
         <div className="space-y-5">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <h3 className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Sprints
             </h3>
-            <div className="flex items-center gap-2">
+
+            {focused && !isSyntheticView ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setSprintContextSheet({
+                    sprintId: focused.id,
+                    mode: focused.status === "completed" ? "view" : "edit-goal",
+                  })
+                }
+                title={focused.goal ?? "Definir objetivo do sprint"}
+                className={`hidden lg:flex flex-1 min-w-0 items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-muted/40 ${
+                  focused.goal ? "text-foreground" : "text-muted-foreground italic"
+                }`}
+              >
+                <Target className="size-3.5 shrink-0 text-primary" />
+                <span className="truncate">
+                  {focused.goal ?? "Definir objetivo do sprint…"}
+                </span>
+              </button>
+            ) : (
+              <div className="hidden lg:block flex-1" />
+            )}
+
+            <div className="flex min-w-0 items-center gap-2 overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
               <Button
                 size="sm"
                 variant="outline"
+                className="shrink-0"
                 onClick={() =>
                   handleCreateTask(
                     focused && !isSyntheticView
@@ -1678,18 +1701,23 @@ export default function ProjectDetailPage({
                 <Plus className="size-3.5" />
                 Nova task
               </Button>
-              <Button size="sm" onClick={() => setSprintDialogOpen(true)}>
+              <Button
+                size="sm"
+                className="shrink-0"
+                onClick={() => setSprintDialogOpen(true)}
+              >
                 <Plus className="size-3.5" />
                 Novo sprint
               </Button>
 
               {focused && !isSyntheticView ? (
                 <>
-                  <span aria-hidden className="mx-1 h-5 w-px bg-border/70" />
+                  <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border/70" />
 
                   {focused.status === "upcoming" ? (
                     <Button
                       size="sm"
+                      className="shrink-0"
                       onClick={() => requestActivateSprint(focused.id)}
                     >
                       <Play className="size-3.5" />
@@ -1699,6 +1727,7 @@ export default function ProjectDetailPage({
                     <Button
                       size="sm"
                       variant="outline"
+                      className="shrink-0"
                       onClick={() => requestCompleteSprint(focused.id)}
                     >
                       <CheckCircle2 className="size-3.5" />
@@ -1713,13 +1742,29 @@ export default function ProjectDetailPage({
                           size="sm"
                           variant="outline"
                           aria-label="Mais ações da sprint"
-                          className="px-2"
+                          className="shrink-0 px-2"
                         />
                       }
                     >
                       <MoreHorizontal className="size-3.5" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() =>
+                          setSprintContextSheet({
+                            sprintId: focused.id,
+                            mode:
+                              focused.status === "completed" ? "view" : "edit-goal",
+                          })
+                        }
+                      >
+                        <Target className="size-3.5" />
+                        {focused.status === "completed"
+                          ? "Ver retrospectiva"
+                          : focused.goal
+                          ? "Editar objetivo"
+                          : "Definir objetivo"}
+                      </DropdownMenuItem>
                       {focused.status === "completed" ? (
                         <DropdownMenuItem
                           onClick={() => requestReopenSprint(focused.id)}
@@ -1991,9 +2036,7 @@ export default function ProjectDetailPage({
             previousActive={previousActive}
             previousActiveTaskStats={previousActiveTaskStats}
             onConfirm={async () => {
-              if (sprintAction.mode === "complete") {
-                await handleCompleteSprint(sprintAction.targetId);
-              } else if (
+              if (
                 sprintAction.mode === "reopen-replacing" ||
                 sprintAction.mode === "reopen-fresh"
               ) {
@@ -2005,6 +2048,19 @@ export default function ProjectDetailPage({
           />
         );
       })() : null}
+
+      {/* Sprint context sheet (goal + retro) */}
+      <SprintContextSheet
+        open={sprintContextSheet !== null}
+        onOpenChange={(open) => !open && setSprintContextSheet(null)}
+        sprint={
+          sprintContextSheet
+            ? sprints.find((s) => s.id === sprintContextSheet.sprintId) ?? null
+            : null
+        }
+        mode={sprintContextSheet?.mode ?? "view"}
+        onSaved={() => loadTasksAndSprints()}
+      />
 
       {/* Task duplicate / clone dialogs */}
       <TaskDuplicateDialog

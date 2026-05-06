@@ -11,7 +11,12 @@ import {
   listStoriesTool,
   approveModuleTool,
   setStoryRefinementTool,
+  deleteUserStoryTool,
 } from "./tools/manage-stories";
+import {
+  updateStoryForOpsTool,
+  manageStoryAcForOpsTool,
+} from "./tools/alpha-hierarchy";
 import {
   listSessionTasksTool,
   listProjectTasksTool,
@@ -193,8 +198,14 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
       capabilities.memberId,
     );
     tools.list_stories = listStoriesTool(sessionId, capabilities.projectId);
-    tools.approve_module = approveModuleTool(capabilities.projectId);
+    tools.approve_module = approveModuleTool(
+      capabilities.projectId,
+      capabilities.memberId,
+    );
     tools.set_story_refinement = setStoryRefinementTool(capabilities.projectId);
+    tools.update_user_story = updateStoryForOpsTool(capabilities.projectId);
+    tools.manage_story_ac = manageStoryAcForOpsTool(capabilities.projectId);
+    tools.delete_user_story = deleteUserStoryTool(capabilities.projectId);
     tools.create_task = createTaskTool(sessionId, capabilities.projectId, capabilities.memberId);
     tools.list_project_tags = listProjectTagsTool(capabilities.projectId);
     tools.list_tasks = listSessionTasksTool(sessionId);

@@ -1,6 +1,11 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import {
+  deleteStory,
+  getStoryByReference,
+  promoteTasksForModule,
+} from "@/lib/dal/story-hierarchy";
 
 /**
  * Lists User Stories of the current session and the project, with refinement
@@ -82,41 +87,46 @@ export function listStoriesTool(sessionId: string, projectId: string) {
 }
 
 /**
- * Promotes a `proposedModuleName` to a real Module across ALL stories of the
- * project that share that proposed name. If a Module with the same name
- * already exists in the project, reuses it.
+ * Approves a Module end-to-end:
+ *   1. Find-or-create the Module (set approvedAt + approvedBy)
+ *   2. Link any pending stories that referenced it via proposedModuleName
+ *   3. PROMOTE draft tasks under the module's stories to status='backlog'
+ *   4. Insert ModuleActivity row for audit trail
  *
- * Use ONLY after confirming with the user. The tool is idempotent: re-running
- * is safe; stories already linked to the Module are skipped.
+ * Mirrors POST /api/modules/[id]/approve (the UI's "Approve" button) — same
+ * cascade in a single tool call, so the agent can finish a module without
+ * leaving tasks stuck in 'draft'.
+ *
+ * Idempotent: re-running on an already-approved module is safe (promoted=0,
+ * ModuleActivity records the no-op).
  */
-export function approveModuleTool(projectId: string) {
+export function approveModuleTool(
+  projectId: string,
+  approverId?: string,
+) {
+  const safeApproverId = approverId ?? null;
   return tool({
     description:
-      "Promove um proposedModuleName em Module real, atualizando TODAS as stories do projeto que tem esse proposedModuleName. Reusa Module existente se ja houver um com o mesmo nome. CHAME APENAS apos confirmacao explicita do usuario no chat.",
+      "Aprova um módulo de ponta a ponta: marca approvedAt+approvedBy, vincula stories que tinham proposedModuleName, promove tasks 'draft'→'backlog' em cascata e registra ModuleActivity. CHAME APENAS após confirmação explícita do PM. Idempotente.",
     inputSchema: z.object({
       proposedName: z
         .string()
         .min(1)
         .describe(
-          "Nome do modulo proposto a aprovar (case-sensitive, igual ao que esta nas stories).",
+          "Nome do módulo (proposedModuleName das stories OU nome do Module já existente).",
         ),
       finalName: z
         .string()
         .optional()
         .describe(
-          "Nome final do Module (se quiser renomear durante a aprovacao). Default = proposedName.",
+          "Nome final do Module se quiser renomear durante a aprovação. Default = proposedName.",
         ),
     }),
     execute: async ({ proposedName, finalName }) => {
       const supabase = db();
       const moduleName = finalName ?? proposedName;
+      const nowIso = new Date().toISOString();
 
-      // 1. Find or create the Module by (projectId, name).
-      //    NEW: sets approvedAt = now() so the module + its stories/tasks
-      //    immediately appear in /projects/[id]. Vitor only calls this tool
-      //    after explicit user confirmation (Regra 0). The module is also
-      //    visible in the briefing tree before approval (no harm done if the
-      //    user later rejects via DELETE /api/modules/[id]/approve).
       const existingMod = await supabase
         .from("Module")
         .select("id, name, approvedAt")
@@ -129,29 +139,38 @@ export function approveModuleTool(projectId: string) {
 
       let moduleId: string;
       let moduleAlreadyExisted = false;
-      const nowIso = new Date().toISOString();
+      let wasAlreadyApproved = false;
+
       if (existingMod.data) {
         moduleId = existingMod.data.id;
         moduleAlreadyExisted = true;
-        // Mark approved if it wasn't already.
-        if (!existingMod.data.approvedAt) {
+        wasAlreadyApproved = !!existingMod.data.approvedAt;
+        if (!wasAlreadyApproved) {
           const { error: approveErr } = await supabase
             .from("Module")
-            .update({ approvedAt: nowIso, updatedAt: nowIso })
+            .update({
+              approvedAt: nowIso,
+              approvedBy: safeApproverId,
+              updatedAt: nowIso,
+            })
             .eq("id", moduleId);
           if (approveErr) return { success: false, error: approveErr.message };
         }
       } else {
         const { data: created, error: createErr } = await supabase
           .from("Module")
-          .insert({ projectId, name: moduleName, approvedAt: nowIso })
+          .insert({
+            projectId,
+            name: moduleName,
+            approvedAt: nowIso,
+            approvedBy: safeApproverId,
+          })
           .select("id")
           .single();
         if (createErr) return { success: false, error: createErr.message };
         moduleId = created!.id;
       }
 
-      // 2. Find candidate stories
       const candidates = await supabase
         .from("UserStory")
         .select("id")
@@ -162,33 +181,51 @@ export function approveModuleTool(projectId: string) {
       }
       const storyIds = (candidates.data ?? []).map((s) => s.id);
 
-      if (storyIds.length === 0) {
-        return {
-          success: true,
-          moduleId,
-          moduleName,
-          moduleAlreadyExisted,
-          storiesPromoted: 0,
-          note: "Nenhuma story com esse proposedModuleName foi encontrada.",
-        };
+      if (storyIds.length > 0) {
+        const { error: updErr } = await supabase
+          .from("UserStory")
+          .update({
+            moduleId,
+            proposedModuleName: null,
+            updatedAt: nowIso,
+          })
+          .in("id", storyIds);
+        if (updErr) return { success: false, error: updErr.message };
       }
 
-      const { error: updErr } = await supabase
-        .from("UserStory")
-        .update({
-          moduleId,
-          proposedModuleName: null,
-          updatedAt: new Date().toISOString(),
-        })
-        .in("id", storyIds);
-      if (updErr) return { success: false, error: updErr.message };
+      let promoted = 0;
+      let totalFp = 0;
+      try {
+        const result = await promoteTasksForModule(moduleId);
+        promoted = result.promoted;
+        totalFp = result.totalFp;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return { success: false, error: `Promoção de tasks falhou: ${msg}` };
+      }
+
+      await supabase.from("ModuleActivity").insert({
+        moduleId,
+        type: "approved",
+        payload: {
+          promoted,
+          totalFp,
+          storiesLinked: storyIds.length,
+          wasAlreadyApproved,
+          viaTool: "approve_module",
+        },
+        actorMemberId: safeApproverId,
+      });
 
       return {
         success: true,
         moduleId,
         moduleName,
         moduleAlreadyExisted,
+        wasAlreadyApproved,
         storiesPromoted: storyIds.length,
+        tasksPromoted: promoted,
+        totalFp,
       };
     },
   });
@@ -241,6 +278,92 @@ export function setStoryRefinementTool(projectId: string) {
         storyId,
         previousStatus: check.data.refinementStatus,
         status,
+      };
+    },
+  });
+}
+
+/**
+ * Deletes a UserStory and its draft tasks in cascade. Refuses if any task
+ * is past 'draft' (todo/in_progress/review/done) — caller must move/delete
+ * those first to avoid losing committed sprint work.
+ *
+ * Why a separate cascade (not relying on FK ON DELETE):
+ *   Task.userStoryId has ON DELETE SET NULL — deleting the story would
+ *   orphan the tasks. We delete drafts explicitly so they don't linger as
+ *   orphans, and block when non-draft tasks exist.
+ */
+export function deleteUserStoryTool(projectId: string) {
+  return tool({
+    description:
+      "Deleta uma UserStory e suas tasks 'draft' em cascata. APENAS após confirmação explícita do PM (Regra 0). Bloqueia se houver tasks fora de 'draft' — nesses casos mova/delete tasks antes via update_task/delete_task.",
+    inputSchema: z.object({
+      reference: z
+        .string()
+        .min(3)
+        .describe("Reference da story (ex: EVZL-US-049)"),
+      reasoning: z
+        .string()
+        .min(10)
+        .describe("Motivo da deleção (auditoria)"),
+    }),
+    execute: async ({ reference }) => {
+      const story = await getStoryByReference(reference);
+      if (!story) {
+        return {
+          success: false,
+          notFound: true,
+          message: `Story ${reference} não encontrada.`,
+        };
+      }
+      if (story.projectId !== projectId) {
+        return {
+          success: false,
+          message: "Story pertence a outro projeto.",
+        };
+      }
+
+      const supabase = db();
+
+      const { data: nonDraftTasks, error: scanErr } = await supabase
+        .from("Task")
+        .select("reference, status")
+        .eq("userStoryId", story.id)
+        .neq("status", "draft");
+      if (scanErr) return { success: false, error: scanErr.message };
+
+      if (nonDraftTasks && nonDraftTasks.length > 0) {
+        return {
+          success: false,
+          blocked: true,
+          message: `Story tem ${nonDraftTasks.length} task(s) fora de 'draft'. Mova ou delete antes de remover a story.`,
+          blocking: nonDraftTasks,
+        };
+      }
+
+      const { data: draftTasks } = await supabase
+        .from("Task")
+        .select("id, reference")
+        .eq("userStoryId", story.id);
+
+      if (draftTasks && draftTasks.length > 0) {
+        const { error: delTasksErr } = await supabase
+          .from("Task")
+          .delete()
+          .in(
+            "id",
+            draftTasks.map((t) => t.id),
+          );
+        if (delTasksErr) return { success: false, error: delTasksErr.message };
+      }
+
+      await deleteStory(story.id);
+
+      return {
+        success: true,
+        deletedStoryReference: reference,
+        deletedTasksCount: draftTasks?.length ?? 0,
+        deletedTaskRefs: draftTasks?.map((t) => t.reference) ?? [],
       };
     },
   });

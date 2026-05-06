@@ -17,7 +17,7 @@ const TASK_STATUSES = [
 export function getProjectCapacityForOpsTool(projectId: string) {
   return tool({
     description:
-      "Retorna a capacidade COMPLETA do projeto em uma chamada: members alocados (com fpAllocation, capacity total, committed, remaining cross-project) + sprints (cap, planejado, disponível). Use ANTES de planejar — substitui múltiplas chamadas de get_member_commitments + get_sprint_capacity.",
+      "Retorna a capacidade COMPLETA do projeto em uma chamada: members do squad (com fpAllocation, capacity total, committed, remaining cross-project) + sprints (cap, planejado, disponível). Use ANTES de planejar — substitui múltiplas chamadas de get_member_commitments + get_sprint_capacity. IMPORTANTE: members vêm com `noContract: true` quando estão no squad mas com fpAllocation=0 — nesse caso, peça ao PM pra definir contrato antes de planejar.",
     inputSchema: z.object({}),
     execute: async () => {
       const supabase = db();
@@ -95,22 +95,22 @@ export function getProjectCapacityForOpsTool(projectId: string) {
           } | null;
           if (!m) return null;
           const xp = commitById.get(m.id);
+          const fpAllocation = row.fpAllocation ?? 0;
           return {
             id: m.id,
             name: m.name,
             role: m.role,
             position: m.position,
             fpCapacity: m.fpCapacity,
-            fpAllocation: row.fpAllocation,
+            fpAllocation,
+            noContract: fpAllocation === 0,
             capacityTotal: xp?.capacityTotal ?? m.fpCapacity,
             committedTotal: xp?.committedTotal ?? 0,
             remainingTotal: xp?.remainingTotal ?? m.fpCapacity,
             projectCount: xp?.projectCount ?? 0,
           };
         })
-        .filter(
-          (r): r is NonNullable<typeof r> => r != null && r.fpAllocation > 0,
-        )
+        .filter((r): r is NonNullable<typeof r> => r != null)
         .sort((a, b) => b.fpAllocation - a.fpAllocation);
 
       const sprintRows = (sprints ?? [])
@@ -143,6 +143,8 @@ export function getProjectCapacityForOpsTool(projectId: string) {
 
       const totals = {
         members: memberRows.length,
+        membersWithContract: memberRows.filter((m) => !m.noContract).length,
+        membersWithoutContract: memberRows.filter((m) => m.noContract).length,
         capacityPerSprint: memberRows.reduce(
           (acc, m) => acc + (m.fpAllocation ?? 0),
           0,

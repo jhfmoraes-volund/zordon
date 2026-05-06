@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { SPRINT_GOAL_MAX_LENGTH } from "@/components/sprint/types";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -38,6 +40,7 @@ export type SprintFormData = {
   startDate: string;
   endDate: string;
   status: string;
+  goal: string;
   projectId?: string;
 };
 
@@ -47,6 +50,7 @@ type EditingSprint = {
   startDate: string;
   endDate: string;
   status: string;
+  goal?: string | null;
 };
 
 type ProjectOption = { id: string; name: string };
@@ -70,7 +74,7 @@ export function SprintDialog({
   projects, allSprints,
 }: Props) {
   const [form, setForm] = useState<SprintFormData>({
-    name: "", startDate: "", endDate: "", status: "upcoming", projectId: "",
+    name: "", startDate: "", endDate: "", status: "upcoming", goal: "", projectId: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -96,6 +100,7 @@ export function SprintDialog({
         startDate: editing.startDate.split("T")[0],
         endDate: editing.endDate.split("T")[0],
         status: editing.status,
+        goal: editing.goal ?? "",
         projectId: "",
       });
     } else {
@@ -105,6 +110,7 @@ export function SprintDialog({
         startDate: defaults.startDate,
         endDate: defaults.endDate,
         status: "upcoming",
+        goal: "",
         projectId: "",
       });
     }
@@ -208,6 +214,24 @@ export function SprintDialog({
             <p className="text-xs text-muted-foreground">
               Sprints sempre vão de segunda a domingo (7 dias). Use ← / → pra navegar.
             </p>
+          </div>
+          <div className="grid gap-2">
+            <div className="flex items-baseline justify-between">
+              <Label htmlFor="sprint-goal">Objetivo do sprint</Label>
+              <span className={`text-xs tabular-nums ${form.goal.length > SPRINT_GOAL_MAX_LENGTH ? "text-destructive" : "text-muted-foreground"}`}>
+                {form.goal.length}/{SPRINT_GOAL_MAX_LENGTH}
+              </span>
+            </div>
+            <Textarea
+              id="sprint-goal"
+              value={form.goal}
+              onChange={(e) =>
+                setForm({ ...form, goal: e.target.value.slice(0, SPRINT_GOAL_MAX_LENGTH) })
+              }
+              placeholder="Manifesto da iteração — o que precisa ser entregue pra esse sprint ter valido a pena? (opcional)"
+              rows={3}
+              className="resize-none"
+            />
           </div>
           {editing && form.status === "active" ? (
             <div className="grid gap-2">
