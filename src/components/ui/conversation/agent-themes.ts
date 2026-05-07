@@ -7,7 +7,12 @@ export type AgentTheme = {
   id: AgentId;
   label: string;
   icon: typeof AlphaIcon;
+  /** Cor primária do agente (oklch wrappado, pronto pra usar em CSS). */
   accent: string;
+  /** Componentes raw L C H — usados pra compor variantes (ex: `oklch(${accentRaw} / 0.3)`). */
+  accentRaw: string;
+  /** Background do tile do badge — tom escuro com cromaticidade do accent. */
+  tileBgRaw: string;
   accentSoft: string;
   glow: string;
   emptyHint: string;
@@ -21,9 +26,12 @@ export const AGENT_THEMES: Record<AgentId, AgentTheme> = {
     id: "alpha",
     label: "Alpha",
     icon: AlphaIcon,
-    accent: "oklch(var(--primary))",
-    accentSoft: "oklch(var(--primary) / 0.08)",
-    glow: "0 0 14px -4px oklch(var(--primary) / 0.40)",
+    // Vermelho terracota — Alpha tem accent próprio (não usa --primary do tema, que é neutro).
+    accent: "oklch(0.58 0.15 30)",
+    accentRaw: "0.58 0.15 30",
+    tileBgRaw: "0.16 0.06 30",
+    accentSoft: "oklch(0.58 0.15 30 / 0.08)",
+    glow: "0 0 14px -4px oklch(0.58 0.15 30 / 0.40)",
     emptyHint:
       "Pergunte sobre sprint, alocação, reuniões ou peça para criar tasks.",
     collapseThreshold: 2,
@@ -35,6 +43,8 @@ export const AGENT_THEMES: Record<AgentId, AgentTheme> = {
     label: "Vitor",
     icon: VitorIcon,
     accent: "oklch(0.74 0.18 55)",
+    accentRaw: "0.74 0.18 55",
+    tileBgRaw: "0.16 0.06 55",
     accentSoft: "oklch(0.74 0.18 55 / 0.08)",
     glow: "0 0 14px -4px oklch(0.74 0.18 55 / 0.40)",
     emptyHint:

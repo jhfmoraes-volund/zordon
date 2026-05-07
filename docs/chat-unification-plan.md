@@ -145,10 +145,10 @@ Cada chip tem 3 estados, mapeados 1:1 do `state` do AI SDK (`partial-call` | `ca
 ### 4.3 Tokens de tema aplicados
 
 ```css
-/* running, agent=alpha */
-border-color: oklch(var(--primary) / 0.30);
-background: oklch(var(--primary) / 0.08);
-loader-color: oklch(var(--primary));
+/* running, agent=alpha (vermelho terracota) */
+border-color: oklch(0.58 0.15 30 / 0.30);
+background: oklch(0.58 0.15 30 / 0.08);
+loader-color: oklch(0.58 0.15 30);
 
 /* running, agent=vitor */
 border-color: oklch(0.74 0.18 55 / 0.30);
@@ -229,9 +229,11 @@ export const AGENT_THEMES: Record<AgentId, AgentTheme> = {
     id: "alpha",
     label: "Alpha",
     icon: AlphaIcon,
-    accent: "oklch(var(--primary))",
-    accentSoft: "oklch(var(--primary) / 0.08)",
-    glow: "0 0 14px -4px oklch(var(--primary) / 0.40)",
+    // Vermelho terracota — espelha o tratamento do Vitor (laranja) com tom mais sóbrio.
+    // Não usa --primary do tema (neutro/escuro) — Alpha tem accent próprio.
+    accent: "oklch(0.58 0.15 30)",
+    accentSoft: "oklch(0.58 0.15 30 / 0.08)",
+    glow: "0 0 14px -4px oklch(0.58 0.15 30 / 0.40)",
     emptyHint: "Pergunte sobre sprint, alocação, reuniões ou peça para criar tasks.",
     collapseThreshold: 2,
     planEventName: "chat:planmode:alpha",
@@ -728,7 +730,7 @@ Anexar ao PR de Fase 1. Aprovação visual antes de Fase 2 começar.
 - History sheet abre/fecha
 - Maximize2 leva pra `/ops`
 - Idle reset (30min) funciona — teste unitário + manual
-- Visual Alpha (cor primary) aplicado em badge, focus ring, FAB pulse, chip running
+- Visual Alpha (vermelho terracota `oklch(0.58 0.15 30)`) aplicado em badge, ícone empty state, focus ring, FAB pulse, chip running
 - Tool calls de Alpha renderizam como chips (fallback aceitável)
 
 **Commit:** `ZRD-JM-XX: alpha-chat/panel — migrate to ConversationPanel`

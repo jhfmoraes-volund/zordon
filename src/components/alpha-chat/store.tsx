@@ -30,6 +30,7 @@ type AlphaChatValue = {
   setOpen: (next: boolean) => void;
   messages: UIMessage[];
   isLoading: boolean;
+  status: "idle" | "submitted" | "streaming" | "error" | "ready";
   sendMessage: (text: string) => void;
   /** Current thread ID. null = fresh conversation (next send creates a new one). */
   threadId: string | null;
@@ -49,6 +50,7 @@ const STUB: AlphaChatValue = {
   setOpen: () => {},
   messages: [],
   isLoading: false,
+  status: "idle",
   sendMessage: () => {},
   threadId: null,
   loadThread: async () => {},
@@ -190,6 +192,7 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     setOpen,
     messages: chat.messages,
     isLoading,
+    status: chat.status,
     sendMessage,
     threadId,
     loadThread,

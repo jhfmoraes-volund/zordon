@@ -1,8 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { AlphaBadge } from "@/components/alpha-chat/alpha-badge";
-import { VitorBadge } from "@/components/design-session/vitor-badge";
+import { AgentBadge } from "@/components/ui/conversation";
 
 type AgentSlug = "vitor" | "alpha";
 
@@ -39,7 +38,7 @@ export function AgentsScene() {
             transition={{ type: "spring", damping: 14, stiffness: 140, delay: 0.1 }}
             className="flex flex-col items-center gap-1.5"
           >
-            <VitorBadge size="md" showDot />
+            <AgentBadge agent="vitor" size="md" showDot />
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
               Design sessions
             </div>
@@ -50,7 +49,7 @@ export function AgentsScene() {
             transition={{ type: "spring", damping: 14, stiffness: 140, delay: 0.22 }}
             className="flex flex-col items-center gap-1.5"
           >
-            <AlphaBadge size="md" showDot />
+            <AgentBadge agent="alpha" size="md" showDot />
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
               Operações
             </div>
@@ -89,11 +88,7 @@ function BubbleRow({ bubble }: { bubble: Bubble }) {
             : "rounded-br-sm border-primary/30 bg-primary/10"
         }`}
       >
-        {isVitor ? (
-          <VitorBadge size="sm" showDot={false} />
-        ) : (
-          <AlphaBadge size="sm" showDot={false} />
-        )}
+        <AgentBadge agent={bubble.agent} size="sm" showDot={false} />
         <div className={bubble.shimmer ? "shimmer-text" : ""}>{bubble.text}</div>
       </div>
     </motion.div>

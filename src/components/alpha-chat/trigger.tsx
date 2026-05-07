@@ -6,15 +6,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AgentBadge } from "@/components/ui/conversation";
 import { useAlphaChat } from "./store";
-import { AlphaBadge } from "./alpha-badge";
 
 /**
- * Botão do header que abre o panel/sheet do Alpha.
- * Renderiza o `AlphaBadge` (Scan HUD) como visual; o botão wrapper só
- * cuida do clique, foco e estado `isOpen` (ring do tile fica realçado).
+ * Header button that opens the Alpha panel/sheet.
+ * Visual is the shared <AgentBadge agent="alpha" />; wrapper handles click,
+ * focus, and the `isOpen` state (active ring on the tile).
  *
- * Atalho: ⌘⇧A (registrado em useAlphaKeyboard).
+ * Shortcut: ⌘⇧A (registered in useAlphaKeyboard).
  */
 export function AlphaChatTrigger() {
   const { enabled, isOpen, toggle } = useAlphaChat();
@@ -37,7 +37,7 @@ export function AlphaChatTrigger() {
               "data-[active=true]:ring-1 data-[active=true]:ring-primary/60 data-[active=true]:ring-offset-2 data-[active=true]:ring-offset-background",
             )}
           >
-            <AlphaBadge size="sm" />
+            <AgentBadge agent="alpha" size="sm" />
           </button>
         }
       />

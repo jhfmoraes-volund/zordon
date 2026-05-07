@@ -9,17 +9,6 @@ type AgentBadgeProps = HTMLAttributes<HTMLSpanElement> & {
   label?: string;
 };
 
-const PALETTE: Record<AgentId, { accentRaw: string; tileBgRaw: string }> = {
-  alpha: {
-    accentRaw: "0.637 0.237 22",
-    tileBgRaw: "0.16 0.06 22",
-  },
-  vitor: {
-    accentRaw: "0.74 0.18 55",
-    tileBgRaw: "0.16 0.06 55",
-  },
-};
-
 export const AgentBadge = forwardRef<HTMLSpanElement, AgentBadgeProps>(
   function AgentBadge(
     { agent, size = "md", showDot = true, label, className, style, ...props },
@@ -28,8 +17,8 @@ export const AgentBadge = forwardRef<HTMLSpanElement, AgentBadgeProps>(
     const theme = AGENT_THEMES[agent];
     const Icon = theme.icon;
     const isSm = size === "sm";
-    const { accentRaw, tileBgRaw } = PALETTE[agent];
-    const accent = `oklch(${accentRaw})`;
+    const { accentRaw, tileBgRaw } = theme;
+    const accent = theme.accent;
     const tileBgPrimary = `oklch(${tileBgRaw}/0.5)`;
     const tileBgScanline = `oklch(${accentRaw}/0.05)`;
     const ringInset = `oklch(${accentRaw}/0.30)`;

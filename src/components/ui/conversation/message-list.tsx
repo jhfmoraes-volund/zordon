@@ -8,7 +8,7 @@ import { type AgentId } from "./agent-themes";
 import { MessageBubble } from "./message-bubble";
 import { ThinkingIndicator } from "./thinking-indicator";
 
-export type MessageListStatus = "idle" | "submitted" | "streaming";
+export type MessageListStatus = "idle" | "submitted" | "streaming" | "error" | "ready";
 
 type Props = {
   agent: AgentId;
@@ -34,7 +34,8 @@ export function MessageList({
 
   const isWaiting = status === "streaming" || status === "submitted";
   const lastMsg = messages[messages.length - 1];
-  const showThinking = isWaiting && (!lastMsg || lastMsg.role !== "assistant");
+  const lastIsAssistant = lastMsg?.role === "assistant";
+  const showThinking = isWaiting && !lastIsAssistant;
 
   const itemCount = messages.length + (showThinking ? 1 : 0);
 

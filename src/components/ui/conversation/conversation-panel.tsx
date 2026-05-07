@@ -68,7 +68,7 @@ function shouldShowExecuteButton(opts: {
   msgIdx: number;
 }): boolean {
   if (!opts.planMode) return false;
-  if (opts.status !== "idle") return false;
+  if (opts.status === "streaming" || opts.status === "submitted") return false;
   if (opts.msgIdx !== opts.messages.length - 1) return false;
   const msg = opts.messages[opts.msgIdx];
   if (!msg || msg.role !== "assistant") return false;
@@ -181,7 +181,7 @@ function PanelBody({
           value={input}
           onChange={onInputChange}
           onSubmit={onSubmit}
-          isStreaming={status !== "idle"}
+          isStreaming={status === "streaming" || status === "submitted"}
           onStop={onStop}
           submitDisabled={composerSubmitDisabled}
           planMode={planMode}

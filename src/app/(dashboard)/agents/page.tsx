@@ -6,12 +6,13 @@ import { Bot, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { AGENT_SETTINGS_REGISTRY } from "@/lib/agent/settings-registry";
-import { AlphaBadge } from "@/components/alpha-chat/alpha-badge";
-import { VitorBadge } from "@/components/design-session/vitor-badge";
+import { AgentBadge } from "@/components/ui/conversation";
 
 function AgentSlugBadge({ slug, name }: { slug: string; name: string }) {
-  if (slug === "ops" || slug === "alpha") return <AlphaBadge size="md" label={name} />;
-  if (slug === "design-session" || slug === "vitor") return <VitorBadge size="md" label={name} />;
+  if (slug === "ops" || slug === "alpha")
+    return <AgentBadge agent="alpha" size="md" label={name} />;
+  if (slug === "design-session" || slug === "vitor")
+    return <AgentBadge agent="vitor" size="md" label={name} />;
   return (
     <span className="inline-flex h-11 items-center gap-2 rounded-md border border-border bg-muted/30 px-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-foreground/90">
       <Bot className="h-4 w-4 text-muted-foreground" />

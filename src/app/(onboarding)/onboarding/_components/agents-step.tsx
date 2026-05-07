@@ -2,8 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Bot } from "lucide-react";
-import { AlphaBadge } from "@/components/alpha-chat/alpha-badge";
-import { VitorBadge } from "@/components/design-session/vitor-badge";
+import { AgentBadge } from "@/components/ui/conversation";
 
 const AGENTS = [
   {
@@ -51,11 +50,7 @@ export function AgentsStep() {
             className="flex items-start gap-3 rounded-lg border border-border/60 bg-card/60 p-3"
           >
             <div className="shrink-0">
-              {a.slug === "vitor" ? (
-                <VitorBadge size="sm" />
-              ) : (
-                <AlphaBadge size="sm" />
-              )}
+              <AgentBadge agent={a.slug} size="sm" />
             </div>
             <div className="min-w-0">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">

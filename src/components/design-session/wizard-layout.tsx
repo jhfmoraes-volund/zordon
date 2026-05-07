@@ -1,15 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  ConversationFab,
+  ConversationPanel,
+} from "@/components/ui/conversation";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { ArrowLeft, ChevronLeft, ChevronRight, Menu, Check, Circle, Loader2, BookOpen } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Loader2,
+  Menu,
+} from "lucide-react";
 import type { StepDef } from "@/lib/design-session-steps";
-import { StickyNoteBoard, type Note } from "./sticky-note";
-import { AIChatBubble } from "./ai-chat-bubble";
-import { AIChatMobileSheet, AIChatDesktopPanel } from "./ai-chat-panel";
 import { useDesignSessionChat } from "@/hooks/use-design-session-chat";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { StickyNoteBoard, type Note } from "./sticky-note";
 
 export function WizardLayout({
   sessionTitle,
@@ -59,21 +71,28 @@ export function WizardLayout({
         : "Continuous Improvement";
 
   const chat = useDesignSessionChat();
-  const chatLoading = chat.status === "streaming" || chat.status === "submitted";
-  const chatProps = {
+  const isMobile = useIsMobile();
+  const chatStreaming =
+    chat.status === "streaming" || chat.status === "submitted";
+
+  const stepBadge = step?.title ? (
+    <Badge variant="secondary" className="text-xs">
+      {step.title}
+    </Badge>
+  ) : null;
+
+  const sharedChatProps = {
+    agent: "vitor" as const,
     messages: chat.messages,
+    status: chat.status,
     input: chat.input,
-    isLoading: chatLoading,
-    currentStepTitle: step?.title ?? "",
     onInputChange: chat.setInput,
-    onSubmit: (e: React.FormEvent) => {
-      e.preventDefault();
-      chat.sendMessage(chat.input);
-    },
+    onSubmit: () => chat.sendMessage(chat.input),
     onStop: chat.stop,
     planMode: chat.planMode,
     onPlanModeChange: chat.setPlanMode,
     onExecutePlan: () => chat.sendMessage("vai"),
+    headerSlot: stepBadge,
   };
 
   return (
@@ -206,9 +225,13 @@ export function WizardLayout({
         <div className="flex gap-6 h-full">
           <main className={`flex-1 min-w-0 ${chat.isOpen ? "overflow-y-auto" : ""}`}>{children}</main>
           {!hideSidePanels && (
-            chat.isOpen ? (
+            chat.isOpen && !isMobile ? (
               <aside className="hidden lg:flex shrink-0 w-[420px] h-full">
-                <AIChatDesktopPanel {...chatProps} onClose={chat.close} />
+                <ConversationPanel
+                  {...sharedChatProps}
+                  variant="desktop"
+                  onClose={chat.close}
+                />
               </aside>
             ) : (
               <aside className="hidden lg:block shrink-0">
@@ -227,18 +250,23 @@ export function WizardLayout({
       {/* AI Chat */}
       {!hideSidePanels && (
         <>
-          <AIChatBubble
+          <ConversationFab
+            agent="vitor"
             isOpen={chat.isOpen}
-            isStreaming={chat.status === "streaming"}
-            onToggle={chat.toggle}
+            isStreaming={chatStreaming}
+            onClick={chat.toggle}
           />
-          <AIChatMobileSheet
-            {...chatProps}
-            isOpen={chat.isOpen}
-            onOpenChange={(open) => {
-              if (open !== chat.isOpen) chat.toggle();
-            }}
-          />
+          {isMobile && (
+            <ConversationPanel
+              {...sharedChatProps}
+              variant="mobile"
+              isOpen={chat.isOpen}
+              onOpenChange={(open) => {
+                if (open !== chat.isOpen) chat.toggle();
+              }}
+              onClose={chat.close}
+            />
+          )}
         </>
       )}
     </div>
