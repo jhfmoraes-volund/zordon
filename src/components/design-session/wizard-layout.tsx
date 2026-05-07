@@ -70,6 +70,10 @@ export function WizardLayout({
       e.preventDefault();
       chat.sendMessage(chat.input);
     },
+    onStop: chat.stop,
+    planMode: chat.planMode,
+    onPlanModeChange: chat.setPlanMode,
+    onExecutePlan: () => chat.sendMessage("vai"),
   };
 
   return (
@@ -172,15 +176,19 @@ export function WizardLayout({
               <ChevronLeft className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Anterior</span>
             </Button>
-            <Button
-              size="sm"
-              onClick={onNext}
-              aria-label={isLast ? "Revisar tasks" : "Proximo"}
-              className="px-2 sm:px-2.5"
-            >
-              <span className="hidden sm:inline">{isLast ? "Revisar tasks" : "Proximo"}</span>
-              <ChevronRight className="h-4 w-4 sm:ml-1" />
-            </Button>
+            {/* Último step (briefing) não tem "próximo" — governance acontece
+                in-place via SessionGovernanceBar dentro do próprio step. */}
+            {!isLast && (
+              <Button
+                size="sm"
+                onClick={onNext}
+                aria-label="Proximo"
+                className="px-2 sm:px-2.5"
+              >
+                <span className="hidden sm:inline">Proximo</span>
+                <ChevronRight className="h-4 w-4 sm:ml-1" />
+              </Button>
+            )}
           </div>
         </div>
 

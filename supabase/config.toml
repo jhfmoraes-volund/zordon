@@ -2,3 +2,16 @@ project_id = "ugvqlmapqlobigkjboae"
 
 [functions.export-design-session]
 verify_jwt = true
+
+# telegram-webhook is called by Telegram itself with a custom secret_token
+# header (see TELEGRAM_WEBHOOK_SECRET) — it cannot present a Supabase JWT.
+[functions.telegram-webhook]
+verify_jwt = false
+
+# telegram-notify is invoked exclusively by the AFTER INSERT trigger on
+# Notification, which presents the service-role key as a bearer token. We
+# disable the gateway's JWT verify (it rejects the service-role key as not a
+# standard user JWT) and gate inside the function instead — the function
+# checks `Authorization === Bearer <service-role-key>` and rejects otherwise.
+[functions.telegram-notify]
+verify_jwt = false

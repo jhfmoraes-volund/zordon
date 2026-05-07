@@ -222,16 +222,17 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
   const handleApproveProposedModule = useCallback(
     async (s: AdaptedStory) => {
       try {
-        const res = await fetch(`/api/stories/${s.reference}/approve-module`, {
-          method: "POST",
-        });
+        const res = await fetch(
+          `/api/stories/${s.reference}/promote-proposed-module`,
+          { method: "POST" },
+        );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "Falha ao aprovar módulo");
+          throw new Error(err.error || "Falha ao promover módulo");
         }
         await refreshStory();
       } catch (e) {
-        showErrorToast(e, { label: "Aprovar módulo" });
+        showErrorToast(e, { label: "Promover módulo" });
       }
     },
     [refreshStory],

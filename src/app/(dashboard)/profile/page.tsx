@@ -15,7 +15,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { fmtDate, isOverdue } from "@/lib/task-constants";
 import { StatusChip } from "@/components/ui/status-chip";
-import { TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
+import { SPRINT_STATUS, TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
 import { roleLabel, specialtyLabel } from "@/lib/roles";
 import {
   TOWERS,
@@ -52,11 +52,15 @@ type MeTask = {
 type MeSprint = {
   id: string;
   name: string;
+  status: "upcoming" | "active" | "completed";
+  startDate: string;
+  endDate: string;
   projectId: string;
   projectName: string;
   taskCount: number;
   fpTotal: number;
   doneCount: number;
+  fpDone: number;
 };
 
 type MeProject = {
@@ -72,6 +76,42 @@ type MeData = {
   sprints: MeSprint[];
   projects: MeProject[];
 };
+
+// ─── Helpers ──────────────────────────────────────────────
+
+const fmtSprintDate = (d: string) =>
+  new Date(d + "T00:00:00").toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+
+type SprintGroup = {
+  projectId: string;
+  projectName: string;
+  sprints: MeSprint[];
+};
+
+function groupSprintsByProject(sprints: MeSprint[]): SprintGroup[] {
+  const groups = new Map<string, SprintGroup>();
+  for (const s of sprints) {
+    const existing = groups.get(s.projectId);
+    if (existing) {
+      existing.sprints.push(s);
+    } else {
+      groups.set(s.projectId, {
+        projectId: s.projectId,
+        projectName: s.projectName,
+        sprints: [s],
+      });
+    }
+  }
+  for (const g of groups.values()) {
+    g.sprints.sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }
+  return Array.from(groups.values()).sort((a, b) =>
+    a.projectName.localeCompare(b.projectName, "pt-BR"),
+  );
+}
 
 // ─── Page ─────────────────────────────────────────────────
 
@@ -116,7 +156,7 @@ export default function ProfilePage() {
     const [assignmentsRes, allocationsRes] = await Promise.all([
       supabase
         .from("TaskAssignment")
-        .select("*, task:Task(id, title, reference, status, type, functionPoints, dueDate, sprintId, projectId, project:Project(name), sprint:Sprint(id, name))")
+        .select("*, task:Task(id, title, reference, status, type, functionPoints, dueDate, sprintId, projectId, project:Project(name), sprint:Sprint(id, name, status, startDate, endDate))")
         .eq("memberId", memberId),
       supabase
         .from("ProjectMember")
@@ -124,7 +164,11 @@ export default function ProfilePage() {
         .eq("memberId", memberId),
     ]);
 
-    const assignments = (assignmentsRes.data ?? []) as { task: MeTask & { sprint: { id: string; name: string } | null } }[];
+    const assignments = (assignmentsRes.data ?? []) as {
+      task: MeTask & {
+        sprint: { id: string; name: string; status: MeSprint["status"]; startDate: string; endDate: string } | null;
+      };
+    }[];
     const tasks = assignments
       .map((a) => a.task)
       .filter((t) => FETCH_STATUSES.includes(t.status));
@@ -139,20 +183,29 @@ export default function ProfilePage() {
     const sprintMap = new Map<string, MeSprint>();
     for (const t of tasks) {
       if (!t.sprint) continue;
+      const fp = t.functionPoints ?? 0;
+      const isDone = t.status === "done";
       const existing = sprintMap.get(t.sprint.id);
       if (existing) {
         existing.taskCount++;
-        existing.fpTotal += t.functionPoints ?? 0;
-        if (t.status === "done") existing.doneCount++;
+        existing.fpTotal += fp;
+        if (isDone) {
+          existing.doneCount++;
+          existing.fpDone += fp;
+        }
       } else {
         sprintMap.set(t.sprint.id, {
           id: t.sprint.id,
           name: t.sprint.name,
+          status: t.sprint.status,
+          startDate: t.sprint.startDate,
+          endDate: t.sprint.endDate,
           projectId: t.projectId,
           projectName: t.project.name,
           taskCount: 1,
-          fpTotal: t.functionPoints ?? 0,
-          doneCount: t.status === "done" ? 1 : 0,
+          fpTotal: fp,
+          doneCount: isDone ? 1 : 0,
+          fpDone: isDone ? fp : 0,
         });
       }
     }
@@ -380,36 +433,62 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* My Sprints */}
+      {/* My Sprints — carrossel por projeto (estilo Ribbon) */}
       {data.sprints.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <h2 className="text-lg font-semibold">Meus Sprints</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {data.sprints.map((s) => {
-              const pct = s.taskCount > 0 ? Math.round((s.doneCount / s.taskCount) * 100) : 0;
-              return (
-                <Link key={s.id} href={`/projects/${s.projectId}?tab=sprints&sprint=${s.id}`}>
-                  <Card className="hover:border-primary/30 transition-colors cursor-pointer">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-semibold">{s.name}</span>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-2">{s.projectName}</p>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span>{s.taskCount} tasks</span>
-                        <span>{s.fpTotal} FP</span>
-                        <span className="text-muted-foreground">{pct}% concluido</span>
-                      </div>
-                      <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full bg-green-500" style={{ width: `${pct}%` }} />
-                      </div>
-                    </CardContent>
-                  </Card>
+          {groupSprintsByProject(data.sprints).map((group) => (
+            <div key={group.projectId} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Link
+                  href={`/projects/${group.projectId}`}
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {group.projectName}
                 </Link>
-              );
-            })}
-          </div>
+                <span className="text-[11px] text-muted-foreground">
+                  {group.sprints.length} sprint{group.sprints.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="overflow-x-auto pb-2">
+                <div className="flex gap-2">
+                  {group.sprints.map((s) => {
+                    const pct = s.fpTotal > 0 ? Math.round((s.fpDone / s.fpTotal) * 100) : 0;
+                    return (
+                      <Link
+                        key={s.id}
+                        href={`/projects/${s.projectId}?tab=sprints&sprint=${s.id}`}
+                        style={{ minWidth: 180 }}
+                        className="flex shrink-0 flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-colors hover:bg-muted/40 hover:border-primary/30"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-semibold">{s.name}</span>
+                          <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} />
+                        </div>
+                        <div className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                          {fmtSprintDate(s.startDate)} → {fmtSprintDate(s.endDate)}
+                        </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-mono tabular-nums text-muted-foreground">
+                            {s.fpDone}/{s.fpTotal} FP
+                          </span>
+                          <span className="font-mono tabular-nums font-medium">
+                            {pct}%
+                          </span>
+                        </div>
+                        <div className="h-1 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full bg-primary transition-[width]"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -34,7 +34,7 @@ type SolutionCardBoardProps = {
 
 type Layout = "single" | "triple";
 
-const genId = () => Math.random().toString(36).slice(2, 9);
+import { genId } from "@/lib/utils";
 
 function hasDetails(sol: SolutionCard) {
   return !!(sol.keyScreens || sol.userFlows || sol.painPointRef || sol.technicalNotes);

@@ -4,9 +4,18 @@ import { MANAGER } from "@/lib/roles";
 import {
   approveProposedModule,
   getStoryByReference,
-  promoteTasksForModule,
 } from "@/lib/dal/story-hierarchy";
 
+/**
+ * POST /api/stories/[ref]/promote-proposed-module
+ *
+ * Para stories MANUAIS (fora de Design Session): promove `proposedModuleName`
+ * em Module real e re-aponta a story. Não há cascata de tasks aqui — stories
+ * manuais não passam pelo ciclo draft→backlog (já nascem com tasks 'backlog').
+ *
+ * Stories de Design Session NÃO devem usar essa rota — sua aprovação acontece
+ * em massa via /api/design-sessions/[id]/complete.
+ */
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ ref: string }> },
@@ -24,6 +33,15 @@ export async function POST(
       { status: 400 },
     );
   }
+  if (story.designSessionId) {
+    return NextResponse.json(
+      {
+        error:
+          "Story de Design Session não promove módulo individualmente — use /api/design-sessions/[id]/complete",
+      },
+      { status: 400 },
+    );
+  }
 
   try {
     const result = await approveProposedModule(
@@ -32,12 +50,9 @@ export async function POST(
       story.proposedModuleName,
       member?.id ?? null,
     );
-    // Promote draft tasks under the (now-approved) module. Idempotent —
-    // subsequent calls for sibling stories see no remaining drafts.
-    const { promoted, totalFp } = await promoteTasksForModule(result.module.id);
-    return NextResponse.json({ ...result, promoted, totalFp });
+    return NextResponse.json(result);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "approve failed";
+    const msg = e instanceof Error ? e.message : "promote failed";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

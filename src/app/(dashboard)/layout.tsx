@@ -19,6 +19,7 @@ import {
   AlphaChatPanel,
   AlphaHistorySheet,
 } from "@/components/alpha-chat";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import {
   verifySession,
   getRealRole,
@@ -140,6 +141,7 @@ export default async function DashboardLayout({
                     </span>
                   )}
                   <SidebarTrigger className="size-9 md:hidden" />
+                  <NotificationBell />
                   <AlphaChatTrigger />
                 </ShellHeaderTriggerGroup>
               }

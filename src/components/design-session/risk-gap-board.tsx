@@ -19,7 +19,7 @@ import type { Gap, Risk, RiskCategory, RiskSeverity } from "@/lib/agent/schemas"
 
 export type { Gap, Risk };
 
-const genId = () => Math.random().toString(36).slice(2, 9);
+import { genId } from "@/lib/utils";
 
 const SEVERITY_TONE: Record<RiskSeverity, string> = {
   high: "bg-red-500/15 text-red-600 border-red-500/30",

@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser, getMemberId } from "@/lib/dal";
+import { getUser, getMemberId, getActorMemberId } from "@/lib/dal";
+import { notifySprintLifecycle } from "@/lib/dal/notifications";
 
 type Body = {
   goodPoints?: string | null;
@@ -60,6 +61,15 @@ export async function POST(
   if (sprintError) {
     return NextResponse.json({ error: sprintError.message }, { status: 500 });
   }
+
+  const actorMemberId = await getActorMemberId();
+  notifySprintLifecycle({
+    sprintId: id,
+    kind: "sprint_ended",
+    actorMemberId,
+  }).catch((e) =>
+    console.error("[notifications] sprint_ended fanout failed", e),
+  );
 
   return NextResponse.json({ sprint, retroSaved: hasAnyRetroContent });
 }

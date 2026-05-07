@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import {
   deleteStory,
   getStoryByReference,
-  promoteTasksForModule,
 } from "@/lib/dal/story-hierarchy";
 
 /**
@@ -86,150 +85,10 @@ export function listStoriesTool(sessionId: string, projectId: string) {
   });
 }
 
-/**
- * Approves a Module end-to-end:
- *   1. Find-or-create the Module (set approvedAt + approvedBy)
- *   2. Link any pending stories that referenced it via proposedModuleName
- *   3. PROMOTE draft tasks under the module's stories to status='backlog'
- *   4. Insert ModuleActivity row for audit trail
- *
- * Mirrors POST /api/modules/[id]/approve (the UI's "Approve" button) — same
- * cascade in a single tool call, so the agent can finish a module without
- * leaving tasks stuck in 'draft'.
- *
- * Idempotent: re-running on an already-approved module is safe (promoted=0,
- * ModuleActivity records the no-op).
- */
-export function approveModuleTool(
-  projectId: string,
-  approverId?: string,
-) {
-  const safeApproverId = approverId ?? null;
-  return tool({
-    description:
-      "Aprova um módulo de ponta a ponta: marca approvedAt+approvedBy, vincula stories que tinham proposedModuleName, promove tasks 'draft'→'backlog' em cascata e registra ModuleActivity. CHAME APENAS após confirmação explícita do PM. Idempotente.",
-    inputSchema: z.object({
-      proposedName: z
-        .string()
-        .min(1)
-        .describe(
-          "Nome do módulo (proposedModuleName das stories OU nome do Module já existente).",
-        ),
-      finalName: z
-        .string()
-        .optional()
-        .describe(
-          "Nome final do Module se quiser renomear durante a aprovação. Default = proposedName.",
-        ),
-    }),
-    execute: async ({ proposedName, finalName }) => {
-      const supabase = db();
-      const moduleName = finalName ?? proposedName;
-      const nowIso = new Date().toISOString();
-
-      const existingMod = await supabase
-        .from("Module")
-        .select("id, name, approvedAt")
-        .eq("projectId", projectId)
-        .eq("name", moduleName)
-        .maybeSingle();
-      if (existingMod.error) {
-        return { success: false, error: existingMod.error.message };
-      }
-
-      let moduleId: string;
-      let moduleAlreadyExisted = false;
-      let wasAlreadyApproved = false;
-
-      if (existingMod.data) {
-        moduleId = existingMod.data.id;
-        moduleAlreadyExisted = true;
-        wasAlreadyApproved = !!existingMod.data.approvedAt;
-        if (!wasAlreadyApproved) {
-          const { error: approveErr } = await supabase
-            .from("Module")
-            .update({
-              approvedAt: nowIso,
-              approvedBy: safeApproverId,
-              updatedAt: nowIso,
-            })
-            .eq("id", moduleId);
-          if (approveErr) return { success: false, error: approveErr.message };
-        }
-      } else {
-        const { data: created, error: createErr } = await supabase
-          .from("Module")
-          .insert({
-            projectId,
-            name: moduleName,
-            approvedAt: nowIso,
-            approvedBy: safeApproverId,
-          })
-          .select("id")
-          .single();
-        if (createErr) return { success: false, error: createErr.message };
-        moduleId = created!.id;
-      }
-
-      const candidates = await supabase
-        .from("UserStory")
-        .select("id")
-        .eq("projectId", projectId)
-        .eq("proposedModuleName", proposedName);
-      if (candidates.error) {
-        return { success: false, error: candidates.error.message };
-      }
-      const storyIds = (candidates.data ?? []).map((s) => s.id);
-
-      if (storyIds.length > 0) {
-        const { error: updErr } = await supabase
-          .from("UserStory")
-          .update({
-            moduleId,
-            proposedModuleName: null,
-            updatedAt: nowIso,
-          })
-          .in("id", storyIds);
-        if (updErr) return { success: false, error: updErr.message };
-      }
-
-      let promoted = 0;
-      let totalFp = 0;
-      try {
-        const result = await promoteTasksForModule(moduleId);
-        promoted = result.promoted;
-        totalFp = result.totalFp;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        return { success: false, error: `Promoção de tasks falhou: ${msg}` };
-      }
-
-      await supabase.from("ModuleActivity").insert({
-        moduleId,
-        type: "approved",
-        payload: {
-          promoted,
-          totalFp,
-          storiesLinked: storyIds.length,
-          wasAlreadyApproved,
-          viaTool: "approve_module",
-        },
-        actorMemberId: safeApproverId,
-      });
-
-      return {
-        success: true,
-        moduleId,
-        moduleName,
-        moduleAlreadyExisted,
-        wasAlreadyApproved,
-        storiesPromoted: storyIds.length,
-        tasksPromoted: promoted,
-        totalFp,
-      };
-    },
-  });
-}
+// `approveModuleTool` removida — aprovação granular durante a Design Session
+// foi descontinuada. PM aprova a sessão inteira via POST /api/design-sessions/
+// [id]/complete (modelo "tudo ou nada"). A tool Alpha `approveModuleForOpsTool`
+// continua existindo pra fluxos manuais fora de DS (criação ad-hoc no projeto).
 
 /**
  * Transitions a Story's refinementStatus. Used by the agent to mark phase

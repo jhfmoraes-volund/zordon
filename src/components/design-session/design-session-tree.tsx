@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { createClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,8 @@ import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
 import {
   ChevronDown,
   ChevronRight,
-  CheckCircle2,
   Sparkles,
   ListChecks,
-  RotateCcw,
   Layers,
   FileText,
   Wrench,
@@ -79,7 +77,7 @@ interface DesignSessionTreeProps {
   sessionId: string;
   /** When provided, action buttons appear and call this callback with the
    *  intended action. Parent is responsible for setting subPhase + sending
-   *  a chat message. When omitted, the tree is read-only (used in /review). */
+   *  a chat message. When omitted, the tree is read-only. */
   onAction?: (action: TreeAction) => Promise<void> | void;
   /** Open the StorySheet for read/edit. Decoupled from `onAction` (which
    *  drives Vitor) so clicking the title never sends a chat message. */
@@ -184,119 +182,9 @@ export function DesignSessionTree({
     });
   };
 
-  const approveModule = async (moduleId: string, name: string) => {
-    setBusyId(moduleId);
-    try {
-      const r = await fetch(`/api/modules/${moduleId}/approve`, { method: "POST" });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        toast.error(`Falha ao aprovar: ${j.error ?? r.status}`);
-        return;
-      }
-      const j = (await r.json().catch(() => ({}))) as { promoted?: number; totalFp?: number };
-      const promoted = j.promoted ?? 0;
-      const totalFp = j.totalFp ?? 0;
-      toast.success(
-        promoted > 0
-          ? `Módulo "${name}" aprovado · ${promoted} task(s) no backlog (${totalFp} FP)`
-          : `Módulo "${name}" aprovado`,
-      );
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const unapproveModule = async (moduleId: string, name: string) => {
-    if (
-      !window.confirm(
-        `Reabrir "${name}" para edição?\n\nTasks no backlog deste módulo voltam para rascunho. ` +
-          `Se alguma task já estiver em sprint (todo/in_progress/review/done), a operação é bloqueada — ` +
-          `resolva essas tasks antes.`,
-      )
-    ) {
-      return;
-    }
-    setBusyId(moduleId);
-    try {
-      const r = await fetch(`/api/modules/${moduleId}/approve`, { method: "DELETE" });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        if (r.status === 409 && j.blocking) {
-          const refs = (j.blocking as Array<{ reference: string | null; status: string }>)
-            .map((b) => `${b.reference ?? "?"} (${b.status})`)
-            .join(", ");
-          toast.error(`Bloqueado: ${j.message}. Tasks ativas: ${refs}`);
-        } else {
-          toast.error(`Falha ao reabrir: ${j.error ?? r.status}`);
-        }
-        return;
-      }
-      const j = await r.json().catch(() => ({}));
-      const reverted = (j as { reverted?: number }).reverted ?? 0;
-      toast.success(
-        reverted > 0
-          ? `Módulo "${name}" reaberto · ${reverted} task(s) voltaram para rascunho`
-          : `Módulo "${name}" reaberto`,
-      );
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const promoteProposed = async (proposedName: string) => {
-    setBusyId(`proposed:${proposedName}`);
-    try {
-      // Find one story with this proposedModuleName via the tree state, then
-      // hit the existing batch endpoint via story-hierarchy DAL pattern. Here
-      // we use a per-story approve call repeated — small N (stories per group).
-      const group = data?.tree.find((g) => g.key === `proposed:${proposedName}`);
-      if (!group) return;
-      // Use the story batch endpoint we already have: POST approve-module per
-      // story. The first call creates/reuses Module + sets approvedAt; subsequent
-      // calls find the now-existing module and re-link.
-      let storiesPromoted = 0;
-      let tasksPromoted = 0;
-      let tasksFp = 0;
-      for (const s of group.stories) {
-        const r = await fetch(`/api/stories/${s.reference}/approve-module`, { method: "POST" });
-        if (r.ok) {
-          storiesPromoted++;
-          const j = (await r.json().catch(() => ({}))) as { promoted?: number; totalFp?: number };
-          tasksPromoted += j.promoted ?? 0;
-          tasksFp += j.totalFp ?? 0;
-        }
-      }
-      toast.success(
-        tasksPromoted > 0
-          ? `Módulo "${proposedName}" aprovado · ${storiesPromoted} story(s), ${tasksPromoted} task(s) no backlog (${tasksFp} FP)`
-          : `Módulo "${proposedName}" aprovado · ${storiesPromoted} story(s) promovida(s)`,
-      );
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const setRefinement = async (storyRef: string, status: "draft" | "refined" | "committed") => {
-    setBusyId(`story:${storyRef}`);
-    try {
-      const r = await fetch(`/api/stories/${storyRef}/refinement-status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        toast.error(`Falha: ${j.error ?? r.status}`);
-        return;
-      }
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  };
+  // Aprovação granular (per-módulo, per-story) foi descontinuada. A briefing
+  // tree é puramente espaço de trabalho — governance acontece atomicamente
+  // pela SessionGovernanceBar do step de briefing (POST .../complete e .../reopen).
 
   const fireAction = async (action: TreeAction) => {
     if (!onAction) return;
@@ -345,16 +233,10 @@ export function DesignSessionTree({
     <div className="space-y-4">
       {/* ── Stats bar ─────────────────────────────────────────────── */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
           <StatPill label="Stories" value={stats.totalStories} icon={<FileText className="h-3 w-3" />} />
           <StatPill label="Tasks" value={stats.totalTasks} icon={<Wrench className="h-3 w-3" />} />
-          <StatPill label="FP draft" value={stats.totalFp} />
-          <StatPill
-            label="Aprovados"
-            value={stats.approvedModulesCount}
-            tone="green"
-            icon={<CheckCircle2 className="h-3 w-3" />}
-          />
+          <StatPill label="FP" value={stats.totalFp} />
         </div>
       )}
 
@@ -367,14 +249,8 @@ export function DesignSessionTree({
               expanded={expanded.has(mod.key)}
               onToggle={() => toggle(mod.key)}
               busy={busyId}
-              onApprove={() => mod.moduleId && approveModule(mod.moduleId, mod.name)}
-              onUnapprove={() =>
-                mod.moduleId && unapproveModule(mod.moduleId, mod.name)
-              }
-              onPromoteProposed={() => promoteProposed(mod.name)}
               onAction={onAction ? fireAction : undefined}
               onOpenStory={onOpenStory}
-              onSetRefinement={setRefinement}
               onOpenTask={(taskId) => setOpenTaskId(taskId)}
             />
           </li>
@@ -397,46 +273,25 @@ function ModuleNode({
   expanded,
   onToggle,
   busy,
-  onApprove,
-  onUnapprove,
-  onPromoteProposed,
   onAction,
   onOpenStory,
-  onSetRefinement,
   onOpenTask,
 }: {
   mod: TreeModule;
   expanded: boolean;
   onToggle: () => void;
   busy: string | null;
-  onApprove: () => void;
-  onUnapprove: () => void;
-  onPromoteProposed: () => void;
   onAction?: (a: TreeAction) => Promise<void>;
   onOpenStory?: (storyRef: string) => void;
-  onSetRefinement: (ref: string, status: "draft" | "refined" | "committed") => Promise<void>;
   onOpenTask: (id: string) => void;
 }) {
-  const isProposed = mod.key.startsWith("proposed:");
   const isOrphan = mod.key === "_orphan_";
-  const isReal = !isProposed && !isOrphan;
 
-  const moduleBusy =
-    (mod.moduleId && busy === mod.moduleId) ||
-    (isProposed && busy === `proposed:${mod.name}`);
-
-  // "proposto" (Module ainda virtual via proposedModuleName) e Module DB em draft
-  // colapsam no mesmo estado visual — ambos significam "não aprovado". A
-  // diferenca tecnica permanece no backend (botão "Aprovar módulo" sabe qual
-  // caminho seguir), só o display unifica em "draft" cinza.
+  // Briefing tree não exibe estado de aprovação per-módulo no header — o
+  // ciclo de aprovação acontece atomicamente via "Concluir sessão" no próprio
+  // step de briefing. Mantém só identificação visual do grupo.
   return (
-    <div
-      className={`rounded-lg border ${
-        mod.approved
-          ? "border-green-500/30 bg-green-500/[3%]"
-          : "border-border bg-card"
-      }`}
-    >
+    <div className="rounded-lg border border-border bg-card">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2">
         <button
@@ -451,65 +306,15 @@ function ModuleNode({
           )}
           <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="font-medium truncate">{mod.name}</span>
-          {mod.approved ? (
-            <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 border-0 gap-1 text-[10px] py-0 h-5">
-              <CheckCircle2 className="h-3 w-3" />
-              aprovado
-            </Badge>
-          ) : isOrphan ? (
+          {isOrphan && (
             <Badge variant="outline" className="text-[10px] py-0 h-5">
               sem módulo
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px] py-0 h-5">
-              draft
             </Badge>
           )}
           <span className="text-xs text-muted-foreground shrink-0 ml-auto">
             {mod.stories.length} {mod.stories.length === 1 ? "story" : "stories"}
           </span>
         </button>
-
-        {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0">
-          {isProposed && (
-            <Button
-              size="sm"
-              variant="default"
-              disabled={!!moduleBusy}
-              onClick={onPromoteProposed}
-              className="h-7 text-xs gap-1"
-            >
-              <CheckCircle2 className="h-3 w-3" />
-              Aprovar módulo
-            </Button>
-          )}
-          {isReal && !mod.approved && (
-            <Button
-              size="sm"
-              variant="default"
-              disabled={!!moduleBusy}
-              onClick={onApprove}
-              className="h-7 text-xs gap-1"
-            >
-              <CheckCircle2 className="h-3 w-3" />
-              Aprovar
-            </Button>
-          )}
-          {isReal && mod.approved && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!!moduleBusy}
-              onClick={onUnapprove}
-              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-              title="Reabrir módulo para edição (tasks no backlog voltam para rascunho)"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Reabrir
-            </Button>
-          )}
-        </div>
       </div>
 
       {/* Stories */}
@@ -522,7 +327,6 @@ function ModuleNode({
               busy={busy}
               onAction={onAction}
               onOpenStory={onOpenStory}
-              onSetRefinement={onSetRefinement}
               onOpenTask={onOpenTask}
             />
           ))}
@@ -539,20 +343,17 @@ function StoryNode({
   busy,
   onAction,
   onOpenStory,
-  onSetRefinement,
   onOpenTask,
 }: {
   story: TreeStory;
   busy: string | null;
   onAction?: (a: TreeAction) => Promise<void>;
   onOpenStory?: (storyRef: string) => void;
-  onSetRefinement: (ref: string, status: "draft" | "refined" | "committed") => Promise<void>;
   onOpenTask: (id: string) => void;
 }) {
   const [taskOpen, setTaskOpen] = useState(false);
   const detailBusy = busy === `detail:${story.id}`;
   const breakdownBusy = busy === `breakdown:${story.id}`;
-  const refinementBusy = busy === `story:${story.reference}`;
 
   const refinementBadge = (() => {
     if (story.refinementStatus === "committed") {
@@ -697,19 +498,8 @@ function StoryNode({
                 Gerar tasks
               </Button>
             )}
-            {story.refinementStatus === "committed" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={refinementBusy}
-                onClick={() => onSetRefinement(story.reference, "refined")}
-                className="h-7 text-xs gap-1 text-muted-foreground"
-                title="Reabrir para edição"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Reabrir
-              </Button>
-            )}
+            {/* Story 'committed' não tem ação granular aqui — pra reabrir,
+                use "Reabrir sessão" na página de Review (cascata atômica). */}
           </div>
         )}
       </div>

@@ -24,6 +24,8 @@ export interface Capabilities {
   };
   /** Per-user Roam API token. Loaded from member_integrations before each run. */
   roamToken?: string;
+  /** When true, agent plans in text and waits for "Executar" before running write tools. Default false (ACT). */
+  planMode?: boolean;
 }
 
 // ─── Engine contracts ────────────────────────────────────

@@ -1174,6 +1174,33 @@ export type Database = {
           },
         ]
       }
+      DesignSessionStepData_backup_20260506: {
+        Row: {
+          data: Json | null
+          id: string | null
+          sessionId: string | null
+          stepIndex: number | null
+          stepKey: string | null
+          updatedAt: string | null
+        }
+        Insert: {
+          data?: Json | null
+          id?: string | null
+          sessionId?: string | null
+          stepIndex?: number | null
+          stepKey?: string | null
+          updatedAt?: string | null
+        }
+        Update: {
+          data?: Json | null
+          id?: string | null
+          sessionId?: string | null
+          stepIndex?: number | null
+          stepKey?: string | null
+          updatedAt?: string | null
+        }
+        Relationships: []
+      }
       DesignSessionTranscript: {
         Row: {
           actionItems: Json
@@ -1694,6 +1721,10 @@ export type Database = {
       Member: {
         Row: {
           createdAt: string
+          dailyTodosEveningEnabled: boolean
+          dailyTodosEveningTime: string
+          dailyTodosMorningEnabled: boolean
+          dailyTodosMorningTime: string
           dedicationPercent: number
           email: string | null
           fpCapacity: number
@@ -1706,11 +1737,21 @@ export type Database = {
           role: string
           seniority: string | null
           specialty: string | null
+          telegramBindExpiresAt: string | null
+          telegramBindToken: string | null
+          telegramChatId: number | null
+          telegramConnectedAt: string | null
+          telegramKindsDisabled: string[]
+          telegramUsername: string | null
           updatedAt: string
           userId: string | null
         }
         Insert: {
           createdAt?: string
+          dailyTodosEveningEnabled?: boolean
+          dailyTodosEveningTime?: string
+          dailyTodosMorningEnabled?: boolean
+          dailyTodosMorningTime?: string
           dedicationPercent?: number
           email?: string | null
           fpCapacity?: number
@@ -1723,11 +1764,21 @@ export type Database = {
           role?: string
           seniority?: string | null
           specialty?: string | null
+          telegramBindExpiresAt?: string | null
+          telegramBindToken?: string | null
+          telegramChatId?: number | null
+          telegramConnectedAt?: string | null
+          telegramKindsDisabled?: string[]
+          telegramUsername?: string | null
           updatedAt: string
           userId?: string | null
         }
         Update: {
           createdAt?: string
+          dailyTodosEveningEnabled?: boolean
+          dailyTodosEveningTime?: string
+          dailyTodosMorningEnabled?: boolean
+          dailyTodosMorningTime?: string
           dedicationPercent?: number
           email?: string | null
           fpCapacity?: number
@@ -1740,6 +1791,12 @@ export type Database = {
           role?: string
           seniority?: string | null
           specialty?: string | null
+          telegramBindExpiresAt?: string | null
+          telegramBindToken?: string | null
+          telegramChatId?: number | null
+          telegramConnectedAt?: string | null
+          telegramKindsDisabled?: string[]
+          telegramUsername?: string | null
           updatedAt?: string
           userId?: string | null
         }
@@ -2109,6 +2166,102 @@ export type Database = {
             columns: ["moduleId"]
             isOneToOne: false
             referencedRelation: "Module"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      Notification: {
+        Row: {
+          actorMemberId: string | null
+          batchId: string | null
+          createdAt: string
+          entityId: string
+          entityType: string
+          id: string
+          kind: string
+          payload: Json
+          readAt: string | null
+          recipientMemberId: string
+        }
+        Insert: {
+          actorMemberId?: string | null
+          batchId?: string | null
+          createdAt?: string
+          entityId: string
+          entityType: string
+          id?: string
+          kind: string
+          payload?: Json
+          readAt?: string | null
+          recipientMemberId: string
+        }
+        Update: {
+          actorMemberId?: string | null
+          batchId?: string | null
+          createdAt?: string
+          entityId?: string
+          entityType?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          readAt?: string | null
+          recipientMemberId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Notification_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Notification_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Notification_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Notification_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Notification_recipientMemberId_fkey"
+            columns: ["recipientMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Notification_recipientMemberId_fkey"
+            columns: ["recipientMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Notification_recipientMemberId_fkey"
+            columns: ["recipientMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Notification_recipientMemberId_fkey"
+            columns: ["recipientMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
         ]
@@ -4015,6 +4168,7 @@ export type Database = {
         Args: { p_member_id: string; p_provider: string }
         Returns: undefined
       }
+      enqueue_daily_todo_reminders: { Args: never; Returns: undefined }
       ensure_wiki_sections: {
         Args: { p_project_id: string; p_sections: Json }
         Returns: {
@@ -4083,6 +4237,39 @@ export type Database = {
           p_token_hint: string
         }
         Returns: undefined
+      }
+      step_array_add: {
+        Args: {
+          p_array_key: string
+          p_item: Json
+          p_session_id: string
+          p_step_index?: number
+          p_step_key: string
+        }
+        Returns: Json
+      }
+      step_array_delete: {
+        Args: {
+          p_array_key: string
+          p_item_id: string
+          p_session_id: string
+          p_step_key: string
+        }
+        Returns: boolean
+      }
+      step_array_update: {
+        Args: {
+          p_array_key: string
+          p_item_id: string
+          p_session_id: string
+          p_step_key: string
+          p_updates: Json
+        }
+        Returns: Json
+      }
+      step_data_lock_key: {
+        Args: { p_session_id: string; p_step_key: string }
+        Returns: number
       }
       task_acceptance_bulk_diff: {
         Args: { p_payload: Json; p_task_id: string }

@@ -1,5 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
+import { db } from "@/lib/db";
+import type { Json } from "@/lib/supabase/database.types";
 import { getStepData, updateStepData } from "./context";
 import { createWebSearchTool } from "./tools/web-search";
 import { createTaskTool } from "./tools/create-task";
@@ -9,7 +11,6 @@ import { proposeModulesTool } from "./tools/propose-modules";
 import { syncProjectPersonasTool } from "./tools/sync-personas";
 import {
   listStoriesTool,
-  approveModuleTool,
   setStoryRefinementTool,
   deleteUserStoryTool,
 } from "./tools/manage-stories";
@@ -43,7 +44,7 @@ import { createMvpCheckTool } from "./tools/mvp-check";
 import { createSearchDocTool } from "./tools/search-doc";
 import type { Capabilities } from "./types";
 
-const genId = () => Math.random().toString(36).slice(2, 9);
+import { genId } from "@/lib/utils";
 
 const stepKeySchema = z
   .enum([
@@ -101,6 +102,7 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
       },
     });
 
+    // Atomic via Postgres RPC (step_array_add). Idempotent on id collision.
     tools.add_item = tool({
       description:
         "Adiciona um novo item a uma lista em um step. Use para criar novas personas, soluções, hipóteses, integrações, regras técnicas, etc.",
@@ -114,12 +116,15 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
           .describe("Objeto do item com os campos do tipo."),
       }),
       execute: async ({ stepKey, arrayKey, item }: { stepKey: string; arrayKey: string; item: Record<string, unknown> }) => {
-        const itemWithId = { id: genId(), ...item };
-        await updateStepData(sessionId, stepKey, (data) => {
-          const arr = (data[arrayKey] as unknown[]) || [];
-          return { ...data, [arrayKey]: [...arr, itemWithId] };
+        const itemWithId = { id: (item.id as string) || genId(), ...item };
+        const { data, error } = await db().rpc("step_array_add", {
+          p_session_id: sessionId,
+          p_step_key: stepKey,
+          p_array_key: arrayKey,
+          p_item: itemWithId as Json,
         });
-        return { success: true, stepKey, arrayKey, addedItem: itemWithId };
+        if (error) throw new Error(`add_item failed: ${error.message}`);
+        return { success: true, stepKey, arrayKey, addedItem: data };
       },
     });
 
@@ -135,16 +140,20 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
           .describe("Campos a atualizar (merge parcial)"),
       }),
       execute: async ({ stepKey, arrayKey, itemId, updates }: { stepKey: string; arrayKey: string; itemId: string; updates: Record<string, unknown> }) => {
-        await updateStepData(sessionId, stepKey, (data) => {
-          const arr = (data[arrayKey] as Array<{ id: string }>) || [];
-          return {
-            ...data,
-            [arrayKey]: arr.map((it) =>
-              it.id === itemId ? { ...it, ...updates } : it
-            ),
-          };
+        const { data, error } = await db().rpc("step_array_update", {
+          p_session_id: sessionId,
+          p_step_key: stepKey,
+          p_array_key: arrayKey,
+          p_item_id: itemId,
+          p_updates: updates as Json,
         });
-        return { success: true, stepKey, arrayKey, itemId, updates };
+        if (error) {
+          if (error.code === "P0002") {
+            return { success: false, stepKey, arrayKey, itemId, error: "item_not_found" };
+          }
+          throw new Error(`update_item failed: ${error.message}`);
+        }
+        return { success: true, stepKey, arrayKey, itemId, updatedItem: data };
       },
     });
 
@@ -157,14 +166,14 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
         itemId: z.string().describe("ID do item a remover"),
       }),
       execute: async ({ stepKey, arrayKey, itemId }: { stepKey: string; arrayKey: string; itemId: string }) => {
-        await updateStepData(sessionId, stepKey, (data) => {
-          const arr = (data[arrayKey] as Array<{ id: string }>) || [];
-          return {
-            ...data,
-            [arrayKey]: arr.filter((it) => it.id !== itemId),
-          };
+        const { data, error } = await db().rpc("step_array_delete", {
+          p_session_id: sessionId,
+          p_step_key: stepKey,
+          p_array_key: arrayKey,
+          p_item_id: itemId,
         });
-        return { success: true, stepKey, arrayKey, removedItemId: itemId };
+        if (error) throw new Error(`delete_item failed: ${error.message}`);
+        return { success: true, stepKey, arrayKey, removedItemId: itemId, removed: !!data };
       },
     });
   }
@@ -184,10 +193,9 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
       capabilities.memberId,
     );
     tools.list_stories = listStoriesTool(sessionId, capabilities.projectId);
-    tools.approve_module = approveModuleTool(
-      capabilities.projectId,
-      capabilities.memberId,
-    );
+    // approve_module foi descontinuada na DS — aprovação acontece atomicamente
+    // pelo PM via /complete da sessão. A tool Alpha equivalente continua viva
+    // pra fluxos manuais fora de DS.
     tools.set_story_refinement = setStoryRefinementTool(capabilities.projectId);
     tools.update_user_story = updateStoryForOpsTool(capabilities.projectId);
     tools.manage_story_ac = manageStoryAcForOpsTool(capabilities.projectId);

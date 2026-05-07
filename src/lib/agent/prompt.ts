@@ -34,6 +34,8 @@ interface PromptInput {
   existingModules?: ExistingModule[];
   existingStories?: ExistingStory[];
   existingPersonas?: ExistingPersona[];
+  /** When true, agent plans in text and waits for "Executar" before write tools. Default false. */
+  planMode?: boolean;
 }
 
 function buildProjectMemorySection(input: PromptInput): string {
@@ -126,29 +128,31 @@ function buildBehaviorRules(): string {
   return `
 ## Comportamentos Obrigatorios (memoria)
 
-0. **Contrato de escrita — propor antes, aplicar depois.**
-   Voce NUNCA executa tool de escrita sem propor o conteudo em texto e receber confirmacao explicita ("ok", "vai", "manda", "aplica", "pode") na mesma conversa. Antes de tocar QUALQUER dado:
-   a. Confirme com o usuario o escopo (qual step ou qual operacao de memoria).
-   b. Proponha em texto o que pretende fazer — bullets curtos, statement/rationale/tags quando for memoria, valores quando for step data. NAO chame tool de escrita ainda.
-   c. Pergunte explicitamente: "Posso aplicar?"
-   d. So execute a tool DEPOIS da confirmacao.
-   e. Apos aplicar, PARE. Resuma em 3-5 bullets o que foi feito e pergunte: "Quer ajustar algo, ou seguimos?". NAO encadeie operacoes em silencio.
+0. **Confirmacao proporcional ao risco.**
+   Tres niveis. O modo atual (PLAN/ACT, ver topo do prompt) modifica em cima desta base.
 
-   **Tools de escrita = QUALQUER tool que altere estado.** Nao importa o nome ou a categoria. Se a tool muda algo no banco (step data, memoria, tasks, contexto de negocio, qualquer coisa), ela exige propose-then-confirm.
+   **Nivel 1 — pequenas e reversiveis. Execute direto.**
+   Tools: \`set_field\`, \`add_item\` (1-3 items), \`update_item\` (1-3 campos), \`add_open_question\`.
+   Quando o usuario descreveu o conteudo claramente (ex: "adiciona uma persona admin que aprova KYC"), execute e mostre o resultado em 1-2 linhas. NAO pergunte "posso aplicar?" pra cada item — fica chato e o usuario vai ajustar no card mesmo.
 
-   Exemplos nao-exaustivos: set_field, add_item, update_item, delete_item, set_bucket, record_decision, revise_decision, resolve_open_question, add_open_question, set_business_context, compact_session_to_project, create_task, update_task, delete_task, e qualquer tool nova que apareca no toolset com efeito de escrita.
+   **Nivel 2 — medio blast radius. Proponha curto, peca ok.**
+   Tools/casos: criar 5+ items num turno (\`add_item\` em lote — apresente lista de titulos em texto antes), \`record_decision\`, \`revise_decision\`, \`resolve_open_question\`, \`set_business_context\`, sequencia multi-tool encadeada (2+ writes acoplados, ex: revise+record), \`update_user_story\` / \`set_story_refinement\` / \`manage_story_ac\`, \`create_user_story\`, \`create_task\` em lote.
+   Apresente intencao em texto curto (titulos / statement / ids alvo). Pergunte "manda?" / "pode?". Execute apos ok ("ok", "vai", "manda", "aplica", "pode").
 
-   **Tools de leitura = qualquer tool que NAO altere estado.** Essas sao livres (sem confirmacao). Exemplos: get_step_data, list_decisions, list_open_questions, list_research, list_tasks, list_project_tasks, read_session_memory, mvp_check.
+   **Nivel 3 — destrutivo / irreversivel. SEMPRE confirme, mesmo com instrucao direta.**
+   Tools: \`delete_item\`, \`delete_task\`, \`delete_user_story\`, \`revise_decision(status: "reverted")\`, \`compact_session_to_project\`.
+   Se o usuario disser "deleta X" — voce ainda confirma uma vez ("vou deletar X (id, titulo). Confirma?"). Operacao destrutiva merece pausa explicita.
 
-   Se em duvida sobre se uma tool e read ou write: assuma write e proponha.
+   **Tools de leitura sao sempre livres** (sem confirmacao). Exemplos: \`get_step_data\`, \`list_decisions\`, \`list_open_questions\`, \`list_research\`, \`list_tasks\`, \`list_project_tasks\`, \`read_session_memory\`, \`mvp_check\`, \`search_doc\`.
 
-   **Instrucao direta do usuario NAO substitui a proposta.** Se o usuario disser "marca X como under_review", "grava decision Y", "preenche o campo Z", "registra essa pergunta": isso e um PEDIDO de operacao, nao uma confirmacao adiantada. Voce ainda deve responder com a proposta concreta (id correto, statement final, rationale, tags) e perguntar "Posso aplicar?". So entao executa.
+   **Em sequencia multi-tool**, se uma tool falhar no meio, PARE e replanje com o usuario — nao recupere silenciosamente em loop.
 
-   **Sequencia multi-tool:** quando uma operacao pede 2+ tools de escrita encadeadas (ex: revise + record + revert pra reverter decisao com supersedure), proponha o PLANO COMPLETO em texto antes da primeira chamada. Se uma tool falhar no meio, PARE e replanje com o usuario — nao recupere silenciosamente em loop.
+   **Ritmo de avanco entre steps — leia o tom da mensagem.**
+   - Se o PM pediu ritmo passo-a-passo ("vamos um por vez", "depois desse vamos ver", perguntas pontuais por step) → mantenha um step por turno, pause e resuma antes de avancar.
+   - Se o PM pediu fluxo continuo ("preenche tudo", "vamos do comeco ao fim", "executa o plano") → siga ate fim do step atual e pause pra resumir antes de pular pro proximo. Nao precisa de novo ok intra-step pra cada \`add_item\` Nivel 1.
+   - Em duvida, pause e pergunte o ritmo no comeco. Nao em cada turno.
 
-   **UM step por turno.** Mesmo apos confirmacao, nao avance pro proximo step sem novo "ok" do usuario. "Preenche tudo" significa "preenche um por vez com confirmacao a cada um", nao "dispara tudo de uma vez".
-
-   Esta regra vence qualquer outra que pareca autorizar auto-write. Quando em duvida, proponha primeiro.
+   Em duvida sobre o nivel: assuma o nivel acima.
 
 1. **Le estruturado antes de propor.** Antes de qualquer sugestao substancial sobre scope/persona/feature, considere as Decisoes Ativas e Perguntas Abertas listadas acima. Se a sugestao depende de algo aberto ha > 7 dias, levante a pergunta antes de chutar.
 
@@ -158,16 +162,16 @@ function buildBehaviorRules(): string {
    - \`(suposicao minha — sem evidencia)\` — assumption
    Sem etiqueta, a sugestao nao sai.
 
-3. **Surface contradicao estruturalmente.** Se o usuario disser algo que contradiz uma Decisao Ativa: chame \`revise_decision(id, status: "under_review")\` IMEDIATAMENTE — nao em silencio assumindo que mudou. Cite a decisao por id curto e data, peca confirmacao. Se confirmar reversao, \`revise_decision(status: "reverted")\` + \`record_decision(novo)\`.
+3. **Surface contradicao estruturalmente.** Se o usuario disser algo que contradiz uma Decisao Ativa: cite a decisao por id curto e data, mostre o conflito, e proponha \`revise_decision(id, status: "under_review")\` (Nivel 2 — peca ok antes). Se o usuario confirmar reversao, encadeie \`revise_decision(status: "reverted")\` + \`record_decision(novo)\` — o segundo write voce ja chama em sequencia, nao precisa de novo ok.
 
-7. **Triggers de write (sujeitos a Regra 0 — propor antes).**
-   Os padroes abaixo sao SINAIS de que cabe write, nao licencas pra disparar tool em silencio. Em todos os casos, proponha o statement/rationale/tags em texto e peca confirmacao antes de chamar a tool.
+7. **Triggers de write (Nivel 2 — propor antes).**
+   Os padroes abaixo sao SINAIS de que cabe write. Em todos, proponha o statement/rationale/tags em texto curto e peca ok antes de chamar a tool (Nivel 2 da Regra 0).
 
    | Trigger | Acao proposta |
    |---|---|
    | "vamos focar em X" / "X fora" / "Y e prioridade" | propor \`record_decision\` (confidence=hard_fact) |
    | "nao pode Z" / "compliance exige W" | propor \`record_decision\` (tags=["constraint"]) |
-   | Voce esta chutando algo importante | propor \`add_open_question\` |
+   | Voce esta chutando algo importante | propor \`add_open_question\` (Nivel 1 — pode chamar direto se claro) |
 
    **Dedup obrigatorio:** antes de propor \`record_decision\`, chame \`list_decisions\` (leitura livre) e cheque se ja existe statement equivalente. Se sim, NAO proponha duplicata — diga ao usuario que a decisao existente cobre o caso.
 
@@ -611,7 +615,7 @@ ${hierarchy}
 
 ### NAO neste modo
 - NAO chame \`create_task\`. Tasks so na sub-fase task_breakdown.
-- NAO chame \`approve_module\` em silencio — usuario decide.
+- NAO sugira aprovar modulo individualmente — aprovacao e atomica via "Concluir sessao" pelo PM (cascata: Module.approvedAt + UserStory.committed + Task.backlog).
 - NAO mude o modulo da story (proposedModuleName/moduleId) sem pedir.
 - NAO repita AC inteiras no chat se nao mudaram — PM ja ve na sheet.
 
@@ -865,6 +869,7 @@ export function buildSystemPrompt({
   existingModules,
   existingStories,
   existingPersonas,
+  planMode,
 }: PromptInput): string {
   const steps = getStepsForSession({ type: sessionType, selectedSteps: selectedSteps ?? null });
   const currentStep = steps.find((s) => s.key === currentStepKey);
@@ -1364,7 +1369,7 @@ Use set_field para alterar campos texto.
 Use add_item para criar novos items em listas.
 Use update_item para melhorar items existentes.
 Use delete_item para remover items.
-No step de briefing, use create_user_story (com proposedModuleName ou moduleId), create_task (com userStoryId obrigatorio), approve_module (apos confirmacao do usuario) e set_story_refinement. Veja o "Modo Briefing — Sub-fase ..." pra a sequencia exata por sub-fase.
+No step de briefing, use create_user_story (com proposedModuleName ou moduleId), create_task (com userStoryId obrigatorio) e set_story_refinement. Aprovacao do briefing e atomica e e responsabilidade exclusiva do PM via "Concluir sessao" — voce nao aprova modulos. Veja o "Modo Briefing — Sub-fase ..." pra a sequencia exata por sub-fase.
 
 ## Regras
 - Sempre responda em portugues brasileiro
@@ -1375,7 +1380,23 @@ No step de briefing, use create_user_story (com proposedModuleName ou moduleId),
 - Seja proativo: se notar dados incompletos ou anotacoes pendentes no step atual, sugira o que pode ser ajustado
 - Fale de forma direta e objetiva, sem formalidades excessivas`;
 
-  const volatileSuffix = `${projectMemorySection}${memorySection}
+  const modeBlock = planMode
+    ? `
+## Modo atual: PLAN
+Voce esta em modo planejamento. NAO chame tools de escrita ainda — apenas tools de leitura sao livres.
+Apresente o plano em texto curto: bullets do que pretende fazer (titulos / nomes / ids alvo). NAO inclua o conteudo completo (descricao, AC longa, etc) no chat — isso vai aparecer nos cards apos executar.
+Quando o usuario clicar "Executar" (mensagem fixa "vai") OU disser "vai" / "manda" / "executa" / "aplica" / "pode", chame as tools de escrita SEM nova proposta — o ok ja foi dado. Se o usuario ajustar o plano por texto, refaca a proposta e espere novo ok.
+Excecao: tools Nivel 3 (delete, revert, compact) sempre exigem confirmacao final, mesmo apos "vai".
+`
+    : `
+## Modo atual: ACT
+Execute conforme a Regra 0 (Confirmacao proporcional ao risco):
+- Nivel 1 (set_field, add_item, update_item, add_open_question com conteudo claro): execute direto.
+- Nivel 2 (5+ items, record_decision, revise_decision, multi-tool, create_user_story, create_task em lote): proponha curto e peca ok.
+- Nivel 3 (delete, revert, compact): SEMPRE confirme.
+`;
+
+  const volatileSuffix = `${modeBlock}${projectMemorySection}${memorySection}
 
 ## Dados completos da sessao
 ${sessionContext || "Nenhum dado preenchido ainda."}

@@ -1,10 +1,11 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser, requireProjectMemberApi } from "@/lib/dal";
+import { getActorMemberId, getUser, requireProjectMemberApi } from "@/lib/dal";
 import { listTagsForTask, setTagsForTask } from "@/lib/dal/task-tags";
 import { TASK_TAG_LIMIT } from "@/lib/task-tags";
 import { snapshotTaskHydrated } from "@/lib/dal/task-snapshot";
 import { recordTaskChanges } from "@/lib/dal/task-activity-recorder";
+import { notifyMembers } from "@/lib/dal/notifications";
 
 const TASK_SELECT = `
   *,
@@ -90,9 +91,55 @@ export async function PUT(
     recordTaskChanges(id, before, after).catch((e) =>
       console.error("[task-activity] recordTaskChanges failed", e),
     );
+    fanoutTaskNotifications(before, after).catch((e) =>
+      console.error("[notifications] fanoutTaskNotifications failed", e),
+    );
   }
 
   return NextResponse.json(task);
+}
+
+async function fanoutTaskNotifications(
+  before: NonNullable<Awaited<ReturnType<typeof snapshotTaskHydrated>>>,
+  after: NonNullable<Awaited<ReturnType<typeof snapshotTaskHydrated>>>,
+): Promise<void> {
+  const actorMemberId = await getActorMemberId();
+  const taskLabel = after.task.reference
+    ? `${after.task.reference} · ${after.task.title}`
+    : after.task.title;
+  const basePayload = {
+    title: taskLabel,
+    projectId: after.task.projectId,
+  };
+
+  const newAssignees = after.assigneeIds.filter(
+    (id) => !before.assigneeIds.includes(id),
+  );
+  if (newAssignees.length > 0) {
+    await notifyMembers(newAssignees, {
+      kind: "assigned",
+      entityType: "task",
+      entityId: after.task.id,
+      actorMemberId,
+      payload: basePayload,
+    });
+  }
+
+  if (before.task.status !== after.task.status) {
+    const watchers = new Set<string>(after.assigneeIds);
+    if (after.task.createdById) watchers.add(after.task.createdById);
+    await notifyMembers(Array.from(watchers), {
+      kind: "status_changed",
+      entityType: "task",
+      entityId: after.task.id,
+      actorMemberId,
+      payload: {
+        ...basePayload,
+        fromStatus: before.task.status,
+        toStatus: after.task.status,
+      },
+    });
+  }
 }
 
 export async function DELETE(

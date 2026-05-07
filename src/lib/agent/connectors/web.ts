@@ -48,11 +48,13 @@ export const webConnector = {
       currentStepKey,
       threadId: requestedThreadId,
       channel: requestedChannel,
+      planMode,
     } = body as {
       messages: Array<{ role: string; content?: string; parts?: Array<{ type: string; text?: string }> }>;
       currentStepKey: string;
       threadId?: string;
       channel?: "web" | "briefing";
+      planMode?: boolean;
     };
 
     // Extract the last user message text from the messages array
@@ -128,7 +130,7 @@ export const webConnector = {
       .select("projectId")
       .eq("id", sessionId)
       .single();
-    let capabilities = { ...WEB_CAPABILITIES };
+    let capabilities = { ...WEB_CAPABILITIES, planMode: !!planMode };
     if (session?.projectId) {
       capabilities = { ...capabilities, projectId: session.projectId };
       if (currentStepKey === "briefing") {

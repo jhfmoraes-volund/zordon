@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RoamIntegrationCard } from "./integrations-card";
+import { TelegramCard } from "@/components/settings/telegram-card";
 
 export default function SettingsPage() {
   const { userEmail } = useAuth();
@@ -83,7 +84,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <div className="flex items-center justify-center h-12 w-12 rounded-full bg-primary/10 text-primary">
@@ -95,11 +96,10 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Integrations */}
-      <RoamIntegrationCard />
-
-      {/* Change password */}
-      <Card className="max-w-md">
+      <div className="space-y-4">
+        <RoamIntegrationCard />
+        <TelegramCard />
+        <Card>
         <CardHeader>
           <CardTitle className="text-base">Alterar senha</CardTitle>
         </CardHeader>
@@ -173,6 +173,7 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

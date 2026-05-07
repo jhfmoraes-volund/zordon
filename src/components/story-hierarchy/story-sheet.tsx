@@ -48,15 +48,6 @@ import type {
   Task,
 } from "./types";
 
-export type StoryCreateInput = {
-  title: string;
-  want: string;
-  soThat?: string;
-  personaId: string | null;
-  moduleId: string | null;
-  proposedModuleName?: string | null;
-};
-
 type StorySheetProps = {
   story: Story | null;
   tasks: Task[];
@@ -64,14 +55,10 @@ type StorySheetProps = {
   personas: Persona[];
   definitionOfDone: string[];
   editing: boolean;
-  /** When true, opens in create mode (no `story` required). */
-  creating?: boolean;
   onClose: () => void;
   onEdit: () => void;
   onCancelEdit: () => void;
   onSave: (updated: Story) => void;
-  /** Required when `creating` is true. */
-  onCreate?: (input: StoryCreateInput) => void | Promise<void>;
   /** Optional callbacks for inline create flows from the edit form. */
   onCreateModuleRequested?: (suggestedName?: string) => void;
   onCreatePersonaRequested?: () => void;
@@ -84,17 +71,14 @@ type StorySheetProps = {
 };
 
 export function StorySheet(props: StorySheetProps) {
-  const { story, editing, creating, onClose } = props;
-  const isOpen = creating === true || story !== null;
+  const { story, editing, onClose } = props;
   return (
     <ResponsiveSheet
-      open={isOpen}
+      open={story !== null}
       onOpenChange={(open) => !open && onClose()}
     >
       <ResponsiveSheetContent size="md" showCloseButton={false}>
-        {creating ? (
-          <StorySheetCreate {...props} />
-        ) : story ? (
+        {story ? (
           editing ? (
             <StorySheetEdit {...props} story={story} />
           ) : (
@@ -438,17 +422,19 @@ function StorySheetEdit({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
               <Label>Módulo</Label>
               {onCreateModuleRequested ? (
                 <button
                   type="button"
-                  className="text-[10px] text-primary hover:underline"
+                  aria-label="Criar módulo"
+                  title="Criar módulo"
+                  className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
                   onClick={() =>
                     onCreateModuleRequested(draft.proposedModuleName)
                   }
                 >
-                  + criar módulo
+                  <Plus className="size-3" strokeWidth={2.5} />
                 </button>
               ) : null}
             </div>
@@ -521,15 +507,17 @@ function StorySheetEdit({
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
             <Label>Persona</Label>
             {onCreatePersonaRequested ? (
               <button
                 type="button"
-                className="text-[10px] text-primary hover:underline"
+                aria-label="Nova persona"
+                title="Nova persona"
+                className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
                 onClick={onCreatePersonaRequested}
               >
-                + nova persona
+                <Plus className="size-3" strokeWidth={2.5} />
               </button>
             ) : null}
           </div>
@@ -595,206 +583,6 @@ function StorySheetEdit({
           Cancelar
         </Button>
         <Button onClick={() => onSave(draft)}>Salvar</Button>
-      </ResponsiveSheetFooter>
-    </>
-  );
-}
-
-// ─── Create mode ─────────────────────────────────────────────────────────────
-
-const MODULE_NEW = "__new__";
-const MODULE_NONE = "__none__";
-
-function StorySheetCreate({
-  modules,
-  personas,
-  onClose,
-  onCreate,
-}: StorySheetProps) {
-  const [title, setTitle] = useState("");
-  const [want, setWant] = useState("");
-  const [soThat, setSoThat] = useState("");
-  const [personaId, setPersonaId] = useState<string>("");
-  const [moduleId, setModuleId] = useState<string>(MODULE_NONE);
-  const [proposedModuleName, setProposedModuleName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    setTitle("");
-    setWant("");
-    setSoThat("");
-    setPersonaId(personas[0]?.id ?? "");
-    setModuleId(MODULE_NONE);
-    setProposedModuleName("");
-    setSubmitting(false);
-  }, [personas]);
-
-  function setMod(v: string) {
-    setModuleId(v);
-    if (v !== MODULE_NEW) setProposedModuleName("");
-  }
-
-  const valid =
-    title.trim().length >= 3 &&
-    want.trim().length >= 3 &&
-    !!personaId &&
-    (moduleId !== MODULE_NEW ||
-      /^[A-Z][A-Z0-9_]*$/.test(proposedModuleName.trim()));
-
-  async function submit() {
-    if (!valid || submitting || !onCreate) return;
-    setSubmitting(true);
-    try {
-      await onCreate({
-        title: title.trim(),
-        want: want.trim(),
-        soThat: soThat.trim() || undefined,
-        personaId,
-        moduleId:
-          moduleId === MODULE_NEW || moduleId === MODULE_NONE
-            ? null
-            : moduleId,
-        proposedModuleName:
-          moduleId === MODULE_NEW ? proposedModuleName.trim() : null,
-      });
-      onClose();
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <>
-      <ResponsiveSheetHeader>
-        <ResponsiveSheetTitle>Nova user story</ResponsiveSheetTitle>
-        <ResponsiveSheetDescription>
-          Como persona, quero algo, para que tenha valor de negócio.
-        </ResponsiveSheetDescription>
-      </ResponsiveSheetHeader>
-
-      <ResponsiveSheetBody className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="story-create-title">Título</Label>
-          <Input
-            id="story-create-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Magic-link com expiração curta"
-            autoFocus
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label>Persona</Label>
-            <Select
-              value={personaId}
-              onValueChange={(v) => v !== null && setPersonaId(v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Escolha persona">
-                  {(v: string | null) =>
-                    v
-                      ? personas.find((p) => p.id === v)?.name ??
-                        "Escolha persona"
-                      : "Escolha persona"
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {personas.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Módulo</Label>
-            <Select
-              value={moduleId}
-              onValueChange={(v) => v !== null && setMod(v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Escolha módulo">
-                  {(v: string | null) => {
-                    if (!v || v === MODULE_NONE) return "Sem módulo";
-                    if (v === MODULE_NEW) return "+ Propor novo";
-                    return (
-                      modules.find((m) => m.id === v)?.name ?? "Escolha módulo"
-                    );
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={MODULE_NONE}>Sem módulo</SelectItem>
-                {modules.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-                <SelectItem value={MODULE_NEW}>+ Propor novo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {moduleId === MODULE_NEW ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="story-create-proposed-module">
-              Nome proposto (UPPERCASE_SNAKE)
-            </Label>
-            <Input
-              id="story-create-proposed-module"
-              value={proposedModuleName}
-              onChange={(e) =>
-                setProposedModuleName(
-                  e.target.value
-                    .toUpperCase()
-                    .replace(/\s+/g, "_")
-                    .replace(/[^A-Z0-9_]/g, ""),
-                )
-              }
-              placeholder="AUDIT_LOG"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              PM precisa aprovar pra virar módulo de fato.
-            </p>
-          </div>
-        ) : null}
-
-        <div className="space-y-1.5">
-          <Label htmlFor="story-create-want">Quero…</Label>
-          <Textarea
-            id="story-create-want"
-            value={want}
-            onChange={(e) => setWant(e.target.value)}
-            placeholder="receber link de login que expira em 10 min"
-            rows={2}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="story-create-so-that">…para que (opcional)</Label>
-          <Textarea
-            id="story-create-so-that"
-            value={soThat}
-            onChange={(e) => setSoThat(e.target.value)}
-            placeholder="reduzir risco de link vazado"
-            rows={2}
-          />
-        </div>
-      </ResponsiveSheetBody>
-
-      <ResponsiveSheetFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button onClick={submit} disabled={!valid || submitting}>
-          {submitting ? "Criando…" : "Criar story"}
-        </Button>
       </ResponsiveSheetFooter>
     </>
   );

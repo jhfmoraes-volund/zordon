@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useDesignSession } from "@/contexts/design-session-context";
+import { useChatPlanMode } from "./use-chat-plan-mode";
 
 /**
  * Chat hook for the design session AI assistant.
@@ -14,6 +15,7 @@ export function useDesignSessionChat() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
+  const { planMode, setPlanMode } = useChatPlanMode();
 
   const transport = useMemo(
     () =>
@@ -23,9 +25,10 @@ export function useDesignSessionChat() {
           sessionId: ctx.sessionId,
           currentStepKey: ctx.currentStepKey,
           threadId,
+          planMode,
         },
       }),
-    [ctx.sessionId, ctx.currentStepKey, threadId]
+    [ctx.sessionId, ctx.currentStepKey, threadId, planMode]
   );
 
   const chat = useChat({
@@ -86,5 +89,7 @@ export function useDesignSessionChat() {
     toggle,
     open,
     close,
+    planMode,
+    setPlanMode,
   };
 }

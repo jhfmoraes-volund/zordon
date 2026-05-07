@@ -6,11 +6,12 @@ import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { ChatComposer } from "@/components/ui/chat-composer";
 import { Markdown } from "@/components/ui/markdown";
+import { useChatPlanMode, readPlanMode } from "@/hooks/use-chat-plan-mode";
 import { ToolCallCard } from "./tool-call-card";
 import { VitorBadge } from "./vitor-badge";
-import { Send, Square, Sparkles, ArrowDown } from "lucide-react";
+import { Sparkles, ArrowDown } from "lucide-react";
 
 function mapToolState(state: string): "partial-call" | "call" | "result" {
   if (state === "input-streaming") return "partial-call";
@@ -55,6 +56,9 @@ export function BriefingTaskChat({
           channel: "web",
           get threadId() {
             return threadIdRef.current;
+          },
+          get planMode() {
+            return readPlanMode();
           },
         },
       }),
@@ -278,6 +282,7 @@ function ChatInput({
   onStop: () => void;
 }) {
   const [inputText, setInputText] = useState("");
+  const { planMode, setPlanMode } = useChatPlanMode();
 
   const handleSend = () => {
     if (!inputText.trim() || isStreaming) return;
@@ -287,44 +292,21 @@ function ChatInput({
   };
 
   return (
-    <div className="flex items-end gap-2 px-4 py-3 border-t border-border/50">
-      <Textarea
+    <div className="px-3 py-3 border-t border-border/50">
+      <ChatComposer
         value={inputText}
-        onChange={(e) => setInputText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-          }
-        }}
+        onChange={setInputText}
+        onSubmit={handleSend}
+        isStreaming={isStreaming}
+        onStop={onStop}
+        planMode={planMode}
+        onPlanModeChange={setPlanMode}
         placeholder={
           existingTaskCount && existingTaskCount > 0
             ? 'Refine: "Quebre a VLD-042 em duas", "A regra X mudou"...'
             : 'Liste os módulos que você identifica no brainstorm…'
         }
-        rows={1}
-        className="resize-none text-sm min-h-[40px] max-h-[120px]"
-        disabled={isStreaming}
       />
-      {isStreaming ? (
-        <Button
-          size="icon"
-          variant="destructive"
-          className="h-10 w-10 shrink-0 animate-pulse"
-          onClick={onStop}
-        >
-          <Square className="h-3.5 w-3.5" />
-        </Button>
-      ) : (
-        <Button
-          size="icon"
-          className="h-10 w-10 shrink-0"
-          disabled={!inputText.trim()}
-          onClick={handleSend}
-        >
-          <Send className="h-4 w-4" />
-        </Button>
-      )}
     </div>
   );
 }

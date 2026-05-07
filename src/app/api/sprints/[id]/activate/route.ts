@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser } from "@/lib/dal";
+import { getActorMemberId, getUser } from "@/lib/dal";
+import { notifySprintLifecycle } from "@/lib/dal/notifications";
 
 export async function POST(
   _req: NextRequest,
@@ -16,6 +17,15 @@ export async function POST(
     const status = error.code === "P0002" ? 404 : error.code === "P0001" ? 409 : 500;
     return NextResponse.json({ error: error.message }, { status });
   }
+
+  const actorMemberId = await getActorMemberId();
+  notifySprintLifecycle({
+    sprintId: id,
+    kind: "sprint_started",
+    actorMemberId,
+  }).catch((e) =>
+    console.error("[notifications] sprint_started fanout failed", e),
+  );
 
   return NextResponse.json(data);
 }

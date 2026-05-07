@@ -22,7 +22,7 @@ type PersonaJourneyBoardProps = {
   onDeleteJourneyStep: (personaId: string, type: "asIs" | "toBe", stepId: string) => void;
 };
 
-const genId = () => Math.random().toString(36).slice(2, 9);
+import { genId } from "@/lib/utils";
 
 export function PersonaJourneyBoard({
   personas,

@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useEffect, useState, useCallback, useRef } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WizardLayout } from "@/components/design-session/wizard-layout";
 import { PersonaJourneyBoard, Persona, JourneyStep } from "@/components/design-session/persona-journey-board";
@@ -17,6 +16,7 @@ import {
   DesignSessionTree,
   type TreeAction,
 } from "@/components/design-session/design-session-tree";
+import { SessionGovernanceBar } from "@/components/design-session/session-governance-bar";
 import { StorySheetByRef } from "@/components/story-sheet-by-ref";
 import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import { getStepsForSession, StepDef } from "@/lib/design-session-steps";
 import type { Note } from "@/components/design-session/sticky-note";
 import { DesignSessionProvider } from "@/contexts/design-session-context";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { genId } from "@/lib/utils";
 
 type Session = {
   id: string;
@@ -124,7 +125,6 @@ export default function StepPage({
     [debouncedSave]
   );
 
-  const genId = () => Math.random().toString(36).slice(2, 9);
 
   const handleAddNote = useCallback(() => {
     const updated = [...notesRef.current, { id: genId(), text: "" }];
@@ -191,11 +191,9 @@ export default function StepPage({
         steps={steps}
         currentStep={stepIndex}
         onNext={() => {
-          if (stepIndex < steps.length - 1) {
-            navigate(stepIndex + 1);
-          } else {
-            router.push(`/design-sessions/${id}/review`);
-          }
+          // No último step (briefing) o WizardLayout esconde o botão — governance
+          // acontece in-place via SessionGovernanceBar.
+          if (stepIndex < steps.length - 1) navigate(stepIndex + 1);
         }}
         onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
         onStepClick={navigate}
@@ -383,7 +381,6 @@ function ScopeDefinitionStep({
   data: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
 }) {
-  const genId = () => Math.random().toString(36).slice(2, 9);
   const getItems = (key: ScopeBucketKey) => (data[key] as PostItItem[]) || [];
 
   const sections: PostItSection[] = SCOPE_BUCKETS.map((b) => ({
@@ -438,7 +435,6 @@ function PersonasJourneysStep({
   data: Record<string, unknown>;
   onChange: (data: Record<string, unknown>) => void;
 }) {
-  const genId = () => Math.random().toString(36).slice(2, 9);
   const personas = ((data.personas as Persona[]) || []).map((p) => ({
     ...p,
     id: p.id || genId(),
@@ -725,7 +721,6 @@ function TechnicalSpecsStep({
   const get = (key: string) => (data[key] as string) || "";
   const set = (key: string, value: string) => onChange({ ...data, [key]: value });
   const getItems = (key: string) => (data[key] as TechSpecItem[]) || [];
-  const genId = () => Math.random().toString(36).slice(2, 9);
 
   const addItem = (key: string, text: string) => {
     if (!text.trim()) return;
@@ -1204,22 +1199,21 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
           em telas grandes — usuário pode rolar a árvore pra ver módulos lá embaixo
           sem perder o input do chat de vista. */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(420px,1fr)] gap-6 items-start">
-        <div className="surface p-5 xl:max-h-[calc(100vh-12rem)] xl:overflow-auto">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Hierarquia (Module → Story → Task)</h3>
-            <Link
-              href={`/design-sessions/${sessionId}/review`}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              Revisar antes de exportar →
-            </Link>
-          </div>
-          <DesignSessionTree
+        <div className="surface p-5 xl:max-h-[calc(100vh-12rem)] xl:overflow-auto space-y-4">
+          <SessionGovernanceBar
             sessionId={sessionId}
             refreshKey={treeRefreshKey}
-            onAction={handleTreeAction}
-            onOpenStory={(ref) => setOpenStoryRef(ref)}
+            onStatusChange={() => setTreeRefreshKey((k) => k + 1)}
           />
+          <div>
+            <h3 className="text-sm font-semibold mb-3">Hierarquia (Module → Story → Task)</h3>
+            <DesignSessionTree
+              sessionId={sessionId}
+              refreshKey={treeRefreshKey}
+              onAction={handleTreeAction}
+              onOpenStory={(ref) => setOpenStoryRef(ref)}
+            />
+          </div>
         </div>
 
         <div className="xl:sticky xl:top-6">

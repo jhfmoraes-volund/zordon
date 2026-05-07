@@ -261,7 +261,11 @@ export async function createStory(input: {
       personaId: input.personaId ?? null,
       want: input.want,
       soThat: input.soThat ?? null,
-      refinementStatus: input.refinementStatus ?? "draft",
+      // 'refined' por default: criação manual (UI/API) nasce visível na lista
+      // do projeto. 'draft' é território exclusivo do agente em sub-fase de
+      // descoberta dentro da Design Session — passado explicitamente por
+      // quem precisa.
+      refinementStatus: input.refinementStatus ?? "refined",
       designSessionId: input.designSessionId ?? null,
       designSessionItemId: input.designSessionItemId ?? null,
       createdById: input.createdById ?? null,
@@ -461,6 +465,10 @@ export async function promoteTasksForModule(
  *
  * Throws if any task is past 'backlog' (todo / in_progress / review / done) —
  * caller is expected to resolve those before unapproving.
+ *
+ * NOTE: chamado hoje só pelo `reopenSession` em cascata. O endpoint legado
+ * `/api/modules/[id]/approve` foi removido — aprovação granular não existe
+ * mais no modelo "tudo ou nada" da Design Session.
  */
 export async function revertTasksForModule(
   moduleId: string,
@@ -501,6 +509,291 @@ export async function revertTasksForModule(
   if (revertErr) throw revertErr;
 
   return { reverted: (reverted ?? []).length, blocking: [] };
+}
+
+// ─── Cascading session approval ──────────────────────────────────────────────
+
+/**
+ * Aprova uma Design Session inteira em cascata atômica:
+ *
+ *   1. Module.approvedAt = now (todos os módulos referenciados pelas stories
+ *      da sessão, incluindo módulos criados a partir de proposedModuleName)
+ *   2. UserStory.refinementStatus → 'committed' (todas as stories da sessão)
+ *   3. Task.status → 'backlog' (todas as tasks 'draft' da sessão)
+ *   4. DesignSession.status = 'completed', completedAt = now
+ *   5. ModuleActivity row 'session_completed' por módulo (audit)
+ *
+ * Modelo "tudo ou nada": aprovação granular foi removida da Design Session.
+ * Stories só ficam visíveis no projeto após a sessão ser concluída.
+ */
+export async function completeSession(
+  sessionId: string,
+  approverId: string | null,
+): Promise<{
+  modulesApproved: number;
+  storiesCommitted: number;
+  tasksPromoted: number;
+  totalFp: number;
+}> {
+  const supabase = db();
+  const nowIso = new Date().toISOString();
+
+  // Snapshot da sessão
+  const { data: session, error: sessErr } = await supabase
+    .from("DesignSession")
+    .select("id, projectId, status")
+    .eq("id", sessionId)
+    .single();
+  if (sessErr) throw sessErr;
+  if (!session) throw new Error("Session not found");
+  if (session.status === "completed") {
+    throw new Error("Sessão já está concluída");
+  }
+
+  // 1. Promover proposedModuleName → Module real (cria/reusa, vincula story).
+  //    Isso normaliza o terreno antes do approval em massa.
+  const { data: proposed, error: proposedErr } = await supabase
+    .from("UserStory")
+    .select("id, projectId, proposedModuleName")
+    .eq("designSessionId", sessionId)
+    .not("proposedModuleName", "is", null);
+  if (proposedErr) throw proposedErr;
+  for (const s of proposed ?? []) {
+    if (!s.proposedModuleName) continue;
+    await approveProposedModule(
+      s.id,
+      s.projectId,
+      s.proposedModuleName,
+      approverId,
+    );
+  }
+
+  // 2. Coletar todos os módulos efetivamente envolvidos.
+  const { data: storyRows, error: storyRowsErr } = await supabase
+    .from("UserStory")
+    .select("id, moduleId, refinementStatus")
+    .eq("designSessionId", sessionId);
+  if (storyRowsErr) throw storyRowsErr;
+
+  const moduleIds = Array.from(
+    new Set(
+      (storyRows ?? [])
+        .map((s) => s.moduleId)
+        .filter((id): id is string => id !== null),
+    ),
+  );
+
+  // 3. Module.approvedAt em todos.
+  if (moduleIds.length > 0) {
+    const { error: modErr } = await supabase
+      .from("Module")
+      .update({
+        approvedAt: nowIso,
+        approvedBy: approverId,
+        updatedAt: nowIso,
+      })
+      .in("id", moduleIds)
+      .is("approvedAt", null); // idempotente — não sobrescreve aprovações antigas
+    if (modErr) throw modErr;
+  }
+
+  // 4. UserStory.refinementStatus → committed (todas, em massa).
+  const storyIds = (storyRows ?? []).map((s) => s.id);
+  let storiesCommitted = 0;
+  if (storyIds.length > 0) {
+    const { data: committed, error: refErr } = await supabase
+      .from("UserStory")
+      .update({ refinementStatus: "committed", updatedAt: nowIso })
+      .in("id", storyIds)
+      .neq("refinementStatus", "committed")
+      .select("id");
+    if (refErr) throw refErr;
+    storiesCommitted = (committed ?? []).length;
+  }
+
+  // 5. Task.status draft → backlog em massa (filtrado por sessão).
+  let tasksPromoted = 0;
+  let totalFp = 0;
+  const { data: drafts, error: draftsErr } = await supabase
+    .from("Task")
+    .select("id, functionPoints")
+    .eq("designSessionId", sessionId)
+    .eq("status", "draft");
+  if (draftsErr) throw draftsErr;
+  if ((drafts ?? []).length > 0) {
+    const { error: promoteErr } = await supabase
+      .from("Task")
+      .update({ status: "backlog", updatedAt: nowIso })
+      .in(
+        "id",
+        (drafts ?? []).map((d) => d.id),
+      );
+    if (promoteErr) throw promoteErr;
+    tasksPromoted = (drafts ?? []).length;
+    totalFp = (drafts ?? []).reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
+  }
+
+  // 6. DesignSession.status = completed.
+  const { error: dsErr } = await supabase
+    .from("DesignSession")
+    .update({ status: "completed", completedAt: nowIso, updatedAt: nowIso })
+    .eq("id", sessionId);
+  if (dsErr) throw dsErr;
+
+  // 7. Audit log: 1 row por módulo aprovado nessa sessão.
+  if (moduleIds.length > 0) {
+    const activityRows = moduleIds.map((moduleId) => ({
+      moduleId,
+      type: "session_completed",
+      payload: { sessionId, storiesCommitted, tasksPromoted, totalFp },
+      actorMemberId: approverId,
+    }));
+    const { error: actErr } = await supabase
+      .from("ModuleActivity")
+      .insert(activityRows);
+    if (actErr) throw actErr;
+  }
+
+  return {
+    modulesApproved: moduleIds.length,
+    storiesCommitted,
+    tasksPromoted,
+    totalFp,
+  };
+}
+
+/**
+ * Reverte uma sessão concluída. Cascata pra trás:
+ *
+ *   1. Pre-flight: bloqueia se qualquer task da sessão saiu de backlog
+ *      (todo/in_progress/review/done) — PM precisa resolver primeiro.
+ *   2. Module.approvedAt = NULL (todos os módulos da sessão)
+ *   3. UserStory.refinementStatus → 'draft' (todas as stories da sessão)
+ *   4. Task.status backlog → draft (em massa)
+ *   5. DesignSession.status = 'in_progress', completedAt = NULL
+ *   6. ModuleActivity row 'session_reopened' por módulo (audit)
+ */
+export async function reopenSession(
+  sessionId: string,
+  reopenerId: string | null,
+): Promise<
+  | {
+      ok: true;
+      modulesReopened: number;
+      storiesReverted: number;
+      tasksReverted: number;
+    }
+  | {
+      ok: false;
+      blocking: Array<{ reference: string | null; status: string }>;
+    }
+> {
+  const supabase = db();
+  const nowIso = new Date().toISOString();
+
+  // Snapshot da sessão
+  const { data: session, error: sessErr } = await supabase
+    .from("DesignSession")
+    .select("id, status")
+    .eq("id", sessionId)
+    .single();
+  if (sessErr) throw sessErr;
+  if (!session) throw new Error("Session not found");
+  if (session.status !== "completed") {
+    throw new Error("Apenas sessões concluídas podem ser reabertas");
+  }
+
+  // 1. Pre-flight: tasks ativas bloqueiam.
+  const { data: active, error: activeErr } = await supabase
+    .from("Task")
+    .select("reference, status")
+    .eq("designSessionId", sessionId)
+    .in("status", ["todo", "in_progress", "review", "done"]);
+  if (activeErr) throw activeErr;
+  if ((active ?? []).length > 0) {
+    return {
+      ok: false,
+      blocking: (active ?? []).map((t) => ({
+        reference: t.reference,
+        status: t.status,
+      })),
+    };
+  }
+
+  // 2. Coletar módulos da sessão (via stories).
+  const { data: storyRows, error: storyRowsErr } = await supabase
+    .from("UserStory")
+    .select("id, moduleId")
+    .eq("designSessionId", sessionId);
+  if (storyRowsErr) throw storyRowsErr;
+
+  const moduleIds = Array.from(
+    new Set(
+      (storyRows ?? [])
+        .map((s) => s.moduleId)
+        .filter((id): id is string => id !== null),
+    ),
+  );
+  const storyIds = (storyRows ?? []).map((s) => s.id);
+
+  // 3. Module.approvedAt = null (todos da sessão).
+  if (moduleIds.length > 0) {
+    const { error: modErr } = await supabase
+      .from("Module")
+      .update({ approvedAt: null, approvedBy: null, updatedAt: nowIso })
+      .in("id", moduleIds);
+    if (modErr) throw modErr;
+  }
+
+  // 4. UserStory.refinementStatus → draft.
+  let storiesReverted = 0;
+  if (storyIds.length > 0) {
+    const { data: reverted, error: refErr } = await supabase
+      .from("UserStory")
+      .update({ refinementStatus: "draft", updatedAt: nowIso })
+      .in("id", storyIds)
+      .select("id");
+    if (refErr) throw refErr;
+    storiesReverted = (reverted ?? []).length;
+  }
+
+  // 5. Task.status backlog → draft.
+  const { data: revertedTasks, error: tasksErr } = await supabase
+    .from("Task")
+    .update({ status: "draft", updatedAt: nowIso })
+    .eq("designSessionId", sessionId)
+    .eq("status", "backlog")
+    .select("id");
+  if (tasksErr) throw tasksErr;
+  const tasksReverted = (revertedTasks ?? []).length;
+
+  // 6. DesignSession.status = in_progress.
+  const { error: dsErr } = await supabase
+    .from("DesignSession")
+    .update({ status: "in_progress", completedAt: null, updatedAt: nowIso })
+    .eq("id", sessionId);
+  if (dsErr) throw dsErr;
+
+  // 7. Audit log.
+  if (moduleIds.length > 0) {
+    const activityRows = moduleIds.map((moduleId) => ({
+      moduleId,
+      type: "session_reopened",
+      payload: { sessionId, storiesReverted, tasksReverted },
+      actorMemberId: reopenerId,
+    }));
+    const { error: actErr } = await supabase
+      .from("ModuleActivity")
+      .insert(activityRows);
+    if (actErr) throw actErr;
+  }
+
+  return {
+    ok: true,
+    modulesReopened: moduleIds.length,
+    storiesReverted,
+    tasksReverted,
+  };
 }
 
 // ─── Acceptance Criteria ─────────────────────────────────────────────────────

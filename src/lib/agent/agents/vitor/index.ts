@@ -165,6 +165,7 @@ export const vitorAgent: AgentDefinition = {
       existingModules: agentContext.existingModules as ExistingModule[],
       existingStories: agentContext.existingStories as ExistingStory[],
       existingPersonas: agentContext.existingPersonas as ExistingPersona[],
+      planMode: !!capabilities.planMode,
     });
   },
 

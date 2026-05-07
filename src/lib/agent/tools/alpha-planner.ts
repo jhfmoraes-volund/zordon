@@ -3,6 +3,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { logAgentQuality } from "@/lib/agent/quality-log";
+import { notifyMembers } from "@/lib/dal/notifications";
 
 const TASK_STATUSES = [
   "backlog",
@@ -456,6 +457,40 @@ export function bulkUpdateTasksForOpsTool(
     }),
     execute: async ({ updates, reasoning }) => {
       const supabase = db();
+
+      // Snapshot before — load tasks by ref + their current assignees so we
+      // can diff for notifications after the atomic RPC succeeds.
+      const refs = updates.map((u) => u.taskRef);
+      const { data: beforeTasks } = await supabase
+        .from("Task")
+        .select("id, reference, title, status, projectId, createdById")
+        .eq("projectId", projectId)
+        .in("reference", refs);
+      const beforeById = new Map(
+        (beforeTasks ?? []).map((t) => [t.id, t]),
+      );
+      const refToId = new Map<string, string>(
+        (beforeTasks ?? [])
+          .filter((t): t is typeof t & { reference: string } =>
+            typeof t.reference === "string",
+          )
+          .map((t) => [t.reference, t.id]),
+      );
+      const taskIds = (beforeTasks ?? []).map((t) => t.id);
+      const beforeAssignees = new Map<string, Set<string>>();
+      if (taskIds.length > 0) {
+        const { data: rows } = await supabase
+          .from("TaskAssignment")
+          .select("taskId, memberId")
+          .in("taskId", taskIds);
+        for (const r of rows ?? []) {
+          if (!r.memberId) continue;
+          const set = beforeAssignees.get(r.taskId) ?? new Set<string>();
+          set.add(r.memberId);
+          beforeAssignees.set(r.taskId, set);
+        }
+      }
+
       const { data, error } = await supabase.rpc("bulk_update_tasks", {
         p_project_id: projectId,
         // RPC signature expects Json — updates is structurally compatible
@@ -482,10 +517,83 @@ export function bulkUpdateTasksForOpsTool(
         },
       });
 
+      // Fan out under a single batchId — UI shows "Alpha atualizou N tasks"
+      // collapsed per recipient. actorMemberId stays null (Alpha = agent).
+      void fanoutAlphaBulk({
+        updates,
+        refToId,
+        beforeById,
+        beforeAssignees,
+      });
+
       return {
         success: true,
         result: data,
       };
     },
   });
+}
+
+type AlphaBulkFanoutArgs = {
+  updates: Array<{
+    taskRef: string;
+    sprintId?: string | null;
+    assigneeIds?: string[];
+    status?: string;
+  }>;
+  refToId: Map<string, string>;
+  beforeById: Map<
+    string,
+    {
+      id: string;
+      reference: string | null;
+      title: string;
+      status: string;
+      projectId: string;
+      createdById: string | null;
+    }
+  >;
+  beforeAssignees: Map<string, Set<string>>;
+};
+
+async function fanoutAlphaBulk(args: AlphaBulkFanoutArgs): Promise<void> {
+  const batchId = crypto.randomUUID();
+  for (const update of args.updates) {
+    const taskId = args.refToId.get(update.taskRef);
+    if (!taskId) continue;
+    const meta = args.beforeById.get(taskId);
+    if (!meta) continue;
+    const taskLabel = meta.reference
+      ? `${meta.reference} · ${meta.title}`
+      : meta.title;
+    const basePayload = {
+      title: taskLabel,
+      projectId: meta.projectId,
+    };
+
+    const watchers = new Set<string>(
+      args.beforeAssignees.get(taskId) ?? new Set(),
+    );
+    if (update.assigneeIds) {
+      for (const id of update.assigneeIds) watchers.add(id);
+    }
+    if (meta.createdById) watchers.add(meta.createdById);
+    if (watchers.size === 0) continue;
+
+    await notifyMembers(Array.from(watchers), {
+      kind: "agent_task_change",
+      entityType: "task",
+      entityId: taskId,
+      actorMemberId: null,
+      batchId,
+      payload: {
+        ...basePayload,
+        ...(update.status && update.status !== meta.status
+          ? { fromStatus: meta.status, toStatus: update.status }
+          : {}),
+      },
+    }).catch((e) =>
+      console.error("[notifications] alpha bulk fanout failed", e),
+    );
+  }
 }

@@ -18,7 +18,7 @@ type HypothesisBoardProps = {
   onDelete: (id: string) => void;
 };
 
-const genId = () => Math.random().toString(36).slice(2, 9);
+import { genId } from "@/lib/utils";
 
 export function HypothesisBoard({
   hypotheses,

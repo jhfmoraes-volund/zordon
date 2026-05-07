@@ -7,13 +7,14 @@ import { db } from "@/lib/db";
 /**
  * PATCH /api/stories/[ref]/refinement-status
  *
- * Updates UserStory.refinementStatus. Used by the tree UI to revert a story
- * from 'committed' → 'refined' (reopen for editing) or to manually flip states
- * outside the agent flow.
+ * Atualiza UserStory.refinementStatus entre 'refined' ↔ 'committed'. Voltar
+ * para 'draft' não é permitido nessa rota: 'draft' é exclusivo do agente em
+ * sub-fase de descoberta dentro da Design Session — não há semântica de
+ * "reabrir como rascunho" depois que a story já foi exposta no projeto.
  */
 
 const Schema = z.object({
-  status: z.enum(["draft", "refined", "committed"]),
+  status: z.enum(["refined", "committed"]),
 });
 
 export async function PATCH(

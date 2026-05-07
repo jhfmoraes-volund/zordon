@@ -384,7 +384,10 @@ export function TaskSheetInner({
                         checked={task.assigneeIds.includes(m.id)}
                         onCheckedChange={() => toggleAssignee(m.id)}
                       >
-                        {m.name}
+                        <span className="flex flex-1 items-center justify-between gap-2">
+                          <span className="truncate">{m.name}</span>
+                          <RoleBadge member={m} />
+                        </span>
                       </DropdownMenuCheckboxItem>
                     ))
                   )}
@@ -700,4 +703,28 @@ function FieldBlock({
       {children}
     </div>
   );
+}
+
+function RoleBadge({ member }: { member: Member }) {
+  if (member.isPm) {
+    return (
+      <Badge
+        variant="outline"
+        className="h-4 shrink-0 border-amber-500/40 px-1 font-mono text-[9px] text-amber-700 dark:text-amber-400"
+      >
+        PM
+      </Badge>
+    );
+  }
+  if (member.isBuilder) {
+    return (
+      <Badge
+        variant="outline"
+        className="h-4 shrink-0 border-sky-500/40 px-1 font-mono text-[9px] text-sky-700 dark:text-sky-400"
+      >
+        B
+      </Badge>
+    );
+  }
+  return null;
 }

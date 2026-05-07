@@ -1,59 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionAccessApi } from "@/lib/dal";
-import { db } from "@/lib/db";
+import { requireSessionEditApi, getCurrentMember } from "@/lib/dal";
+import { completeSession } from "@/lib/dal/story-hierarchy";
 
 /**
  * POST /api/design-sessions/[id]/complete
  *
- * Marks a Design Session as completed. This is a status-only flip — task
- * promotion happens at module-approval time, not here.
+ * Aprovação atômica da Design Session inteira (modelo "tudo ou nada"):
+ *   - Module.approvedAt = now (todos os módulos da sessão)
+ *   - UserStory.refinementStatus → 'committed' (todas)
+ *   - Task.status → 'backlog' (todas as 'draft' da sessão)
+ *   - DesignSession.status = 'completed', completedAt = now
+ *   - ModuleActivity 'session_completed' por módulo
  *
- * Pre-flight: blocks if any draft task remains. A draft task means there's
- * still work that hasn't been wrapped into an approved module — the user
- * needs to either approve the relevant module (which promotes the tasks) or
- * discard the story.
+ * Stories só ficam visíveis no projeto a partir desse ponto. Aprovação
+ * granular (approve_module) foi descontinuada na DS — PM concentra no
+ * fechamento da sessão.
  */
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: sessionId } = await params;
-  const denied = await requireSessionAccessApi(sessionId);
+  const denied = await requireSessionEditApi(sessionId);
   if (denied) return denied;
 
-  const supabase = db();
+  const member = await getCurrentMember();
 
-  const { count: draftCount, error: countErr } = await supabase
-    .from("Task")
-    .select("id", { count: "exact", head: true })
-    .eq("designSessionId", sessionId)
-    .eq("status", "draft");
-  if (countErr) {
-    return NextResponse.json({ error: countErr.message }, { status: 500 });
+  try {
+    const result = await completeSession(sessionId, member?.id ?? null);
+    return NextResponse.json({ ok: true, ...result });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "complete failed";
+    const status = /já está concluída/i.test(msg) ? 409 : 500;
+    return NextResponse.json({ error: msg }, { status });
   }
-  if ((draftCount ?? 0) > 0) {
-    return NextResponse.json(
-      {
-        error: "blocked",
-        message: `${draftCount} task(s) ainda em rascunho. Aprove os módulos correspondentes ou descarte as stories antes de concluir.`,
-        draftCount,
-      },
-      { status: 409 },
-    );
-  }
-
-  const { error: sessionErr } = await supabase
-    .from("DesignSession")
-    .update({
-      status: "completed",
-      completedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    })
-    .eq("id", sessionId);
-
-  if (sessionErr) {
-    return NextResponse.json({ error: sessionErr.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true });
 }

@@ -23,6 +23,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  ConfirmDialog,
+  type ConfirmState,
+} from "@/components/ui/confirm-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -54,7 +58,6 @@ import {
   TaskDuplicateDialog,
   TaskCloneDialog,
   type ProjectLite,
-  type StoryCreateInput,
   type TaskTag,
 } from "@/components/story-hierarchy";
 import type { ChipTone } from "@/lib/status-chips";
@@ -89,6 +92,8 @@ import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { tempId as makeTempId } from "@/lib/optimistic/reconcile";
 import { suggestFunctionPoints } from "@/lib/function-points";
+import { useAuth } from "@/contexts/auth-context";
+import { hasMinAccessLevel } from "@/lib/roles";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -187,6 +192,8 @@ export default function ProjectDetailPage({
 }) {
   const { id } = use(params);
   const supabase = useMemo(() => createClient(), []);
+  const { effectiveAccessLevel } = useAuth();
+  const canDeleteSprint = hasMinAccessLevel(effectiveAccessLevel, "admin");
 
   const router = useRouter();
   const pathname = usePathname();
@@ -265,10 +272,10 @@ export default function ProjectDetailPage({
   const [personaDialog, setPersonaDialog] = useState<{ open: boolean }>({
     open: false,
   });
-  const [storyCreateOpen, setStoryCreateOpen] = useState(false);
   const [duplicateTaskRef, setDuplicateTaskRef] = useState<string | null>(null);
   const [cloneTaskRef, setCloneTaskRef] = useState<string | null>(null);
   const [targetProjects, setTargetProjects] = useState<ProjectLite[]>([]);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   // Sprint focada (id de sprint real) derivada do sprintView.
   // null quando view sintética ("backlog"/"all") ou ainda não resolvida.
@@ -335,16 +342,20 @@ export default function ProjectDetailPage({
   }, [id, supabase]);
 
   const loadStoryHierarchy = useCallback(async () => {
-    // Project view shows only APPROVED modules (Module.approvedAt IS NOT NULL).
-    // Stories whose moduleId points to a draft module — or whose moduleId is
-    // null (still in proposedModuleName) — are excluded. Drafts live exclusively
-    // in the Design Session briefing tree until approved.
+    // Story visibility no projeto = "tudo ou nada" da Design Session.
+    // - Stories manuais (designSessionId IS NULL): aparecem sempre — universo
+    //   paralelo ao da DS.
+    // - Stories de DS: aparecem só quando a sessão estiver `completed`. Drafts
+    //   da sessão e qualquer story de sessão ainda aberta ficam invisíveis aqui
+    //   e vivem na briefing tree.
+    // O JOIN inclui `designSession:DesignSession(status)` pra filtrar no
+    // cliente — a quantidade de stories por projeto é pequena o bastante pra
+    // não justificar uma RPC dedicada.
     const [modulesRes, personasRes, storiesRes, taskAcRes] = await Promise.all([
       supabase
         .from("Module")
         .select("*")
         .eq("projectId", id)
-        .not("approvedAt", "is", null)
         .order("name"),
       supabase
         .from("ProjectPersona")
@@ -354,10 +365,9 @@ export default function ProjectDetailPage({
       supabase
         .from("UserStory")
         .select(
-          "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module!inner(id, name, description, approvedAt), persona:ProjectPersona(id, name, description)",
+          "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description, approvedAt), persona:ProjectPersona(id, name, description), designSession:DesignSession(status)",
         )
         .eq("projectId", id)
-        .not("module.approvedAt", "is", null)
         .order("createdAt", { ascending: false }),
       supabase
         .from("AcceptanceCriterion")
@@ -367,9 +377,16 @@ export default function ProjectDetailPage({
 
     setRawModules((modulesRes.data ?? []) as ModuleRow[]);
     setRawPersonas((personasRes.data ?? []) as PersonaRow[]);
-    setRawStories(
-      ((storiesRes.data ?? []) as unknown) as StoryWithRelations[],
-    );
+    const visibleStories = ((storiesRes.data ?? []) as Array<
+      StoryWithRelations & {
+        designSessionId: string | null;
+        designSession: { status: string } | null;
+      }
+    >).filter((s) => {
+      if (s.designSessionId === null) return true;
+      return s.designSession?.status === "completed";
+    });
+    setRawStories(visibleStories as unknown as StoryWithRelations[]);
     setTaskAcRows((taskAcRes.data ?? []) as AcceptanceCriterionRow[]);
     // After a hard reload, all rows carry real ids — aliases are obsolete.
     acIdAliasRef.current.clear();
@@ -481,7 +498,26 @@ export default function ProjectDetailPage({
     [tasks],
   );
 
-  const members = useMemo(() => rawMembers.map(adaptMember), [rawMembers]);
+  // "Members" do projeto = PM (Project.pmId) ∪ alocados (ProjectMember). PM
+  // ganha precedência: se a mesma pessoa for PM e Builder, exibe só "PM".
+  const members = useMemo(() => {
+    const allocated = rawMembers.map(adaptMember).map((m) => ({
+      ...m,
+      isBuilder: true,
+    }));
+    const pm = project?.pm;
+    if (!pm) return allocated;
+    const idx = allocated.findIndex((m) => m.id === pm.id);
+    if (idx >= 0) {
+      const next = [...allocated];
+      next[idx] = { ...next[idx], isPm: true, isBuilder: false };
+      return next;
+    }
+    return [
+      { ...adaptMember(pm), isPm: true, isBuilder: false },
+      ...allocated,
+    ];
+  }, [rawMembers, project?.pm]);
 
   const sprints: SprintView[] = useMemo(
     () =>
@@ -649,7 +685,42 @@ export default function ProjectDetailPage({
     }
   }
 
-  async function handleCreateStory(input: StoryCreateInput) {
+  async function handleDeleteSprint(targetId: string) {
+    const target = sprints.find((s) => s.id === targetId);
+    const label = target?.name ?? "essa sprint";
+    setConfirmState({
+      title: `Excluir ${label}?`,
+      description:
+        "Tasks vinculadas precisam ser movidas antes. Essa ação não pode ser desfeita.",
+      confirmLabel: "Excluir",
+      destructive: true,
+      onConfirm: () => deleteSprint(targetId),
+    });
+  }
+
+  async function deleteSprint(targetId: string) {
+    try {
+      await fetchOrThrow(`/api/sprints/${targetId}`, { method: "DELETE" });
+      toast.success("Sprint excluída");
+      if (sprintView === targetId) setSprintView(null);
+      await loadTasksAndSprints();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao excluir sprint" });
+    }
+  }
+
+  /**
+   * Create a stub story and open the StorySheet on it in edit mode. Mirrors
+   * the TaskSheet pattern: the user fills in title/want/persona/module on the
+   * form they already know. If it was a misclick, they delete via the row's
+   * kebab menu like any other story.
+   *
+   * `refinementStatus="draft"` is reserved for AI-proposed stories pending
+   * human review (revealed only inside the originating Design Session), and is
+   * set explicitly by that flow — never by this manual button. Manual stubs
+   * nascem 'refined' (default no DAL) e aparecem na lista do projeto na hora.
+   */
+  async function handleCreateStory() {
     if (!project?.referenceKey) {
       showErrorToast(
         new Error("Project precisa de referenceKey. Configure em Settings."),
@@ -658,19 +729,20 @@ export default function ProjectDetailPage({
       return;
     }
     try {
-      await fetchOrThrow(`/api/projects/${id}/stories`, {
+      const res = await fetchOrThrow(`/api/projects/${id}/stories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: input.title,
-          want: input.want,
-          soThat: input.soThat ?? null,
-          personaId: input.personaId,
-          moduleId: input.moduleId,
-          proposedModuleName: input.proposedModuleName ?? null,
+          title: "Nova story",
+          want: "A definir.",
+          personaId: personas[0]?.id ?? null,
+          moduleId: null,
         }),
       });
+      const { story } = (await res.json()) as { story: { reference: string } };
       await loadStoryHierarchy();
+      setSelectedStoryRef(story.reference);
+      setEditingStory(true);
     } catch (e) {
       showErrorToast(e, { label: "Falha ao criar story" });
     }
@@ -807,6 +879,25 @@ export default function ProjectDetailPage({
     } catch (e) {
       showErrorToast(e, { label: "Falha ao salvar story" });
     }
+  }
+
+  async function handleDeleteStory(storyRef: string) {
+    setConfirmState({
+      title: `Deletar story ${storyRef}?`,
+      description:
+        "Tasks relacionadas serão desvinculadas. Essa ação não pode ser desfeita.",
+      confirmLabel: "Deletar",
+      destructive: true,
+      onConfirm: async () => {
+        if (selectedStoryRef === storyRef) setSelectedStoryRef(null);
+        try {
+          await fetchOrThrow(`/api/stories/${storyRef}`, { method: "DELETE" });
+          await loadStoryHierarchy();
+        } catch (e) {
+          showErrorToast(e, { label: "Falha ao deletar story" });
+        }
+      },
+    });
   }
 
   /** Inline edits from the TasksList row. taskRef is the public reference;
@@ -1174,9 +1265,16 @@ export default function ProjectDetailPage({
   async function handleDeleteTask(taskRef: string) {
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
-    if (!confirm(`Deletar task ${taskRef}? Essa ação não pode ser desfeita.`)) {
-      return;
-    }
+    setConfirmState({
+      title: `Deletar task ${taskRef}?`,
+      description: "Essa ação não pode ser desfeita.",
+      confirmLabel: "Deletar",
+      destructive: true,
+      onConfirm: () => deleteTask(taskRef, taskId),
+    });
+  }
+
+  async function deleteTask(taskRef: string, taskId: string) {
     if (selectedTaskRef === taskRef) setSelectedTaskRef(null);
     await taskMutate(
       { type: "delete", id: taskId },
@@ -1385,12 +1483,13 @@ export default function ProjectDetailPage({
   async function handleApproveProposedModule(story: AdaptedStory) {
     if (!story.proposedModuleName) return;
     try {
-      await fetchOrThrow(`/api/stories/${story.reference}/approve-module`, {
-        method: "POST",
-      });
+      await fetchOrThrow(
+        `/api/stories/${story.reference}/promote-proposed-module`,
+        { method: "POST" },
+      );
       await loadStoryHierarchy();
     } catch (e) {
-      showErrorToast(e, { label: "Falha ao aprovar módulo" });
+      showErrorToast(e, { label: "Falha ao promover módulo" });
     }
   }
 
@@ -1438,15 +1537,22 @@ export default function ProjectDetailPage({
   }
 
   async function handleDeleteModule(modId: string) {
-    if (!confirm("Deletar módulo?")) return;
-    try {
-      await fetchOrThrow(`/api/projects/${id}/modules/${modId}`, {
-        method: "DELETE",
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao deletar módulo" });
-    }
+    setConfirmState({
+      title: "Deletar módulo?",
+      description: "Essa ação não pode ser desfeita.",
+      confirmLabel: "Deletar",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await fetchOrThrow(`/api/projects/${id}/modules/${modId}`, {
+            method: "DELETE",
+          });
+          await loadStoryHierarchy();
+        } catch (e) {
+          showErrorToast(e, { label: "Falha ao deletar módulo" });
+        }
+      },
+    });
   }
 
   async function handleCreatePersona(data: {
@@ -1482,15 +1588,22 @@ export default function ProjectDetailPage({
   }
 
   async function handleDeletePersona(perId: string) {
-    if (!confirm("Deletar persona?")) return;
-    try {
-      await fetchOrThrow(`/api/projects/${id}/personas/${perId}`, {
-        method: "DELETE",
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao deletar persona" });
-    }
+    setConfirmState({
+      title: "Deletar persona?",
+      description: "Essa ação não pode ser desfeita.",
+      confirmLabel: "Deletar",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await fetchOrThrow(`/api/projects/${id}/personas/${perId}`, {
+            method: "DELETE",
+          });
+          await loadStoryHierarchy();
+        } catch (e) {
+          showErrorToast(e, { label: "Falha ao deletar persona" });
+        }
+      },
+    });
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -1653,7 +1766,8 @@ export default function ProjectDetailPage({
             setSelectedStoryRef(ref);
             setEditingStory(false);
           }}
-          onCreateStory={() => setStoryCreateOpen(true)}
+          onCreateStory={handleCreateStory}
+          onDeleteStory={handleDeleteStory}
         />
       ) : activeTab === "sprints" ? (
         <div className="space-y-5">
@@ -1789,6 +1903,15 @@ export default function ProjectDetailPage({
                           Ativar sprint
                         </DropdownMenuItem>
                       ) : null}
+                      {canDeleteSprint ? (
+                        <DropdownMenuItem
+                          onClick={() => handleDeleteSprint(focused.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="size-3.5" />
+                          Excluir sprint
+                        </DropdownMenuItem>
+                      ) : null}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </>
@@ -1904,7 +2027,8 @@ export default function ProjectDetailPage({
         />
       ) : null}
 
-      {/* Story sheet — view, edit, AND create modes share the same panel. */}
+      {/* Story sheet — view + edit share the same panel. New stories nasce via
+          handleCreateStory (stub) e abre direto em edit mode. */}
       <StorySheet
         story={selectedStory}
         tasks={tasks}
@@ -1912,11 +2036,9 @@ export default function ProjectDetailPage({
         personas={personas}
         definitionOfDone={project.definitionOfDone}
         editing={editingStory}
-        creating={storyCreateOpen}
         onClose={() => {
           setSelectedStoryRef(null);
           setEditingStory(false);
-          setStoryCreateOpen(false);
         }}
         onEdit={() => setEditingStory(true)}
         onCancelEdit={() => setEditingStory(false)}
@@ -1924,7 +2046,6 @@ export default function ProjectDetailPage({
           handleSaveStory(updated as AdaptedStory);
           setEditingStory(false);
         }}
-        onCreate={handleCreateStory}
         onCreateModuleRequested={(suggested) =>
           setModuleDialog({ open: true, suggested })
         }
@@ -1991,6 +2112,11 @@ export default function ProjectDetailPage({
         onSubmit={async (data) => {
           await handleCreatePersona(data);
         }}
+      />
+
+      <ConfirmDialog
+        state={confirmState}
+        onClose={() => setConfirmState(null)}
       />
 
       {/* Access sheet (legacy) */}

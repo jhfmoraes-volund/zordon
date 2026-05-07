@@ -4,9 +4,9 @@ import { useRef, useEffect, useLayoutEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { ChatComposer, type ChatComposerHandle } from "@/components/ui/chat-composer";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Send, Loader2, Wrench, X } from "lucide-react";
+import { Loader2, Wrench, X, Play } from "lucide-react";
 import type { UIMessage } from "ai";
 import { Markdown } from "@/components/ui/markdown";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -21,7 +21,37 @@ type ChatContentProps = {
   onInputChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   onClose?: () => void;
+  planMode?: boolean;
+  onPlanModeChange?: (next: boolean) => void;
+  onExecutePlan?: () => void;
+  onStop?: () => void;
 };
+
+/**
+ * In PLAN mode, the agent presents a plan and waits for the user to send "vai".
+ * The "Executar plano" button shows under the last assistant message when:
+ *   - planMode is on
+ *   - last message is from the assistant
+ *   - assistant did NOT call any tool in that message (i.e. it was a plan, not an execution)
+ *   - chat is not currently streaming
+ *
+ * This is a pure client-side UX shortcut — clicking sends "vai" through the normal
+ * sendMessage path. The agent treats "vai" as the confirmation signal per Regra 0.
+ */
+function shouldShowExecuteButton(opts: {
+  planMode: boolean | undefined;
+  isLoading: boolean;
+  messages: UIMessage[];
+  msgIdx: number;
+}): boolean {
+  if (!opts.planMode) return false;
+  if (opts.isLoading) return false;
+  if (opts.msgIdx !== opts.messages.length - 1) return false;
+  const msg = opts.messages[opts.msgIdx];
+  if (!msg || msg.role !== "assistant") return false;
+  const hasToolCall = msg.parts?.some((p) => p.type === "tool-invocation") ?? false;
+  return !hasToolCall;
+}
 
 function AIChatContent({
   messages,
@@ -31,9 +61,13 @@ function AIChatContent({
   onInputChange,
   onSubmit,
   onClose,
+  planMode,
+  onPlanModeChange,
+  onExecutePlan,
+  onStop,
 }: ChatContentProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<ChatComposerHandle>(null);
   const stickToBottomRef = useRef(true);
 
   // Empty state precisa ocupar toda a altura quando nao ha mensagem
@@ -74,7 +108,7 @@ function AIChatContent({
   }, [itemCount, virtualizer, messages]);
 
   useEffect(() => {
-    const t = setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 100);
+    const t = setTimeout(() => composerRef.current?.focus(), 100);
     return () => clearTimeout(t);
   }, []);
 
@@ -136,7 +170,22 @@ function AIChatContent({
                       <span className="text-xs">Pensando...</span>
                     </div>
                   ) : msg ? (
-                    <MessageBubble message={msg} />
+                    <>
+                      <MessageBubble message={msg} />
+                      {onExecutePlan && shouldShowExecuteButton({ planMode, isLoading, messages, msgIdx: idx }) && (
+                        <div className="mt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={onExecutePlan}
+                            className="gap-1.5"
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                            Executar plano
+                          </Button>
+                        </div>
+                      )}
+                    </>
                   ) : null}
                 </div>
               );
@@ -145,38 +194,23 @@ function AIChatContent({
         )}
       </div>
 
-      <form onSubmit={onSubmit} className="shrink-0 border-t border-border/50 p-3 pb-safe">
-        <div className="flex gap-2">
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (input.trim() && !isLoading) {
-                  onSubmit(e);
-                }
-              }
-            }}
-            placeholder="Pergunte ou peça algo..."
-            rows={1}
-            className="max-h-[100px] min-h-[40px] flex-1 resize-none text-sm"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            disabled={!input.trim() || isLoading}
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </form>
+      <div className="shrink-0 border-t border-border/50 p-3 pb-safe">
+        <ChatComposer
+          ref={composerRef}
+          value={input}
+          onChange={onInputChange}
+          onSubmit={() => {
+            if (!input.trim() || isLoading) return;
+            // Wrap in a synthetic event to keep the existing onSubmit signature.
+            onSubmit({ preventDefault: () => {} } as React.FormEvent);
+          }}
+          isStreaming={isLoading}
+          onStop={onStop}
+          planMode={planMode}
+          onPlanModeChange={onPlanModeChange}
+          placeholder="Pergunte ou peça algo..."
+        />
+      </div>
     </>
   );
 }

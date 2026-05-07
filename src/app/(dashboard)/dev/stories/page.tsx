@@ -67,7 +67,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Eye }[] = [
 ];
 
 function genId(prefix: string) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  return `${prefix}-${crypto.randomUUID()}`;
 }
 
 export default function ProjectStoriesMockPage() {

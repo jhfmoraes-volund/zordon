@@ -1,8 +1,12 @@
 "use client";
 
-import { Check, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { Check, AlertTriangle, Gauge } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PixelBar, PixelDot, pixelTone } from "@/components/ui/pixel-bar";
 import { StatusChip } from "@/components/ui/status-chip";
+import { useAuth } from "@/contexts/auth-context";
+import { hasMinAccessLevel } from "@/lib/roles";
 import type { ChipTone } from "@/lib/status-chips";
 import type { Member } from "@/components/story-hierarchy";
 import type { SprintMemberCapacity } from "./types";
@@ -28,6 +32,9 @@ export function SprintCapacity({
   deliveredFp = {},
   plannedFp = {},
 }: Props) {
+  const { effectiveAccessLevel } = useAuth();
+  const canViewCapacity = hasMinAccessLevel(effectiveAccessLevel, "manager");
+
   if (capacities.length === 0) {
     return (
       <p className="text-xs italic text-muted-foreground">
@@ -57,6 +64,19 @@ export function SprintCapacity({
               <span className="text-sm font-medium truncate flex-1 min-w-0">
                 {member.name}
               </span>
+              {canViewCapacity && (
+                <Link href={`/members/${cap.memberId}`}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    title="Ver capacity detalhada"
+                  >
+                    <Gauge className="h-3.5 w-3.5" />
+                    capacity
+                  </Button>
+                </Link>
+              )}
               <StatusChip tone={health.tone} size="sm">
                 {health.icon === "ok" ? (
                   <Check className="h-3 w-3" />

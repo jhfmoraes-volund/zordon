@@ -41,7 +41,6 @@ export { AcList } from "./ac-list";
 export { ModuleDialog, PersonaDialog } from "./dialogs";
 export { StoriesList } from "./stories-list";
 export { StorySheet } from "./story-sheet";
-export type { StoryCreateInput } from "./story-sheet";
 export { TasksList } from "./tasks-list";
 export { TaskSheet, TaskSheetInner } from "./task-sheet";
 export { TaskRowMenu } from "./task-row-menu";

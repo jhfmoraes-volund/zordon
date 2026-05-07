@@ -11,6 +11,7 @@ import {
   decorateForViewer,
   getCommentsForTask,
 } from "@/lib/dal/task-comments";
+import { notifyMembers } from "@/lib/dal/notifications";
 import { parseMentions, type MentionMember } from "@/lib/mentions";
 
 const createSchema = z.object({
@@ -27,6 +28,17 @@ async function fetchTaskProjectId(taskId: string): Promise<string | null> {
     .eq("id", taskId)
     .maybeSingle();
   return data?.projectId ?? null;
+}
+
+async function fetchTaskMeta(
+  taskId: string,
+): Promise<{ projectId: string; title: string; reference: string | null } | null> {
+  const { data } = await db()
+    .from("Task")
+    .select("projectId, title, reference")
+    .eq("id", taskId)
+    .maybeSingle();
+  return data ?? null;
 }
 
 async function fetchProjectMembers(
@@ -105,6 +117,26 @@ export async function POST(
       mentionedMemberIds,
     });
     const viewerMemberId = await getActorMemberId();
+
+    if (mentionedMemberIds.length > 0) {
+      const meta = await fetchTaskMeta(id);
+      const taskLabel = meta?.reference
+        ? `${meta.reference} · ${meta.title}`
+        : meta?.title ?? "task";
+      const snippet = parsed.data.body.slice(0, 200);
+      await notifyMembers(mentionedMemberIds, {
+        kind: "mention",
+        entityType: "comment",
+        entityId: comment.id,
+        actorMemberId: viewerMemberId,
+        payload: {
+          title: taskLabel,
+          snippet,
+          projectId: meta?.projectId,
+        },
+      });
+    }
+
     return NextResponse.json(
       { comment: decorateForViewer(comment, viewerMemberId) },
       { status: 201 },

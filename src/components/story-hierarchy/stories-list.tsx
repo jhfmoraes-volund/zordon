@@ -9,6 +9,7 @@ import {
   fpOfStory,
   taskCountsOfStory,
 } from "./helpers";
+import { StoryRowMenu } from "./story-row-menu";
 import type { Module, Story, Task } from "./types";
 
 type StoriesListProps = {
@@ -17,6 +18,7 @@ type StoriesListProps = {
   modules: Module[];
   onOpenStory: (ref: string) => void;
   onCreateStory?: () => void;
+  onDeleteStory?: (ref: string) => void;
 };
 
 export function StoriesList({
@@ -25,6 +27,7 @@ export function StoriesList({
   modules,
   onOpenStory,
   onCreateStory,
+  onDeleteStory,
 }: StoriesListProps) {
   const groups = modules
     .map((m) => ({
@@ -63,6 +66,7 @@ export function StoriesList({
           tasks={tasks}
           modules={modules}
           onOpenStory={onOpenStory}
+          onDeleteStory={onDeleteStory}
         />
       ))}
 
@@ -75,6 +79,7 @@ export function StoriesList({
           tasks={tasks}
           modules={modules}
           onOpenStory={onOpenStory}
+          onDeleteStory={onDeleteStory}
         />
       ) : null}
     </div>
@@ -88,6 +93,7 @@ function StoryGroup({
   tasks,
   modules,
   onOpenStory,
+  onDeleteStory,
   inbox = false,
 }: {
   title: string;
@@ -96,8 +102,13 @@ function StoryGroup({
   tasks: Task[];
   modules: Module[];
   onOpenStory: (ref: string) => void;
+  onDeleteStory?: (ref: string) => void;
   inbox?: boolean;
 }) {
+  const showMenu = !!onDeleteStory;
+  const gridCols = showMenu
+    ? "grid-cols-[96px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px_40px]"
+    : "grid-cols-[96px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px]";
   return (
     <section className="space-y-2">
       <div className="flex items-baseline gap-2">
@@ -128,8 +139,10 @@ function StoryGroup({
         }`}
       >
         <div className="overflow-x-auto">
-          <div className="min-w-[1040px]">
-            <div className="grid grid-cols-[96px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px] gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className={showMenu ? "min-w-[1080px]" : "min-w-[1040px]"}>
+            <div
+              className={`grid ${gridCols} gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground`}
+            >
               <span>Ref</span>
               <span>Título</span>
               <span>Módulo</span>
@@ -137,6 +150,7 @@ function StoryGroup({
               <span>Status</span>
               <span className="text-right">Tasks</span>
               <span className="text-right">FP</span>
+              {showMenu ? <span /> : null}
             </div>
             {rows.map((story, i) => (
               <StoryRow
@@ -145,7 +159,9 @@ function StoryGroup({
                 tasks={tasks}
                 modules={modules}
                 isLast={i === rows.length - 1}
+                gridCols={gridCols}
                 onOpen={() => onOpenStory(story.reference)}
+                onDelete={onDeleteStory}
               />
             ))}
           </div>
@@ -160,13 +176,17 @@ function StoryRow({
   tasks,
   modules,
   isLast,
+  gridCols,
   onOpen,
+  onDelete,
 }: {
   story: Story;
   tasks: Task[];
   modules: Module[];
   isLast: boolean;
+  gridCols: string;
   onOpen: () => void;
+  onDelete?: (ref: string) => void;
 }) {
   const mod = modules.find((m) => m.id === story.moduleId);
   const fps = fpOfStory(story, tasks);
@@ -174,10 +194,17 @@ function StoryRow({
   const status = computeStatus(story, tasks);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className={`grid w-full grid-cols-[96px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px] items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={`grid w-full cursor-pointer ${gridCols} items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40 ${
         !isLast ? "border-b" : ""
       }`}
     >
@@ -227,6 +254,18 @@ function StoryRow({
       <span className="text-right font-mono text-xs tabular-nums">
         {fps.total === 0 ? "—" : `${fps.done}/${fps.total}`}
       </span>
-    </button>
+
+      {onDelete ? (
+        <span className="flex justify-center">
+          <StoryRowMenu
+            storyRef={story.reference}
+            onCopyRef={(ref) => {
+              void navigator.clipboard.writeText(ref);
+            }}
+            onDelete={onDelete}
+          />
+        </span>
+      ) : null}
+    </div>
   );
 }

@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { canEditTasks, getUser } from "@/lib/dal";
+import { canEditTasks, getActorMemberId, getUser } from "@/lib/dal";
 import { TASK_TAG_LIMIT } from "@/lib/task-tags";
+import { notifyMembers } from "@/lib/dal/notifications";
 
 // ─── Body shape ──────────────────────────────────────────────
 //
@@ -135,6 +136,29 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "patch is empty" }, { status: 400 });
   }
 
+  // Snapshot per-task state BEFORE mutation so we can diff for notifications.
+  const { data: beforeTasks } = await supabase
+    .from("Task")
+    .select("id, title, reference, status, projectId, createdById")
+    .in("id", allowedIds);
+  const beforeStatusById = new Map(
+    (beforeTasks ?? []).map((t) => [t.id, t.status]),
+  );
+  const beforeMetaById = new Map(
+    (beforeTasks ?? []).map((t) => [t.id, t]),
+  );
+  const { data: beforeAssigns } = await supabase
+    .from("TaskAssignment")
+    .select("taskId, memberId")
+    .in("taskId", allowedIds);
+  const beforeAssigneesByTask = new Map<string, Set<string>>();
+  for (const r of beforeAssigns ?? []) {
+    if (!r.memberId) continue;
+    const set = beforeAssigneesByTask.get(r.taskId) ?? new Set<string>();
+    set.add(r.memberId);
+    beforeAssigneesByTask.set(r.taskId, set);
+  }
+
   if (hasTaskUpdate) {
     taskUpdate.updatedAt = new Date().toISOString();
     const { error } = await supabase
@@ -166,6 +190,22 @@ export async function PATCH(req: NextRequest) {
       }
     }
   }
+
+  // Fan out notifications with a shared batchId so the bell collapses N task
+  // changes into a single row per recipient. Failures are logged, not fatal.
+  fanoutBulkNotifications({
+    allowedIds,
+    statusBefore: beforeStatusById,
+    assigneesBefore: beforeAssigneesByTask,
+    metaById: beforeMetaById,
+    nextStatus:
+      "status" in taskUpdate ? (taskUpdate.status as string) : null,
+    nextAssigneeId:
+      hasAssigneeChange &&
+      (typeof patch.assigneeId === "string" ? patch.assigneeId : null),
+  }).catch((e) =>
+    console.error("[notifications] bulk fanout failed", e),
+  );
 
   // ─── Tag changes ────────────────────────────────────────────
   // Skipped tasks (limit-exceeded) are surfaced so the UI can warn.
@@ -277,4 +317,84 @@ export async function PATCH(req: NextRequest) {
     skippedDueToLimit,
     updatedAt: new Date().toISOString(),
   });
+}
+
+type TaskMeta = {
+  id: string;
+  title: string;
+  reference: string | null;
+  projectId: string;
+  createdById: string | null;
+};
+
+async function fanoutBulkNotifications(args: {
+  allowedIds: string[];
+  statusBefore: Map<string, string>;
+  assigneesBefore: Map<string, Set<string>>;
+  metaById: Map<string, TaskMeta>;
+  nextStatus: string | null;
+  nextAssigneeId: string | false | null;
+}): Promise<void> {
+  const { allowedIds, statusBefore, assigneesBefore, metaById, nextStatus } =
+    args;
+  const actorMemberId = await getActorMemberId();
+
+  // Status change fan-out — one batchId across all affected tasks/recipients.
+  if (nextStatus !== null) {
+    const batchId = crypto.randomUUID();
+    for (const taskId of allowedIds) {
+      const prev = statusBefore.get(taskId);
+      if (prev === undefined || prev === nextStatus) continue;
+      const meta = metaById.get(taskId);
+      if (!meta) continue;
+      const watchers = new Set<string>(
+        assigneesBefore.get(taskId) ?? new Set(),
+      );
+      if (meta.createdById) watchers.add(meta.createdById);
+      if (watchers.size === 0) continue;
+      const taskLabel = meta.reference
+        ? `${meta.reference} · ${meta.title}`
+        : meta.title;
+      await notifyMembers(Array.from(watchers), {
+        kind: "status_changed",
+        entityType: "task",
+        entityId: taskId,
+        actorMemberId,
+        batchId,
+        payload: {
+          title: taskLabel,
+          projectId: meta.projectId,
+          fromStatus: prev,
+          toStatus: nextStatus,
+        },
+      });
+    }
+  }
+
+  // Assignment fan-out — only when a single member is assigned across all
+  // tasks in the batch (the only assignment shape this endpoint supports).
+  if (typeof args.nextAssigneeId === "string") {
+    const newAssigneeId = args.nextAssigneeId;
+    const batchId = crypto.randomUUID();
+    for (const taskId of allowedIds) {
+      const prev = assigneesBefore.get(taskId) ?? new Set();
+      if (prev.has(newAssigneeId)) continue;
+      const meta = metaById.get(taskId);
+      if (!meta) continue;
+      const taskLabel = meta.reference
+        ? `${meta.reference} · ${meta.title}`
+        : meta.title;
+      await notifyMembers([newAssigneeId], {
+        kind: "assigned",
+        entityType: "task",
+        entityId: taskId,
+        actorMemberId,
+        batchId,
+        payload: {
+          title: taskLabel,
+          projectId: meta.projectId,
+        },
+      });
+    }
+  }
 }

@@ -5,8 +5,9 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { ChatComposer } from "@/components/ui/chat-composer";
 import { Markdown } from "@/components/ui/markdown";
+import { useChatPlanMode, readPlanMode } from "@/hooks/use-chat-plan-mode";
 import { VitorBadge } from "./vitor-badge";
 import { ToolCallCard } from "./tool-call-card";
 import {
@@ -15,13 +16,9 @@ import {
 } from "./roam-transcript-modal";
 import {
   Loader2,
-  Bot,
-  User,
-  Send,
   Paperclip,
   File,
   X,
-  Square,
   Sparkles,
   Mic,
 } from "lucide-react";
@@ -80,6 +77,8 @@ export function PreWorkStep({
     [data, onChange]
   );
 
+  const { planMode, setPlanMode } = useChatPlanMode();
+
   // AI SDK useChat — connected to the agent engine
   // Memoize transport so useChat doesn't reset on every render
   const transport = useMemo(
@@ -91,6 +90,9 @@ export function PreWorkStep({
           currentStepKey: "pre_work",
           get threadId() {
             return threadIdRef.current;
+          },
+          get planMode() {
+            return readPlanMode();
           },
         },
       }),
@@ -409,26 +411,7 @@ export function PreWorkStep({
         )}
 
         {/* Input bar */}
-        <div className="flex items-end gap-2 px-4 py-3 border-t border-border/50">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading || isStreaming}
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            onClick={() => setRoamModalOpen(true)}
-            disabled={isStreaming}
-            title="Importar reuniao do Roam"
-          >
-            <Mic className="h-4 w-4" />
-          </Button>
+        <div className="px-3 py-3 border-t border-border/50">
           <input
             ref={fileInputRef}
             type="file"
@@ -440,41 +423,47 @@ export function PreWorkStep({
               e.target.value = "";
             }}
           />
-          <Textarea
+          <ChatComposer
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
+            onChange={setInputText}
+            onSubmit={handleSend}
+            isStreaming={isStreaming}
+            onStop={stop}
+            disabled={uploading}
+            submitDisabled={
+              (!inputText.trim() && !pendingFiles.length) || uploading
+            }
+            planMode={planMode}
+            onPlanModeChange={setPlanMode}
             placeholder="Descreva o projeto, cole texto, ou arraste arquivos..."
-            rows={1}
-            className="resize-none text-sm min-h-[40px] max-h-[120px]"
-            disabled={isStreaming}
+            leftActions={
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || isStreaming}
+                  aria-label="Anexar arquivo"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setRoamModalOpen(true)}
+                  disabled={isStreaming}
+                  title="Importar reuniao do Roam"
+                  aria-label="Importar reuniao do Roam"
+                >
+                  <Mic className="h-4 w-4" />
+                </Button>
+              </>
+            }
           />
-          {isStreaming ? (
-            <Button
-              size="icon"
-              variant="destructive"
-              className="h-10 w-10 shrink-0 animate-pulse"
-              onClick={stop}
-            >
-              <Square className="h-3.5 w-3.5" />
-            </Button>
-          ) : (
-            <Button
-              size="icon"
-              className="h-10 w-10 shrink-0"
-              disabled={
-                (!inputText.trim() && !pendingFiles.length) || uploading
-              }
-              onClick={handleSend}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          )}
         </div>
       </div>
 
