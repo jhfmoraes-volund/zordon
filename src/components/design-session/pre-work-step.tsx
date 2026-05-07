@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
-import { File, Loader2, Mic, Paperclip, Sparkles, X } from "lucide-react";
+import { File, Loader2, Mic, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ConversationFab,
@@ -32,7 +32,7 @@ function formatSize(bytes: number) {
 }
 
 const WELCOME_TEXT =
-  "Olá! Sou o Vitor, seu assistente de design de produto. Me conte sobre o projeto — pode descrever em texto livre ou anexar documentos.\n\nQuando sentir que já tem contexto suficiente, clique no botão para eu preencher os próximos steps.";
+  "Olá! Sou o Vitor, seu assistente de design de produto. Me conte sobre o projeto — pode descrever em texto livre ou anexar documentos.";
 
 export function PreWorkStep({
   sessionId,
@@ -53,7 +53,6 @@ export function PreWorkStep({
   const [threadId, setThreadId] = useState<string | null>(null);
   const [roamModalOpen, setRoamModalOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<ImportedTranscript[]>([]);
-  const [hasTriggeredFill, setHasTriggeredFill] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -230,18 +229,6 @@ export function PreWorkStep({
     [uploadFiles],
   );
 
-  const triggerFill = () => {
-    setHasTriggeredFill(true);
-    sendMessage({
-      text: "Agora preencha todos os steps com base no que conversamos. Preencha product_vision, personas_journeys, brainstorm (com campos ricos: keyScreens, userFlows, painPointRef, technicalNotes), hypotheses e technical_specs. Seja completo.",
-    });
-  };
-
-  const showFillButton =
-    !hasTriggeredFill &&
-    !isStreaming &&
-    messages.filter((m) => m.role === "user").length >= 1;
-
   const composerLeftActions = (
     <>
       <input
@@ -318,19 +305,6 @@ export function PreWorkStep({
         <div className="flex items-center gap-2 px-4 py-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-xs">Processando arquivos...</span>
-        </div>
-      )}
-
-      {showFillButton && (
-        <div className="flex justify-center border-t border-border/50 px-4 py-2">
-          <Button
-            variant="outline"
-            className="gap-2 border-primary/30 text-primary hover:bg-primary/5"
-            onClick={triggerFill}
-          >
-            <Sparkles className="h-4 w-4" />
-            Preencher steps com o que conversamos
-          </Button>
         </div>
       )}
 

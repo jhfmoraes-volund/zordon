@@ -39,6 +39,8 @@ type StatusChipSelectProps<T extends Record<string, ChipDescriptor>> = {
   dot?: boolean;
   className?: string;
   variant?: StatusChipSelectVariant;
+  /** Trigger height in `variant="input"`. `default` = 36px (form), `sm` = 28px (table row). */
+  triggerSize?: "default" | "sm";
 };
 
 export function StatusChipSelect<T extends Record<string, ChipDescriptor>>({
@@ -51,6 +53,7 @@ export function StatusChipSelect<T extends Record<string, ChipDescriptor>>({
   dot = true,
   className,
   variant = "inline",
+  triggerSize = "default",
 }: StatusChipSelectProps<T>) {
   if (variant === "input") {
     const currentTone = lookupChip(options, value).tone;
@@ -61,8 +64,9 @@ export function StatusChipSelect<T extends Record<string, ChipDescriptor>>({
         disabled={disabled}
       >
         <SelectTrigger
+          size={triggerSize}
           className={cn(
-            "h-9 w-full justify-between rounded-lg border px-2.5 text-sm font-medium transition-colors",
+            "w-full justify-between rounded-lg border px-2.5 text-sm font-medium transition-colors",
             TONE_FILL[currentTone],
             className,
           )}

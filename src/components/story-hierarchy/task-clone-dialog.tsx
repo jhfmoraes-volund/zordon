@@ -11,7 +11,7 @@ import {
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Field, FormBody } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -92,50 +92,56 @@ export function TaskCloneDialog({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <ResponsiveDialogBody className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Projeto destino</Label>
-            {empty ? (
-              <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                Você não tem outros projetos com permissão de edição.
-              </p>
-            ) : (
-              <Select
-                value={targetProjectId}
-                onValueChange={(v) => v && setTargetProjectId(v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um projeto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {targetProjects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+        <ResponsiveDialogBody>
+          <FormBody>
+            <Field name="clone-project" required>
+              <Field.Label>Projeto destino</Field.Label>
+              {empty ? (
+                <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                  Você não tem outros projetos com permissão de edição.
+                </p>
+              ) : (
+                <Field.Control>
+                  <Select
+                    value={targetProjectId}
+                    onValueChange={(v) => v && setTargetProjectId(v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um projeto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {targetProjects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field.Control>
+              )}
+            </Field>
 
-          <div className="space-y-1.5">
-            <Label>Status</Label>
-            <Select
-              value={status}
-              onValueChange={(v) => v && setStatus(v as TaskStatus)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <Field name="clone-status">
+              <Field.Label>Status</Field.Label>
+              <Field.Control>
+                <Select
+                  value={status}
+                  onValueChange={(v) => v && setStatus(v as TaskStatus)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field.Control>
+            </Field>
+          </FormBody>
         </ResponsiveDialogBody>
 
         <ResponsiveDialogFooter>

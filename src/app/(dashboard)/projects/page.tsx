@@ -8,8 +8,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   ResponsiveDialog,
@@ -89,6 +89,7 @@ function ProjectCardMobile({
       >
         <DropdownMenu>
           <DropdownMenuTrigger
+            // eslint-disable-next-line no-restricted-syntax -- icon button in row action, not a form control
             render={<Button variant="ghost" size="icon" className="h-9 w-9" />}
           >
             <MoreVertical className="h-4 w-4" />
@@ -412,134 +413,226 @@ export default function ProjectsPage() {
           <ResponsiveDialogHeader>
             <ResponsiveDialogTitle>{editing ? "Editar Projeto" : "Novo Projeto"}</ResponsiveDialogTitle>
           </ResponsiveDialogHeader>
-          <ResponsiveDialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Cliente</Label>
-              <Select value={form.clientId} onValueChange={(v) => v && setForm({ ...form, clientId: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione">
-                    {(value: string | null) => clients.find((c) => c.id === value)?.name ?? "Selecione"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>PM Responsável</Label>
-              <Select value={form.pmId} onValueChange={(v) => v && setForm({ ...form, pmId: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione (opcional)">
-                    {(value: string | null) => members.find((m) => m.id === value)?.name ?? "Selecione (opcional)"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
+          <ResponsiveDialogBody className="py-4">
+            <FormBody>
+              <Field name="project-client" required>
+                <Field.Label>Cliente</Field.Label>
+                <Field.Control>
+                  <Select
+                    value={form.clientId}
+                    onValueChange={(v) => v && setForm({ ...form, clientId: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione">
+                        {(value: string | null) =>
+                          clients.find((c) => c.id === value)?.name ??
+                          "Selecione"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field.Control>
+              </Field>
+
+              <Field name="project-pm">
+                <Field.Label>PM Responsável</Field.Label>
+                <Field.Control>
+                  <Select
+                    value={form.pmId}
+                    onValueChange={(v) => v && setForm({ ...form, pmId: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione (opcional)">
+                        {(value: string | null) =>
+                          members.find((m) => m.id === value)?.name ??
+                          "Selecione (opcional)"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members
+                        .filter((m) => m.position === "pm")
+                        .map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                      {members.filter((m) => m.position === "pm").length ===
+                        0 && (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          Nenhum membro com role &quot;pm&quot; cadastrado
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </Field.Control>
+              </Field>
+
+              <Field name="project-members">
+                <Field.Label>Membros Alocados</Field.Label>
+                <Field.Hint>
+                  Clique para alocar/desalocar membros do projeto
+                </Field.Hint>
+                <div className="flex min-h-[40px] flex-wrap gap-1.5 rounded-md border p-3">
                   {members
-                    .filter((m) => m.position === "pm")
-                    .map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                    ))}
-                  {members.filter((m) => m.position === "pm").length === 0 && (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      Nenhum membro com role &quot;pm&quot; cadastrado
-                    </div>
+                    .filter((m) => m.position !== "pm")
+                    .map((m) => {
+                      const isSelected = form.memberIds.includes(m.id);
+                      return (
+                        <Badge
+                          key={m.id}
+                          variant={isSelected ? "default" : "outline"}
+                          className={`cursor-pointer text-xs transition-colors ${
+                            isSelected ? "" : "opacity-50 hover:opacity-80"
+                          }`}
+                          onClick={() => toggleMember(m.id)}
+                        >
+                          {m.name}
+                          <span className="ml-1 text-[10px]">
+                            {roleLabel(m.position)}
+                          </span>
+                        </Badge>
+                      );
+                    })}
+                  {members.filter((m) => m.position !== "pm").length === 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      Nenhum membro cadastrado
+                    </span>
                   )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Membros Alocados</Label>
-              <p className="text-xs text-muted-foreground">Clique para alocar/desalocar membros do projeto</p>
-              <div className="flex flex-wrap gap-1.5 p-3 border rounded-md min-h-[40px]">
-                {members
-                  .filter((m) => m.position !== "pm")
-                  .map((m) => {
-                    const isSelected = form.memberIds.includes(m.id);
-                    return (
-                      <Badge
-                        key={m.id}
-                        variant={isSelected ? "default" : "outline"}
-                        className={`cursor-pointer text-xs transition-colors ${
-                          isSelected ? "" : "opacity-50 hover:opacity-80"
-                        }`}
-                        onClick={() => toggleMember(m.id)}
-                      >
-                        {m.name}
-                        <span className="ml-1 text-[10px]">
-                          {roleLabel(m.position)}
-                        </span>
-                      </Badge>
-                    );
-                  })}
-                {members.filter((m) => m.position !== "pm").length === 0 && (
-                  <span className="text-xs text-muted-foreground">Nenhum membro cadastrado</span>
+                </div>
+              </Field>
+
+              <Field name="project-name" required>
+                <Field.Label>Nome</Field.Label>
+                <Field.Control>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </Field.Control>
+              </Field>
+
+              <Field name="project-repo">
+                <Field.Label>Repo URL</Field.Label>
+                <Field.Control>
+                  <Input
+                    value={form.repoUrl}
+                    onChange={(e) =>
+                      setForm({ ...form, repoUrl: e.target.value })
+                    }
+                    placeholder="https://github.com/..."
+                  />
+                </Field.Control>
+              </Field>
+
+              <Field.Row cols={3}>
+                <Field name="project-gh-owner">
+                  <Field.Label>GitHub Owner</Field.Label>
+                  <Field.Control>
+                    <Input
+                      value={form.githubRepoOwner}
+                      onChange={(e) =>
+                        setForm({ ...form, githubRepoOwner: e.target.value })
+                      }
+                      placeholder="org-name"
+                    />
+                  </Field.Control>
+                </Field>
+                <Field name="project-gh-repo">
+                  <Field.Label>GitHub Repo</Field.Label>
+                  <Field.Control>
+                    <Input
+                      value={form.githubRepoName}
+                      onChange={(e) =>
+                        setForm({ ...form, githubRepoName: e.target.value })
+                      }
+                      placeholder="repo-name"
+                    />
+                  </Field.Control>
+                </Field>
+                <Field name="project-gh-branch">
+                  <Field.Label>Default Branch</Field.Label>
+                  <Field.Control>
+                    <Input
+                      value={form.githubDefaultBranch}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          githubDefaultBranch: e.target.value,
+                        })
+                      }
+                      placeholder="main"
+                    />
+                  </Field.Control>
+                </Field>
+              </Field.Row>
+
+              <div className="flex flex-col gap-(--field-gap)">
+                <label className="flex cursor-pointer items-center gap-2 text-sm select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-input"
+                    checked={form.ongoing}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        ongoing: e.target.checked,
+                        startDate: e.target.checked ? "" : form.startDate,
+                        endDate: e.target.checked ? "" : form.endDate,
+                      })
+                    }
+                  />
+                  Projeto em andamento (sem prazo definido)
+                </label>
+                {!form.ongoing && (
+                  <Field.Row cols={2}>
+                    <Field name="project-start">
+                      <Field.Label>Data Início</Field.Label>
+                      <Field.Control>
+                        <Input
+                          type="date"
+                          value={form.startDate}
+                          onChange={(e) =>
+                            setForm({ ...form, startDate: e.target.value })
+                          }
+                        />
+                      </Field.Control>
+                    </Field>
+                    <Field name="project-end">
+                      <Field.Label>Data Fim</Field.Label>
+                      <Field.Control>
+                        <Input
+                          type="date"
+                          value={form.endDate}
+                          onChange={(e) =>
+                            setForm({ ...form, endDate: e.target.value })
+                          }
+                        />
+                      </Field.Control>
+                    </Field>
+                  </Field.Row>
                 )}
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Nome</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div className="grid gap-2">
-              <Label>Repo URL</Label>
-              <Input value={form.repoUrl} onChange={(e) => setForm({ ...form, repoUrl: e.target.value })} placeholder="https://github.com/..." />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="grid gap-2">
-                <Label>GitHub Owner</Label>
-                <Input value={form.githubRepoOwner} onChange={(e) => setForm({ ...form, githubRepoOwner: e.target.value })} placeholder="org-name" />
-              </div>
-              <div className="grid gap-2">
-                <Label>GitHub Repo</Label>
-                <Input value={form.githubRepoName} onChange={(e) => setForm({ ...form, githubRepoName: e.target.value })} placeholder="repo-name" />
-              </div>
-              <div className="grid gap-2">
-                <Label>Default Branch</Label>
-                <Input value={form.githubDefaultBranch} onChange={(e) => setForm({ ...form, githubDefaultBranch: e.target.value })} placeholder="main" />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-input"
-                  checked={form.ongoing}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      ongoing: e.target.checked,
-                      startDate: e.target.checked ? "" : form.startDate,
-                      endDate: e.target.checked ? "" : form.endDate,
-                    })
-                  }
-                />
-                Projeto em andamento (sem prazo definido)
-              </label>
-              {!form.ongoing && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Data Início</Label>
-                    <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Data Fim</Label>
-                    <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
-                  </div>
-                </div>
-              )}
-            </div>
-<div className="grid gap-2">
-              <Label>Status</Label>
-              <StatusChipSelect
-                variant="input"
-                value={form.status}
-                options={PROJECT_STATUS}
-                onValueChange={(v) => setForm({ ...form, status: v })}
-              />
-            </div>
+
+              <Field name="project-status">
+                <Field.Label>Status</Field.Label>
+                <Field.Control>
+                  <StatusChipSelect
+                    variant="input"
+                    value={form.status}
+                    options={PROJECT_STATUS}
+                    onValueChange={(v) => setForm({ ...form, status: v })}
+                  />
+                </Field.Control>
+              </Field>
+            </FormBody>
           </ResponsiveDialogBody>
           <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>

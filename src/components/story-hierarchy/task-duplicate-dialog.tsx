@@ -11,7 +11,7 @@ import {
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Field, FormBody } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -97,44 +97,53 @@ export function TaskDuplicateDialog({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <ResponsiveDialogBody className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Sprint</Label>
-            <Select value={sprintId} onValueChange={(v) => v && setSprintId(v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SPRINT_NONE}>
-                  <span className="text-muted-foreground">Sem sprint</span>
-                </SelectItem>
-                {sprints.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <ResponsiveDialogBody>
+          <FormBody>
+            <Field name="duplicate-sprint">
+              <Field.Label>Sprint</Field.Label>
+              <Field.Control>
+                <Select
+                  value={sprintId}
+                  onValueChange={(v) => v && setSprintId(v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SPRINT_NONE}>
+                      <span className="text-muted-foreground">Sem sprint</span>
+                    </SelectItem>
+                    {sprints.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field.Control>
+            </Field>
 
-          <div className="space-y-1.5">
-            <Label>Status</Label>
-            <Select
-              value={status}
-              onValueChange={(v) => v && setStatus(v as TaskStatus)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <Field name="duplicate-status">
+              <Field.Label>Status</Field.Label>
+              <Field.Control>
+                <Select
+                  value={status}
+                  onValueChange={(v) => v && setStatus(v as TaskStatus)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field.Control>
+            </Field>
+          </FormBody>
         </ResponsiveDialogBody>
 
         <ResponsiveDialogFooter>

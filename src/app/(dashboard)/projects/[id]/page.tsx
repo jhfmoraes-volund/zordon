@@ -972,7 +972,15 @@ export default function ProjectDetailPage({
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
 
-    const memberLookup = new Map(rawMembers.map((m) => [m.id, m]));
+    const memberLookup = new Map<string, { id: string; name: string }>(
+      rawMembers.map((m) => [m.id, { id: m.id, name: m.name }]),
+    );
+    if (project?.pm && !memberLookup.has(project.pm.id)) {
+      memberLookup.set(project.pm.id, {
+        id: project.pm.id,
+        name: project.pm.name,
+      });
+    }
     const optimisticAssignments = memberIds
       .map((memberId) => {
         const m = memberLookup.get(memberId);

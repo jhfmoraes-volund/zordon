@@ -11,9 +11,9 @@ import {
   ResponsiveDialogTitle,
 } from "@/components/ui/responsive-dialog";
 import { Button } from "@/components/ui/button";
+import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import type { Module, Persona } from "./types";
 
 // ─── Module dialog ───────────────────────────────────────────────────────────
@@ -77,37 +77,43 @@ export function ModuleDialog({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <ResponsiveDialogBody className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="module-name">Nome</Label>
-            <Input
-              id="module-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="LOGIN"
-              autoFocus
-            />
-            <p className="text-[11px] text-muted-foreground">
-              {MODULE_NAME_HELP}{" "}
-              {name && name !== normalized ? (
-                <>
-                  Vai virar:{" "}
-                  <span className="font-mono text-foreground">{normalized}</span>
-                </>
-              ) : null}
-            </p>
-          </div>
+        <ResponsiveDialogBody>
+          <FormBody>
+            <Field name="module-name" required>
+              <Field.Label>Nome</Field.Label>
+              <Field.Control>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="LOGIN"
+                  autoFocus
+                />
+              </Field.Control>
+              <Field.Hint>
+                {MODULE_NAME_HELP}{" "}
+                {name && name !== normalized ? (
+                  <>
+                    Vai virar:{" "}
+                    <span className="font-mono text-foreground">
+                      {normalized}
+                    </span>
+                  </>
+                ) : null}
+              </Field.Hint>
+            </Field>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="module-desc">Descrição</Label>
-            <Textarea
-              id="module-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="1-2 frases explicando o escopo funcional"
-              rows={2}
-            />
-          </div>
+            <Field name="module-desc">
+              <Field.Label>Descrição</Field.Label>
+              <Field.Control>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="1-2 frases explicando o escopo funcional"
+                  rows={2}
+                />
+              </Field.Control>
+            </Field>
+          </FormBody>
         </ResponsiveDialogBody>
 
         <ResponsiveDialogFooter>
@@ -172,28 +178,32 @@ export function PersonaDialog({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <ResponsiveDialogBody className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="persona-name">Nome</Label>
-            <Input
-              id="persona-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Cliente Premium"
-              autoFocus
-            />
-          </div>
+        <ResponsiveDialogBody>
+          <FormBody>
+            <Field name="persona-name" required>
+              <Field.Label>Nome</Field.Label>
+              <Field.Control>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Cliente Premium"
+                  autoFocus
+                />
+              </Field.Control>
+            </Field>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="persona-desc">Descrição</Label>
-            <Textarea
-              id="persona-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Quem é essa pessoa, o que ela busca"
-              rows={2}
-            />
-          </div>
+            <Field name="persona-desc">
+              <Field.Label>Descrição</Field.Label>
+              <Field.Control>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Quem é essa pessoa, o que ela busca"
+                  rows={2}
+                />
+              </Field.Control>
+            </Field>
+          </FormBody>
         </ResponsiveDialogBody>
 
         <ResponsiveDialogFooter>

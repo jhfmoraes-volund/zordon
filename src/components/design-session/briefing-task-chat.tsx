@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
-import { Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   ConversationFab,
   ConversationPanel,
@@ -44,7 +42,7 @@ export function BriefingTaskChat({
   // Canal "web" unificado: mesmo thread dos outros steps. Vitor herda contexto.
   // Visual fica limpo na entrada do briefing porque o GET filtra por
   // `allFromBriefing=1` (só mensagens >= DesignSessionStepData.briefing.firstMessageAt).
-  // Histórico anterior é acessível via botão "Carregar mensagens anteriores".
+  // Histórico anterior é carregado automaticamente conforme o usuário scrolla pro topo.
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -191,21 +189,6 @@ export function BriefingTaskChat({
       ? 'Refine: "Quebre a VLD-042 em duas", "A regra X mudou"...'
       : "Liste os módulos que você identifica no brainstorm…";
 
-  const aboveSlot = hasMoreHistory ? (
-    <div className="flex justify-center px-3 pt-3">
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={loadingMore}
-        onClick={loadMoreHistory}
-        className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-      >
-        {loadingMore && <Sparkles className="h-3 w-3 animate-pulse" />}
-        {loadingMore ? "Carregando..." : "Carregar mensagens anteriores"}
-      </Button>
-    </div>
-  ) : null;
-
   if (isMobile) {
     return (
       <>
@@ -230,7 +213,9 @@ export function BriefingTaskChat({
           planMode={planMode}
           onPlanModeChange={setPlanMode}
           placeholder={placeholder}
-          composerAboveSlot={aboveSlot}
+          hasOlder={hasMoreHistory}
+          isLoadingOlder={loadingMore}
+          onLoadOlder={loadMoreHistory}
         />
       </>
     );
@@ -250,7 +235,9 @@ export function BriefingTaskChat({
         planMode={planMode}
         onPlanModeChange={setPlanMode}
         placeholder={placeholder}
-        composerAboveSlot={aboveSlot}
+        hasOlder={hasMoreHistory}
+        isLoadingOlder={loadingMore}
+        onLoadOlder={loadMoreHistory}
       />
     </div>
   );

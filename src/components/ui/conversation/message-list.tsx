@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type AgentId } from "./agent-themes";
 import { MessageBubble } from "./message-bubble";
@@ -17,6 +18,10 @@ type Props = {
   emptyState?: ReactNode;
   /** Optional render after a given message — used for "Executar plano" button. */
   renderAfterMessage?: (message: UIMessage, index: number) => ReactNode;
+  /** When true, an IntersectionObserver near the top fires `onLoadOlder` to prepend history. */
+  hasOlder?: boolean;
+  isLoadingOlder?: boolean;
+  onLoadOlder?: () => void;
   className?: string;
 };
 
@@ -26,9 +31,13 @@ export function MessageList({
   status,
   emptyState,
   renderAfterMessage,
+  hasOlder,
+  isLoadingOlder,
+  onLoadOlder,
   className,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef(true);
   const didInitialJumpRef = useRef(false);
 
@@ -62,19 +71,63 @@ export function MessageList({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Scroll-anchor preservation: when older messages are prepended, the virtualizer's
+  // total size grows from the top. Without compensation, the viewport visually jumps
+  // because scrollTop stays the same while content above it expands. We track the id
+  // of the first message and the totalSize before the prepend, then on layout we shift
+  // scrollTop by the delta so the user's view remains pinned to what they were reading.
+  const firstIdRef = useRef<string | null>(messages[0]?.id ?? null);
+  const prevTotalSizeRef = useRef<number>(0);
+
+  // Auto-trigger load when sentinel intersects the scroll viewport.
+  useEffect(() => {
+    if (!onLoadOlder) return;
+    const sentinel = sentinelRef.current;
+    const root = scrollRef.current;
+    if (!sentinel || !root) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) return;
+        if (!hasOlder || isLoadingOlder) return;
+        onLoadOlder();
+      },
+      { root, rootMargin: "300px 0px 0px 0px", threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasOlder, isLoadingOlder, onLoadOlder]);
+
   useLayoutEffect(() => {
     if (itemCount === 0) return;
+    const newFirstId = messages[0]?.id ?? null;
+    const prependedAtTop =
+      didInitialJumpRef.current &&
+      firstIdRef.current !== null &&
+      newFirstId !== firstIdRef.current;
+
     if (!didInitialJumpRef.current) {
       virtualizer.scrollToIndex(itemCount - 1, {
         align: "end",
         behavior: "auto",
       });
       didInitialJumpRef.current = true;
-      return;
-    }
-    if (stickyRef.current) {
+    } else if (prependedAtTop) {
+      // Force re-measure so getTotalSize reflects the new prepended items, then
+      // shift scrollTop by the size delta to keep viewport visually pinned.
+      virtualizer.measure();
+      const newTotal = virtualizer.getTotalSize();
+      const delta = newTotal - prevTotalSizeRef.current;
+      const el = scrollRef.current;
+      if (el && delta > 0) {
+        el.scrollTop += delta;
+      }
+    } else if (stickyRef.current) {
       virtualizer.scrollToIndex(itemCount - 1, { align: "end" });
     }
+
+    firstIdRef.current = newFirstId;
+    prevTotalSizeRef.current = virtualizer.getTotalSize();
   }, [itemCount, virtualizer, messages]);
 
   if (messages.length === 0 && !showThinking) {
@@ -98,6 +151,12 @@ export function MessageList({
       ref={scrollRef}
       className={cn("flex-1 overflow-y-auto overscroll-contain", className)}
     >
+      <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+      {isLoadingOlder && (
+        <div className="flex justify-center py-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      )}
       <div
         className="relative w-full p-4"
         style={{ height: `${totalSize}px` }}

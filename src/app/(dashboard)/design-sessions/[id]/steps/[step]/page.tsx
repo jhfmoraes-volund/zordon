@@ -158,10 +158,16 @@ export default function StepPage({
   }, [id, currentStepDef?.key]);
 
   const navigate = (targetStep: number) => {
+    // Só promove draft → in_progress no primeiro toque. Nunca toca em
+    // `completed` — isso é território exclusivo de /complete e /reopen, que
+    // fazem cascata. Sobrescrever aqui derruba a invariante "stories só
+    // aparecem se DS.status=completed" e some com elas do projeto.
+    const body: Record<string, unknown> = { currentStep: targetStep };
+    if (session?.status === "draft") body.status = "in_progress";
     fetchOrThrow(`/api/design-sessions/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentStep: targetStep, status: "in_progress" }),
+      body: JSON.stringify(body),
     }).catch((e) =>
       showErrorToast(e, { label: "Falha ao salvar progresso de step" }),
     );

@@ -17,9 +17,9 @@ const MAX_LIMIT = 200;
  *   - Without `before`: returns the most recent `limit` messages (default 30).
  *     Frontend renders these in chronological order (asc).
  *   - With `before=<iso>`: returns the next `limit` older messages (createdAt < before).
- *     Used by "Carregar mensagens anteriores" button — chunks keep parse cost bounded.
+ *     Used by MessageList's infinite-scroll sentinel — chunks keep parse cost bounded.
  *
- * `hasMore` tells the frontend whether to keep showing the load-more button.
+ * `hasMore` tells the frontend whether the top sentinel should keep firing.
  *
  * Special flag `allFromBriefing=1` (used by the briefing chat on first mount):
  *   instead of returning ANY recent message from the thread, returns ONLY messages

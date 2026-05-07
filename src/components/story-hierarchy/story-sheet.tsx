@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pencil, Plus, Sparkles, X } from "lucide-react";
 import {
   ResponsiveSheet,
@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/responsive-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -410,172 +410,192 @@ function StorySheetEdit({
         </div>
       </ResponsiveSheetHeader>
 
-      <ResponsiveSheetBody className="space-y-5">
-        <div className="space-y-1.5">
-          <Label htmlFor="story-title">Título</Label>
-          <Input
-            id="story-title"
-            value={draft.title}
-            onChange={(e) => patch("title", e.target.value)}
-          />
-        </div>
+      <ResponsiveSheetBody>
+        <FormBody>
+          <Field name="story-title" required>
+            <Field.Label>Título</Field.Label>
+            <Field.Control>
+              <Input
+                value={draft.title}
+                onChange={(e) => patch("title", e.target.value)}
+              />
+            </Field.Control>
+          </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <Label>Módulo</Label>
-              {onCreateModuleRequested ? (
-                <button
-                  type="button"
-                  aria-label="Criar módulo"
-                  title="Criar módulo"
-                  className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                  onClick={() =>
-                    onCreateModuleRequested(draft.proposedModuleName)
-                  }
-                >
-                  <Plus className="size-3" strokeWidth={2.5} />
-                </button>
-              ) : null}
-            </div>
-            <Select
-              value={draft.moduleId ?? "__none"}
-              onValueChange={(v) =>
-                patch("moduleId", v === "__none" ? null : v)
+          <Field name="story-module">
+            <Field.Label
+              addon={
+                onCreateModuleRequested ? (
+                  <button
+                    type="button"
+                    aria-label="Criar módulo"
+                    title="Criar módulo"
+                    className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                    onClick={() =>
+                      onCreateModuleRequested(draft.proposedModuleName)
+                    }
+                  >
+                    <Plus className="size-3" strokeWidth={2.5} />
+                  </button>
+                ) : undefined
               }
             >
-              <SelectTrigger>
-                <SelectValue>
-                  {(v: string | null) => {
-                    if (!v || v === "__none") {
-                      return (
+              Módulo
+            </Field.Label>
+            <Field.Control>
+              <Select
+                value={draft.moduleId ?? "__none"}
+                onValueChange={(v) =>
+                  patch("moduleId", v === "__none" ? null : v)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {(v: string | null) => {
+                      if (!v || v === "__none") {
+                        return (
+                          <span className="text-muted-foreground">
+                            — sem módulo —
+                          </span>
+                        );
+                      }
+                      const mod = modules.find((m) => m.id === v);
+                      return mod ? (
+                        <span className="font-mono">{mod.name}</span>
+                      ) : (
                         <span className="text-muted-foreground">
                           — sem módulo —
                         </span>
                       );
-                    }
-                    const mod = modules.find((m) => m.id === v);
-                    return mod ? (
-                      <span className="font-mono">{mod.name}</span>
-                    ) : (
-                      <span className="text-muted-foreground">
-                        — sem módulo —
-                      </span>
-                    );
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none">— sem módulo —</SelectItem>
-                {modules.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    <span className="font-mono">{m.name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">— sem módulo —</SelectItem>
+                  {modules.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      <span className="font-mono">{m.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field.Control>
             {draft.moduleId === null && draft.proposedModuleName ? (
-              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              <Field.Hint tone="warning">
                 Alpha sugeriu:{" "}
                 <span className="font-mono">{draft.proposedModuleName}</span>
-              </p>
+              </Field.Hint>
             ) : null}
-          </div>
+          </Field>
 
-          <div className="space-y-1.5">
-            <Label>Refinement</Label>
-            <Select
-              value={draft.refinementStatus}
-              onValueChange={(v) =>
-                patch("refinementStatus", v as RefinementStatus)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(["draft", "refined", "committed"] as RefinementStatus[]).map(
-                  (s) => (
-                    <SelectItem key={s} value={s}>
-                      {REFINEMENT_MAP[s].label}
-                    </SelectItem>
-                  ),
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5">
-            <Label>Persona</Label>
-            {onCreatePersonaRequested ? (
-              <button
-                type="button"
-                aria-label="Nova persona"
-                title="Nova persona"
-                className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                onClick={onCreatePersonaRequested}
-              >
-                <Plus className="size-3" strokeWidth={2.5} />
-              </button>
-            ) : null}
-          </div>
-          <Select
-            value={draft.personaId}
-            onValueChange={(v) => v && patch("personaId", v)}
-          >
-            <SelectTrigger>
-              <SelectValue>
-                {(v: string | null) =>
-                  v
-                    ? personas.find((p) => p.id === v)?.name ?? "—"
-                    : "—"
+          <Field.Row cols={2}>
+            <Field name="story-persona">
+              <Field.Label
+                addon={
+                  onCreatePersonaRequested ? (
+                    <button
+                      type="button"
+                      aria-label="Nova persona"
+                      title="Nova persona"
+                      className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                      onClick={onCreatePersonaRequested}
+                    >
+                      <Plus className="size-3" strokeWidth={2.5} />
+                    </button>
+                  ) : undefined
                 }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {personas.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+              >
+                Persona
+              </Field.Label>
+              <Field.Control>
+                <Select
+                  value={draft.personaId}
+                  onValueChange={(v) => v && patch("personaId", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue>
+                      {(v: string | null) =>
+                        v
+                          ? personas.find((p) => p.id === v)?.name ?? "—"
+                          : "—"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {personas.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field.Control>
+            </Field>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="story-want">Quero (want)</Label>
-          <Textarea
-            id="story-want"
-            value={draft.want}
-            onChange={(e) => patch("want", e.target.value)}
-            rows={2}
+            <Field name="story-refinement">
+              <Field.Label>Refinement</Field.Label>
+              <Field.Control>
+                <Select
+                  value={draft.refinementStatus}
+                  onValueChange={(v) =>
+                    patch("refinementStatus", v as RefinementStatus)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(
+                      ["draft", "refined", "committed"] as RefinementStatus[]
+                    ).map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {REFINEMENT_MAP[s].label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field.Control>
+            </Field>
+          </Field.Row>
+
+          <Field name="story-want" required>
+            <Field.Label>Quero (want)</Field.Label>
+            <Field.Control>
+              <Textarea
+                value={draft.want}
+                onChange={(e) => patch("want", e.target.value)}
+                rows={2}
+              />
+            </Field.Control>
+          </Field>
+
+          <Field name="story-sothat">
+            <Field.Label>Para que (soThat) — opcional</Field.Label>
+            <Field.Control>
+              <Textarea
+                value={draft.soThat ?? ""}
+                onChange={(e) =>
+                  patch(
+                    "soThat",
+                    e.target.value.length === 0 ? null : e.target.value,
+                  )
+                }
+                rows={2}
+              />
+            </Field.Control>
+          </Field>
+
+          <Separator />
+
+          <AcList
+            mode="editDraft"
+            items={draft.acceptanceCriteria}
+            onToggle={toggleAC}
+            onChange={patchAC}
+            onAdd={addAC}
+            onRemove={removeAC}
           />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="story-sothat">Para que (soThat) — opcional</Label>
-          <Textarea
-            id="story-sothat"
-            value={draft.soThat ?? ""}
-            onChange={(e) =>
-              patch("soThat", e.target.value.length === 0 ? null : e.target.value)
-            }
-            rows={2}
-          />
-        </div>
-
-        <Separator />
-
-        <AcList
-          mode="editDraft"
-          items={draft.acceptanceCriteria}
-          onToggle={toggleAC}
-          onChange={patchAC}
-          onAdd={addAC}
-          onRemove={removeAC}
-        />
+        </FormBody>
       </ResponsiveSheetBody>
 
       <ResponsiveSheetFooter>

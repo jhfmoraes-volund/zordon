@@ -290,7 +290,7 @@ export function DependenciesBlock({
           value={addRef}
           onChange={(e) => setAddRef(e.target.value)}
           placeholder="Ref (ex: ZRDN-T-042)"
-          className="h-8 flex-1 font-mono text-xs"
+          className="flex-1 font-mono text-xs"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -303,7 +303,7 @@ export function DependenciesBlock({
           value={addKind}
           onValueChange={(v) => setAddKind(v as DependencyKind)}
         >
-          <SelectTrigger className="h-8 w-[130px] text-xs">
+          <SelectTrigger className="w-[130px] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -313,11 +313,11 @@ export function DependenciesBlock({
         </Select>
         <Button
           type="button"
-          size="sm"
+          size="icon"
           variant="outline"
           onClick={handleAdd}
           disabled={busy || addRef.trim() === ""}
-          className="h-8"
+          aria-label="Adicionar dependência"
         >
           {busy ? (
             <Loader2 className="h-3 w-3 animate-spin" />

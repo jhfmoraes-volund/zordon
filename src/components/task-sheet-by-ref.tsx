@@ -342,6 +342,11 @@ function TaskSheetByRefInner({
     async (_taskRef: string, memberIds: string[]) => {
       if (!ctx) return;
       const taskId = ctx.task.__id;
+      const previousAssigneeIds = ctx.task.assigneeIds;
+
+      setCtx((cur) =>
+        cur ? { ...cur, task: { ...cur.task, assigneeIds: memberIds } } : cur,
+      );
 
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: "PUT",
@@ -352,15 +357,20 @@ function TaskSheetByRefInner({
         }),
       });
       if (!res.ok) {
+        setCtx((cur) =>
+          cur
+            ? { ...cur, task: { ...cur.task, assigneeIds: previousAssigneeIds } }
+            : cur,
+        );
         const err = await res.json().catch(() => ({}));
         showErrorToast(new Error(err.error || "Falha ao atribuir"), {
           label: "Falha ao atribuir",
         });
         return;
       }
-      await refreshTask();
+      onAfterChange?.();
     },
-    [ctx, refreshTask],
+    [ctx, onAfterChange],
   );
 
   const handleCreateTag = useCallback(

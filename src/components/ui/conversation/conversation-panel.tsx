@@ -44,6 +44,11 @@ export type ConversationPanelProps = {
   /** Auto-focus composer on mount (defaults: desktop=true, mobile only when open). */
   autoFocus?: boolean;
 
+  /** When true, MessageList auto-loads older history on scroll-to-top. */
+  hasOlder?: boolean;
+  isLoadingOlder?: boolean;
+  onLoadOlder?: () => void;
+
   className?: string;
 };
 
@@ -99,6 +104,9 @@ function PanelBody({
   composerAboveSlot,
   composerSubmitDisabled,
   autoFocus,
+  hasOlder,
+  isLoadingOlder,
+  onLoadOlder,
 }: Omit<ConversationPanelProps, "isOpen" | "onOpenChange" | "className">) {
   const composerRef = useRef<ChatComposerHandle>(null);
   const theme = AGENT_THEMES[agent];
@@ -166,6 +174,9 @@ function PanelBody({
         status={status}
         emptyState={emptyState ?? defaultEmpty}
         renderAfterMessage={renderAfterMessage}
+        hasOlder={hasOlder}
+        isLoadingOlder={isLoadingOlder}
+        onLoadOlder={onLoadOlder}
       />
 
       <div

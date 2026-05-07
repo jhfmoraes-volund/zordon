@@ -1107,6 +1107,7 @@ function TasksTable({
                 {editing.onChangeStatus ? (
                   <StatusChipSelect
                     variant="input"
+                    triggerSize="sm"
                     value={task.status}
                     options={TASK_STATUS}
                     onValueChange={(v) =>
