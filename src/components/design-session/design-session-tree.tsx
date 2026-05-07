@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { createClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -200,8 +199,6 @@ export function DesignSessionTree({
     }
   };
 
-  const stats = data?.stats;
-
   if (loading) {
     return (
       <div className="space-y-3">
@@ -229,18 +226,10 @@ export function DesignSessionTree({
     );
   }
 
+  // Stats agora vivem no BriefingRibbon do parent. Tree só renderiza módulos.
+
   return (
     <div className="space-y-4">
-      {/* ── Stats bar ─────────────────────────────────────────────── */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-          <StatPill label="Stories" value={stats.totalStories} icon={<FileText className="h-3 w-3" />} />
-          <StatPill label="Tasks" value={stats.totalTasks} icon={<Wrench className="h-3 w-3" />} />
-          <StatPill label="FP" value={stats.totalFp} />
-        </div>
-      )}
-
-      {/* ── Modules ───────────────────────────────────────────────── */}
       <ul className="space-y-2">
         {data.tree.map((mod) => (
           <li key={mod.key}>
@@ -541,30 +530,3 @@ function StoryNode({
   );
 }
 
-// ─── Tiny stat pill ─────────────────────────────────────────────────────────
-
-function StatPill({
-  label,
-  value,
-  tone,
-  icon,
-}: {
-  label: string;
-  value: number;
-  tone?: "green" | "amber";
-  icon?: React.ReactNode;
-}) {
-  const cls =
-    tone === "green"
-      ? "border-green-500/30 bg-green-500/[5%] text-green-700 dark:text-green-400"
-      : tone === "amber"
-        ? "border-amber-500/30 bg-amber-500/[5%] text-amber-700 dark:text-amber-400"
-        : "border-border bg-card text-foreground";
-  return (
-    <div className={`rounded-md border px-2.5 py-1.5 flex items-center gap-1.5 ${cls}`}>
-      {icon}
-      <span className="text-[10px] uppercase tracking-wide opacity-70">{label}</span>
-      <span className="font-semibold tabular-nums ml-auto">{value}</span>
-    </div>
-  );
-}

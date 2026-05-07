@@ -58,7 +58,7 @@ export function BriefingTaskChat({
             return threadIdRef.current;
           },
           get planMode() {
-            return readPlanMode();
+            return readPlanMode("vitor");
           },
         },
       }),
@@ -200,7 +200,8 @@ export function BriefingTaskChat({
     messages[messages.length - 1].role === "user";
 
   return (
-    <div className="surface flex flex-col h-[60vh] min-h-[480px] overflow-hidden">
+    // h-full: preenche a coluna que o parent define. Antes era h-[60vh] fixo.
+    <div className="surface flex flex-col h-full min-h-0 overflow-hidden">
       {/* Messages.
           - `initial="instant"`: no primeiro paint o ResizeObserver ancora no
             fim sem animação visível, então refresh já abre na última mensagem.
@@ -282,7 +283,7 @@ function ChatInput({
   onStop: () => void;
 }) {
   const [inputText, setInputText] = useState("");
-  const { planMode, setPlanMode } = useChatPlanMode();
+  const { planMode, setPlanMode } = useChatPlanMode("vitor");
 
   const handleSend = () => {
     if (!inputText.trim() || isStreaming) return;
@@ -294,6 +295,7 @@ function ChatInput({
   return (
     <div className="px-3 py-3 border-t border-border/50">
       <ChatComposer
+        agent="vitor"
         value={inputText}
         onChange={setInputText}
         onSubmit={handleSend}

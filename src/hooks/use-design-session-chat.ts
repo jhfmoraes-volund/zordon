@@ -15,7 +15,7 @@ export function useDesignSessionChat() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
-  const { planMode, setPlanMode } = useChatPlanMode();
+  const { planMode, setPlanMode } = useChatPlanMode("vitor");
 
   const transport = useMemo(
     () =>

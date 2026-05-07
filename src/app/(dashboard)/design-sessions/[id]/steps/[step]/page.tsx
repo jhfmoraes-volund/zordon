@@ -9,14 +9,13 @@ import { HypothesisBoard, Hypothesis } from "@/components/design-session/hypothe
 import { PriorityBoard, PrioritizedItem, PriorityBucket } from "@/components/design-session/priority-board";
 import { PostItBoard, PostItItem, PostItSection } from "@/components/design-session/post-it-board";
 import { RiskGapBoard, type Gap, type Risk } from "@/components/design-session/risk-gap-board";
-import { CATEGORY_LABEL, SEVERITY_LABEL, SEVERITY_TONE } from "@/components/design-session/risk-gap-board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
 import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
 import {
   DesignSessionTree,
   type TreeAction,
 } from "@/components/design-session/design-session-tree";
-import { SessionGovernanceBar } from "@/components/design-session/session-governance-bar";
+import { BriefingRibbon } from "@/components/design-session/briefing-ribbon";
 import { StorySheetByRef } from "@/components/story-sheet-by-ref";
 import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -880,8 +879,6 @@ function ItemList({
 function BriefingStep({ sessionId }: { sessionId: string }) {
   const [allData, setAllData] = useState<Record<string, Record<string, unknown>>>({});
   const [loading, setLoading] = useState(true);
-  const [taskCount, setTaskCount] = useState(0);
-  const [briefingOpen, setBriefingOpen] = useState<boolean | null>(null);
   const sendChatRef = useRef<((text: string) => void) | null>(null);
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const [openStoryRef, setOpenStoryRef] = useState<string | null>(null);
@@ -912,35 +909,18 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
     [sessionId],
   );
 
-  const loadTaskCount = useCallback(async () => {
-    try {
-      const r = await fetch(`/api/design-sessions/${sessionId}/tasks?countOnly=1`);
-      const j = await r.json();
-      setTaskCount(j.count ?? 0);
-    } catch {
-      // ignore
-    }
-  }, [sessionId]);
-
   useEffect(() => {
     const stepKeys = ["product_vision", "scope_definition", "personas_journeys", "brainstorm", "risks_gaps", "prioritization", "technical_specs", "hypotheses"];
-    Promise.all([
-      ...stepKeys.map((key) =>
+    Promise.all(
+      stepKeys.map((key) =>
         fetch(`/api/design-sessions/${sessionId}/steps/${key}`)
           .then((r) => r.json())
-          .then((r) => ({ key, data: r.data || {} }))
+          .then((r) => ({ key, data: r.data || {} })),
       ),
-      fetch(`/api/design-sessions/${sessionId}/tasks?countOnly=1`)
-        .then((r) => r.json())
-        .then((r) => r.count as number)
-        .catch(() => 0),
-    ]).then((results) => {
-      const count = results.pop() as number;
+    ).then((results) => {
       const map: Record<string, Record<string, unknown>> = {};
-      for (const r of results as { key: string; data: Record<string, unknown> }[]) map[r.key] = r.data;
+      for (const r of results) map[r.key] = r.data;
       setAllData(map);
-      setTaskCount(count);
-      setBriefingOpen(false);
       setLoading(false);
     });
   }, [sessionId]);
@@ -949,280 +929,37 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
     return <div className="text-center text-muted-foreground py-12">Carregando briefing...</div>;
   }
 
-  const isOpen = briefingOpen ?? false;
-  const vision = allData.product_vision || {};
-  const v = (key: string) => (vision[key] as string) || "";
-  const scope = allData.scope_definition || {};
-  const scopeBuckets = (key: "is" | "isNot" | "does" | "doesNot") =>
-    (scope[key] as Array<{ id: string; text: string }> | undefined) || [];
-  const hasScope =
-    scopeBuckets("is").length > 0 ||
-    scopeBuckets("isNot").length > 0 ||
-    scopeBuckets("does").length > 0 ||
-    scopeBuckets("doesNot").length > 0;
-  const personas = (allData.personas_journeys?.personas as Persona[]) || [];
-  const solutions = ((allData.brainstorm?.solutions as SolutionCard[]) || []).filter(
-    (s) => !s.archived,
-  );
-  const priorityItems = (allData.prioritization?.items as PrioritizedItem[]) || [];
-  const gaps = (allData.risks_gaps?.gaps as Gap[]) || [];
-  const risks = (allData.risks_gaps?.risks as Risk[]) || [];
-  const featureTitleById = new Map(
-    solutions.map((s) => [s.id, s.title || "Sem titulo"]),
-  );
-  const featureLabel = (ref?: string) => {
-    if (!ref) return null;
-    return featureTitleById.get(ref) || ref;
-  };
-  const hypotheses = (allData.hypotheses?.hypotheses as Hypothesis[]) || [];
-  const techSpecs = allData.technical_specs || {};
-  const ts = (key: string) => {
-    const val = techSpecs[key];
-    if (!val) return "";
-    if (typeof val === "string") return val;
-    if (typeof val === "object") return Object.entries(val).map(([k, v]) => `${k}: ${v}`).join("\n");
-    return String(val);
-  };
-  const tsItems = (key: string) => (techSpecs[key] as TechSpecItem[]) || [];
-
-  const mvpItems = priorityItems.filter((i) => i.bucket === "mvp");
-  const nextItems = priorityItems.filter((i) => i.bucket === "next");
-  const outItems = priorityItems.filter((i) => i.bucket === "out");
-
   return (
-    <div className="w-full space-y-6">
-      <Card>
-        <button
-          type="button"
-          onClick={() => setBriefingOpen(!isOpen)}
-          className="w-full flex items-center justify-between p-6 text-left hover:bg-muted/30 transition-colors rounded-t-xl"
-        >
-          <div className="flex items-center gap-2">
-            {isOpen ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )}
-            <div>
-              <CardTitle className="text-base">Briefing Consolidado</CardTitle>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {taskCount > 0
-                  ? `${taskCount} task${taskCount > 1 ? "s" : ""} gerada${taskCount > 1 ? "s" : ""} • clique para ${isOpen ? "recolher" : "expandir"}`
-                  : "Resumo de toda a session. Use como referencia para geracao de tasks."}
-              </p>
-            </div>
-          </div>
-        </button>
-        {isOpen && (
-        <CardContent className="max-w-4xl space-y-6 text-sm">
-          {/* Vision */}
-          <section>
-            <h3 className="font-semibold mb-2">1. Visao do Produto</h3>
-            <div className="space-y-1 pl-4">
-              {v("problem") && <p><strong>Problema:</strong> {v("problem")}</p>}
-              {v("whoSuffers") && <p><strong>Quem sofre:</strong> {v("whoSuffers")}</p>}
-              {v("consequences") && <p><strong>Consequencias:</strong> {v("consequences")}</p>}
-              {v("successVision") && <p><strong>Visao de sucesso:</strong> {v("successVision")}</p>}
-              {v("impactMetrics") && <p><strong>Metricas:</strong> {v("impactMetrics")}</p>}
-            </div>
-          </section>
+    // -m-6 cancela o padding global do WizardLayout pra colar o ribbon na
+    // borda inferior do header. h-full + flex-col faz o conteúdo abaixo do
+    // ribbon ocupar exatamente a altura restante (até o bottom do viewport),
+    // e cada coluna do grid rola independente — chat não acompanha a árvore.
+    <div className="w-full -m-6 h-full flex flex-col min-h-0">
+      <BriefingRibbon
+        sessionId={sessionId}
+        briefingData={allData}
+        refreshKey={treeRefreshKey}
+        onStatusChange={() => setTreeRefreshKey((k) => k + 1)}
+      />
 
-          {hasScope && (
-            <section>
-              <h3 className="font-semibold mb-2">2. Escopo & Fronteiras</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-4">
-                {([
-                  { key: "is" as const, label: "É", className: "text-emerald-500" },
-                  { key: "isNot" as const, label: "NÃO É", className: "text-rose-500" },
-                  { key: "does" as const, label: "FAZ", className: "text-sky-500" },
-                  { key: "doesNot" as const, label: "NÃO FAZ", className: "text-amber-500" },
-                ]).map(({ key, label, className }) => {
-                  const items = scopeBuckets(key);
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={key}>
-                      <p className={`text-xs font-medium ${className}`}>{label}</p>
-                      <ul className="list-disc list-inside text-xs">
-                        {items.map((i) => <li key={i.id}>{i.text}</li>)}
-                      </ul>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {personas.length > 0 && (
-            <section>
-              <h3 className="font-semibold mb-2">3. Personas & Jornadas</h3>
-              {personas.map((p) => (
-                <div key={p.id} className="pl-4 mb-3">
-                  <p className="font-medium">{p.name} — {p.role}</p>
-                  {p.context && <p className="text-muted-foreground">{p.context}</p>}
-                  {p.asIsSteps.length > 0 && (
-                    <div className="mt-1">
-                      <p className="text-xs font-medium text-red-600">AS-IS:</p>
-                      <ul className="list-disc list-inside text-xs">
-                        {p.asIsSteps.map((s) => (
-                          <li key={s.id}>{s.description}{s.painOrGain && <span className="text-red-500"> — Dor: {s.painOrGain}</span>}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {p.toBeSteps.length > 0 && (
-                    <div className="mt-1">
-                      <p className="text-xs font-medium text-green-600">TO-BE:</p>
-                      <ul className="list-disc list-inside text-xs">
-                        {p.toBeSteps.map((s) => (
-                          <li key={s.id}>{s.description}{s.painOrGain && <span className="text-green-600"> — Ganho: {s.painOrGain}</span>}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </section>
-          )}
-
-          {solutions.length > 0 && (
-            <section>
-              <h3 className="font-semibold mb-2">4. Solucoes Levantadas</h3>
-              <ul className="list-disc list-inside pl-4">
-                {solutions.map((s) => (
-                  <li key={s.id}><strong>{s.title}</strong>{s.howItSolves && ` — ${s.howItSolves}`}{s.targetPersona && <span className="text-muted-foreground"> (Persona: {s.targetPersona})</span>}</li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {(gaps.length > 0 || risks.length > 0) && (
-            <section>
-              <h3 className="font-semibold mb-2">5. Riscos & Lacunas</h3>
-              <div className="pl-4 space-y-3">
-                {gaps.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-sky-600">Lacunas ({gaps.length})</p>
-                    <ul className="list-disc list-inside text-xs space-y-1">
-                      {gaps.map((g) => (
-                        <li key={g.id}>
-                          {(g.category || g.severity) && (
-                            <span className="font-medium">
-                              [{g.category ? CATEGORY_LABEL[g.category] : "—"}
-                              {g.severity ? ` · ${SEVERITY_LABEL[g.severity]}` : ""}]
-                            </span>
-                          )}{" "}
-                          {g.text}
-                          {featureLabel(g.relatedFeature) && (
-                            <span className="text-muted-foreground"> — ref: {featureLabel(g.relatedFeature)}</span>
-                          )}
-                          {g.mitigation && (
-                            <span className="block pl-4 text-muted-foreground">Mitigacao: {g.mitigation}</span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {risks.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-red-600">Riscos ({risks.length})</p>
-                    <ul className="list-disc list-inside text-xs space-y-1">
-                      {risks.map((r) => (
-                        <li key={r.id}>
-                          <span className="font-medium">[{CATEGORY_LABEL[r.category]} · {SEVERITY_LABEL[r.severity]}]</span>{" "}
-                          {r.text}
-                          {featureLabel(r.relatedFeature) && (
-                            <span className="text-muted-foreground"> — ref: {featureLabel(r.relatedFeature)}</span>
-                          )}
-                          {r.mitigation && (
-                            <span className="block pl-4 text-muted-foreground">Mitigacao: {r.mitigation}</span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {priorityItems.length > 0 && (
-            <section>
-              <h3 className="font-semibold mb-2">6. Priorizacao</h3>
-              <div className="pl-4 space-y-2">
-                {mvpItems.length > 0 && (<div><p className="text-xs font-medium text-green-700">MVP ({mvpItems.length})</p><ul className="list-disc list-inside text-xs">{mvpItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
-                {nextItems.length > 0 && (<div><p className="text-xs font-medium text-blue-700">Next ({nextItems.length})</p><ul className="list-disc list-inside text-xs">{nextItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
-                {outItems.length > 0 && (<div><p className="text-xs font-medium text-muted-foreground">Out ({outItems.length})</p><ul className="list-disc list-inside text-xs">{outItems.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>)}
-              </div>
-            </section>
-          )}
-
-          {hypotheses.length > 0 && (
-            <section>
-              <h3 className="font-semibold mb-2">7. Hipoteses & Metricas</h3>
-              <div className="pl-4 space-y-3">
-                {hypotheses.map((h, i) => (
-                  <div key={h.id}>
-                    <p className="text-xs font-medium">Hipotese {i + 1}: {h.hypothesis}</p>
-                    <div className="text-xs text-muted-foreground pl-2 space-y-0.5">
-                      {h.indicator && <p><strong>Indicador:</strong> {h.indicator}</p>}
-                      {h.target && <p><strong>Meta:</strong> {h.target}</p>}
-                      {h.expectedResult && <p><strong>Resultado esperado:</strong> {h.expectedResult}</p>}
-                      {h.evidence && <p><strong>Evidencia:</strong> {h.evidence}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {(ts("stack") || tsItems("integrations").length > 0 || tsItems("rules").length > 0 || ts("performance") || ts("notes")) && (
-            <section>
-              <h3 className="font-semibold mb-2">8. Especificacoes Tecnicas</h3>
-              <div className="pl-4 space-y-2">
-                {ts("stack") && (<div><p className="text-xs font-medium">Stack & Infra</p><p className="text-xs text-muted-foreground">{ts("stack")}</p></div>)}
-                {tsItems("integrations").length > 0 && (<div><p className="text-xs font-medium">Integracoes</p><ul className="list-disc list-inside text-xs">{tsItems("integrations").map((i) => <li key={i.id}>{i.text}</li>)}</ul></div>)}
-                {tsItems("rules").length > 0 && (<div><p className="text-xs font-medium">Regras & Restricoes</p><ul className="list-disc list-inside text-xs">{tsItems("rules").map((i) => <li key={i.id}>{i.text}</li>)}</ul></div>)}
-                {ts("performance") && (<div><p className="text-xs font-medium">Performance</p><p className="text-xs text-muted-foreground">{ts("performance")}</p></div>)}
-                {ts("notes") && (<div><p className="text-xs font-medium">Observacoes</p><p className="text-xs text-muted-foreground">{ts("notes")}</p></div>)}
-              </div>
-            </section>
-          )}
-        </CardContent>
-        )}
-      </Card>
-
-      {/* Árvore Module → Story → Task ao lado do Chat com Vitor.
-          Layout aproveita toda a largura disponível (sem max-w externo). Em telas
-          xl o ratio fica mais generoso pra árvore (1.6/1) porque ela carrega o
-          conteúdo denso (cards de Module/Story/Task). Chat fica sticky no topo
-          em telas grandes — usuário pode rolar a árvore pra ver módulos lá embaixo
-          sem perder o input do chat de vista. */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(420px,1fr)] gap-6 items-start">
-        <div className="surface p-5 xl:max-h-[calc(100vh-12rem)] xl:overflow-auto space-y-4">
-          <SessionGovernanceBar
+      {/* Árvore (esquerda) + Chat com Vitor (direita). Cada coluna ocupa
+          a altura disponível e rola por dentro. Chat tem composer fixo no
+          fim da própria coluna, sem precisar de sticky. */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(420px,1fr)] gap-6 p-6">
+        <div className="surface p-5 overflow-y-auto min-h-0">
+          <h3 className="text-sm font-semibold mb-3">Hierarquia (Module → Story → Task)</h3>
+          <DesignSessionTree
             sessionId={sessionId}
             refreshKey={treeRefreshKey}
-            onStatusChange={() => setTreeRefreshKey((k) => k + 1)}
+            onAction={handleTreeAction}
+            onOpenStory={(ref) => setOpenStoryRef(ref)}
           />
-          <div>
-            <h3 className="text-sm font-semibold mb-3">Hierarquia (Module → Story → Task)</h3>
-            <DesignSessionTree
-              sessionId={sessionId}
-              refreshKey={treeRefreshKey}
-              onAction={handleTreeAction}
-              onOpenStory={(ref) => setOpenStoryRef(ref)}
-            />
-          </div>
         </div>
 
-        <div className="xl:sticky xl:top-6">
+        <div className="min-h-0">
           <BriefingTaskChat
             sessionId={sessionId}
-            onTasksChanged={() => {
-              loadTaskCount();
-              setTreeRefreshKey((k) => k + 1);
-            }}
+            onTasksChanged={() => setTreeRefreshKey((k) => k + 1)}
             onSendReady={(send) => {
               sendChatRef.current = send;
             }}

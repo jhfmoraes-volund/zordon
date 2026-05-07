@@ -1,9 +1,18 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import {
+  type CSSProperties,
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+} from "react";
 import { ArrowUp, CheckSquare, Loader2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AGENT_THEMES,
+  type AgentId,
+} from "@/components/ui/conversation/agent-themes";
 import { cn } from "@/lib/utils";
 
 export type ChatComposerHandle = {
@@ -21,6 +30,11 @@ export type ChatComposerProps = {
   submitDisabled?: boolean;
   /** Called when user clicks the stop icon (only visible while streaming). */
   onStop?: () => void;
+
+  /** Selects accent color for focus ring + plan toggle accent. */
+  agent?: AgentId;
+  /** Mobile-friendly mode: enterkeyhint=send + 44px touch targets. */
+  mobileMode?: boolean;
 
   /** When provided, renders a "Plan" toggle to the left of the submit button. */
   planMode?: boolean;
@@ -55,6 +69,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       disabled,
       submitDisabled,
       onStop,
+      agent = "alpha",
+      mobileMode,
       planMode,
       onPlanModeChange,
       aboveSlot,
@@ -72,12 +88,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     const showPlanToggle =
       planMode !== undefined && onPlanModeChange !== undefined;
     const canSubmit = !submitDisabled && !disabled && !isStreaming;
+    const accent = AGENT_THEMES[agent].accent;
+    const accentVar = { "--composer-accent": accent } as CSSProperties;
+    const buttonSizeClass = mobileMode ? "h-11 w-11" : "h-8 w-8";
+    const iconSizeClass = mobileMode ? "h-4 w-4" : "h-3.5 w-3.5";
 
     return (
       <div
+        style={accentVar}
         className={cn(
           "rounded-2xl border border-border bg-muted/40 transition-colors",
-          "focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20",
+          "focus-within:border-[color:var(--composer-accent)] focus-within:ring-2 focus-within:ring-[color:var(--composer-accent)]/20",
           disabled && "opacity-60",
           className,
         )}
@@ -103,6 +124,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           placeholder={placeholder}
           rows={1}
           disabled={disabled}
+          enterKeyHint={mobileMode ? "send" : undefined}
           className={cn(
             "min-h-[44px] max-h-[160px] resize-none border-0 bg-transparent text-sm dark:bg-transparent",
             "shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
@@ -149,9 +171,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                 variant="ghost"
                 onClick={onStop}
                 aria-label="Parar"
-                className="h-8 w-8 shrink-0 rounded-lg bg-foreground/10 text-foreground hover:bg-foreground/20 animate-pulse"
+                className={cn(
+                  "shrink-0 animate-pulse rounded-lg bg-foreground/10 text-foreground hover:bg-foreground/20",
+                  buttonSizeClass,
+                )}
               >
-                <Square className="h-3.5 w-3.5" />
+                <Square className={iconSizeClass} />
               </Button>
             ) : (
               <Button
@@ -161,12 +186,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                 onClick={onSubmit}
                 disabled={!canSubmit || (submitDisabled ?? !value.trim())}
                 aria-label="Enviar"
-                className="h-8 w-8 shrink-0 rounded-lg bg-foreground/10 text-foreground hover:bg-foreground/20 disabled:opacity-40"
+                className={cn(
+                  "shrink-0 rounded-lg bg-foreground/10 text-foreground hover:bg-foreground/20 disabled:opacity-40",
+                  buttonSizeClass,
+                )}
               >
                 {isStreaming ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className={cn("animate-spin", iconSizeClass)} />
                 ) : (
-                  <ArrowUp className="h-4 w-4" />
+                  <ArrowUp className={mobileMode ? "h-5 w-5" : "h-4 w-4"} />
                 )}
               </Button>
             )}

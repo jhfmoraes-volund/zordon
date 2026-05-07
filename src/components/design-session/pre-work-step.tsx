@@ -77,7 +77,7 @@ export function PreWorkStep({
     [data, onChange]
   );
 
-  const { planMode, setPlanMode } = useChatPlanMode();
+  const { planMode, setPlanMode } = useChatPlanMode("vitor");
 
   // AI SDK useChat — connected to the agent engine
   // Memoize transport so useChat doesn't reset on every render
@@ -92,7 +92,7 @@ export function PreWorkStep({
             return threadIdRef.current;
           },
           get planMode() {
-            return readPlanMode();
+            return readPlanMode("vitor");
           },
         },
       }),
@@ -424,6 +424,7 @@ export function PreWorkStep({
             }}
           />
           <ChatComposer
+            agent="vitor"
             value={inputText}
             onChange={setInputText}
             onSubmit={handleSend}

@@ -197,6 +197,7 @@ function AIChatContent({
       <div className="shrink-0 border-t border-border/50 p-3 pb-safe">
         <ChatComposer
           ref={composerRef}
+          agent="vitor"
           value={input}
           onChange={onInputChange}
           onSubmit={() => {
