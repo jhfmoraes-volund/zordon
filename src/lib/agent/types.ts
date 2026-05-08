@@ -46,6 +46,18 @@ export interface PromptContext {
 }
 
 /**
+ * Output of buildPrompt — split in two so the engine can mark `stable` as
+ * cacheable (Anthropic prompt cache via OpenRouter) and append `volatile`
+ * without invalidating the cache. See docs/vitor-cost-reduction-plan.md F1.
+ */
+export interface SystemPrompt {
+  /** Stable prefix — identity, behavior rules, schemas. Cacheable across turns. */
+  stable: string;
+  /** Volatile suffix — session/step data, memory blocks. Changes per turn. */
+  volatile: string;
+}
+
+/**
  * Agent definition — prompt builder + tool assembler + context loader.
  * Each agent (Vitor, Alpha, ...) implements this interface.
  */
@@ -54,7 +66,7 @@ export interface AgentDefinition {
   /** Optional per-agent model override. Falls back to DEFAULT_MODEL when absent. */
   model?: string;
   /** Builds the system prompt given runtime context */
-  buildPrompt: (ctx: PromptContext) => string;
+  buildPrompt: (ctx: PromptContext) => SystemPrompt;
   /** Assembles tools for this run */
   buildTools: (ctx: PromptContext) => ToolSet | Promise<ToolSet>;
   /** Loads agent-specific context (session data, sprint overview, etc.) */

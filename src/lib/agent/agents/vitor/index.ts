@@ -2,7 +2,7 @@ import { buildSystemPrompt } from "../../prompt";
 import { assembleTools } from "../../tools";
 import {
   buildSessionContext,
-  getStepData,
+  getStepDataForPrompt,
   type SessionContextVerbosity,
 } from "../../context";
 import { db } from "@/lib/db";
@@ -15,25 +15,44 @@ import {
   BRIEFING_SUB_PHASES,
   DEFAULT_BRIEFING_SUB_PHASE,
 } from "@/lib/design-sessions/constants";
+import { getStepsForSession } from "@/lib/design-session-steps";
 import type { AgentDefinition, AgentRunRequest } from "../../types";
 
 function pickVerbosity(
   currentStepKey: string,
   subPhase: string | undefined,
+  sessionType: string,
+  selectedSteps: string[] | null,
 ): SessionContextVerbosity {
-  if (currentStepKey !== "briefing") return "full";
-  const phase = subPhase ?? DEFAULT_BRIEFING_SUB_PHASE;
-  switch (phase) {
-    case BRIEFING_SUB_PHASES.MODULE_DISCOVERY:
-      return "discovery";
-    case BRIEFING_SUB_PHASES.STORY_TREE:
-      return "refinement";
-    case BRIEFING_SUB_PHASES.STORY_DETAIL:
-    case BRIEFING_SUB_PHASES.TASK_BREAKDOWN:
-      return "execution";
-    default:
-      return "full";
+  if (currentStepKey === "briefing") {
+    const phase = subPhase ?? DEFAULT_BRIEFING_SUB_PHASE;
+    switch (phase) {
+      case BRIEFING_SUB_PHASES.MODULE_DISCOVERY:
+        return "discovery";
+      case BRIEFING_SUB_PHASES.STORY_TREE:
+        return "refinement";
+      case BRIEFING_SUB_PHASES.STORY_DETAIL:
+      case BRIEFING_SUB_PHASES.TASK_BREAKDOWN:
+        return "execution";
+      default:
+        return "full";
+    }
   }
+  if (currentStepKey === "brainstorm" || currentStepKey === "prioritization") {
+    return "full";
+  }
+
+  // F3 — steps pos-brainstorm renderizam brainstorm/prioritization compact.
+  // Guard de selectedSteps: sessoes "super" podem nao ter brainstorm; nesse
+  // caso mantem comportamento atual ("full").
+  const steps = getStepsForSession({ type: sessionType, selectedSteps });
+  const order = steps.map((s) => s.key);
+  const brainstormIndex = order.indexOf("brainstorm");
+  if (brainstormIndex === -1) return "full";
+
+  const currentIndex = order.indexOf(currentStepKey);
+  if (currentIndex > brainstormIndex) return "compact-vision";
+  return "full";
 }
 
 /**
@@ -58,9 +77,18 @@ export const vitorAgent: AgentDefinition = {
 
     // Load step data first so we can pick context verbosity from subPhase.
     // Cheap (single row) and unblocks the parallel fan-out below.
-    const currentStepData = await getStepData(sessionId, currentStepKey);
+    // F4: use the prompt-sanitized version (sem `_drafts`) pra reduzir tokens.
+    // subPhase nao mora dentro de `_draft*`, entao o filtro nao afeta.
+    const currentStepData = await getStepDataForPrompt(sessionId, currentStepKey);
     const subPhase = (currentStepData as { subPhase?: string } | null)?.subPhase;
-    const verbosity = pickVerbosity(currentStepKey, subPhase);
+    const sessionSelectedSteps =
+      (session as { selectedSteps?: string[] | null }).selectedSteps ?? null;
+    const verbosity = pickVerbosity(
+      currentStepKey,
+      subPhase,
+      session.type,
+      sessionSelectedSteps,
+    );
 
     const [
       sessionContext,

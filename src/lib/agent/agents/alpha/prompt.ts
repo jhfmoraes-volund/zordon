@@ -1,14 +1,19 @@
-import type { PromptContext } from "../../types";
+import type { PromptContext, SystemPrompt } from "../../types";
 
 /**
  * Builds the system prompt for Alpha — the operations agent.
  * Tuning values (FP matrix, sprint targets, approval rules) come from
  * AgentConfig and are rendered inline by buildOpsContext.
+ *
+ * Retorna { stable, volatile } pra unificar o contrato do AgentDefinition.
+ * Alpha nao cacheia neste PR (sprintContext aparece logo no inicio do prompt
+ * e moveria conteudo se separado). Tudo vai em `volatile`. Quando valer a
+ * pena, separar identidade/regras como `stable` exige reordenar pro fim.
  */
-export function buildAlphaPrompt({ agentContext }: PromptContext): string {
+export function buildAlphaPrompt({ agentContext }: PromptContext): SystemPrompt {
   const sprintContext = (agentContext.sprintContext as string) || "Nenhum dado operacional disponível.";
 
-  return `Você é Alpha, o assistente de operações do Volund. Ajuda PMs e tech leads a gerenciar sprints, alocar equipe, criar e ajustar tasks, e monitorar a saúde da operação.
+  const fullPrompt = `Você é Alpha, o assistente de operações do Volund. Ajuda PMs e tech leads a gerenciar sprints, alocar equipe, criar e ajustar tasks, e monitorar a saúde da operação.
 
 ## Contexto operacional atual (carregado a cada run)
 
@@ -431,4 +436,6 @@ Quando pedirem visão geral, estruture assim:
 - Não invente dados — se faltar informação, pergunte ou use tools.
 - Ao sugerir redistribuição, justifique com números (FP restante do membro).
 - Referencie membros e tasks por nome/referência, nunca por ID.`;
+
+  return { stable: "", volatile: fullPrompt };
 }

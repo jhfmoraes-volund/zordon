@@ -25,6 +25,35 @@ The `DIRECT_URL` env var (in `.env`) points to the Supabase Postgres connection 
 - Never use `prisma migrate` — Prisma is not the migration tool for this project.
 <!-- END:supabase-agent-rules -->
 
+<!-- BEGIN:ui-patterns -->
+# UI patterns — reuse first
+
+Cinco padrões canônicos. Antes de criar componente novo, modal, form ou mutação client-side, verificar se um destes cobre.
+
+1. **Componentes reutilizáveis** vivem em `src/components/ui/`. Inventário completo: ver memory `project_ui_patterns.md`. Inclui `Field`/`FormBody`, `Button`, `Input`, `Textarea`, `Select`, `StatusChip`, `StatusChipSelect`, `Card`, `Badge`, `Skeleton`, `Tooltip`, `DropdownMenu`, `Sidebar`, `Markdown`, `Sonner`, etc.
+
+2. **Responsive Sheet/Dialog (sempre)** — nunca `<Dialog>` ou `<Sheet>` nu. Use:
+   - `ResponsiveSheet` (`src/components/ui/responsive-sheet.tsx`) — desktop side-sheet, mobile bottom-sheet 90dvh. Para edição rica de item de lista (story/task/project/design session). `size="sm|md|lg"` = 480/640/760px no desktop.
+   - `ResponsiveDialog` (`src/components/ui/responsive-dialog.tsx`) — desktop modal, mobile bottom-sheet. Para 1–3 fields / decisão pontual.
+   - Ambos resolvem mobile via `useIsMobile()` (768px) com context. Sub-components (Header/Body/Footer) tratam padding e safe-area.
+
+3. **Custom Confirm/Alert** — proibido `window.confirm()` / `alert()`. Use `ConfirmDialog` (`src/components/ui/confirm-dialog.tsx`): stateless, recebe `state: { title, description?, confirmLabel?, cancelLabel?, destructive?, onConfirm: () => void|Promise<void> } | null`, trata busy + close async. Erros vão em **Sonner toast** (não em alert/dialog).
+
+4. **Forms — Field compound API** (ver `docs/forms-standardization-plan.md`):
+   - `<Field name required error><Field.Label/><Field.Control><Input|Select|Textarea/></Field.Control><Field.Hint/></Field>` — `Field.Control` injeta `id`/`aria-describedby`/`aria-invalid`/`aria-required` via `cloneElement`.
+   - `<FormBody density="comfortable|compact">` controla densidade no escopo. `<Field.Row cols={2|3}>` para grid.
+   - Altura via CSS var `--field-h` (não passar `h-9` no className do campo).
+   - Estado: `useState` direto (sem react-hook-form). Validação Zod só em `src/app/api/**`, **não no client**.
+   - Sem masked-input lib. Use `<Input type="date|number|tel|email">` nativo.
+
+5. **Optimistic updates (sempre que mutar coleção)** — ver `docs/optimistic-updates-runbook.md`:
+   - Hook canônico: `useOptimisticCollection<T, X>(initial, reducer?)` em `src/hooks/use-optimistic-collection.ts`. Mutations base: `patch | create | delete | bulkPatch | bulkDelete | external_update`. Estende com `combineReducers(extra)`.
+   - API: `mutate(mutation, persist, { errorLabel, reconcile?, retry? })` — aplica reducer otimista, roda `persist(signal)`, reconcilia committed.
+   - Errors via `showErrorToast` (`src/lib/optimistic/toast.ts`): 403 → "sem permissão", 409 → "outro usuário editou", 5xx → auto-retry 1× + toast com "Tentar de novo", network/abort → "sem conexão. Mudança revertida".
+   - AbortController por chave (`${type}:${id}`) cancela mutation prévia. Para fetch simples, `fetchOrThrow` joga `HttpError` com status preservado.
+   - **Regra**: nunca `setState` direto após `fetch` em listas. Sempre `mutate(...)`.
+<!-- END:ui-patterns -->
+
 <!-- BEGIN:git-agent-rules -->
 # Git — commit + push via sync-main.sh
 

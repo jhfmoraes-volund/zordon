@@ -870,7 +870,7 @@ export function buildSystemPrompt({
   existingStories,
   existingPersonas,
   planMode,
-}: PromptInput): string {
+}: PromptInput): { stable: string; volatile: string } {
   const steps = getStepsForSession({ type: sessionType, selectedSteps: selectedSteps ?? null });
   const currentStep = steps.find((s) => s.key === currentStepKey);
   const stepListText = steps
@@ -1331,6 +1331,10 @@ Regras de escopo:
 
   // ── Layout otimizado pra prompt cache (OpenAI/Anthropic).
   //
+  // CACHE BREAKPOINT — nao edite o conteudo do `stablePrefix` sem revisar impacto.
+  // Qualquer mudanca aqui invalida o cache de TODAS as sessoes em curso por 5min.
+  // Ver docs/vitor-cost-reduction-plan.md F1.
+  //
   // Prefix ESTAVEL primeiro: identidade, tipo de sessao, lista de steps,
   // schema docs, instrucoes por step, regras de comportamento. Esse bloco
   // muda raramente dentro de uma mesma sessao/step e cacheia entre turns.
@@ -1404,5 +1408,5 @@ ${sessionContext || "Nenhum dado preenchido ainda."}
 ## Dados detalhados do step atual (${currentStepKey})
 ${JSON.stringify(currentStepData, null, 2)}`;
 
-  return `${stablePrefix}\n${volatileSuffix}`;
+  return { stable: stablePrefix, volatile: `\n${volatileSuffix}` };
 }

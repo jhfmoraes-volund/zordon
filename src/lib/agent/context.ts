@@ -31,6 +31,23 @@ export async function getStepData(
 }
 
 /**
+ * Loads step data for prompt injection — strips client-side draft state
+ * (`_draft`, `_drafts`) recursively. Drafts are intermediate UI state that
+ * the agent should never read; including them inflates the prompt with
+ * abandoned tool calls. `_notes` are kept (facilitator-facing notes the
+ * agent acts on).
+ */
+export async function getStepDataForPrompt(
+  sessionId: string,
+  stepKey: string
+): Promise<Record<string, unknown>> {
+  const raw = await getStepData(sessionId, stepKey);
+  return JSON.parse(
+    JSON.stringify(raw, (k, v) => (k.startsWith("_draft") ? undefined : v))
+  );
+}
+
+/**
  * Applies a mutation to step data (read-modify-write).
  */
 export async function updateStepData(
@@ -60,20 +77,35 @@ export async function updateStepData(
 
 /**
  * Loads chat history from ChatMessage table and converts to AI SDK message format.
+ *
+ * F2: defaults to the last 40 messages (~20 turnos). Threads no Vitor podem
+ * passar de 200 mensagens; sem cap, o histórico inflate o prompt sem ganho
+ * (o agente raramente precisa de contexto de >50 turnos atrás — info crítica
+ * já vai pra DesignDecision/DesignOpenQuestion via agentContext).
+ *
+ * Hoje só emitimos `{ role, content }` em texto puro (sem `parts` com tool
+ * calls), então não há risco de orphan tool_use/tool_result. Se voltar a
+ * hidratar tool calls no histórico, o cap precisa respeitar boundaries de
+ * turno.
  */
 export async function buildMessageHistory(
-  threadId: string
+  threadId: string,
+  opts: { maxMessages?: number } = {}
 ): Promise<ModelMessage[]> {
+  const limit = opts.maxMessages ?? 40;
   const { data: messages } = await db()
     .from("ChatMessage")
     .select("*")
     .eq("threadId", threadId)
-    .order("createdAt", { ascending: true });
+    .in("role", ["user", "assistant"])
+    .order("createdAt", { ascending: false })
+    .limit(limit);
 
   if (!messages?.length) return [];
 
   return messages
-    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice()
+    .reverse()
     .map((m) => ({
       role: m.role as "user" | "assistant",
       content: m.content,

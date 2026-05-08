@@ -4,21 +4,27 @@ import { db } from "@/lib/db";
  * Verbosity level controls how much of each step is rendered into the system
  * prompt. Tuned per sub-phase to keep the prompt cacheable and compact:
  *
- *   - "full"        — everything. Used in pre_work, debugging.
- *   - "discovery"   — brainstorm full + prioritization full + hypotheses (trim)
- *                     + tech specs. Used in module_discovery.
- *   - "refinement"  — MVP cards compact (title+howItSolves+targetPersona+
- *                     painPointRef), no `next`/`out`, no hypotheses, no
- *                     tech specs. Used in story_tree.
- *   - "execution"   — zero brainstorm / prioritization / hypotheses. Only
- *                     vision + scope + personas + tech specs. Used in
- *                     story_detail, task_breakdown.
+ *   - "full"           — everything. Used in pre_work, debugging.
+ *   - "discovery"      — brainstorm full + prioritization full + hypotheses (trim)
+ *                        + tech specs. Used in module_discovery.
+ *   - "refinement"     — MVP cards compact (title+howItSolves+targetPersona+
+ *                        painPointRef), no `next`/`out`, no hypotheses, no
+ *                        tech specs. Used in story_tree.
+ *   - "execution"      — zero brainstorm / prioritization / hypotheses. Only
+ *                        vision + scope + personas + tech specs. Used in
+ *                        story_detail, task_breakdown.
+ *   - "compact-vision" — Used em steps pos-brainstorm (hypotheses, technical_specs,
+ *                        risks_gaps) quando o brainstorm/priorizacao ja foram
+ *                        feitos. Renderiza brainstorm/priorizacao compact (sem
+ *                        keyScreens/userFlows/technicalNotes) — agente puxa o
+ *                        JSON cru via get_step_data sob demanda.
  */
 export type SessionContextVerbosity =
   | "full"
   | "discovery"
   | "refinement"
-  | "execution";
+  | "execution"
+  | "compact-vision";
 
 interface BrainstormCard {
   id?: string;
@@ -136,24 +142,30 @@ ${gains}`;
   }
 
   // Brainstorm — heaviest section. Drop entirely in execution; compact in
-  // refinement (MVP-bound cards already live in prioritization); full elsewhere.
+  // refinement (MVP-bound cards already live in prioritization); compact em
+  // compact-vision (steps pos-brainstorm); full elsewhere.
   const brainstorm = stepMap["brainstorm"] as { solutions?: BrainstormCard[] } | undefined;
   if (brainstorm?.solutions?.length) {
     if (verbosity === "full" || verbosity === "discovery") {
       const text = brainstorm.solutions.map(renderCardFull).join("\n\n");
       sections.push(`## Soluções Levantadas\n${text}`);
+    } else if (verbosity === "compact-vision") {
+      const text = brainstorm.solutions.map(renderCardCompact).join("\n\n");
+      sections.push(`## Soluções Levantadas (compact — use get_step_data("brainstorm") pra detalhes)\n${text}`);
     }
     // refinement & execution: skip raw brainstorm — refinement reads via
     // prioritization (MVP-only), execution doesn't need brainstorm at all.
   }
 
   // Prioritization — drives story_tree filtering. In refinement we keep ONLY
-  // MVP and render compact. Execution skips entirely.
+  // MVP and render compact. Execution skips entirely. compact-vision: full
+  // 3 buckets em compact.
   const prioritization = stepMap["prioritization"] as { items?: PrioritizationItem[] } | undefined;
   if (prioritization?.items?.length && verbosity !== "execution") {
     const buckets: Record<string, string[]> = { mvp: [], next: [], out: [] };
+    const useCompact = verbosity === "refinement" || verbosity === "compact-vision";
     for (const item of prioritization.items) {
-      const renderer = verbosity === "refinement" ? renderCardCompact : renderCardFull;
+      const renderer = useCompact ? renderCardCompact : renderCardFull;
       (buckets[item.bucket] || []).push(renderer(item));
     }
     if (verbosity === "refinement") {
