@@ -262,7 +262,6 @@ export default function ProjectDetailPage({
     mode: SprintContextSheetMode;
   } | null>(null);
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
-  const [editingStory, setEditingStory] = useState(false);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(taskParam);
 
   const [moduleDialog, setModuleDialog] = useState<{
@@ -742,7 +741,6 @@ export default function ProjectDetailPage({
       const { story } = (await res.json()) as { story: { reference: string } };
       await loadStoryHierarchy();
       setSelectedStoryRef(story.reference);
-      setEditingStory(true);
     } catch (e) {
       showErrorToast(e, { label: "Falha ao criar story" });
     }
@@ -858,26 +856,94 @@ export default function ProjectDetailPage({
     await loadTasksAndSprints();
   }
 
-  async function handleSaveStory(updated: AdaptedStory) {
-    const dbStory = rawStories.find((s) => s.reference === updated.reference);
+  async function handleStoryPatch(
+    storyRef: string,
+    patch: Partial<AdaptedStory>,
+  ) {
+    const dbStory = rawStories.find((s) => s.reference === storyRef);
     if (!dbStory) return;
+    // Optimistic — keys in AdaptedStory map 1:1 to rawStory columns. Apply
+    // immediately so the sheet's adapted view reflects the edit without
+    // waiting for the PATCH + refetch round-trip.
+    setRawStories((prev) =>
+      prev.map((s) =>
+        s.reference === storyRef
+          ? ({ ...s, ...patch } as typeof s)
+          : s,
+      ),
+    );
     try {
-      await fetchOrThrow(`/api/stories/${updated.reference}`, {
+      await fetchOrThrow(`/api/stories/${storyRef}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: updated.title,
-          want: updated.want,
-          soThat: updated.soThat,
-          personaId: updated.personaId,
-          moduleId: updated.moduleId,
-          proposedModuleName: updated.proposedModuleName ?? null,
-          refinementStatus: updated.refinementStatus,
-        }),
+        body: JSON.stringify(patch),
       });
       await loadStoryHierarchy();
     } catch (e) {
       showErrorToast(e, { label: "Falha ao salvar story" });
+      await loadStoryHierarchy();
+    }
+  }
+
+  async function handleStoryAcCreate(
+    storyRef: string,
+    text: string,
+    order: number,
+  ) {
+    try {
+      await fetchOrThrow(`/api/stories/${storyRef}/acceptance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, order }),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Criar critério" });
+    }
+  }
+
+  async function handleStoryAcUpdateText(
+    storyRef: string,
+    acId: string,
+    text: string,
+  ) {
+    try {
+      await fetchOrThrow(`/api/stories/${storyRef}/acceptance/${acId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Salvar critério" });
+    }
+  }
+
+  async function handleStoryAcToggle(
+    storyRef: string,
+    acId: string,
+    checked: boolean,
+  ) {
+    try {
+      await fetchOrThrow(`/api/stories/${storyRef}/acceptance/${acId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checked }),
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Marcar critério" });
+    }
+  }
+
+  async function handleStoryAcDelete(storyRef: string, acId: string) {
+    try {
+      await fetchOrThrow(`/api/stories/${storyRef}/acceptance/${acId}`, {
+        method: "DELETE",
+      });
+      await loadStoryHierarchy();
+    } catch (e) {
+      showErrorToast(e, { label: "Remover critério" });
     }
   }
 
@@ -1772,7 +1838,6 @@ export default function ProjectDetailPage({
           modules={modules}
           onOpenStory={(ref) => {
             setSelectedStoryRef(ref);
-            setEditingStory(false);
           }}
           onCreateStory={handleCreateStory}
           onDeleteStory={handleDeleteStory}
@@ -2035,25 +2100,20 @@ export default function ProjectDetailPage({
         />
       ) : null}
 
-      {/* Story sheet — view + edit share the same panel. New stories nasce via
-          handleCreateStory (stub) e abre direto em edit mode. */}
+      {/* Story sheet — always editable. New stories nascem via handleCreateStory
+          (stub) e abrem direto pra o usuário editar inline. */}
       <StorySheet
         story={selectedStory}
         tasks={tasks}
         modules={modules}
         personas={personas}
         definitionOfDone={project.definitionOfDone}
-        editing={editingStory}
-        onClose={() => {
-          setSelectedStoryRef(null);
-          setEditingStory(false);
-        }}
-        onEdit={() => setEditingStory(true)}
-        onCancelEdit={() => setEditingStory(false)}
-        onSave={(updated) => {
-          handleSaveStory(updated as AdaptedStory);
-          setEditingStory(false);
-        }}
+        onClose={() => setSelectedStoryRef(null)}
+        onPatch={(patch) =>
+          selectedStory
+            ? handleStoryPatch(selectedStory.reference, patch as Partial<AdaptedStory>)
+            : undefined
+        }
         onCreateModuleRequested={(suggested) =>
           setModuleDialog({ open: true, suggested })
         }
@@ -2064,9 +2124,18 @@ export default function ProjectDetailPage({
         onValidateAc={(s) => handleValidateAc(s as AdaptedStory)}
         onOpenTask={(ref) => {
           setSelectedStoryRef(null);
-          setEditingStory(false);
           setSelectedTaskRef(ref);
         }}
+        onCreateTaskForStory={async (storyRef) => {
+          const story = stories.find((s) => s.reference === storyRef);
+          if (!story) return;
+          setSelectedStoryRef(null);
+          await handleCreateTask({ userStoryId: story.__id });
+        }}
+        onAcCreate={handleStoryAcCreate}
+        onAcUpdateText={handleStoryAcUpdateText}
+        onAcToggle={handleStoryAcToggle}
+        onAcDelete={handleStoryAcDelete}
       />
 
       {/* Task sheet — inline edit + create share the same panel. */}
@@ -2091,7 +2160,6 @@ export default function ProjectDetailPage({
         onOpenStory={(ref) => {
           setSelectedTaskRef(null);
           setSelectedStoryRef(ref);
-          setEditingStory(false);
         }}
         onOpenTaskByRef={(ref) => {
           setSelectedTaskRef(null);
@@ -2309,9 +2377,17 @@ function SettingsTab({
         .update({ referenceKey: normalized })
         .eq("id", project.id);
       if (error) {
-        showErrorToast(new Error(error.message), {
-          label: "Falha ao salvar reference",
-        });
+        const isDup = /duplicate key|project_reference_key_unique/i.test(
+          error.message,
+        );
+        showErrorToast(
+          new Error(
+            isDup
+              ? `Reference "${normalized}" já está em uso por outro projeto.`
+              : error.message,
+          ),
+          { label: "Falha ao salvar reference" },
+        );
         return;
       }
       await onUpdateProject();
@@ -2350,13 +2426,16 @@ function SettingsTab({
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
             Prefixo único pro código de stories deste projeto (CRM-US-001).
-            2-5 letras maiúsculas.
+            Gerado automaticamente ao criar o projeto; só edite se precisar.
+            2-5 caracteres (letras + dígitos), iniciando por letra.
           </p>
           <div className="flex items-center gap-2">
             <Input
               value={refKey}
               onChange={(e) =>
-                setRefKey(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))
+                setRefKey(
+                  e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+                )
               }
               maxLength={5}
               className="w-32 font-mono"
@@ -2366,7 +2445,7 @@ function SettingsTab({
               onClick={saveRef}
               disabled={
                 savingRef ||
-                !/^[A-Z]{2,5}$/.test(refKey) ||
+                !/^[A-Z][A-Z0-9]{1,4}$/.test(refKey) ||
                 refKey === project.referenceKey
               }
             >

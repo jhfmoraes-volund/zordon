@@ -7,6 +7,7 @@
 // the same mutation handlers used inside the project page.
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import {
   ResponsiveSheet,
@@ -30,6 +31,7 @@ import type {
   StoryWithRelations,
 } from "@/lib/dal/story-hierarchy";
 import { createClient } from "@/lib/supabase/client";
+import { suggestFunctionPoints } from "@/lib/function-points";
 
 type Ctx = {
   story: AdaptedStory;
@@ -68,8 +70,8 @@ export function StorySheetByRef({
 function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: Props) {
   const [ctx, setCtx] = useState<Ctx | null>(null);
   const [loading, setLoading] = useState(storyRef !== null);
-  const [editing, setEditing] = useState(false);
   const supabase = createClient();
+  const router = useRouter();
 
   const load = useCallback(
     async (ref: string): Promise<Ctx | null> => {
@@ -183,40 +185,59 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
     onAfterChange?.();
   }, [ctx, storyRef, supabase, onAfterChange]);
 
+  const refreshTasks = useCallback(async () => {
+    if (!ctx) return;
+    const { data: tasksRes } = await supabase
+      .from("Task")
+      .select(
+        "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+      )
+      .eq("projectId", ctx.projectId);
+    const { data: taskAcRes } = await supabase
+      .from("AcceptanceCriterion")
+      .select("*")
+      .not("taskId", "is", null);
+    const acRows = (taskAcRes ?? []) as AcceptanceCriterionRow[];
+    const adapterCtx = buildTaskAdapterContext(
+      // include the current story so adapter has context
+      [ctx.story],
+      acRows,
+    );
+    const tasks = ((tasksRes ?? []) as Parameters<typeof adaptTask>[0][]).map((t) =>
+      adaptTask(t, adapterCtx),
+    );
+    setCtx((cur) => (cur ? { ...cur, tasks } : cur));
+    onAfterChange?.();
+  }, [ctx, supabase, onAfterChange]);
+
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
-  const handleSave = useCallback(
-    async (updated: AdaptedStory) => {
+  const handlePatch = useCallback(
+    async (patch: Partial<AdaptedStory>) => {
       if (!ctx) return;
+      const ref = ctx.story.reference;
+      // Optimistic apply — the user sees their edit immediately, no flicker
+      // while the PATCH round-trips. On failure, refetch restores the truth.
+      setCtx((cur) =>
+        cur ? { ...cur, story: { ...cur.story, ...patch } } : cur,
+      );
       try {
-        const res = await fetch(`/api/stories/${updated.reference}`, {
+        const res = await fetch(`/api/stories/${ref}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: updated.title,
-            want: updated.want,
-            soThat: updated.soThat,
-            personaId: updated.personaId,
-            moduleId: updated.moduleId,
-            proposedModuleName: updated.proposedModuleName ?? null,
-            refinementStatus: updated.refinementStatus,
-          }),
+          body: JSON.stringify(patch),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || "Falha ao salvar story");
         }
-        // Persist AC edits — story-sheet edit form mutates `acceptanceCriteria`
-        // in-place. The PATCH above doesn't touch AC; we sync them via the
-        // dedicated /acceptance endpoint.
-        await syncAc(ctx.story, updated);
-        await refreshStory();
-        setEditing(false);
+        onAfterChange?.();
       } catch (e) {
         showErrorToast(e, { label: "Falha ao salvar story" });
+        await refreshStory();
       }
     },
-    [ctx, refreshStory],
+    [ctx, refreshStory, onAfterChange],
   );
 
   const handleApproveProposedModule = useCallback(
@@ -256,6 +277,112 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
     [refreshStory],
   );
 
+  // ─── AC handlers (granular, server is source of truth — refetch story) ───
+  const handleAcCreate = useCallback(
+    async (ref: string, text: string, order: number) => {
+      try {
+        const res = await fetch(`/api/stories/${ref}/acceptance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, order }),
+        });
+        if (!res.ok) throw new Error("Falha ao criar critério");
+        await refreshStory();
+      } catch (e) {
+        showErrorToast(e, { label: "Criar critério" });
+      }
+    },
+    [refreshStory],
+  );
+
+  const handleAcUpdateText = useCallback(
+    async (ref: string, acId: string, text: string) => {
+      try {
+        const res = await fetch(`/api/stories/${ref}/acceptance/${acId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) throw new Error("Falha ao salvar critério");
+        await refreshStory();
+      } catch (e) {
+        showErrorToast(e, { label: "Salvar critério" });
+      }
+    },
+    [refreshStory],
+  );
+
+  const handleAcToggle = useCallback(
+    async (ref: string, acId: string, checked: boolean) => {
+      try {
+        const res = await fetch(`/api/stories/${ref}/acceptance/${acId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checked }),
+        });
+        if (!res.ok) throw new Error("Falha ao marcar critério");
+        await refreshStory();
+      } catch (e) {
+        showErrorToast(e, { label: "Marcar critério" });
+      }
+    },
+    [refreshStory],
+  );
+
+  const handleAcDelete = useCallback(
+    async (ref: string, acId: string) => {
+      try {
+        const res = await fetch(`/api/stories/${ref}/acceptance/${acId}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) throw new Error("Falha ao remover critério");
+        await refreshStory();
+      } catch (e) {
+        showErrorToast(e, { label: "Remover critério" });
+      }
+    },
+    [refreshStory],
+  );
+
+  const handleCreateTaskForStory = useCallback(
+    async () => {
+      if (!ctx) return;
+      try {
+        const dbStoryId = (ctx.story as AdaptedStory & { __id?: string }).__id ?? null;
+        const res = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: ctx.projectId,
+            title: "Nova task",
+            type: "feature",
+            scope: "small",
+            complexity: "medium",
+            status: "backlog",
+            userStoryId: dbStoryId,
+            functionPoints: suggestFunctionPoints("small", "medium"),
+            billable: true,
+            updatedAt: new Date().toISOString(),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao criar task");
+        }
+        const created = (await res.json()) as { reference?: string };
+        await refreshTasks();
+        if (created.reference && onOpenTask) {
+          onClose();
+          onOpenTask(created.reference);
+        }
+        router.refresh();
+      } catch (e) {
+        showErrorToast(e, { label: "Criar task" });
+      }
+    },
+    [ctx, onClose, onOpenTask, refreshTasks, router],
+  );
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const isOpen = storyRef !== null;
@@ -265,7 +392,7 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
   if (loading || !ctx) {
     return (
       <ResponsiveSheet open={isOpen} onOpenChange={(o) => !o && onClose()}>
-        <ResponsiveSheetContent size="md" showCloseButton={false}>
+        <ResponsiveSheetContent size="lg" showCloseButton={false}>
           <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
             <Loader2 className="mr-2 size-4 animate-spin" />
             Carregando story…
@@ -282,14 +409,8 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
       modules={ctx.modules}
       personas={ctx.personas}
       definitionOfDone={ctx.definitionOfDone}
-      editing={editing}
-      onClose={() => {
-        setEditing(false);
-        onClose();
-      }}
-      onEdit={() => setEditing(true)}
-      onCancelEdit={() => setEditing(false)}
-      onSave={(updated) => handleSave(updated as AdaptedStory)}
+      onClose={onClose}
+      onPatch={(patch) => handlePatch(patch as Partial<AdaptedStory>)}
       onApproveProposedModule={(s) => handleApproveProposedModule(s as AdaptedStory)}
       onValidateAc={(s) => handleValidateAc(s as AdaptedStory)}
       onOpenTask={(taskRef) => {
@@ -298,50 +419,11 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
           onOpenTask(taskRef);
         }
       }}
+      onCreateTaskForStory={handleCreateTaskForStory}
+      onAcCreate={handleAcCreate}
+      onAcUpdateText={handleAcUpdateText}
+      onAcToggle={handleAcToggle}
+      onAcDelete={handleAcDelete}
     />
   );
-}
-
-// ─── AC sync ────────────────────────────────────────────────────────────────
-// The story-sheet edit form lets the user add/remove/edit AC rows locally.
-// On Save, diff the original vs draft and call the granular endpoints.
-async function syncAc(original: AdaptedStory, updated: AdaptedStory) {
-  const originalById = new Map(original.acceptanceCriteria.map((a) => [a.id, a]));
-  const updatedIds = new Set(
-    updated.acceptanceCriteria.map((a) => a.id).filter((id) => !id.startsWith("ac-new-")),
-  );
-
-  const toCreate = updated.acceptanceCriteria.filter((a) => a.id.startsWith("ac-new-"));
-  const toDelete = original.acceptanceCriteria.filter((a) => !updatedIds.has(a.id));
-  const toUpdate = updated.acceptanceCriteria.filter((a) => {
-    if (a.id.startsWith("ac-new-")) return false;
-    const orig = originalById.get(a.id);
-    if (!orig) return false;
-    return orig.text !== a.text || orig.checked !== a.checked;
-  });
-
-  for (let i = 0; i < toCreate.length; i++) {
-    const ac = toCreate[i];
-    if (!ac.text.trim()) continue;
-    await fetch(`/api/stories/${updated.reference}/acceptance`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: ac.text,
-        order: original.acceptanceCriteria.length + i,
-      }),
-    });
-  }
-  for (const ac of toDelete) {
-    await fetch(`/api/stories/${updated.reference}/acceptance/${ac.id}`, {
-      method: "DELETE",
-    });
-  }
-  for (const ac of toUpdate) {
-    await fetch(`/api/stories/${updated.reference}/acceptance/${ac.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: ac.text, checked: ac.checked }),
-    });
-  }
 }

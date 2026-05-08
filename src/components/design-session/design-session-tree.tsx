@@ -229,7 +229,7 @@ export function DesignSessionTree({
   // Stats agora vivem no BriefingRibbon do parent. Tree só renderiza módulos.
 
   return (
-    <div className="space-y-4">
+    <>
       <ul className="space-y-2">
         {data.tree.map((mod) => (
           <li key={mod.key}>
@@ -251,7 +251,7 @@ export function DesignSessionTree({
         onClose={() => setOpenTaskId(null)}
         onAfterChange={load}
       />
-    </div>
+    </>
   );
 }
 

@@ -1,20 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Sparkles, X } from "lucide-react";
+import { useFieldDebounce } from "@/hooks/use-field-debounce";
+import { Plus, Sparkles, X } from "lucide-react";
 import {
   ResponsiveSheet,
   ResponsiveSheetBody,
   ResponsiveSheetContent,
-  ResponsiveSheetDescription,
-  ResponsiveSheetFooter,
   ResponsiveSheetHeader,
   ResponsiveSheetTitle,
 } from "@/components/ui/responsive-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FormBody } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -40,7 +38,6 @@ import {
   taskCountsOfStory,
 } from "./helpers";
 import type {
-  AC,
   Module,
   Persona,
   RefinementStatus,
@@ -54,12 +51,10 @@ type StorySheetProps = {
   modules: Module[];
   personas: Persona[];
   definitionOfDone: string[];
-  editing: boolean;
   onClose: () => void;
-  onEdit: () => void;
-  onCancelEdit: () => void;
-  onSave: (updated: Story) => void;
-  /** Optional callbacks for inline create flows from the edit form. */
+  /** Persist a partial Story patch (called per-field from inline edits). */
+  onPatch: (patch: Partial<Story>) => void | Promise<void>;
+  /** Optional callbacks for inline create flows from the form. */
   onCreateModuleRequested?: (suggestedName?: string) => void;
   onCreatePersonaRequested?: () => void;
   /** Approve `proposedModuleName` → creates module + assigns to story. */
@@ -68,41 +63,68 @@ type StorySheetProps = {
   onValidateAc?: (story: Story) => void;
   /** Open task detail when a task row in the sheet is clicked. */
   onOpenTask?: (taskRef: string) => void;
+  /** Create a new task linked to this story. The parent should create the
+   *  task with `userStoryRef = story.reference` and open it. */
+  onCreateTaskForStory?: (storyRef: string) => void | Promise<void>;
+  /** AC handlers — granular like the TaskSheet. When omitted, AC is read-only. */
+  onAcCreate?: (storyRef: string, text: string, order: number) => void | Promise<void>;
+  onAcUpdateText?: (storyRef: string, acId: string, text: string) => void | Promise<void>;
+  onAcToggle?: (storyRef: string, acId: string, checked: boolean) => void | Promise<void>;
+  onAcDelete?: (storyRef: string, acId: string) => void | Promise<void>;
 };
 
 export function StorySheet(props: StorySheetProps) {
-  const { story, editing, onClose } = props;
+  const { story, onClose } = props;
   return (
     <ResponsiveSheet
       open={story !== null}
       onOpenChange={(open) => !open && onClose()}
     >
-      <ResponsiveSheetContent size="md" showCloseButton={false}>
+      <ResponsiveSheetContent size="lg" showCloseButton={false}>
         {story ? (
-          editing ? (
-            <StorySheetEdit {...props} story={story} />
-          ) : (
-            <StorySheetView {...props} story={story} />
-          )
+          <StorySheetInner key={story.reference} {...props} story={story} />
         ) : null}
       </ResponsiveSheetContent>
     </ResponsiveSheet>
   );
 }
 
-// ─── View mode ───────────────────────────────────────────────────────────────
+// ─── Inner: always-editable story body ───────────────────────────────────────
 
-function StorySheetView({
+function StorySheetInner({
   story,
   tasks,
   modules,
   personas,
-  onEdit,
   onClose,
+  onPatch,
+  onCreateModuleRequested,
+  onCreatePersonaRequested,
   onApproveProposedModule,
   onValidateAc,
   onOpenTask,
+  onCreateTaskForStory,
+  onAcCreate,
+  onAcUpdateText,
+  onAcToggle,
+  onAcDelete,
 }: StorySheetProps & { story: Story }) {
+  // Local drafts for free-text fields; persist on blur.
+  // The outer wrapper keys this component on `story.reference`, so each new
+  // story remounts with fresh drafts — no useEffect reconciliation needed.
+  const [title, setTitle] = useState(story.title);
+  const [want, setWant] = useState(story.want);
+  const [soThat, setSoThat] = useState(story.soThat ?? "");
+
+  const { schedule: scheduleTextPersist } = useFieldDebounce(2_000);
+  function persistIfChanged<K extends keyof Story>(field: K, value: Story[K]) {
+    if (value === story[field]) return;
+    onPatch({ [field]: value } as Partial<Story>);
+  }
+  function persistTextDebounced<K extends keyof Story>(field: K, value: Story[K]) {
+    scheduleTextPersist(String(field), () => persistIfChanged(field, value));
+  }
+
   const mod = modules.find((m) => m.id === story.moduleId);
   const persona = personas.find((p) => p.id === story.personaId);
   const status = computeStatus(story, tasks);
@@ -110,11 +132,29 @@ function StorySheetView({
   const counts = taskCountsOfStory(story, tasks);
   const own = tasksOfStory(story, tasks);
 
+  // ─── AC handlers ─────────────────────────────────────────────────────────
+  async function handleAcTextCommit(id: string, text: string) {
+    if (!onAcUpdateText) return;
+    await onAcUpdateText(story.reference, id, text);
+  }
+  async function handleAcToggleLocal(id: string, checked: boolean) {
+    if (!onAcToggle) return;
+    await onAcToggle(story.reference, id, checked);
+  }
+  async function handleAcRemove(id: string) {
+    if (!onAcDelete) return;
+    await onAcDelete(story.reference, id);
+  }
+  async function handleAcAdd() {
+    if (!onAcCreate) return;
+    await onAcCreate(story.reference, "", story.acceptanceCriteria.length);
+  }
+
   return (
     <>
       <ResponsiveSheetHeader>
         <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1">
+          <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs text-muted-foreground">
                 {story.reference}
@@ -146,30 +186,34 @@ function StorySheetView({
                 </span>
               ) : null}
             </div>
-            <ResponsiveSheetTitle>{story.title}</ResponsiveSheetTitle>
-            <ResponsiveSheetDescription>
-              Como{" "}
-              <strong className="text-foreground">
-                {persona?.name ?? "—"}
-              </strong>
-              , quero {story.want}
-              {story.soThat ? <>, para que {story.soThat}.</> : "."}
-            </ResponsiveSheetDescription>
+            <ResponsiveSheetTitle className="sr-only">
+              {title || "Título da story"}
+            </ResponsiveSheetTitle>
+            <textarea
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => persistTextDebounced("title", title)}
+              rows={1}
+              className="block w-full resize-none bg-transparent font-heading font-semibold leading-snug text-foreground outline-none placeholder:text-muted-foreground field-sizing-content"
+              style={{
+                border: 0,
+                margin: 0,
+                padding: 0,
+                boxShadow: "none",
+                minHeight: 0,
+                fontSize: "1.322rem",
+              }}
+              placeholder="Título da story"
+            />
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button size="sm" variant="outline" onClick={onEdit}>
-              <Pencil className="size-3.5" />
-              Editar
-            </Button>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              onClick={onClose}
-              aria-label="Fechar"
-            >
-              <X />
-            </Button>
-          </div>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={onClose}
+            aria-label="Fechar"
+          >
+            <X />
+          </Button>
         </div>
       </ResponsiveSheetHeader>
 
@@ -191,363 +235,121 @@ function StorySheetView({
           </div>
         ) : null}
 
-        <AcList mode="view" items={story.acceptanceCriteria} />
-
-        {status === "tasks_complete" && story.acValidatedAt === null ? (
-          <div className="flex items-center justify-between rounded-md border border-purple-500/30 bg-purple-500/5 px-3 py-2 text-xs">
-            <span className="text-purple-700 dark:text-purple-300">
-              Tasks completas. PM valida AC pra fechar.
-            </span>
-            {onValidateAc ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onValidateAc(story)}
-              >
-                Validar AC
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {story.acValidatedAt ? (
-          <div className="rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2 text-[11px] text-green-700 dark:text-green-300">
-            AC validado por <strong>{story.acValidatedBy}</strong> em{" "}
-            <time className="font-mono tabular-nums">
-              {story.acValidatedAt}
-            </time>
-          </div>
-        ) : null}
-
-        <Separator />
-
-        {/* Tasks ────────────────────────────────────────────────────── */}
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Tasks
-            </h4>
-            <div className="flex items-center gap-3 text-[11px]">
-              <span className="font-mono tabular-nums text-muted-foreground">
-                {counts.done} / {counts.total} tasks
-              </span>
-              <span className="font-mono tabular-nums">
-                {fps.done} / {fps.total} FP
-              </span>
-            </div>
-          </div>
-
-          {own.length === 0 ? (
-            <div className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
-              Nenhuma task ainda. Story precisa ser quebrada antes de entrar
-              em sprint.
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-md border">
-              {own.map((task, i) => (
-                <button
-                  key={task.reference}
-                  type="button"
-                  onClick={() => onOpenTask?.(task.reference)}
-                  className={`flex w-full items-center gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/40 ${
-                    i > 0 ? "border-t" : ""
-                  }`}
-                >
-                  <span className="font-mono text-muted-foreground">
-                    {task.reference}
-                  </span>
-                  {task.tags.length > 0 ? (
-                    <span className="flex shrink-0 items-center gap-1">
-                      {task.tags.slice(0, 2).map((tg) => (
-                        <TagChip
-                          key={tg.id}
-                          name={tg.name}
-                          tone={tg.tone as ChipTone}
-                          variant="linear"
-                          size="sm"
-                        />
-                      ))}
-                      <TagChipOverflow
-                        count={Math.max(0, task.tags.length - 2)}
-                        variant="linear"
-                        size="sm"
-                      />
-                    </span>
-                  ) : null}
-                  <span className="flex-1 truncate">{task.title}</span>
-                  <span className="font-mono tabular-nums text-muted-foreground">
-                    {task.functionPoints} FP
-                  </span>
-                  <TaskStatusChip status={task.status} />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {fps.total > 0 ? (
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary"
-                style={{
-                  width: `${(fps.done / Math.max(1, fps.total)) * 100}%`,
-                }}
-              />
-            </div>
-          ) : null}
-        </section>
-
-        <Separator />
-
-        <section className="space-y-2">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Origem & metadados
-          </h4>
-          <dl className="grid grid-cols-2 gap-y-1 text-xs">
-            <dt className="text-muted-foreground">Origem</dt>
-            <dd className="font-mono">{story.designSessionRef ?? "—"}</dd>
-            <dt className="text-muted-foreground">Criada por</dt>
-            <dd>{story.createdByAgent ? "Alpha (agente)" : "Manual"}</dd>
-            <dt className="text-muted-foreground">Persona</dt>
-            <dd>{persona?.name ?? "—"}</dd>
-          </dl>
-        </section>
-
-      </ResponsiveSheetBody>
-    </>
-  );
-}
-
-// ─── Edit mode ───────────────────────────────────────────────────────────────
-
-function StorySheetEdit({
-  story,
-  modules,
-  personas,
-  onCancelEdit,
-  onSave,
-  onClose,
-  onCreateModuleRequested,
-  onCreatePersonaRequested,
-}: StorySheetProps & { story: Story }) {
-  const [draft, setDraft] = useState<Story>(story);
-
-  function patch<K extends keyof Story>(key: K, value: Story[K]) {
-    setDraft((d) => ({ ...d, [key]: value }));
-  }
-
-  function patchAC(id: string, text: string) {
-    setDraft((d) => ({
-      ...d,
-      acceptanceCriteria: d.acceptanceCriteria.map((ac) =>
-        ac.id === id ? { ...ac, text } : ac,
-      ),
-    }));
-  }
-
-  function toggleAC(id: string) {
-    setDraft((d) => ({
-      ...d,
-      acceptanceCriteria: d.acceptanceCriteria.map((ac) =>
-        ac.id === id
-          ? {
-              ...ac,
-              checked: !ac.checked,
-              checkedBy: !ac.checked ? "Você" : undefined,
-            }
-          : ac,
-      ),
-    }));
-  }
-
-  function removeAC(id: string) {
-    setDraft((d) => ({
-      ...d,
-      acceptanceCriteria: d.acceptanceCriteria.filter((ac) => ac.id !== id),
-    }));
-  }
-
-  function addAC() {
-    const newAc: AC = {
-      id: `ac-new-${Date.now()}`,
-      text: "",
-      checked: false,
-    };
-    setDraft((d) => ({
-      ...d,
-      acceptanceCriteria: [...d.acceptanceCriteria, newAc],
-    }));
-  }
-
-  return (
-    <>
-      <ResponsiveSheetHeader>
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs text-muted-foreground">
-                {draft.reference}
-              </span>
-              <Badge
-                variant="outline"
-                className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
-              >
-                Editando
-              </Badge>
-            </div>
-            <ResponsiveSheetTitle>Editar story</ResponsiveSheetTitle>
-            <ResponsiveSheetDescription>
-              Alterações ficam locais até salvar.
-            </ResponsiveSheetDescription>
-          </div>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={onClose}
-            aria-label="Fechar"
-          >
-            <X />
-          </Button>
-        </div>
-      </ResponsiveSheetHeader>
-
-      <ResponsiveSheetBody>
         <FormBody>
-          <Field name="story-title" required>
-            <Field.Label>Título</Field.Label>
+          <Field name="story-want" required>
+            <Field.Label>Quero (want)</Field.Label>
             <Field.Control>
-              <Input
-                value={draft.title}
-                onChange={(e) => patch("title", e.target.value)}
+              <Textarea
+                value={want}
+                onChange={(e) => setWant(e.target.value)}
+                onBlur={() => persistTextDebounced("want", want)}
+                rows={2}
               />
             </Field.Control>
           </Field>
 
-          <Field name="story-module">
-            <Field.Label
-              addon={
-                onCreateModuleRequested ? (
-                  <button
-                    type="button"
-                    aria-label="Criar módulo"
-                    title="Criar módulo"
-                    className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                    onClick={() =>
-                      onCreateModuleRequested(draft.proposedModuleName)
-                    }
-                  >
-                    <Plus className="size-3" strokeWidth={2.5} />
-                  </button>
-                ) : undefined
-              }
-            >
-              Módulo
-            </Field.Label>
+          <Field name="story-sothat">
+            <Field.Label>Para que (soThat) — opcional</Field.Label>
             <Field.Control>
-              <Select
-                value={draft.moduleId ?? "__none"}
-                onValueChange={(v) =>
-                  patch("moduleId", v === "__none" ? null : v)
+              <Textarea
+                value={soThat}
+                onChange={(e) => setSoThat(e.target.value)}
+                onBlur={() =>
+                  persistTextDebounced(
+                    "soThat",
+                    soThat.trim() === "" ? null : soThat,
+                  )
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue>
-                    {(v: string | null) => {
-                      if (!v || v === "__none") {
-                        return (
-                          <span className="text-muted-foreground">
-                            — sem módulo —
-                          </span>
-                        );
-                      }
-                      const mod = modules.find((m) => m.id === v);
-                      return mod ? (
-                        <span className="font-mono">{mod.name}</span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          — sem módulo —
-                        </span>
-                      );
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">— sem módulo —</SelectItem>
-                  {modules.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      <span className="font-mono">{m.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                rows={2}
+              />
             </Field.Control>
-            {draft.moduleId === null && draft.proposedModuleName ? (
-              <Field.Hint tone="warning">
-                Alpha sugeriu:{" "}
-                <span className="font-mono">{draft.proposedModuleName}</span>
-              </Field.Hint>
-            ) : null}
           </Field>
+
+          <Separator />
 
           <Field.Row cols={2}>
-            <Field name="story-persona">
+            <Field name="story-module">
               <Field.Label
                 addon={
-                  onCreatePersonaRequested ? (
+                  onCreateModuleRequested ? (
                     <button
                       type="button"
-                      aria-label="Nova persona"
-                      title="Nova persona"
+                      aria-label="Criar módulo"
+                      title="Criar módulo"
                       className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                      onClick={onCreatePersonaRequested}
+                      onClick={() =>
+                        onCreateModuleRequested(story.proposedModuleName)
+                      }
                     >
                       <Plus className="size-3" strokeWidth={2.5} />
                     </button>
                   ) : undefined
                 }
               >
-                Persona
+                Módulo
               </Field.Label>
               <Field.Control>
                 <Select
-                  value={draft.personaId}
-                  onValueChange={(v) => v && patch("personaId", v)}
+                  value={story.moduleId ?? "__none"}
+                  onValueChange={(v) => {
+                    if (v === null) return;
+                    onPatch({ moduleId: v === "__none" ? null : v });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue>
-                      {(v: string | null) =>
-                        v
-                          ? personas.find((p) => p.id === v)?.name ?? "—"
-                          : "—"
-                      }
+                      {(v: string | null) => {
+                        if (!v || v === "__none") {
+                          return (
+                            <span className="text-muted-foreground">
+                              — sem módulo —
+                            </span>
+                          );
+                        }
+                        const m = modules.find((x) => x.id === v);
+                        return m ? (
+                          <span className="font-mono">{m.name}</span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            — sem módulo —
+                          </span>
+                        );
+                      }}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {personas.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
+                    <SelectItem value="__none">— sem módulo —</SelectItem>
+                    {modules.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        <span className="font-mono">{m.name}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field.Control>
+              {story.moduleId === null && story.proposedModuleName ? (
+                <Field.Hint tone="warning">
+                  Alpha sugeriu:{" "}
+                  <span className="font-mono">{story.proposedModuleName}</span>
+                </Field.Hint>
+              ) : null}
             </Field>
 
             <Field name="story-refinement">
               <Field.Label>Refinement</Field.Label>
               <Field.Control>
                 <Select
-                  value={draft.refinementStatus}
-                  onValueChange={(v) =>
-                    patch("refinementStatus", v as RefinementStatus)
-                  }
+                  value={story.refinementStatus}
+                  onValueChange={(v) => {
+                    if (v === null) return;
+                    onPatch({ refinementStatus: v as RefinementStatus });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(
-                      ["draft", "refined", "committed"] as RefinementStatus[]
-                    ).map((s) => (
+                    {(["draft", "refined", "committed"] as RefinementStatus[]).map((s) => (
                       <SelectItem key={s} value={s}>
                         {REFINEMENT_MAP[s].label}
                       </SelectItem>
@@ -558,52 +360,209 @@ function StorySheetEdit({
             </Field>
           </Field.Row>
 
-          <Field name="story-want" required>
-            <Field.Label>Quero (want)</Field.Label>
+          <Field name="story-persona">
+            <Field.Label
+              addon={
+                onCreatePersonaRequested ? (
+                  <button
+                    type="button"
+                    aria-label="Nova persona"
+                    title="Nova persona"
+                    className="inline-flex size-4 items-center justify-center rounded-[4px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                    onClick={onCreatePersonaRequested}
+                  >
+                    <Plus className="size-3" strokeWidth={2.5} />
+                  </button>
+                ) : undefined
+              }
+            >
+              Persona
+            </Field.Label>
             <Field.Control>
-              <Textarea
-                value={draft.want}
-                onChange={(e) => patch("want", e.target.value)}
-                rows={2}
-              />
-            </Field.Control>
-          </Field>
-
-          <Field name="story-sothat">
-            <Field.Label>Para que (soThat) — opcional</Field.Label>
-            <Field.Control>
-              <Textarea
-                value={draft.soThat ?? ""}
-                onChange={(e) =>
-                  patch(
-                    "soThat",
-                    e.target.value.length === 0 ? null : e.target.value,
-                  )
-                }
-                rows={2}
-              />
+              <Select
+                value={story.personaId}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  onPatch({ personaId: v });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {(v: string | null) =>
+                      v ? personas.find((p) => p.id === v)?.name ?? "—" : "—"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {personas.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field.Control>
           </Field>
 
           <Separator />
 
-          <AcList
-            mode="editDraft"
-            items={draft.acceptanceCriteria}
-            onToggle={toggleAC}
-            onChange={patchAC}
-            onAdd={addAC}
-            onRemove={removeAC}
-          />
+          {/* AC ─────────────────────────────────────────────────────────── */}
+          {onAcCreate && onAcUpdateText && onAcToggle && onAcDelete ? (
+            <AcList
+              mode="editPersisted"
+              items={story.acceptanceCriteria}
+              onToggle={handleAcToggleLocal}
+              onTextCommit={handleAcTextCommit}
+              onAdd={handleAcAdd}
+              onRemove={handleAcRemove}
+            />
+          ) : (
+            <AcList mode="view" items={story.acceptanceCriteria} />
+          )}
+
+          {status === "tasks_complete" && story.acValidatedAt === null ? (
+            <div className="flex items-center justify-between rounded-md border border-purple-500/30 bg-purple-500/5 px-3 py-2 text-xs">
+              <span className="text-purple-700 dark:text-purple-300">
+                Tasks completas. PM valida AC pra fechar.
+              </span>
+              {onValidateAc ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onValidateAc(story)}
+                >
+                  Validar AC
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {story.acValidatedAt ? (
+            <div className="rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2 text-[11px] text-green-700 dark:text-green-300">
+              AC validado por <strong>{story.acValidatedBy}</strong> em{" "}
+              <time className="font-mono tabular-nums">
+                {story.acValidatedAt}
+              </time>
+            </div>
+          ) : null}
+
+          <Separator />
+
+          {/* Tasks ────────────────────────────────────────────────────── */}
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Tasks
+              </h4>
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="font-mono tabular-nums text-muted-foreground">
+                  {counts.done} / {counts.total} tasks
+                </span>
+                <span className="font-mono tabular-nums">
+                  {fps.done} / {fps.total} FP
+                </span>
+                {onCreateTaskForStory ? (
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Adicionar task"
+                    title="Adicionar task"
+                    onClick={() => void onCreateTaskForStory(story.reference)}
+                  >
+                    <Plus />
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {own.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                <span>
+                  Nenhuma task ainda. Story precisa ser quebrada antes de entrar
+                  em sprint.
+                </span>
+                {onCreateTaskForStory ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void onCreateTaskForStory(story.reference)}
+                  >
+                    <Plus className="size-3.5" />
+                    Adicionar task
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-md border">
+                {own.map((task, i) => (
+                  <button
+                    key={task.reference}
+                    type="button"
+                    onClick={() => onOpenTask?.(task.reference)}
+                    className={`flex w-full items-center gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/40 ${
+                      i > 0 ? "border-t" : ""
+                    }`}
+                  >
+                    <span className="font-mono text-muted-foreground">
+                      {task.reference}
+                    </span>
+                    {task.tags.length > 0 ? (
+                      <span className="flex shrink-0 items-center gap-1">
+                        {task.tags.slice(0, 2).map((tg) => (
+                          <TagChip
+                            key={tg.id}
+                            name={tg.name}
+                            tone={tg.tone as ChipTone}
+                            variant="linear"
+                            size="sm"
+                          />
+                        ))}
+                        <TagChipOverflow
+                          count={Math.max(0, task.tags.length - 2)}
+                          variant="linear"
+                          size="sm"
+                        />
+                      </span>
+                    ) : null}
+                    <span className="flex-1 truncate">{task.title}</span>
+                    <span className="font-mono tabular-nums text-muted-foreground">
+                      {task.functionPoints} FP
+                    </span>
+                    <TaskStatusChip status={task.status} />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {fps.total > 0 ? (
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary"
+                  style={{
+                    width: `${(fps.done / Math.max(1, fps.total)) * 100}%`,
+                  }}
+                />
+              </div>
+            ) : null}
+          </section>
+
+          <Separator />
+
+          <section className="space-y-2">
+            <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Origem & metadados
+            </h4>
+            <dl className="grid grid-cols-2 gap-y-1 text-xs">
+              <dt className="text-muted-foreground">Origem</dt>
+              <dd className="font-mono">{story.designSessionRef ?? "—"}</dd>
+              <dt className="text-muted-foreground">Criada por</dt>
+              <dd>{story.createdByAgent ? "Alpha (agente)" : "Manual"}</dd>
+              <dt className="text-muted-foreground">Persona</dt>
+              <dd>{persona?.name ?? "—"}</dd>
+            </dl>
+          </section>
         </FormBody>
       </ResponsiveSheetBody>
-
-      <ResponsiveSheetFooter>
-        <Button variant="ghost" onClick={onCancelEdit}>
-          Cancelar
-        </Button>
-        <Button onClick={() => onSave(draft)}>Salvar</Button>
-      </ResponsiveSheetFooter>
     </>
   );
 }

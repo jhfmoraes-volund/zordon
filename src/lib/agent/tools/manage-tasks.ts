@@ -9,6 +9,7 @@ import {
   DEPENDENCY_KINDS,
 } from "@/lib/dal/task-dependencies";
 import type { Database } from "@/lib/supabase/database.types";
+import { decodeUnicodeEscapes } from "./_text-decode";
 
 type TaskUpdate = Database["public"]["Tables"]["Task"]["Update"];
 
@@ -126,7 +127,26 @@ export function updateTaskTool(sessionId: string) {
         module: z.string().optional(),
       }),
     }),
-    execute: async ({ taskId, updates }) => {
+    execute: async ({ taskId, updates: rawUpdates }) => {
+      const updates = {
+        ...rawUpdates,
+        title:
+          rawUpdates.title !== undefined
+            ? decodeUnicodeEscapes(rawUpdates.title)
+            : rawUpdates.title,
+        description:
+          rawUpdates.description !== undefined
+            ? decodeUnicodeEscapes(rawUpdates.description)
+            : rawUpdates.description,
+        notes:
+          typeof rawUpdates.notes === "string"
+            ? decodeUnicodeEscapes(rawUpdates.notes)
+            : rawUpdates.notes,
+        module:
+          rawUpdates.module !== undefined
+            ? decodeUnicodeEscapes(rawUpdates.module)
+            : rawUpdates.module,
+      };
       const supabase = db();
 
       const { data: existing, error: fetchErr } = await supabase

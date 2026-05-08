@@ -87,15 +87,39 @@ export function BriefingTaskChat({
   const isStreaming = status === "streaming" || status === "submitted";
 
   const refreshTaskCount = async () => {
+    onTasksChanged?.();
     try {
       const r = await fetch(`/api/design-sessions/${sessionId}/tasks?countOnly=1`);
       const j = await r.json();
       setExistingTaskCount(j.count ?? 0);
-      onTasksChanged?.();
     } catch {
       // ignore
     }
   };
+
+  // Refresh the tree as soon as Vitor finishes any write tool — no need to wait
+  // for the full stream to end. We dedupe by toolCallId so a result that
+  // re-renders multiple times during streaming only triggers one refresh.
+  const seenToolResultsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    let triggered = false;
+    for (const m of messages) {
+      if (m.role !== "assistant" || !m.parts) continue;
+      for (const p of m.parts as Array<Record<string, unknown>>) {
+        const type = String(p.type ?? "");
+        const isTool = type === "tool-invocation" || type.startsWith("tool-");
+        if (!isTool) continue;
+        if (p.state !== "result" && p.state !== "output-available") continue;
+        const id =
+          typeof p.toolCallId === "string" ? p.toolCallId : `${m.id}:${type}`;
+        if (seenToolResultsRef.current.has(id)) continue;
+        seenToolResultsRef.current.add(id);
+        triggered = true;
+      }
+    }
+    if (triggered) refreshTaskCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   // Mount: load only briefing-era messages.
   useEffect(() => {

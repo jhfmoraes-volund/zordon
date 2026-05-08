@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import type { Database } from "@/lib/supabase/database.types";
+import { decodeUnicodeEscapes } from "./_text-decode";
 
 type UserStoryUpdate = Database["public"]["Tables"]["UserStory"]["Update"];
 
@@ -112,8 +113,28 @@ REGRAS DURAS:
         (d) => !!(d.moduleId || d.proposedModuleName),
         { message: "passe moduleId (preferido) OU proposedModuleName." },
       ),
-    execute: async (input) => {
+    execute: async (rawInput) => {
       const supabase = db();
+
+      // Defensive: some providers (OpenRouter → Sonnet) emit tool args with
+      // literal `\uXXXX` escapes. Decode at the boundary so DB stores real chars.
+      const input = {
+        ...rawInput,
+        title: decodeUnicodeEscapes(rawInput.title),
+        want: decodeUnicodeEscapes(rawInput.want),
+        soThat:
+          rawInput.soThat !== undefined
+            ? decodeUnicodeEscapes(rawInput.soThat)
+            : rawInput.soThat,
+        proposedModuleName:
+          rawInput.proposedModuleName !== undefined
+            ? decodeUnicodeEscapes(rawInput.proposedModuleName)
+            : rawInput.proposedModuleName,
+        acceptanceCriteriaProduct:
+          rawInput.acceptanceCriteriaProduct?.map((t) =>
+            decodeUnicodeEscapes(t),
+          ) ?? rawInput.acceptanceCriteriaProduct,
+      };
 
       const trimmedAc = (input.acceptanceCriteriaProduct ?? [])
         .map((t) => t.trim())

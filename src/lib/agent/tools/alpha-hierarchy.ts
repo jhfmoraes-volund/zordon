@@ -16,6 +16,7 @@ import {
   normalizeModuleName,
 } from "@/lib/dal/story-hierarchy";
 import { logAgentQuality } from "@/lib/agent/quality-log";
+import { decodeUnicodeEscapes } from "./_text-decode";
 
 const REFINEMENT_STATUSES = ["draft", "refined", "committed"] as const;
 
@@ -301,7 +302,22 @@ export function updateStoryForOpsTool(projectId: string) {
       }),
       reasoning: z.string().min(10),
     }),
-    execute: async ({ reference, patch }) => {
+    execute: async ({ reference, patch: rawPatch }) => {
+      const patch = {
+        ...rawPatch,
+        title:
+          rawPatch.title !== undefined
+            ? decodeUnicodeEscapes(rawPatch.title)
+            : rawPatch.title,
+        want:
+          rawPatch.want !== undefined
+            ? decodeUnicodeEscapes(rawPatch.want)
+            : rawPatch.want,
+        soThat:
+          typeof rawPatch.soThat === "string"
+            ? decodeUnicodeEscapes(rawPatch.soThat)
+            : rawPatch.soThat,
+      };
       const story = await getStoryByReference(reference);
       if (!story) {
         return {
@@ -466,7 +482,12 @@ export function manageStoryAcForOpsTool(projectId: string) {
         .max(15),
       reasoning: z.string().min(10),
     }),
-    execute: async ({ reference, operations }) => {
+    execute: async ({ reference, operations: rawOps }) => {
+      const operations = rawOps.map((op) =>
+        op.op === "remove"
+          ? op
+          : { ...op, text: decodeUnicodeEscapes(op.text) },
+      );
       const story = await getStoryByReference(reference);
       if (!story) {
         return {

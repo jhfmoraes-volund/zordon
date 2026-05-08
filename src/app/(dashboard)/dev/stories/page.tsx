@@ -88,7 +88,6 @@ export default function ProjectStoriesMockPage() {
   const [focusSprintId, setFocusSprintId] = useState<string | null>(activeSprintId);
 
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
-  const [editingStory, setEditingStory]         = useState(false);
 
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(null);
   const [editingTask, setEditingTask]         = useState(false);
@@ -124,10 +123,101 @@ export default function ProjectStoriesMockPage() {
 
   // ─── Mutators ──────────────────────────────────────────────────────
 
-  function updateStory(updated: Story) {
+  function patchStory(storyRef: string, patch: Partial<Story>) {
     setStories((prev) =>
-      prev.map((s) => (s.reference === updated.reference ? updated : s)),
+      prev.map((s) =>
+        s.reference === storyRef ? { ...s, ...patch } : s,
+      ),
     );
+  }
+
+  function createStoryAc(storyRef: string, text: string, order: number) {
+    setStories((prev) =>
+      prev.map((s) =>
+        s.reference === storyRef
+          ? {
+              ...s,
+              acceptanceCriteria: [
+                ...s.acceptanceCriteria,
+                { id: genId("ac"), text, checked: false },
+              ].sort(() => 0).map((ac, i) => (i === order ? ac : ac)),
+            }
+          : s,
+      ),
+    );
+  }
+
+  function updateStoryAcText(storyRef: string, acId: string, text: string) {
+    setStories((prev) =>
+      prev.map((s) =>
+        s.reference === storyRef
+          ? {
+              ...s,
+              acceptanceCriteria: s.acceptanceCriteria.map((ac) =>
+                ac.id === acId ? { ...ac, text } : ac,
+              ),
+            }
+          : s,
+      ),
+    );
+  }
+
+  function toggleStoryAc(storyRef: string, acId: string, checked: boolean) {
+    setStories((prev) =>
+      prev.map((s) =>
+        s.reference === storyRef
+          ? {
+              ...s,
+              acceptanceCriteria: s.acceptanceCriteria.map((ac) =>
+                ac.id === acId
+                  ? {
+                      ...ac,
+                      checked,
+                      checkedBy: checked ? "Você" : undefined,
+                    }
+                  : ac,
+              ),
+            }
+          : s,
+      ),
+    );
+  }
+
+  function deleteStoryAc(storyRef: string, acId: string) {
+    setStories((prev) =>
+      prev.map((s) =>
+        s.reference === storyRef
+          ? {
+              ...s,
+              acceptanceCriteria: s.acceptanceCriteria.filter(
+                (ac) => ac.id !== acId,
+              ),
+            }
+          : s,
+      ),
+    );
+  }
+
+  function createTaskForStory(storyRef: string) {
+    const ref = `${PROJECT.referenceKey}-T-${(tasks.length + 1).toString().padStart(3, "0")}`;
+    const newTask: Task = {
+      reference: ref,
+      userStoryRef: storyRef,
+      title: "Nova task",
+      status: "backlog",
+      type: "feature",
+      scope: "small",
+      complexity: "medium",
+      tags: [],
+      functionPoints: 3,
+      billable: true,
+      assigneeIds: [],
+      acceptanceCriteria: [],
+      createdByAgent: false,
+    };
+    setTasks((prev) => [newTask, ...prev]);
+    setSelectedStoryRef(null);
+    setSelectedTaskRef(ref);
   }
 
   function updateTask(updated: Task) {
@@ -277,7 +367,6 @@ export default function ProjectStoriesMockPage() {
           modules={modules}
           onOpenStory={(ref) => {
             setSelectedStoryRef(ref);
-            setEditingStory(false);
           }}
         />
       ) : activeTab === "tasks" ? (
@@ -356,23 +445,16 @@ export default function ProjectStoriesMockPage() {
         <PlaceholderTab tab={activeTab} />
       )}
 
-      {/* Story sheet */}
+      {/* Story sheet — always editable */}
       <StorySheet
         story={selectedStory}
         tasks={tasks}
         modules={modules}
         personas={personas}
         definitionOfDone={PROJECT.definitionOfDone}
-        editing={editingStory}
-        onClose={() => {
-          setSelectedStoryRef(null);
-          setEditingStory(false);
-        }}
-        onEdit={() => setEditingStory(true)}
-        onCancelEdit={() => setEditingStory(false)}
-        onSave={(updated) => {
-          updateStory(updated);
-          setEditingStory(false);
+        onClose={() => setSelectedStoryRef(null)}
+        onPatch={(patch) => {
+          if (selectedStory) patchStory(selectedStory.reference, patch);
         }}
         onCreateModuleRequested={(suggested) =>
           setModuleDialog({ open: true, suggested })
@@ -384,10 +466,14 @@ export default function ProjectStoriesMockPage() {
         onValidateAc={validateAc}
         onOpenTask={(ref) => {
           setSelectedStoryRef(null);
-          setEditingStory(false);
           setSelectedTaskRef(ref);
           setEditingTask(false);
         }}
+        onCreateTaskForStory={createTaskForStory}
+        onAcCreate={createStoryAc}
+        onAcUpdateText={updateStoryAcText}
+        onAcToggle={toggleStoryAc}
+        onAcDelete={deleteStoryAc}
       />
 
       {/* Task sheet */}
@@ -402,7 +488,6 @@ export default function ProjectStoriesMockPage() {
         onOpenStory={(ref) => {
           setSelectedTaskRef(null);
           setSelectedStoryRef(ref);
-          setEditingStory(false);
         }}
       />
 
@@ -417,7 +502,7 @@ export default function ProjectStoriesMockPage() {
           const id = genId("mod");
           setModules((prev) => [...prev, { id, ...data }]);
           // If a story is currently in edit mode, attach it
-          if (selectedStoryRef && editingStory) {
+          if (selectedStoryRef) {
             setStories((prev) =>
               prev.map((s) =>
                 s.reference === selectedStoryRef
@@ -435,7 +520,7 @@ export default function ProjectStoriesMockPage() {
         onSubmit={(data) => {
           const id = genId("per");
           setPersonas((prev) => [...prev, { id, ...data }]);
-          if (selectedStoryRef && editingStory) {
+          if (selectedStoryRef) {
             setStories((prev) =>
               prev.map((s) =>
                 s.reference === selectedStoryRef ? { ...s, personaId: id } : s,

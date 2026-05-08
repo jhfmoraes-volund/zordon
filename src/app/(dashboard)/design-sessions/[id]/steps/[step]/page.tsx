@@ -952,14 +952,18 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
           a altura disponível e rola por dentro. Chat tem composer fixo no
           fim da própria coluna, sem precisar de sticky. */}
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(420px,1fr)] gap-6 p-6">
-        <div className="surface p-5 overflow-y-auto min-h-0">
-          <h3 className="text-sm font-semibold mb-3">Hierarquia (Module → Story → Task)</h3>
-          <DesignSessionTree
-            sessionId={sessionId}
-            refreshKey={treeRefreshKey}
-            onAction={handleTreeAction}
-            onOpenStory={(ref) => setOpenStoryRef(ref)}
-          />
+        <div className="surface overflow-y-auto min-h-0">
+          <h3 className="sticky top-0 z-10 bg-card/95 backdrop-blur text-sm font-semibold px-5 pt-5 pb-3 border-b">
+            Hierarquia (Module → Story → Task)
+          </h3>
+          <div className="px-5 py-4">
+            <DesignSessionTree
+              sessionId={sessionId}
+              refreshKey={treeRefreshKey}
+              onAction={handleTreeAction}
+              onOpenStory={(ref) => setOpenStoryRef(ref)}
+            />
+          </div>
         </div>
 
         <div className="min-h-0">

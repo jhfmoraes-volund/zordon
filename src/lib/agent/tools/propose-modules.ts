@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { normalizeModuleName } from "@/lib/dal/story-hierarchy";
+import { decodeUnicodeEscapes } from "./_text-decode";
 
 /**
  * `propose_modules` — bulk-create draft Modules at the start of a briefing.
@@ -46,7 +47,14 @@ export function proposeModulesTool(projectId: string) {
           "Lista completa de modulos propostos. Chame UMA vez com todos — nao itere.",
         ),
     }),
-    execute: async (input) => {
+    execute: async (rawInput) => {
+      // Defensive decode at the boundary (see _text-decode.ts).
+      const input = {
+        modules: rawInput.modules.map((m) => ({
+          name: decodeUnicodeEscapes(m.name),
+          description: decodeUnicodeEscapes(m.description),
+        })),
+      };
       const supabase = db();
       const created: Array<{ id: string; name: string; reused: boolean }> = [];
 

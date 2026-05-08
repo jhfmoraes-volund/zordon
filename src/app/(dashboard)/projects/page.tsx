@@ -35,6 +35,7 @@ import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { showErrorToast } from "@/lib/optimistic/toast";
+import { generateUniqueReferenceKey } from "@/lib/project-reference-key";
 
 type ProjectMemberAlloc = {
   id: string;
@@ -247,8 +248,23 @@ export default function ProjectsPage() {
       await supabase.from("Project").update(projectData).eq("id", editing.id);
       projectId = editing.id;
     } else {
-      const { data } = await supabase.from("Project").insert({ id: crypto.randomUUID(), updatedAt: new Date().toISOString(), ...projectData }).select("id").single();
-      if (!data) return;
+      const referenceKey = await generateUniqueReferenceKey(supabase, form.name);
+      const { data, error } = await supabase
+        .from("Project")
+        .insert({
+          id: crypto.randomUUID(),
+          updatedAt: new Date().toISOString(),
+          referenceKey,
+          ...projectData,
+        })
+        .select("id")
+        .single();
+      if (error || !data) {
+        showErrorToast(new Error(error?.message ?? "Falha ao criar projeto"), {
+          label: "Projeto",
+        });
+        return;
+      }
       projectId = data.id;
     }
 

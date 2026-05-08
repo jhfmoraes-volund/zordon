@@ -9,6 +9,7 @@ import {
   DEPENDENCY_KINDS,
 } from "@/lib/dal/task-dependencies";
 import type { ChipTone } from "@/lib/status-chips";
+import { decodeUnicodeEscapes } from "./_text-decode";
 
 // Heurística de tone pra tags novas. Aplicada SO quando a tag ainda nao existe
 // no projeto — tags existentes mantem o tone que ja tem. Match case-insensitive
@@ -115,17 +116,32 @@ export function createTaskTool(
           "Tags canonicas comuns: Front (blue), Back (purple), Bug (red).",
         ),
     }),
-    execute: async ({
-      userStoryId,
-      title,
-      description,
-      acceptanceCriteria,
-      notes,
-      complexity,
-      scope,
-      dependsOn,
-      tags,
-    }) => {
+    execute: async (rawInput) => {
+      // Defensive decode: see _text-decode.ts. Provider sometimes emits
+      // tool args with literal `\uXXXX` escapes; decode at the boundary.
+      const {
+        userStoryId,
+        title,
+        description,
+        acceptanceCriteria,
+        notes,
+        complexity,
+        scope,
+        dependsOn,
+        tags,
+      } = {
+        ...rawInput,
+        title: decodeUnicodeEscapes(rawInput.title),
+        description: decodeUnicodeEscapes(rawInput.description),
+        acceptanceCriteria: rawInput.acceptanceCriteria.map((t) =>
+          decodeUnicodeEscapes(t),
+        ),
+        notes:
+          rawInput.notes !== undefined
+            ? decodeUnicodeEscapes(rawInput.notes)
+            : rawInput.notes,
+        tags: rawInput.tags?.map((t) => decodeUnicodeEscapes(t)),
+      };
       const supabase = db();
       const functionPoints = suggestFunctionPoints(scope, complexity);
 
