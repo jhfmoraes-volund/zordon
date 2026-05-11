@@ -184,6 +184,12 @@ type SuggestResponse = {
   context: ApiContext;
 };
 
+// Espelha o `max(3)` do Zod em /api/projects/[id]/apply-sprint-suggestion.
+// Cap aqui na UI pra impedir que "Sugerir mais 1 sprint" empurre o preview
+// pra além do limite e o apply estoure 400 com array de issues do Zod
+// (que vira "não foi possível salvar." genérico no toast).
+const MAX_SPRINTS_PER_APPLY = 3;
+
 // ─── Local preview state ─────────────────────────────────────────────────────
 
 type PreviewSprint = {
@@ -418,6 +424,12 @@ export function SuggestSprintsSheet({
   const suggestOneMore = useCallback(async () => {
     if (!preview) return;
     if (mode === "fill-existing") return;
+    if (preview.sprints.length >= MAX_SPRINTS_PER_APPLY) {
+      toast.info(
+        `Máximo de ${MAX_SPRINTS_PER_APPLY} sprints por aplicação. Aplique essas e gere outra rodada depois.`,
+      );
+      return;
+    }
     const allocatedNow = preview.sprints.flatMap((s) =>
       s.tasks.map((t) => t.id),
     );
@@ -776,15 +788,25 @@ export function SuggestSprintsSheet({
                 )}
 
                 {mode === "create-new" && preview.sprints.length > 0 ? (
-                  <div>
+                  <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={suggestOneMore}
-                      disabled={generating || applying}
+                      disabled={
+                        generating ||
+                        applying ||
+                        preview.sprints.length >= MAX_SPRINTS_PER_APPLY
+                      }
                     >
                       {generating ? "Gerando…" : "Sugerir mais 1 sprint"}
                     </Button>
+                    {preview.sprints.length >= MAX_SPRINTS_PER_APPLY ? (
+                      <span className="text-xs text-muted-foreground">
+                        Máximo de {MAX_SPRINTS_PER_APPLY} por aplicação. Aplique
+                        essas e gere outra rodada depois.
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
 
