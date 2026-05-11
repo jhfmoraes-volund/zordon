@@ -342,6 +342,451 @@ run("todas candidates bloqueadas → sprints[]=[] e tudo leftover", () => {
   assert.ok(out.leftover.every((l) => l.reason === "BLOCKED_BY_BACKLOG"));
 });
 
+// ─── Story-first vertical slicing ───────────────────────────────────────────
+
+run("story-first: tasks da mesma story caem juntas na mesma sprint", () => {
+  // Story S1 tem 3 tasks (data+api+ui). Capacity comporta tudo.
+  // Sem story-grouping o algoritmo poderia espalhar — com grouping, ficam juntas.
+  const out = planSprints(
+    baseInput({
+      candidates: [
+        task("s1-data", {
+          userStoryId: "S1",
+          layer: "DATA",
+          functionPoints: 3,
+        }),
+        task("s1-api", {
+          userStoryId: "S1",
+          layer: "API",
+          functionPoints: 3,
+        }),
+        task("s1-ui", {
+          userStoryId: "S1",
+          layer: "UI",
+          functionPoints: 3,
+        }),
+      ],
+      capacityPerSprint: 10,
+      n: 1,
+    }),
+  );
+  assert.equal(out.sprints.length, 1);
+  assert.equal(out.sprints[0].tasks.length, 3);
+  const ids = out.sprints[0].tasks.map((t) => t.id).sort();
+  assert.deepEqual(ids, ["s1-api", "s1-data", "s1-ui"]);
+});
+
+run(
+  "story-first: multi-task story (UI) vence singleton DATA isolada em capacidade restrita",
+  () => {
+    // Capacity 10. Singleton DATA fp=3 (score: 0 deps + 500 layer = 500).
+    // Story S1 (data+api+ui) fp total 9 (best task score = ~500 + cohesion 200 + UI 150 = 850).
+    // Cohesion + UI bonus tornam a story preferida, então S1 entra antes da
+    // singleton DATA.
+    const out = planSprints(
+      baseInput({
+        candidates: [
+          task("solo-data", { layer: "DATA", functionPoints: 3 }),
+          task("s1-data", {
+            userStoryId: "S1",
+            layer: "DATA",
+            functionPoints: 3,
+          }),
+          task("s1-api", {
+            userStoryId: "S1",
+            layer: "API",
+            functionPoints: 3,
+          }),
+          task("s1-ui", {
+            userStoryId: "S1",
+            layer: "UI",
+            functionPoints: 3,
+          }),
+        ],
+        capacityPerSprint: 10,
+        n: 1,
+      }),
+    );
+    // S1 (9pts) cabe; solo-data (3pts) não cabe nos 1pt restantes.
+    const ids = out.sprints[0].tasks.map((t) => t.id).sort();
+    assert.deepEqual(ids, ["s1-api", "s1-data", "s1-ui"]);
+    assert.equal(out.leftover.length, 1);
+    assert.equal(out.leftover[0].task.id, "solo-data");
+  },
+);
+
+run("UI-closure: story grande split mantém UI na sprint (slice demoável)", () => {
+  // Story com 4 tasks somando 16pts; capacity 10. UI task fp=3, sua única
+  // dep intra-story é s1-data (fp=3). Closure {data+ui} = 6pts → cabe.
+  // Resultado: sprint inclui s1-data + s1-ui (vertical slice). s1-api + s1-extra
+  // ficam pra próxima sprint.
+  const out = planSprints(
+    baseInput({
+      candidates: [
+        task("s1-data", {
+          userStoryId: "S1",
+          layer: "DATA",
+          functionPoints: 3,
+        }),
+        task("s1-api", {
+          userStoryId: "S1",
+          layer: "API",
+          functionPoints: 5,
+        }),
+        task("s1-ui", {
+          userStoryId: "S1",
+          layer: "UI",
+          functionPoints: 3,
+        }),
+        task("s1-extra", {
+          userStoryId: "S1",
+          layer: "API",
+          functionPoints: 5,
+        }),
+      ],
+      // s1-ui só depende de s1-data, NÃO de s1-api.
+      dependencies: [{ taskId: "s1-ui", dependsOn: "s1-data" }],
+      capacityPerSprint: 10,
+      n: 1,
+    }),
+  );
+  assert.equal(out.sprints.length, 1);
+  const ids = out.sprints[0].tasks.map((t) => t.id).sort();
+  assert.ok(ids.includes("s1-ui"), "split precisa ter UI task pra ser demoável");
+  assert.ok(ids.includes("s1-data"), "UI closure puxa sua dep intra-story");
+  // s1-extra deve ter sobrado (não cabia + closure já consumiu).
+  assert.ok(out.leftover.some((l) => l.task.id === "s1-extra"));
+});
+
+run("UI-closure: nenhuma fits → story espera próxima sprint", () => {
+  // Story tem UI gigante (15pts) cuja closure não cabe em capacity 10.
+  // Tem singleton DATA isolada que cabe — algoritmo deve pular a story
+  // (esperando ela caber depois ou ir pra próxima sprint) e pegar a singleton.
+  const out = planSprints(
+    baseInput({
+      candidates: [
+        task("s1-data", {
+          userStoryId: "S1",
+          layer: "DATA",
+          functionPoints: 5,
+        }),
+        task("s1-ui", {
+          userStoryId: "S1",
+          layer: "UI",
+          functionPoints: 15,
+        }),
+        task("solo", { layer: "DATA", functionPoints: 3 }),
+      ],
+      dependencies: [{ taskId: "s1-ui", dependsOn: "s1-data" }],
+      capacityPerSprint: 10,
+      n: 2,
+    }),
+  );
+  // Sprint 0: deve incluir solo (não a story, porque UI closure não cabe).
+  assert.ok(
+    out.sprints[0].tasks.some((t) => t.id === "solo"),
+    "Sprint 0 deve incluir a singleton (não tem story que caiba com UI)",
+  );
+});
+
+run("backend-only story split livre quando não cabe inteira", () => {
+  // Story sem UI tasks — split livre por score, sem regra de closure.
+  const out = planSprints(
+    baseInput({
+      candidates: [
+        task("s1-data", {
+          userStoryId: "S1",
+          layer: "DATA",
+          functionPoints: 6,
+        }),
+        task("s1-api", {
+          userStoryId: "S1",
+          layer: "API",
+          functionPoints: 6,
+        }),
+        task("s1-ops", {
+          userStoryId: "S1",
+          layer: "OPS",
+          functionPoints: 6,
+        }),
+      ],
+      capacityPerSprint: 10,
+      n: 2,
+    }),
+  );
+  // Sprint 0: pega 1 task (6pts) já que duas somam 12 > 10. Greedy por score:
+  // DATA tem layer score maior, então s1-data primeiro.
+  assert.equal(out.sprints.length, 2);
+  assert.equal(out.sprints[0].totalPoints, 6);
+  assert.equal(out.sprints[0].tasks[0].id, "s1-data");
+});
+
+// ─── Novos warnings ─────────────────────────────────────────────────────────
+
+run("NO_UI_TASK: sprint sem UI dispara warning quando projeto TEM UI", () => {
+  // Projeto tem UI tasks no backlog (s2-ui), mas a sprint atual só pega
+  // tasks de back (s1) — deve avisar.
+  const out = planSprints(
+    baseInput({
+      candidates: [
+        task("s1-data", {
+          userStoryId: "S1",
+          layer: "DATA",
+          functionPoints: 4,
+        }),
+        task("s1-api", {
+          userStoryId: "S1",
+          layer: "API",
+          functionPoints: 4,
+        }),
+        // UI task em outra story que vai ficar bloqueada (depende de algo fora).
+        task("s2-ui", {
+          userStoryId: "S2",
+          layer: "UI",
+          functionPoints: 4,
+        }),
+      ],
+      dependencies: [{ taskId: "s2-ui", dependsOn: "external-blocker" }],
+      capacityPerSprint: 10,
+      n: 1,
+    }),
+  );
+  const w = out.sprints[0].warnings.find((x) => x.type === "NO_UI_TASK");
+  assert.ok(w, "NO_UI_TASK esperado pois projeto tem UI mas sprint não");
+});
+
+run("NO_UI_TASK: NÃO dispara quando projeto inteiro é backend", () => {
+  // Sem UI em lugar nenhum — não tem sentido avisar.
+  const out = planSprints(
+    baseInput({
+      candidates: [
+        task("a", { layer: "DATA", functionPoints: 3 }),
+        task("b", { layer: "API", functionPoints: 3 }),
+      ],
+      capacityPerSprint: 10,
+      n: 1,
+    }),
+  );
+  const w = out.sprints[0].warnings.find((x) => x.type === "NO_UI_TASK");
+  assert.equal(w, undefined);
+});
+
+run("STORY_SPLIT_ACROSS_SPRINTS: warning quando story spans 2 sprints", () => {
+  // Story grande precisa ser splittada em 2 sprints.
+  const out = planSprints(
+    baseInput({
+      candidates: [
+        task("s1-data", {
+          userStoryId: "S1",
+          layer: "DATA",
+          functionPoints: 6,
+        }),
+        task("s1-ui", {
+          userStoryId: "S1",
+          layer: "UI",
+          functionPoints: 6,
+        }),
+      ],
+      dependencies: [{ taskId: "s1-ui", dependsOn: "s1-data" }],
+      capacityPerSprint: 10,
+      n: 2,
+    }),
+  );
+  // Sprint 0: s1-data (6pts) + s1-ui closure (depende de s1-data) wouldn't fit
+  // since closure = data+ui = 12 > 10. So UI closure can't form. Free split
+  // gets stuck (story has UI). Falls through to greedy with UI rule... actually
+  // since closure points 12 > 10, no closure fits. Skip this round.
+  // Then fallback: empty sprint → grab first eligible task. s1-data has no
+  // blockers → taken alone with OVERCAPACITY? No, 6 ≤ 10. Placed normally.
+  // Sprint 1: s1-data is placed, s1-ui unblocked. Closure = {s1-ui} = 6pts.
+  // Fits. Taken.
+  // Both sprints contain s1 tasks → STORY_SPLIT warning on both.
+  const w0 = out.sprints[0].warnings.find(
+    (x) => x.type === "STORY_SPLIT_ACROSS_SPRINTS",
+  );
+  const w1 = out.sprints[1].warnings.find(
+    (x) => x.type === "STORY_SPLIT_ACROSS_SPRINTS",
+  );
+  assert.ok(w0, "STORY_SPLIT esperado na sprint 0");
+  assert.ok(w1, "STORY_SPLIT esperado na sprint 1");
+});
+
+// ─── Continuidade entre sprints (in-progress stories/modules) ───────────────
+
+run(
+  "continuidade: story in-progress vence story fresh com mesmo score (tier 1 < tier 3)",
+  () => {
+    // Duas stories, ambas com 1 task fresh idêntica em peso/AC.
+    // S1-OLD tem 1 task em alreadyAllocated → tier 1 (continuação).
+    // S2-NEW está fresh → tier 3.
+    // Sem continuidade, a ordem dependia só de hash. Com continuidade, S1
+    // vem primeiro.
+    const out = planSprints(
+      baseInput({
+        candidates: [
+          task("s1-rest", {
+            userStoryId: "S1-OLD",
+            layer: "API",
+            functionPoints: 3,
+          }),
+          task("s2-rest", {
+            userStoryId: "S2-NEW",
+            layer: "API",
+            functionPoints: 3,
+          }),
+        ],
+        alreadyAllocated: new Set(["s1-done"]),
+        inProgressStoryIds: new Set(["S1-OLD"]),
+        capacityPerSprint: 3,
+        n: 1,
+      }),
+    );
+    assert.equal(out.sprints[0].tasks.length, 1);
+    assert.equal(out.sprints[0].tasks[0].id, "s1-rest");
+    assert.equal(out.leftover.length, 1);
+    assert.equal(out.leftover[0].task.id, "s2-rest");
+  },
+);
+
+run(
+  "continuidade: story em módulo in-progress (tier 2) bate fresh tier 3",
+  () => {
+    // S1 (módulo M1) tem tasks em alreadyAllocated → M1 está em andamento.
+    // S2 é nova mas pertence ao M1 → tier 2.
+    // S3 está num módulo M2 totalmente fresh → tier 3.
+    // Sprint pega S2 antes de S3.
+    const out = planSprints(
+      baseInput({
+        candidates: [
+          // Tasks restantes de S1 não cabem mais aqui (suponha já estão fechadas
+          // — ou não existem). S2 e S3 são as duas opções.
+          task("s2-task", {
+            userStoryId: "S2",
+            moduleId: "M1",
+            layer: "API",
+            functionPoints: 3,
+          }),
+          task("s3-task", {
+            userStoryId: "S3",
+            moduleId: "M2",
+            layer: "API",
+            functionPoints: 3,
+          }),
+        ],
+        alreadyAllocated: new Set(["m1-old-task"]),
+        // M1 tem tasks em andamento, mas S2 ainda é fresh (S2 não tem tasks
+        // em alreadyAllocated).
+        inProgressStoryIds: new Set<string>(),
+        inProgressModuleIds: new Set(["M1"]),
+        capacityPerSprint: 3,
+        n: 1,
+      }),
+    );
+    assert.equal(out.sprints[0].tasks.length, 1);
+    assert.equal(out.sprints[0].tasks[0].id, "s2-task");
+  },
+);
+
+run(
+  "continuidade: in-progress story (tier 1) vence in-progress-module (tier 2)",
+  () => {
+    // S1 (tier 1, story em andamento) vs S2 (tier 2, módulo em andamento mas
+    // story fresh). Story em andamento ganha — finish what's started.
+    const out = planSprints(
+      baseInput({
+        candidates: [
+          task("s1-rest", {
+            userStoryId: "S1",
+            moduleId: "M1",
+            layer: "API",
+            functionPoints: 3,
+          }),
+          task("s2-task", {
+            userStoryId: "S2",
+            moduleId: "M2",
+            layer: "API",
+            functionPoints: 3,
+          }),
+        ],
+        alreadyAllocated: new Set(["s1-old", "m2-old"]),
+        inProgressStoryIds: new Set(["S1"]),
+        inProgressModuleIds: new Set(["M1", "M2"]),
+        capacityPerSprint: 3,
+        n: 1,
+      }),
+    );
+    assert.equal(out.sprints[0].tasks[0].id, "s1-rest");
+  },
+);
+
+run(
+  "continuidade: UI closure pode ser pequena quando intra-deps já placed",
+  () => {
+    // Story tem DATA + API placed em sprint anterior, e só a UI no backlog.
+    // Sem precisar incluir DATA/API (já placed), UI closure = {UI} = 3pts.
+    // Cabe em capacity 5.
+    const out = planSprints(
+      baseInput({
+        candidates: [
+          task("s1-ui", {
+            userStoryId: "S1",
+            layer: "UI",
+            functionPoints: 3,
+          }),
+        ],
+        // s1-data + s1-api já em sprint anterior.
+        alreadyAllocated: new Set(["s1-data", "s1-api"]),
+        inProgressStoryIds: new Set(["S1"]),
+        dependencies: [
+          { taskId: "s1-ui", dependsOn: "s1-api" },
+          { taskId: "s1-api", dependsOn: "s1-data" },
+        ],
+        capacityPerSprint: 5,
+        n: 1,
+      }),
+    );
+    assert.equal(out.sprints[0].tasks.length, 1);
+    assert.equal(out.sprints[0].tasks[0].id, "s1-ui");
+  },
+);
+
+run(
+  "STORY_SPLIT_ACROSS_SPRINTS: warning quando parte da story sobra no leftover",
+  () => {
+    // Story com 3 tasks; só 2 cabem; 1 vai pro leftover.
+    const out = planSprints(
+      baseInput({
+        candidates: [
+          task("s1-data", {
+            userStoryId: "S1",
+            layer: "DATA",
+            functionPoints: 4,
+          }),
+          task("s1-ui", {
+            userStoryId: "S1",
+            layer: "UI",
+            functionPoints: 4,
+          }),
+          task("s1-extra", {
+            userStoryId: "S1",
+            layer: "API",
+            functionPoints: 5,
+          }),
+        ],
+        capacityPerSprint: 9,
+        n: 1,
+      }),
+    );
+    // Algoritmo deve preferir UI closure {data+ui}=8 → cabe; top-off não
+    // cabe (extra 5pts > 1pt restante). s1-extra fica em leftover.
+    assert.ok(out.leftover.some((l) => l.task.id === "s1-extra"));
+    const w = out.sprints[0].warnings.find(
+      (x) => x.type === "STORY_SPLIT_ACROSS_SPRINTS",
+    );
+    assert.ok(w, "STORY_SPLIT esperado pois story tem leftover");
+  },
+);
+
 console.log("");
 if (failures.length > 0) {
   console.error(`✗ ${failures.length} falha(s):`, failures.join(", "));

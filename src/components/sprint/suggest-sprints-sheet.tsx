@@ -78,9 +78,44 @@ type ApiWarning =
       sprintIndex: number;
       taskId: string;
       points: number;
+    }
+  | { type: "NO_UI_TASK"; sprintIndex: number }
+  | {
+      type: "STORY_SPLIT_ACROSS_SPRINTS";
+      sprintIndex: number;
+      storyId: string;
     };
 
 type ModuleEnabled = { id: string; name: string; count: number };
+
+type StoryCompleted = {
+  id: string;
+  title: string;
+  reference: string;
+  moduleName: string | null;
+  uiTaskTitles: string[];
+};
+
+type ModuleCompleted = {
+  id: string;
+  name: string;
+  storyTitles: string[];
+  uiTaskTitles: string[];
+};
+
+type ContinuedStory = {
+  id: string;
+  title: string;
+  reference: string;
+  moduleName: string | null;
+  fromSprintNames: string[];
+};
+
+type ContinuedModule = {
+  id: string;
+  name: string;
+  fromSprintNames: string[];
+};
 
 type SprintRationale = {
   dependsOn: Array<{
@@ -92,6 +127,10 @@ type SprintRationale = {
   enablesCount: number;
   enablesByModule: ModuleEnabled[];
   primaryModules: ModuleEnabled[];
+  storiesCompleted: StoryCompleted[];
+  modulesCompleted: ModuleCompleted[];
+  continuedStories: ContinuedStory[];
+  continuedModules: ContinuedModule[];
   layerDistribution: Record<TaskLayer, number>;
   topTags: Array<{ id: string; name: string; tone: string; count: number }>;
   keyHubs: Array<{
@@ -1070,7 +1109,7 @@ function SprintCard({
         />
         {sprint.warnings.length > 0 ? (
           <div className="space-y-1">
-            {sprint.warnings.map((w, i) => (
+            {aggregateWarnings(sprint.warnings).map((w, i) => (
               <Warning key={i} warning={w} sprintIndex={sprintIndex} />
             ))}
           </div>
@@ -1141,20 +1180,7 @@ function RationaleExpander({
           {sentences.map((s, i) => (
             <p key={i}>{s}</p>
           ))}
-          {rationale.topTags.length > 0 ? (
-            <p className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-muted-foreground">Tags presentes:</span>
-              {rationale.topTags.map((t) => (
-                <TagChip
-                  key={t.id}
-                  name={`${t.name} × ${t.count}`}
-                  tone={asChipTone(t.tone)}
-                  variant="solid"
-                  size="sm"
-                />
-              ))}
-            </p>
-          ) : null}
+          <TagGroups topTags={rationale.topTags} />
         </div>
       ) : null}
     </div>
@@ -1166,6 +1192,45 @@ function buildRationaleSentences(
   sprintIndex: number,
 ): string[] {
   const out: string[] = [];
+
+  // 0) Continuidade — stories/módulos iniciados em sprints prévias.
+  // Vem PRIMEIRO porque é a informação mais relevante pro PM ("porque a gente
+  // está pegando essas tasks? porque continua o que começou semana passada").
+  if (r.continuedModules.length > 0 || r.continuedStories.length > 0) {
+    // Prefere narrar por módulo quando possível (mais alto-nível); senão por story.
+    if (r.continuedModules.length > 0) {
+      const items = r.continuedModules.slice(0, 3).map((m) => {
+        const from =
+          m.fromSprintNames.length > 0
+            ? ` (iniciado ${m.fromSprintNames.length === 1 ? "na" : "nas"} ${joinNatural(m.fromSprintNames)})`
+            : "";
+        return `${m.name}${from}`;
+      });
+      const more =
+        r.continuedModules.length > 3
+          ? ` e mais ${r.continuedModules.length - 3} módulo${r.continuedModules.length - 3 > 1 ? "s" : ""}`
+          : "";
+      out.push(
+        `Continua trabalho ${r.continuedModules.length === 1 ? "no módulo" : "nos módulos"} ${joinNatural(items)}${more} — finaliza o que está em andamento antes de abrir frentes novas.`,
+      );
+    } else {
+      const items = r.continuedStories.slice(0, 3).map((s) => {
+        const mod = s.moduleName ? ` (${s.moduleName})` : "";
+        const from =
+          s.fromSprintNames.length > 0
+            ? ` ${s.fromSprintNames.length === 1 ? "iniciada na" : "iniciada em"} ${joinNatural(s.fromSprintNames)}`
+            : "";
+        return `"${truncateTitle(s.title, 50)}"${mod}${from}`;
+      });
+      const more =
+        r.continuedStories.length > 3
+          ? ` e mais ${r.continuedStories.length - 3} história${r.continuedStories.length - 3 > 1 ? "s" : ""}`
+          : "";
+      out.push(
+        `Continua ${r.continuedStories.length === 1 ? "a história" : "histórias"} ${joinNatural(items)}${more} — fecha o que estava em andamento.`,
+      );
+    }
+  }
 
   // 1) Intro — depende de sprints anteriores OU é fundação
   if (r.dependsOn.length > 0) {
@@ -1216,7 +1281,50 @@ function buildRationaleSentences(
     );
   }
 
-  // 3) Tarefas-chave — explicadas pela própria descrição (não pelo ref)
+  // 3) O que fica PRONTO ao final dessa sprint — narrativo, módulos + telas.
+  if (r.modulesCompleted.length > 0) {
+    for (const mod of r.modulesCompleted) {
+      const screensTxt =
+        mod.uiTaskTitles.length > 0
+          ? ` — entrega ${mod.uiTaskTitles.length === 1 ? "a tela" : "as telas"} ${joinNatural(
+              mod.uiTaskTitles
+                .slice(0, 4)
+                .map((t) => `"${truncateTitle(t, 50)}"`),
+            )}${mod.uiTaskTitles.length > 4 ? " entre outras" : ""}`
+          : "";
+      const storiesTxt =
+        mod.storyTitles.length > 0
+          ? ` (cobrindo ${mod.storyTitles.length === 1 ? "a história" : `${mod.storyTitles.length} histórias`}: ${joinNatural(
+              mod.storyTitles
+                .slice(0, 3)
+                .map((s) => `"${truncateTitle(s, 60)}"`),
+            )}${mod.storyTitles.length > 3 ? " entre outras" : ""})`
+          : "";
+      out.push(
+        `Ao final da sprint, o módulo ${mod.name} fica 100% pronto${screensTxt}${storiesTxt}.`,
+      );
+    }
+  } else if (r.storiesCompleted.length > 0) {
+    // Sem módulo inteiro, mas algumas histórias completas.
+    const count = r.storiesCompleted.length;
+    const titles = r.storiesCompleted
+      .slice(0, 3)
+      .map((s) => `"${truncateTitle(s.title, 60)}"`);
+    const screens = uniq(
+      r.storiesCompleted.flatMap((s) => s.uiTaskTitles),
+    ).slice(0, 4);
+    const screensTxt =
+      screens.length > 0
+        ? `, entregando ${screens.length === 1 ? "a tela" : "as telas"} ${joinNatural(
+            screens.map((t) => `"${truncateTitle(t, 50)}"`),
+          )}`
+        : "";
+    out.push(
+      `Ao final da sprint, ${count === 1 ? "a história" : `${count} histórias`} ${joinNatural(titles)}${count > 3 ? " entre outras" : ""} fica${count > 1 ? "m" : ""} 100% pronta${count > 1 ? "s" : ""}${screensTxt}.`,
+    );
+  }
+
+  // 4) Tarefas-chave — explicadas pela própria descrição (não pelo ref)
   if (r.keyHubs.length > 0) {
     const hubText = r.keyHubs
       .map((h) => {
@@ -1227,7 +1335,7 @@ function buildRationaleSentences(
     out.push(`As tarefas-chave aqui são ${hubText}.`);
   }
 
-  // 4) O que destrava ao terminar — agrupado por módulo
+  // 5) O que destrava ao terminar — agrupado por módulo
   if (r.enablesCount > 0) {
     if (r.enablesByModule.length > 0) {
       const modText = joinNatural(
@@ -1244,6 +1352,59 @@ function buildRationaleSentences(
   }
 
   return out;
+}
+
+// ─── Tag groups (Tipos + Prioridade), separados ─────────────────────────────
+
+const PRIORITY_TAG_RE = /^p[1-4](\b|\W|$)/i;
+
+function TagGroups({
+  topTags,
+}: {
+  topTags: SprintRationale["topTags"];
+}) {
+  if (topTags.length === 0) return null;
+  const priority = topTags
+    .filter((t) => PRIORITY_TAG_RE.test(t.name.trim()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const types = topTags.filter(
+    (t) => !PRIORITY_TAG_RE.test(t.name.trim()),
+  );
+
+  if (priority.length === 0 && types.length === 0) return null;
+
+  return (
+    <div className="space-y-1 pt-1">
+      {types.length > 0 ? (
+        <p className="flex flex-wrap items-center gap-1.5">
+          <span className="text-muted-foreground">Tipos:</span>
+          {types.map((t) => (
+            <TagChip
+              key={t.id}
+              name={`${t.name} × ${t.count}`}
+              tone={asChipTone(t.tone)}
+              variant="solid"
+              size="sm"
+            />
+          ))}
+        </p>
+      ) : null}
+      {priority.length > 0 ? (
+        <p className="flex flex-wrap items-center gap-1.5">
+          <span className="text-muted-foreground">Prioridade:</span>
+          {priority.map((t) => (
+            <TagChip
+              key={t.id}
+              name={`${t.name} × ${t.count}`}
+              tone={asChipTone(t.tone)}
+              variant="solid"
+              size="sm"
+            />
+          ))}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function truncateTitle(t: string, max = 80): string {
@@ -1405,16 +1566,63 @@ function LeftoverList({
 
 // ─── Warning row ────────────────────────────────────────────────────────────
 
+/**
+ * STORY_SPLIT_ACROSS_SPRINTS sai do planner uma vez por story afetada — se 3
+ * stories quebram, vêm 3 warnings idênticos em texto. Dedup pra UI: mantém
+ * uma só linha mas anota a contagem.
+ */
+type AggregatedWarning =
+  | ApiWarning
+  | { type: "STORY_SPLIT_AGG"; sprintIndex: number; count: number };
+
+function aggregateWarnings(warnings: ApiWarning[]): AggregatedWarning[] {
+  const splitCount = warnings.filter(
+    (w) => w.type === "STORY_SPLIT_ACROSS_SPRINTS",
+  ).length;
+  const others = warnings.filter(
+    (w) => w.type !== "STORY_SPLIT_ACROSS_SPRINTS",
+  );
+  if (splitCount === 0) return others;
+  return [
+    ...others,
+    {
+      type: "STORY_SPLIT_AGG",
+      sprintIndex: warnings[0].sprintIndex,
+      count: splitCount,
+    },
+  ];
+}
+
 function Warning({
   warning,
 }: {
-  warning: ApiWarning;
+  warning: AggregatedWarning;
   sprintIndex: number;
 }) {
-  const msg =
-    warning.type === "LOW_LAYER_DIVERSITY"
-      ? "Sprint só com 1 categoria de task — considere variar pra não deixar time ocioso."
-      : `Task acima da capacidade (${warning.points}fp) — ocupa a sprint sozinha.`;
+  let msg: string;
+  switch (warning.type) {
+    case "LOW_LAYER_DIVERSITY":
+      msg =
+        "Sprint só com 1 categoria de task — considere variar pra não deixar time ocioso.";
+      break;
+    case "OVERCAPACITY":
+      msg = `Task acima da capacidade (${warning.points}fp) — ocupa a sprint sozinha.`;
+      break;
+    case "NO_UI_TASK":
+      msg =
+        "Sprint sem saída visual (nenhuma task de UI) — cliente não tem nada demoável ao final.";
+      break;
+    case "STORY_SPLIT_ACROSS_SPRINTS":
+      msg =
+        "Story dividida entre sprints — algumas tasks dessa story ficam pra depois.";
+      break;
+    case "STORY_SPLIT_AGG":
+      msg =
+        warning.count === 1
+          ? "Story dividida entre sprints — algumas tasks dessa story ficam pra depois."
+          : `${warning.count} stories divididas entre sprints — partes ficam pra próximas sprints.`;
+      break;
+  }
   return (
     <div className="flex items-center gap-1.5 text-[11px] text-amber-700">
       <AlertTriangle className="size-3" />

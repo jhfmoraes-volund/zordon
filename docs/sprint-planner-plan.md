@@ -122,27 +122,76 @@ type PlannerInput = {
 };
 ```
 
-**Score** (peso decrescente):
+### Story-first vertical slicing + continuidade (v2 — 2026-05-11)
+
+A versão original prioritava task-por-task com viés pra layer DATA → API →
+UI. Em produtos construídos via IA isso vira "back inteiro antes do front",
+o que entrega sprints sem valor demoável (62 tasks de back e zero tela).
+A v2 desloca a unidade primária pra **user story** (vertical slice
+natural) **e** adiciona tiers de continuidade pra evitar abrir frentes
+novas antes de fechar o que está em andamento.
+
+**Stories como unidade de planejamento:**
+
+- Tasks com `userStoryId` são agrupadas em buckets por story.
+- Tasks sem story viram singletons (`__solo__<taskId>`), preservando
+  semântica antiga.
+- Cada bucket recebe um **bucket score**:
+
 ```
-score = 1000 × #dependentes_no_backlog
-      + 100  × layerRank[layer]   // DATA=5, API=4, REALTIME=3, UI=2, OPS=1
-      + 10   × #ACs_cobertos
-      + FNV-1a_hash(id)           // tiebreaker determinístico ∈ [0,1)
+bucketScore = max(taskScore das tasks)
+            + 200 (cohesion)        // se bucket é story real (>1 task)
+            + 150 (UI demoável)     // se bucket é story real E tem ≥1 task UI
+            + FNV-1a_hash(bucketId) // tiebreaker
 ```
 
-**Bucketagem:** loop greedy por N rounds. Em cada round, varre candidates em
-ordem de score, adiciona até `totalPoints >= capacityPerSprint`. Tasks
-bloqueadas por dep não-satisfeita são puladas; depois de adicionar uma task,
-revarre (ela pode ter desbloqueado outras).
+`taskScore` ainda é o antigo: `1000 × dependentes_no_backlog + 100 ×
+layerRank + 10 × #ACs`. Mantido pra ordenar dentro do bucket e desempatar
+singletons.
+
+**Tier de continuidade (ordenação primária dos buckets):**
+
+```
+tier 1: story já tem tasks em alreadyAllocated → finish what's started
+tier 2: story fresh mas seu módulo tem tasks em alreadyAllocated
+tier 3: story totalmente fresh / singletons
+```
+
+Sort de buckets é lexicográfico: `tier asc, depois bucketScore desc, depois
+hash`. Inputs `inProgressStoryIds` e `inProgressModuleIds` (opcionais)
+vêm da API: stories/módulos com ≥1 task em `Task.sprintId IS NOT NULL`.
+
+**Bucketagem por sprint:**
+
+Pra cada sprint K, varre buckets na ordem do sort tiered. Pra cada
+bucket:
+
+1. **Cabe inteira?** Se `remainingPoints(bucket) ≤ capacityRestante`,
+   leva tudo (greedy intra-bucket respeitando deps).
+2. **Não cabe + tem UI?** Calcula **UI closures**: menor subconjunto de
+   tasks da story necessário pra entregar cada task UI (UI + transitive
+   intra-story deps não alocadas). Escolhe a closure de menor pontuação
+   que caiba na capacidade restante. Depois top-off greedy se sobra
+   espaço. Se nenhuma closure cabe → story espera próxima sprint (não
+   permite split puramente backend).
+3. **Não cabe + sem UI?** Split livre, greedy por taskScore.
+
+Após o loop, se sprint ficou vazia, **fallback**: pega a primeira task
+elegível em ordem de score (mesmo oversize, gera warning OVERCAPACITY).
 
 **Regras duras:**
-- Não adiciona task se algum `blocks` dela não foi alocado a sprint ≤ K
-- Capacidade ≤ 0 → erro
-- N ≤ 0 → leftover vazio, sprints vazias
+- Não adiciona task se algum `blocks` dela não foi alocado a sprint ≤ K.
+- Capacidade ≤ 0 → erro.
+- N ≤ 0 → leftover vazio, sprints vazias.
 
 **Regras soft (warnings, não rejeita):**
-- Sprint com 1 só layer → `LOW_LAYER_DIVERSITY`
-- Task gigante (>capacity) ocupa sprint sozinha → `OVERCAPACITY`
+- Sprint com 1 só layer → `LOW_LAYER_DIVERSITY`.
+- Task gigante (>capacity) ocupa sprint sozinha → `OVERCAPACITY`.
+- Sprint sem nenhuma task UI **e** projeto tem UI no backlog → `NO_UI_TASK`
+  (sprint sem saída demoável).
+- Story cujas tasks ficaram divididas entre sprints OU com leftover →
+  `STORY_SPLIT_ACROSS_SPRINTS` (emitido em cada sprint que contém parte
+  da story).
 
 **Output:** sprints + leftover (`reason: CAPACITY | BLOCKED_BY_BACKLOG`).
 Nenhum I/O, totalmente determinístico.

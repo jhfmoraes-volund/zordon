@@ -44,6 +44,9 @@ type TaskRow = {
   functionPoints: number | null;
   sprintId: string | null;
   story: {
+    id: string;
+    title: string;
+    reference: string;
     moduleId: string | null;
     module: { id: string; name: string } | null;
   } | null;
@@ -76,7 +79,7 @@ export async function POST(
     .from("Task")
     .select(
       `id, reference, title, description, layer, status, "userStoryId", "functionPoints", "sprintId",
-       story:UserStory("moduleId", module:Module(id, name)),
+       story:UserStory(id, title, reference, "moduleId", module:Module(id, name)),
        acs:TaskAcceptanceCriterion("acceptanceCriterionId"),
        tags:TaskTagAssignment(tag:TaskTag(id, name, tone))`,
     )
@@ -145,6 +148,9 @@ export async function POST(
   const excludeSet = new Set(parsed.data.excludeTaskIds ?? []);
   const candidates: PlannerTask[] = [];
   const alreadyAllocated = new Set<string>();
+  // Stories/módulos que têm ≥1 task em sprint (continuity tiering).
+  const inProgressStoryIds = new Set<string>();
+  const inProgressModuleIds = new Set<string>();
   // Mapeia taskId → sprintId pra construir rationale (de onde vêm os blockers).
   const sprintIdByTaskId = new Map<string, string>();
   // fpBySprint = soma empírica de Task.functionPoints (excluindo status=backlog)
@@ -154,6 +160,8 @@ export async function POST(
     if (t.sprintId) {
       alreadyAllocated.add(t.id);
       sprintIdByTaskId.set(t.id, t.sprintId);
+      if (t.userStoryId) inProgressStoryIds.add(t.userStoryId);
+      if (t.story?.moduleId) inProgressModuleIds.add(t.story.moduleId);
       if (t.status !== "backlog") {
         fpBySprint.set(
           t.sprintId,
@@ -246,6 +254,8 @@ export async function POST(
     n: effectiveN,
     capacityPerSprint,
     nextSprintNumber,
+    inProgressStoryIds,
+    inProgressModuleIds,
   });
 
   const blockedByMap = buildBlockedByMap(dependencies);
@@ -315,6 +325,33 @@ export async function POST(
     fromSprintName: string | null; // sprint anterior do banco OU "Sprint sugerida #N"
   };
   type ModuleEnabled = { id: string; name: string; count: number };
+  type StoryCompleted = {
+    id: string;
+    title: string;
+    reference: string;
+    moduleName: string | null;
+    uiTaskTitles: string[];
+  };
+  type ModuleCompleted = {
+    id: string;
+    name: string;
+    storyTitles: string[];
+    uiTaskTitles: string[];
+  };
+  type ContinuedStory = {
+    id: string;
+    title: string;
+    reference: string;
+    moduleName: string | null;
+    /** Nomes das sprints prévias onde a story tem tasks (do DB OU do plano). */
+    fromSprintNames: string[];
+  };
+  type ContinuedModule = {
+    id: string;
+    name: string;
+    /** Nomes das sprints prévias onde o módulo tem tasks. */
+    fromSprintNames: string[];
+  };
   type SprintRationale = {
     dependsOn: DependsOnRef[];
     enablesCount: number;
@@ -322,6 +359,14 @@ export async function POST(
     enablesByModule: ModuleEnabled[];
     /** Lista de módulos representados nas tasks dessa sprint (top 3). */
     primaryModules: ModuleEnabled[];
+    /** Stories cujas tasks ficam 100% prontas ao fim dessa sprint. */
+    storiesCompleted: StoryCompleted[];
+    /** Módulos cujas tasks ficam 100% prontos ao fim dessa sprint. */
+    modulesCompleted: ModuleCompleted[];
+    /** Stories desta sprint que CONTINUAM trabalho iniciado em sprints prévias. */
+    continuedStories: ContinuedStory[];
+    /** Módulos desta sprint cujo trabalho já tinha sido iniciado em sprints prévias. */
+    continuedModules: ContinuedModule[];
     layerDistribution: Record<TaskLayer, number>;
     topTags: Array<{ id: string; name: string; tone: string; count: number }>;
     /** Top 3 tasks que mais desbloqueiam — agora com module. */
@@ -342,6 +387,74 @@ export async function POST(
       if (entry?.tag) list.push(entry.tag);
     }
     if (list.length > 0) tagsByTaskId.set(t.id, list);
+  }
+
+  // ─── Story/Module completion tracking ──────────────────────────────────
+  // Computa quais stories/módulos ficam 100% prontos ao fim de cada sprint
+  // — usado pra rationale narrativo ("ao final dessa sprint, módulo X fica
+  // completo, entregando a tela Y").
+  type StoryInfo = {
+    id: string;
+    title: string;
+    reference: string;
+    moduleId: string | null;
+    moduleName: string | null;
+  };
+  const storyInfoById = new Map<string, StoryInfo>();
+  // Total de tasks (non-draft) por story e por módulo no PROJETO INTEIRO.
+  const totalTasksByStory = new Map<string, number>();
+  const totalTasksByModule = new Map<string, number>();
+  // taskId → UI? (pra mencionar "telas entregues" no narrativo).
+  const uiTaskTitleById = new Map<string, string>();
+  for (const t of allTasks) {
+    if (t.story && !storyInfoById.has(t.story.id)) {
+      storyInfoById.set(t.story.id, {
+        id: t.story.id,
+        title: t.story.title,
+        reference: t.story.reference,
+        moduleId: t.story.moduleId,
+        moduleName: t.story.module?.name ?? null,
+      });
+    }
+    if (t.userStoryId) {
+      totalTasksByStory.set(
+        t.userStoryId,
+        (totalTasksByStory.get(t.userStoryId) ?? 0) + 1,
+      );
+    }
+    const moduleId = t.story?.moduleId ?? null;
+    if (moduleId) {
+      totalTasksByModule.set(
+        moduleId,
+        (totalTasksByModule.get(moduleId) ?? 0) + 1,
+      );
+    }
+    if (t.layer === "UI") uiTaskTitleById.set(t.id, t.title);
+  }
+  const moduleById = new Map<string, { id: string; name: string }>();
+  for (const t of allTasks) {
+    if (t.story?.module) moduleById.set(t.story.module.id, t.story.module);
+  }
+
+  // Mapas pra completion tracking: taskId → storyId/moduleId (cobre o projeto inteiro).
+  const storyOfTaskId = new Map<string, string | null>();
+  const moduleOfTaskId = new Map<string, string | null>();
+  for (const t of allTasks) {
+    storyOfTaskId.set(t.id, t.userStoryId);
+    moduleOfTaskId.set(t.id, t.story?.moduleId ?? null);
+  }
+
+  function countByKey<K>(
+    ids: Iterable<string>,
+    keyOf: Map<string, K | null>,
+  ): Map<K, number> {
+    const out = new Map<K, number>();
+    for (const id of ids) {
+      const k = keyOf.get(id);
+      if (k == null) continue;
+      out.set(k, (out.get(k) ?? 0) + 1);
+    }
+    return out;
   }
 
   // Construir rationale levando em conta sprints anteriores DENTRO do plano + alreadyAllocated.
@@ -490,11 +603,144 @@ export async function POST(
       .sort((a, b) => b.count - a.count)
       .slice(0, 6);
 
+    // ── Stories / Módulos concluídos AO FIM dessa sprint ────────────────
+    // Conclusão = todas as tasks da story/módulo placed após essa sprint AND
+    // ainda não estavam todas placed antes dessa sprint.
+    const placedBefore = new Set<string>([
+      ...alreadyAllocated,
+      ...prevPlannedIds,
+    ]);
+    const placedAfter = new Set<string>([...placedBefore, ...here]);
+
+    const placedByStoryAfter = countByKey(placedAfter, storyOfTaskId);
+    const placedByStoryBefore = countByKey(placedBefore, storyOfTaskId);
+    const placedByModuleAfter = countByKey(placedAfter, moduleOfTaskId);
+    const placedByModuleBefore = countByKey(placedBefore, moduleOfTaskId);
+
+    const storiesCompleted: StoryCompleted[] = [];
+    for (const [storyId, total] of totalTasksByStory) {
+      const after = placedByStoryAfter.get(storyId) ?? 0;
+      const before = placedByStoryBefore.get(storyId) ?? 0;
+      if (after !== total || before >= total) continue;
+      const info = storyInfoById.get(storyId);
+      if (!info) continue;
+      const uiTitles: string[] = [];
+      for (const t of sprint.tasks) {
+        if (t.userStoryId === storyId && uiTaskTitleById.has(t.id)) {
+          uiTitles.push(uiTaskTitleById.get(t.id) ?? t.title);
+        }
+      }
+      storiesCompleted.push({
+        id: info.id,
+        title: info.title,
+        reference: info.reference,
+        moduleName: info.moduleName,
+        uiTaskTitles: uiTitles,
+      });
+    }
+
+    const modulesCompleted: ModuleCompleted[] = [];
+    for (const [moduleId, total] of totalTasksByModule) {
+      const after = placedByModuleAfter.get(moduleId) ?? 0;
+      const before = placedByModuleBefore.get(moduleId) ?? 0;
+      if (after !== total || before >= total) continue;
+      const mod = moduleById.get(moduleId);
+      if (!mod) continue;
+      const uiTitles: string[] = [];
+      const storyTitles: string[] = [];
+      for (const t of sprint.tasks) {
+        if (t.moduleId === moduleId && uiTaskTitleById.has(t.id)) {
+          uiTitles.push(uiTaskTitleById.get(t.id) ?? t.title);
+        }
+      }
+      for (const story of storyInfoById.values()) {
+        if (story.moduleId !== moduleId) continue;
+        const totalS = totalTasksByStory.get(story.id) ?? 0;
+        const afterS = placedByStoryAfter.get(story.id) ?? 0;
+        if (totalS > 0 && afterS === totalS) storyTitles.push(story.title);
+      }
+      modulesCompleted.push({
+        id: mod.id,
+        name: mod.name,
+        storyTitles,
+        uiTaskTitles: uiTitles,
+      });
+    }
+
+    // ── Continuação de stories/módulos iniciados em sprints prévias ──────
+    // Detecta stories/módulos desta sprint que JÁ tinham tasks em alguma
+    // sprint anterior (DB OU plano). Anota nome das sprints prévias pra
+    // narrativa ("continua o módulo X iniciado na Sprint 1").
+    function priorSprintNamesFor(predicate: (taskId: string) => boolean): string[] {
+      const names = new Set<string>();
+      // Do DB:
+      for (const [taskId, sprintId] of sprintIdByTaskId) {
+        if (!predicate(taskId)) continue;
+        const name = sprintNameById.get(sprintId);
+        if (name) names.add(name);
+      }
+      // Do plano (sprints anteriores no mesmo plano):
+      for (let j = 0; j < k; j++) {
+        for (const t of output.sprints[j].tasks) {
+          if (!predicate(t.id)) continue;
+          names.add(output.sprints[j].suggestedName);
+          break;
+        }
+      }
+      return [...names];
+    }
+
+    const storyIdsHere = new Set<string>();
+    const moduleIdsHere = new Set<string>();
+    for (const t of sprint.tasks) {
+      if (t.userStoryId) storyIdsHere.add(t.userStoryId);
+      const modId = moduleOfTaskId.get(t.id);
+      if (modId) moduleIdsHere.add(modId);
+    }
+
+    const continuedStories: ContinuedStory[] = [];
+    for (const storyId of storyIdsHere) {
+      const before = placedByStoryBefore.get(storyId) ?? 0;
+      if (before === 0) continue; // story é fresh nessa sprint, não continuação
+      const info = storyInfoById.get(storyId);
+      if (!info) continue;
+      const fromSprintNames = priorSprintNamesFor(
+        (taskId) => storyOfTaskId.get(taskId) === storyId,
+      );
+      continuedStories.push({
+        id: info.id,
+        title: info.title,
+        reference: info.reference,
+        moduleName: info.moduleName,
+        fromSprintNames,
+      });
+    }
+
+    const continuedModules: ContinuedModule[] = [];
+    for (const moduleId of moduleIdsHere) {
+      const before = placedByModuleBefore.get(moduleId) ?? 0;
+      if (before === 0) continue;
+      const mod = moduleById.get(moduleId);
+      if (!mod) continue;
+      const fromSprintNames = priorSprintNamesFor(
+        (taskId) => moduleOfTaskId.get(taskId) === moduleId,
+      );
+      continuedModules.push({
+        id: mod.id,
+        name: mod.name,
+        fromSprintNames,
+      });
+    }
+
     sprintRationales.push({
       dependsOn: [...dependsOn.values()].slice(0, 6),
       enablesCount: enablesSet.size,
       enablesByModule,
       primaryModules,
+      storiesCompleted,
+      modulesCompleted,
+      continuedStories,
+      continuedModules,
       layerDistribution: layerDist,
       topTags,
       keyHubs,
