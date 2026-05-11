@@ -36,6 +36,8 @@ import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { showErrorToast } from "@/lib/optimistic/toast";
 import { generateUniqueReferenceKey } from "@/lib/project-reference-key";
+import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
+import { toast } from "sonner";
 
 type ProjectMemberAlloc = {
   id: string;
@@ -147,6 +149,7 @@ export default function ProjectsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [form, setForm] = useState({
     name: "", repoUrl: "", startDate: "", endDate: "",    status: "active", clientId: "", pmId: "",
     githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
@@ -281,20 +284,74 @@ export default function ProjectsPage() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm("Remover este projeto?")) return;
-    await projectMutate(
-      { type: "delete", id },
-      async () => {
-        const supabase = createClient();
-        const { error } = await supabase.from("Project").delete().eq("id", id);
-        if (error) throw new Error(error.message);
-        return { ok: true as const, id };
+    const project = projects.find((p) => p.id === id);
+    if (!project) return;
+
+    const supabase = createClient();
+    const [tasksRes, storiesRes, sprintsRes, projTasksRes] = await Promise.all([
+      supabase.from("Task").select("id", { count: "exact", head: true }).eq("projectId", id),
+      supabase.from("UserStory").select("id", { count: "exact", head: true }).eq("projectId", id),
+      supabase.from("Sprint").select("id", { count: "exact", head: true }).eq("projectId", id),
+      supabase.from("Task").select("id").eq("projectId", id),
+    ]);
+    const counts = {
+      tasks: tasksRes.count ?? 0,
+      stories: storiesRes.count ?? 0,
+      sprints: sprintsRes.count ?? 0,
+      members: project.projectMembers.length,
+      deps: 0,
+    };
+    if (projTasksRes.data && projTasksRes.data.length > 0) {
+      const ids = projTasksRes.data.map((t) => t.id);
+      const { count } = await supabase
+        .from("TaskDependency")
+        .select("taskId", { count: "exact", head: true })
+        .or(`taskId.in.(${ids.join(",")}),dependsOn.in.(${ids.join(",")})`);
+      counts.deps = count ?? 0;
+    }
+
+    const permanentItems = [
+      counts.tasks > 0 ? `${counts.tasks} task${counts.tasks === 1 ? "" : "s"}` : null,
+      counts.stories > 0 ? `${counts.stories} stor${counts.stories === 1 ? "y" : "ies"}` : null,
+      counts.sprints > 0 ? `${counts.sprints} sprint${counts.sprints === 1 ? "" : "s"}` : null,
+      counts.deps > 0 ? `${counts.deps} dependência${counts.deps === 1 ? "" : "s"} entre tasks` : null,
+    ].filter(Boolean).join(", ");
+
+    const sentences: string[] = [];
+    if (permanentItems) sentences.push(`Vai apagar permanentemente: ${permanentItems}.`);
+    if (counts.members > 0) {
+      const verb = counts.members === 1 ? "será desvinculado" : "serão desvinculados";
+      const noun = counts.members === 1 ? "membro" : "membros";
+      sentences.push(`${counts.members} ${noun} ${verb} do projeto.`);
+    }
+    const description = sentences.length > 0 ? sentences.join(" ") : undefined;
+
+    setConfirmState({
+      title: `Excluir "${project.name}"?`,
+      description,
+      confirmLabel: "Excluir",
+      destructive: true,
+      onConfirm: async () => {
+        const result = await projectMutate(
+          { type: "delete", id },
+          async () => {
+            const sb = createClient();
+            const { error } = await sb.rpc("delete_project_cascade", {
+              p_project_id: id,
+            });
+            if (error) throw error;
+            return { ok: true as const, id };
+          },
+          {
+            errorLabel: "Falha ao remover projeto",
+            reconcile: (prev) => prev.filter((p) => p.id !== id),
+          },
+        );
+        if (result) {
+          toast.success(`Projeto "${project.name}" excluído.`);
+        }
       },
-      {
-        errorLabel: "Falha ao remover projeto",
-        reconcile: (prev) => prev.filter((p) => p.id !== id),
-      },
-    );
+    });
   };
 
   const toggleExpand = (id: string) => {
@@ -656,6 +713,8 @@ export default function ProjectsPage() {
           </ResponsiveDialogFooter>
         </ResponsiveDialogContent>
       </ResponsiveDialog>
+
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }
