@@ -53,6 +53,11 @@ export function ConfirmDialog({ state, onClose }: ConfirmDialogProps) {
           {state?.description ? (
             <DialogDescription>{state.description}</DialogDescription>
           ) : null}
+          {state?.destructive ? (
+            <p className="text-sm font-medium text-destructive">
+              Essa ação não pode ser desfeita.
+            </p>
+          ) : null}
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>

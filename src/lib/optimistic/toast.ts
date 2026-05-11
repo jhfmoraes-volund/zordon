@@ -44,6 +44,14 @@ export function classifyError(error: unknown): ErrorClass {
     if (error.status >= 500) return "server";
     if (error.status >= 400) return "client";
   }
+  // PostgrestError-like (Supabase): has a string `code`.
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = String((error as { code: unknown }).code ?? "");
+    if (code === "42501" || code === "PGRST301") return "forbidden";
+    if (code === "23505") return "conflict";
+    if (code.startsWith("23")) return "client"; // integrity violations
+    if (code === "P0001") return "client"; // RAISE EXCEPTION sem código próprio
+  }
   return "unknown";
 }
 
@@ -101,12 +109,23 @@ function describe(cls: ErrorClass, label: string, error: unknown): string {
       const detail =
         error instanceof HttpError && error.body
           ? safeBody(error.body)
-          : null;
+          : extractMessage(error);
       return detail ? `${label}: ${detail}` : `${label}: não foi possível salvar.`;
     }
-    default:
-      return `${label}: falha inesperada.`;
+    default: {
+      const detail = extractMessage(error);
+      return detail ? `${label}: ${detail}` : `${label}: falha inesperada.`;
+    }
   }
+}
+
+function extractMessage(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const obj = error as { message?: unknown };
+  if (typeof obj.message !== "string") return null;
+  const msg = obj.message.trim();
+  if (!msg || msg.length > 240) return null;
+  return msg;
 }
 
 function safeBody(body: string): string | null {

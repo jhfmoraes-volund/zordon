@@ -1030,8 +1030,7 @@ export default function ProjectDetailPage({
   async function handleDeleteStory(storyRef: string) {
     setConfirmState({
       title: `Deletar story ${storyRef}?`,
-      description:
-        "Tasks relacionadas serão desvinculadas. Essa ação não pode ser desfeita.",
+      description: "Tasks relacionadas serão desvinculadas.",
       confirmLabel: "Deletar",
       destructive: true,
       onConfirm: async () => {
@@ -1421,7 +1420,6 @@ export default function ProjectDetailPage({
     if (!taskId) return;
     setConfirmState({
       title: `Deletar task ${taskRef}?`,
-      description: "Essa ação não pode ser desfeita.",
       confirmLabel: "Deletar",
       destructive: true,
       onConfirm: () => deleteTask(taskRef, taskId),
@@ -1693,7 +1691,6 @@ export default function ProjectDetailPage({
   async function handleDeleteModule(modId: string) {
     setConfirmState({
       title: "Deletar módulo?",
-      description: "Essa ação não pode ser desfeita.",
       confirmLabel: "Deletar",
       destructive: true,
       onConfirm: async () => {
@@ -1744,7 +1741,6 @@ export default function ProjectDetailPage({
   async function handleDeletePersona(perId: string) {
     setConfirmState({
       title: "Deletar persona?",
-      description: "Essa ação não pode ser desfeita.",
       confirmLabel: "Deletar",
       destructive: true,
       onConfirm: async () => {

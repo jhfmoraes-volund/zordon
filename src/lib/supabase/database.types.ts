@@ -4168,6 +4168,10 @@ export type Database = {
         Args: { p_member_id: string; p_provider: string }
         Returns: undefined
       }
+      delete_project_cascade: {
+        Args: { p_project_id: string }
+        Returns: undefined
+      }
       enqueue_daily_todo_reminders: { Args: never; Returns: undefined }
       ensure_wiki_sections: {
         Args: { p_project_id: string; p_sections: Json }
