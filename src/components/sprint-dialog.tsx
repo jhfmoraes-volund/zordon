@@ -44,8 +44,8 @@ export type SprintFormData = {
   projectId?: string;
   /** Quando true, após criar a sprint o parent abre o SuggestSprintsSheet
    *  apontando pra ela. Só faz sentido em criação (não edição) e em contexto
-   *  de projeto único. */
-  autoFillFromBacklog?: boolean;
+   *  de projeto único. Quando null/undefined, usuário ainda não escolheu. */
+  autoFillFromBacklog?: boolean | null;
 };
 
 type EditingSprint = {
@@ -81,8 +81,8 @@ export function SprintDialog({
   projects, allSprints, allowAutoFill,
 }: Props) {
   const [form, setForm] = useState<SprintFormData>({
-    name: "", startDate: "", endDate: "", status: "upcoming", goal: "", projectId: "",
-    autoFillFromBacklog: false,
+    name: "", startDate: "", endDate: "", status: "", goal: "", projectId: "",
+    autoFillFromBacklog: null,
   });
   const [saving, setSaving] = useState(false);
 
@@ -110,7 +110,7 @@ export function SprintDialog({
         status: editing.status,
         goal: editing.goal ?? "",
         projectId: "",
-        autoFillFromBacklog: false,
+        autoFillFromBacklog: null,
       });
     } else {
       const defaults = getNextSprintDefaults(existingSprints);
@@ -118,10 +118,10 @@ export function SprintDialog({
         name: defaults.name,
         startDate: defaults.startDate,
         endDate: defaults.endDate,
-        status: "upcoming",
+        status: "",
         goal: "",
         projectId: "",
-        autoFillFromBacklog: false,
+        autoFillFromBacklog: null,
       });
     }
   }, [open, editing]);
@@ -149,8 +149,15 @@ export function SprintDialog({
   };
 
   const defaults = editing ? null : currentDefaults();
-  const canSave = !saving && (editing ? !!form.name : (hasProjectSelector ? !!form.projectId : true));
   const showAutoFill = allowAutoFill && !editing && !hasProjectSelector;
+  const needsStatus = !(editing && form.status === "active");
+  const statusOk = !needsStatus || !!form.status;
+  const autoFillOk = !showAutoFill || form.autoFillFromBacklog !== null;
+  const canSave =
+    !saving &&
+    (editing ? !!form.name : hasProjectSelector ? !!form.projectId : true) &&
+    statusOk &&
+    autoFillOk;
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
@@ -313,15 +320,30 @@ export function SprintDialog({
                 </Field.Hint>
               </Field>
             ) : (
-              <Field name="sprint-status">
+              <Field name="sprint-status" required>
                 <Field.Label>Status</Field.Label>
                 <Field.Control>
                   <Select
-                    value={form.status === "active" ? "upcoming" : form.status}
+                    value={form.status === "" ? null : form.status}
                     onValueChange={(v) => v && setForm({ ...form, status: v })}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Selecionar">
+                        {(v: string | null) => {
+                          if (!v) {
+                            return (
+                              <span className="text-muted-foreground">
+                                Selecionar
+                              </span>
+                            );
+                          }
+                          return v === "upcoming"
+                            ? "A iniciar"
+                            : v === "completed"
+                              ? "Concluída"
+                              : v;
+                        }}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="upcoming">A iniciar</SelectItem>
@@ -337,7 +359,7 @@ export function SprintDialog({
             )}
 
             {showAutoFill ? (
-              <Field name="sprint-autofill">
+              <Field name="sprint-autofill" required>
                 <Field.Label>
                   <span className="inline-flex items-center gap-1.5">
                     <Sparkles className="size-3.5" />
@@ -346,8 +368,15 @@ export function SprintDialog({
                 </Field.Label>
                 <Field.Control>
                   <Select
-                    value={form.autoFillFromBacklog ? "auto" : "empty"}
+                    value={
+                      form.autoFillFromBacklog === null
+                        ? null
+                        : form.autoFillFromBacklog
+                          ? "auto"
+                          : "empty"
+                    }
                     onValueChange={(v) =>
+                      v &&
                       setForm({
                         ...form,
                         autoFillFromBacklog: v === "auto",
@@ -355,7 +384,24 @@ export function SprintDialog({
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Selecionar">
+                        {(v: string | null) => {
+                          if (!v) {
+                            return (
+                              <span className="text-muted-foreground">
+                                Selecionar
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="block truncate">
+                              {v === "auto"
+                                ? "Preencher com tasks do backlog"
+                                : "Criar vazia"}
+                            </span>
+                          );
+                        }}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="empty">

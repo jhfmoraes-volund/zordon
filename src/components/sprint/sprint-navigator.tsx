@@ -100,11 +100,22 @@ export function SprintNavigator({
     if (!enableKeyboard) return;
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
+      if (!target) return;
       if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+      // Ignora setas quando o foco está dentro de um menu/popover/dialog —
+      // ArrowRight num DropdownMenu (e.g., kebab da sprint) sem submenu vira
+      // no-op no menu, mas o listener global aqui pegava o evento e mudava
+      // a sprint focada (na última sprint, isso pula pra "backlog").
+      if (
+        target.closest(
+          "[role='menu'],[role='menuitem'],[role='dialog'],[role='alertdialog'],[role='listbox'],[role='combobox'],[data-slot='select-content'],[data-slot='dropdown-menu-content']",
+        )
       ) {
         return;
       }

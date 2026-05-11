@@ -20,7 +20,14 @@ type Props = {
   plannedFp?: Record<string, number>;
 };
 
-function healthChip(usagePct: number): { tone: ChipTone; label: string; icon: "ok" | "warn" } {
+function healthChip(
+  usagePct: number,
+  hasAllocation: boolean,
+  hasPlanned: boolean,
+): { tone: ChipTone; label: string; icon: "ok" | "warn" } {
+  if (!hasAllocation && hasPlanned) {
+    return { tone: "red", label: "sem capacity", icon: "warn" };
+  }
   if (usagePct >= 100) return { tone: "red", label: "overcommit", icon: "warn" };
   if (usagePct >= 80) return { tone: "amber", label: "cheio", icon: "warn" };
   return { tone: "green", label: "OK", icon: "ok" };
@@ -52,10 +59,16 @@ export function SprintCapacity({
         const done = deliveredFp[cap.memberId] ?? 0;
         const open = Math.max(0, planned - done);
         // Bar reflete utilização do contrato: planejado / alocação.
+        // Sem alocação mas com tasks planejadas → renderiza como overcommit
+        // (100% vermelho) pra sinalizar "tem trabalho mas sem capacity definida".
         const usagePct =
-          cap.fpAllocation > 0 ? (planned / cap.fpAllocation) * 100 : 0;
+          cap.fpAllocation > 0
+            ? (planned / cap.fpAllocation) * 100
+            : planned > 0
+              ? 100
+              : 0;
         const tone = pixelTone(usagePct, "contract");
-        const health = healthChip(usagePct);
+        const health = healthChip(usagePct, cap.fpAllocation > 0, planned > 0);
 
         return (
           <li key={cap.memberId} className="py-3 first:pt-0 last:pb-0 space-y-2">
@@ -105,10 +118,16 @@ export function SprintCapacity({
               </div>
               <p
                 className="text-sm font-bold tabular-nums shrink-0"
-                title="Planejado / alocação do contrato no sprint"
+                title={
+                  cap.fpAllocation > 0
+                    ? "Planejado / alocação do contrato no sprint"
+                    : "Planejado · sem alocação definida pra esta pessoa no sprint"
+                }
               >
                 <span style={{ color: tone.fg }}>{planned}</span>
-                <span className="text-muted-foreground/70"> / {cap.fpAllocation}</span>
+                <span className="text-muted-foreground/70">
+                  {" "}/ {cap.fpAllocation > 0 ? cap.fpAllocation : "—"}
+                </span>
               </p>
             </div>
 

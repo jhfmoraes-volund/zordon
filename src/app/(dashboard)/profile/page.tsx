@@ -153,7 +153,7 @@ export default function ProfilePage() {
 
   const fetchProfile = async (memberId: string, memberInfo: typeof member) => {
     const supabase = createClient();
-    const [assignmentsRes, allocationsRes] = await Promise.all([
+    const [assignmentsRes, allocationsRes, pmProjectsRes] = await Promise.all([
       supabase
         .from("TaskAssignment")
         .select("*, task:Task(id, title, reference, status, type, functionPoints, dueDate, sprintId, projectId, project:Project(name), sprint:Sprint(id, name, status, startDate, endDate))")
@@ -162,6 +162,12 @@ export default function ProfilePage() {
         .from("ProjectMember")
         .select("*, project:Project(id, name, status)")
         .eq("memberId", memberId),
+      // Projetos onde sou PM (sem ProjectMember explícito). Sem isso, PMs
+      // perdem a contagem de "Projetos" e a lista "Meus Projetos" no /profile.
+      supabase
+        .from("Project")
+        .select("id, name, status")
+        .eq("pmId", memberId),
     ]);
 
     const assignments = (assignmentsRes.data ?? []) as {
@@ -172,7 +178,14 @@ export default function ProfilePage() {
     const tasks = assignments
       .map((a) => a.task)
       .filter((t) => FETCH_STATUSES.includes(t.status));
-    const projects = (allocationsRes.data ?? []).map((pa: { project: MeProject }) => pa.project);
+    const projectMap = new Map<string, MeProject>();
+    for (const pa of (allocationsRes.data ?? []) as { project: MeProject }[]) {
+      if (pa.project) projectMap.set(pa.project.id, pa.project);
+    }
+    for (const p of (pmProjectsRes.data ?? []) as MeProject[]) {
+      if (p && !projectMap.has(p.id)) projectMap.set(p.id, p);
+    }
+    const projects = Array.from(projectMap.values());
 
     // FP em aberto (open statuses)
     const fpOpen = tasks

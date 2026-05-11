@@ -78,9 +78,11 @@ import {
   SprintDetail,
   SprintNavigator,
   SprintActionDialog,
+  SprintDeleteDialog,
   SprintRibbon,
   type NavValue,
   type Sprint as SprintView,
+  type SprintDeleteAction,
   type SprintMemberCapacity,
 } from "@/components/sprint";
 import type {
@@ -113,7 +115,12 @@ type ProjectMeta = {
   client: { name: string } | null;
   clientId: string;
   pmId: string | null;
-  pm: { id: string; name: string; role: string | null } | null;
+  pm: {
+    id: string;
+    name: string;
+    role: string | null;
+    fpCapacity: number | null;
+  } | null;
   repoUrl: string | null;
   startDate: string | null;
   endDate: string | null;
@@ -195,7 +202,7 @@ export default function ProjectDetailPage({
   const { id } = use(params);
   const supabase = useMemo(() => createClient(), []);
   const { effectiveAccessLevel } = useAuth();
-  const canDeleteSprint = hasMinAccessLevel(effectiveAccessLevel, "admin");
+  const canManageSprint = hasMinAccessLevel(effectiveAccessLevel, "manager");
 
   const router = useRouter();
   const pathname = usePathname();
@@ -263,6 +270,10 @@ export default function ProjectDetailPage({
     | { mode: "reopen-replacing" | "reopen-fresh"; targetId: string }
     | null
   >(null);
+  const [sprintDeleteTargetId, setSprintDeleteTargetId] = useState<
+    string | null
+  >(null);
+  const [sprintEditingId, setSprintEditingId] = useState<string | null>(null);
   const [sprintContextSheet, setSprintContextSheet] = useState<{
     sprintId: string;
     mode: SprintContextSheetMode;
@@ -315,7 +326,7 @@ export default function ProjectDetailPage({
     const { data } = await supabase
       .from("Project")
       .select(
-        "id, name, status, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role)",
+        "id, name, status, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role, fpCapacity)",
       )
       .eq("id", id)
       .single();
@@ -332,6 +343,7 @@ export default function ProjectDetailPage({
           id: string;
           name: string;
           role: string | null;
+          fpCapacity: number | null;
         } | null) ?? null,
       repoUrl: data.repoUrl ?? null,
       startDate: data.startDate ?? null,
@@ -548,14 +560,21 @@ export default function ProjectDetailPage({
    *   3. Member.fpCapacity          — full battery (member exists but never
    *                                   had allocation set; assume available)
    *
-   * Iterates over every ProjectMember × every Sprint, so the widget shows
-   * everyone allocated to the project — not just those manually written
-   * into SprintMember (which is a manual-only table with no DB trigger).
+   * Iterates over every (member × sprint), so the widget shows the PM and
+   * task assignees too — not only ProjectMember rows. PM (Project.pmId) e
+   * pessoas alocadas em tasks da sprint entram com fpCapacity como fallback
+   * de allocation quando não há SprintMember/ProjectMember explícito.
    */
   const capacities: SprintMemberCapacity[] = useMemo(() => {
     const memberCapacityById = new Map(
       rawMembers.map((m) => [m.id, m.fpCapacity ?? 0]),
     );
+    // PM costuma não estar em ProjectMember (e portanto não está em rawMembers),
+    // então o Member.fpCapacity dele precisa entrar via project.pm pra evitar
+    // cair pra 0 no fallback do fpAllocation abaixo.
+    if (project?.pm?.id) {
+      memberCapacityById.set(project.pm.id, project.pm.fpCapacity ?? 0);
+    }
     const projectAllocById = new Map(
       rawProjectMembers.map((pm) => [pm.memberId, pm.fpAllocation]),
     );
@@ -565,11 +584,31 @@ export default function ProjectDetailPage({
       ),
     );
 
-    return rawSprints.flatMap((sprint) =>
-      rawProjectMembers.map((pm) => {
-        const fpCapacity = memberCapacityById.get(pm.memberId) ?? 0;
-        const sprintAlloc = sprintAllocByKey.get(`${sprint.id}|${pm.memberId}`);
-        const projectAlloc = projectAllocById.get(pm.memberId) ?? 0;
+    const assigneesBySprint = new Map<string, Set<string>>();
+    for (const t of rawTasks) {
+      if (!t.sprintId) continue;
+      let set = assigneesBySprint.get(t.sprintId);
+      if (!set) {
+        set = new Set();
+        assigneesBySprint.set(t.sprintId, set);
+      }
+      for (const a of t.assignments ?? []) {
+        if (a.memberId) set.add(a.memberId);
+      }
+    }
+
+    const pmId = project?.pm?.id ?? null;
+
+    return rawSprints.flatMap((sprint) => {
+      const memberIds = new Set<string>(rawProjectMembers.map((pm) => pm.memberId));
+      if (pmId) memberIds.add(pmId);
+      const assignees = assigneesBySprint.get(sprint.id);
+      if (assignees) for (const id of assignees) memberIds.add(id);
+
+      return Array.from(memberIds).map((memberId) => {
+        const fpCapacity = memberCapacityById.get(memberId) ?? 0;
+        const sprintAlloc = sprintAllocByKey.get(`${sprint.id}|${memberId}`);
+        const projectAlloc = projectAllocById.get(memberId) ?? 0;
         const fpAllocation =
           sprintAlloc !== undefined && sprintAlloc > 0
             ? sprintAlloc
@@ -578,13 +617,13 @@ export default function ProjectDetailPage({
               : fpCapacity;
         return {
           sprintId: sprint.id,
-          memberId: pm.memberId,
+          memberId,
           fpCapacity,
           fpAllocation,
         };
-      }),
-    );
-  }, [rawSprints, rawSprintMembers, rawProjectMembers, rawMembers]);
+      });
+    });
+  }, [rawSprints, rawSprintMembers, rawProjectMembers, rawMembers, rawTasks, project?.pm?.id, project?.pm?.fpCapacity]);
 
   const moduleUsage = useMemo(() => {
     const acc: Record<string, number> = {};
@@ -655,6 +694,28 @@ export default function ProjectDetailPage({
     }
   }
 
+  async function handleUpdateSprint(targetId: string, form: SprintFormData) {
+    setSprintEditingId(null);
+    const goal = form.goal.trim();
+    try {
+      await fetchOrThrow(`/api/sprints/${targetId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          startDate: form.startDate,
+          endDate: form.endDate,
+          status: form.status,
+          goal: goal === "" ? null : goal,
+        }),
+      });
+      toast.success("Sprint atualizada");
+      await loadTasksAndSprints();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao atualizar sprint" });
+    }
+  }
+
   function requestActivateSprint(targetId: string) {
     const hasActive = sprints.some((s) => s.status === "active");
     setSprintAction({
@@ -695,27 +756,35 @@ export default function ProjectDetailPage({
     }
   }
 
-  async function handleDeleteSprint(targetId: string) {
-    const target = sprints.find((s) => s.id === targetId);
-    const label = target?.name ?? "essa sprint";
-    setConfirmState({
-      title: `Excluir ${label}?`,
-      description:
-        "Tasks vinculadas precisam ser movidas antes. Essa ação não pode ser desfeita.",
-      confirmLabel: "Excluir",
-      destructive: true,
-      onConfirm: () => deleteSprint(targetId),
-    });
+  function handleDeleteSprint(targetId: string) {
+    setSprintDeleteTargetId(targetId);
   }
 
-  async function deleteSprint(targetId: string) {
+  async function deleteSprint(
+    targetId: string,
+    action: SprintDeleteAction,
+    taskCount: number,
+  ) {
     try {
-      await fetchOrThrow(`/api/sprints/${targetId}`, { method: "DELETE" });
-      toast.success("Sprint excluída");
+      await fetchOrThrow(`/api/sprints/${targetId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskAction: action }),
+      });
+      // Mensagem reflete o que de fato aconteceu: sprint vazia não tem
+      // tasks pra mover, mesmo que o action canônico seja "moveToBacklog".
+      const message =
+        taskCount === 0
+          ? "Sprint excluída"
+          : action === "moveToBacklog"
+            ? "Sprint excluída · tasks movidas pro backlog"
+            : "Sprint e tasks excluídas";
+      toast.success(message);
       if (sprintView === targetId) setSprintView(null);
       await loadTasksAndSprints();
     } catch (e) {
       showErrorToast(e, { label: "Falha ao excluir sprint" });
+      throw e;
     }
   }
 
@@ -1834,7 +1903,7 @@ export default function ProjectDetailPage({
             ) : null}
             {tab.key === "sprints" ? (
               <Badge variant="secondary" className="ml-1 h-5 text-xs">
-                {tasks.length}
+                {sprints.length}
               </Badge>
             ) : null}
           </button>
@@ -1884,38 +1953,43 @@ export default function ProjectDetailPage({
             )}
 
             <div className="flex min-w-0 items-center gap-2 overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
-              <Button
-                size="sm"
-                variant="outline"
-                className="shrink-0"
-                onClick={() =>
-                  handleCreateTask(
-                    focused && !isSyntheticView
-                      ? { sprintId: focused.id }
-                      : undefined,
-                  )
-                }
-              >
-                <Plus className="size-3.5" />
-                Nova task
-              </Button>
-              <Button
-                size="sm"
-                className="shrink-0"
-                onClick={() => setSprintDialogOpen(true)}
-              >
-                <Plus className="size-3.5" />
-                Novo sprint
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="shrink-0"
-                onClick={() => setSuggestSheetOpen(true)}
-              >
-                <Sparkles className="size-3.5" />
-                Sugerir próximas
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button size="sm" className="shrink-0" />}
+                >
+                  <Plus className="size-3.5" />
+                  Nova
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-52">
+                  <DropdownMenuItem
+                    className="whitespace-nowrap"
+                    onClick={() =>
+                      handleCreateTask(
+                        focused && !isSyntheticView
+                          ? { sprintId: focused.id }
+                          : undefined,
+                      )
+                    }
+                  >
+                    <Plus className="size-3.5" />
+                    Task
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="whitespace-nowrap"
+                    onClick={() => setSprintDialogOpen(true)}
+                  >
+                    <Zap className="size-3.5" />
+                    Sprint
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="whitespace-nowrap"
+                    onClick={() => setSuggestSheetOpen(true)}
+                  >
+                    <Sparkles className="size-3.5" />
+                    Sugestão de sprint
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {focused && !isSyntheticView ? (
                 <>
@@ -1955,8 +2029,9 @@ export default function ProjectDetailPage({
                     >
                       <MoreHorizontal className="size-3.5" />
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" className="min-w-44">
                       <DropdownMenuItem
+                        className="whitespace-nowrap"
                         onClick={() =>
                           setSprintContextSheet({
                             sprintId: focused.id,
@@ -1974,6 +2049,7 @@ export default function ProjectDetailPage({
                       </DropdownMenuItem>
                       {focused.status === "completed" ? (
                         <DropdownMenuItem
+                          className="whitespace-nowrap"
                           onClick={() => requestReopenSprint(focused.id)}
                         >
                           <RotateCcw className="size-3.5" />
@@ -1982,6 +2058,7 @@ export default function ProjectDetailPage({
                       ) : null}
                       {focused.status === "active" ? (
                         <DropdownMenuItem
+                          className="whitespace-nowrap"
                           onClick={() => requestCompleteSprint(focused.id)}
                         >
                           <CheckCircle2 className="size-3.5" />
@@ -1990,16 +2067,27 @@ export default function ProjectDetailPage({
                       ) : null}
                       {focused.status === "upcoming" ? (
                         <DropdownMenuItem
+                          className="whitespace-nowrap"
                           onClick={() => requestActivateSprint(focused.id)}
                         >
                           <Play className="size-3.5" />
                           Ativar sprint
                         </DropdownMenuItem>
                       ) : null}
-                      {canDeleteSprint ? (
+                      {canManageSprint ? (
                         <DropdownMenuItem
+                          className="whitespace-nowrap"
+                          onClick={() => setSprintEditingId(focused.id)}
+                        >
+                          <Pencil className="size-3.5" />
+                          Editar sprint
+                        </DropdownMenuItem>
+                      ) : null}
+                      {canManageSprint ? (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          className="whitespace-nowrap"
                           onClick={() => handleDeleteSprint(focused.id)}
-                          className="text-destructive focus:text-destructive"
                         >
                           <Trash2 className="size-3.5" />
                           Excluir sprint
@@ -2222,15 +2310,45 @@ export default function ProjectDetailPage({
         projectId={id}
       />
 
-      {/* Sprint create dialog */}
-      <SprintDialog
-        open={sprintDialogOpen}
-        onOpenChange={setSprintDialogOpen}
-        editing={null}
-        existingSprints={rawSprints.map((s) => ({ startDate: s.startDate, endDate: s.endDate }))}
-        onSave={handleCreateSprint}
-        allowAutoFill
-      />
+      {/* Sprint create / edit dialog */}
+      {(() => {
+        const editingSprint = sprintEditingId
+          ? rawSprints.find((s) => s.id === sprintEditingId) ?? null
+          : null;
+        const editingPayload = editingSprint
+          ? {
+              id: editingSprint.id,
+              name: editingSprint.name,
+              startDate: editingSprint.startDate,
+              endDate: editingSprint.endDate,
+              status: editingSprint.status,
+              goal: editingSprint.goal,
+            }
+          : null;
+        return (
+          <SprintDialog
+            open={sprintDialogOpen || sprintEditingId !== null}
+            onOpenChange={(next) => {
+              if (!next) {
+                setSprintDialogOpen(false);
+                setSprintEditingId(null);
+              } else {
+                setSprintDialogOpen(true);
+              }
+            }}
+            editing={editingPayload}
+            existingSprints={rawSprints
+              .filter((s) => s.id !== sprintEditingId)
+              .map((s) => ({ startDate: s.startDate, endDate: s.endDate }))}
+            onSave={(form) =>
+              editingPayload
+                ? handleUpdateSprint(editingPayload.id, form)
+                : handleCreateSprint(form)
+            }
+            allowAutoFill
+          />
+        );
+      })()}
 
       <SuggestSprintsSheet
         open={suggestSheetOpen}
@@ -2287,6 +2405,28 @@ export default function ProjectDetailPage({
                 await handleActivateSprint(sprintAction.targetId);
               }
             }}
+          />
+        );
+      })() : null}
+
+      {/* Sprint delete confirmation (with task-handling choice) */}
+      {sprintDeleteTargetId ? (() => {
+        const target = sprints.find((s) => s.id === sprintDeleteTargetId);
+        if (!target) return null;
+        // rawTasks já filtra drafts no loader; usar a fonte canônica evita
+        // qualquer drift do pipeline de adapt.
+        const taskCount = rawTasks.filter(
+          (t) => t.sprintId === sprintDeleteTargetId,
+        ).length;
+        return (
+          <SprintDeleteDialog
+            open
+            onOpenChange={(open) => !open && setSprintDeleteTargetId(null)}
+            sprintName={target.name}
+            taskCount={taskCount}
+            onConfirm={(action) =>
+              deleteSprint(sprintDeleteTargetId, action, taskCount)
+            }
           />
         );
       })() : null}
