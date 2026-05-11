@@ -27,6 +27,8 @@ export {
   SprintPulseVitals,
 } from "./sprint-pulse-overview";
 export { SprintActionDialog } from "./sprint-action-dialog";
+export { SprintDeleteDialog } from "./sprint-delete-dialog";
+export type { SprintDeleteAction } from "./sprint-delete-dialog";
 export { SprintRibbon } from "./sprint-ribbon";
 export type { RibbonTab } from "./sprint-ribbon";
 export { SprintSummaryStats } from "./sprint-summary-stats";

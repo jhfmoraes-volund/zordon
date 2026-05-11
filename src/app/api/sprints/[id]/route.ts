@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, getRealRole } from "@/lib/dal";
-import { hasMinLevel, ADMIN } from "@/lib/roles";
+import { hasMinLevel, MANAGER } from "@/lib/roles";
 import type { Database } from "@/lib/supabase/database.types";
 
 type SprintUpdate = Database["public"]["Tables"]["Sprint"]["Update"];
@@ -67,20 +67,75 @@ export async function PUT(
   return NextResponse.json(sprint);
 }
 
+/**
+ * DELETE /api/sprints/:id
+ *
+ * O Sprint tem um trigger (sprint_block_delete_with_tasks) que bloqueia o
+ * DELETE quando há tasks vinculadas. Pra deletar uma sprint com tasks, o
+ * cliente declara o que fazer com elas via body:
+ *
+ *   - `{ taskAction: "moveToBacklog" }` → seta sprintId = null nas tasks
+ *     e depois deleta a sprint. Tasks ficam no backlog do projeto.
+ *   - `{ taskAction: "delete" }` → deleta as tasks (cascade pra AC/tags via
+ *     FKs) e depois a sprint.
+ *   - Sem body / `taskAction` ausente → comportamento legado: tenta deletar
+ *     direto; se o trigger bloquear, retorna 409.
+ */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const realRole = await getRealRole();
-  if (!hasMinLevel(realRole, ADMIN)) {
-    return NextResponse.json({ error: "Apenas admins podem excluir sprints." }, { status: 403 });
+  if (!hasMinLevel(realRole, MANAGER)) {
+    return NextResponse.json({ error: "Apenas PMs e admins podem excluir sprints." }, { status: 403 });
   }
 
   const { id } = await params;
-  const { error } = await db().from("Sprint").delete().eq("id", id);
+
+  let taskAction: "moveToBacklog" | "delete" | null = null;
+  try {
+    const body = await req.json();
+    if (body?.taskAction === "moveToBacklog" || body?.taskAction === "delete") {
+      taskAction = body.taskAction;
+    }
+  } catch {
+    // sem body é OK — segue caminho legado
+  }
+
+  const client = db();
+
+  if (taskAction === "moveToBacklog") {
+    const { error: moveErr } = await client
+      .from("Task")
+      .update({
+        sprintId: null,
+        status: "backlog",
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("sprintId", id);
+    if (moveErr) {
+      return NextResponse.json(
+        { error: `Falha ao mover tasks pro backlog: ${moveErr.message}` },
+        { status: 500 },
+      );
+    }
+  } else if (taskAction === "delete") {
+    const { error: delTasksErr } = await client
+      .from("Task")
+      .delete()
+      .eq("sprintId", id);
+    if (delTasksErr) {
+      return NextResponse.json(
+        { error: `Falha ao excluir tasks da sprint: ${delTasksErr.message}` },
+        { status: 500 },
+      );
+    }
+  }
+
+  const { error } = await client.from("Sprint").delete().eq("id", id);
   if (error) {
     // Trigger sprint_block_delete_with_tasks levanta P0001 com prefixo "sprint_has_tasks:".
     if (error.message?.includes("sprint_has_tasks")) {

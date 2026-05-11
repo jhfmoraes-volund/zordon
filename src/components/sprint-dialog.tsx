@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,10 @@ export type SprintFormData = {
   status: string;
   goal: string;
   projectId?: string;
+  /** Quando true, após criar a sprint o parent abre o SuggestSprintsSheet
+   *  apontando pra ela. Só faz sentido em criação (não edição) e em contexto
+   *  de projeto único. Quando null/undefined, usuário ainda não escolheu. */
+  autoFillFromBacklog?: boolean | null;
 };
 
 type EditingSprint = {
@@ -67,14 +71,18 @@ type Props = {
   /** All sprints across projects — needed when projects prop is provided
    *  so we can filter by selected project. Each item needs projectId + endDate. */
   allSprints?: (ExistingSprint & { projectId: string })[];
+  /** Habilita o select "Preencher com tasks do backlog" abaixo do status.
+   *  Só faz sentido fora do contexto multi-projeto. */
+  allowAutoFill?: boolean;
 };
 
 export function SprintDialog({
   open, onOpenChange, editing, existingSprints, onSave,
-  projects, allSprints,
+  projects, allSprints, allowAutoFill,
 }: Props) {
   const [form, setForm] = useState<SprintFormData>({
-    name: "", startDate: "", endDate: "", status: "upcoming", goal: "", projectId: "",
+    name: "", startDate: "", endDate: "", status: "", goal: "", projectId: "",
+    autoFillFromBacklog: null,
   });
   const [saving, setSaving] = useState(false);
 
@@ -102,6 +110,7 @@ export function SprintDialog({
         status: editing.status,
         goal: editing.goal ?? "",
         projectId: "",
+        autoFillFromBacklog: null,
       });
     } else {
       const defaults = getNextSprintDefaults(existingSprints);
@@ -109,9 +118,10 @@ export function SprintDialog({
         name: defaults.name,
         startDate: defaults.startDate,
         endDate: defaults.endDate,
-        status: "upcoming",
+        status: "",
         goal: "",
         projectId: "",
+        autoFillFromBacklog: null,
       });
     }
   }, [open, editing]);
@@ -139,7 +149,15 @@ export function SprintDialog({
   };
 
   const defaults = editing ? null : currentDefaults();
-  const canSave = !saving && (editing ? !!form.name : (hasProjectSelector ? !!form.projectId : true));
+  const showAutoFill = allowAutoFill && !editing && !hasProjectSelector;
+  const needsStatus = !(editing && form.status === "active");
+  const statusOk = !needsStatus || !!form.status;
+  const autoFillOk = !showAutoFill || form.autoFillFromBacklog !== null;
+  const canSave =
+    !saving &&
+    (editing ? !!form.name : hasProjectSelector ? !!form.projectId : true) &&
+    statusOk &&
+    autoFillOk;
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
@@ -302,15 +320,30 @@ export function SprintDialog({
                 </Field.Hint>
               </Field>
             ) : (
-              <Field name="sprint-status">
+              <Field name="sprint-status" required>
                 <Field.Label>Status</Field.Label>
                 <Field.Control>
                   <Select
-                    value={form.status === "active" ? "upcoming" : form.status}
+                    value={form.status === "" ? null : form.status}
                     onValueChange={(v) => v && setForm({ ...form, status: v })}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Selecionar">
+                        {(v: string | null) => {
+                          if (!v) {
+                            return (
+                              <span className="text-muted-foreground">
+                                Selecionar
+                              </span>
+                            );
+                          }
+                          return v === "upcoming"
+                            ? "A iniciar"
+                            : v === "completed"
+                              ? "Concluída"
+                              : v;
+                        }}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="upcoming">A iniciar</SelectItem>
@@ -324,6 +357,68 @@ export function SprintDialog({
                 </Field.Hint>
               </Field>
             )}
+
+            {showAutoFill ? (
+              <Field name="sprint-autofill" required>
+                <Field.Label>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="size-3.5" />
+                    Conteúdo da sprint
+                  </span>
+                </Field.Label>
+                <Field.Control>
+                  <Select
+                    value={
+                      form.autoFillFromBacklog === null
+                        ? null
+                        : form.autoFillFromBacklog
+                          ? "auto"
+                          : "empty"
+                    }
+                    onValueChange={(v) =>
+                      v &&
+                      setForm({
+                        ...form,
+                        autoFillFromBacklog: v === "auto",
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar">
+                        {(v: string | null) => {
+                          if (!v) {
+                            return (
+                              <span className="text-muted-foreground">
+                                Selecionar
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="block truncate">
+                              {v === "auto"
+                                ? "Preencher com tasks do backlog"
+                                : "Criar vazia"}
+                            </span>
+                          );
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="empty">
+                        Criar vazia (eu adiciono as tasks depois)
+                      </SelectItem>
+                      <SelectItem value="auto">
+                        Preencher com tasks do backlog (sugestão automática)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field.Control>
+                <Field.Hint>
+                  Em &quot;automático&quot;, ao salvar você revê e ajusta as
+                  tasks sugeridas antes de confirmar.
+                </Field.Hint>
+              </Field>
+            ) : null}
           </FormBody>
         </ResponsiveDialogBody>
         <ResponsiveDialogFooter>

@@ -29,6 +29,7 @@ export async function GET(
     { data: member, error: memberErr },
     { data: commitment },
     { data: projectAllocations },
+    { data: pmProjects },
     { data: sprintCaps },
   ] = await Promise.all([
     supabase
@@ -45,6 +46,12 @@ export async function GET(
       .from("ProjectMember")
       .select("projectId, fpAllocation, project:Project(id, name)")
       .eq("memberId", id),
+    // Projetos onde este Member é PM. ProjectMember pode não existir pro PM —
+    // o PM ainda precisa ver os projetos que está pilotando no resumo de capacity.
+    supabase
+      .from("Project")
+      .select("id, name")
+      .eq("pmId", id),
     supabase
       .from("sprint_member_capacity")
       .select("sprintId, projectId, fp_allocation, fp_planned, fp_done, fp_open, has_sprint_override")
@@ -101,14 +108,39 @@ export async function GET(
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
-  const projects = (projectAllocations || []).map((pa) => {
+  // União de ProjectMember (com fpAllocation explícita) ∪ Project.pmId
+  // (alocação implícita do PM, fallback = Member.fpCapacity).
+  // PM ganha precedência se for ambos (PM + builder) — quase nunca acontece
+  // mas evita duplicação. Pra PM-only projects, fpAllocation = fpCapacity
+  // como fallback (mesma cascata usada na página do projeto).
+  const projectMap = new Map<
+    string,
+    { projectId: string; projectName: string; fpAllocation: number; isPm: boolean }
+  >();
+  for (const pa of projectAllocations || []) {
     const proj = pa.project as ProjectRef;
-    return {
+    projectMap.set(pa.projectId, {
       projectId: pa.projectId,
       projectName: proj?.name ?? "?",
       fpAllocation: Number(pa.fpAllocation) || 0,
-    };
-  });
+      isPm: false,
+    });
+  }
+  const fallbackAllocation = Number(member.fpCapacity) || 0;
+  for (const p of pmProjects || []) {
+    const existing = projectMap.get(p.id);
+    if (existing) {
+      existing.isPm = true;
+    } else {
+      projectMap.set(p.id, {
+        projectId: p.id,
+        projectName: p.name,
+        fpAllocation: fallbackAllocation,
+        isPm: true,
+      });
+    }
+  }
+  const projects = Array.from(projectMap.values());
 
   return NextResponse.json({
     member: {

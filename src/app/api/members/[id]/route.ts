@@ -1,6 +1,11 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser, requireRole, ForbiddenError } from "@/lib/dal";
+import {
+  getUser,
+  getCurrentMember,
+  requireRole,
+  ForbiddenError,
+} from "@/lib/dal";
 import {
   ADMIN_ROLE_NAMES,
   mapPositionToAccessLevel,
@@ -13,10 +18,26 @@ import type { Database } from "@/lib/supabase/database.types";
 type MemberUpdate = Database["public"]["Tables"]["Member"]["Update"];
 
 /**
- * PUT /api/members/[id] — admin-only.
+ * Campos que o próprio membro pode editar do seu Member sem precisar de admin.
+ * São os controles da bateria/capacity. Cargo, access level, isExternal etc.
+ * continuam sendo admin-only.
+ */
+const SELF_EDITABLE_FIELDS = new Set([
+  "fpCapacity",
+  "seniority",
+  "dedicationPercent",
+]);
+
+/**
+ * PUT /api/members/[id].
+ *
+ * - Admin: pode editar qualquer campo de qualquer Member.
+ * - Usuário não-admin editando o próprio Member: pode atualizar SOMENTE os
+ *   campos em `SELF_EDITABLE_FIELDS` (bateria de capacity, seniority,
+ *   dedicação). Qualquer campo fora dessa lista retorna 403.
  *
  * Body accepts `position` (cargo) and `accessLevel` (authz) independently.
- * Legacy `role` is mapped onto both for backwards compat.
+ * Legacy `role` is mapped onto both for backwards compat (admin-only).
  *
  * Mirror rules to the auth user:
  *   - position changed → write to `app_metadata.role` (legacy mirror) and
@@ -33,15 +54,39 @@ export async function PUT(
 ) {
   const user = await getUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
-  try {
-    await requireRole(ADMIN_ROLE_NAMES);
-  } catch (e) {
-    if (e instanceof ForbiddenError) return new NextResponse(e.message, { status: 403 });
-    throw e;
-  }
 
   const { id } = await params;
   const body = await req.json();
+
+  let isAdmin = false;
+  try {
+    await requireRole(ADMIN_ROLE_NAMES);
+    isAdmin = true;
+  } catch (e) {
+    if (!(e instanceof ForbiddenError)) throw e;
+  }
+
+  if (!isAdmin) {
+    // Não-admin só pode editar o próprio Member, e só os campos da bateria.
+    const me = await getCurrentMember();
+    if (!me || me.id !== id) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+    const disallowed = Object.keys(body).filter(
+      (k) => !SELF_EDITABLE_FIELDS.has(k),
+    );
+    if (disallowed.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Você só pode editar seus próprios campos de capacity (${Array.from(
+            SELF_EDITABLE_FIELDS,
+          ).join(", ")}). Campos negados: ${disallowed.join(", ")}.`,
+        },
+        { status: 403 },
+      );
+    }
+  }
+
   // Pull authz/cargo fields out separately; the rest goes straight to Member.
   const { password, position, accessLevel, role, ...rest } = body;
 

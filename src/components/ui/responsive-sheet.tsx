@@ -53,23 +53,30 @@ function ResponsiveSheetTrigger(props: TriggerProps) {
   return <SheetTrigger {...props} />
 }
 
-type Size = "sm" | "md" | "lg"
+type Size = "sm" | "md" | "lg" | "xl" | "2xl"
 
 const SIZE_CLASS: Record<Size, string> = {
   sm: "sm:max-w-[480px]",
   md: "sm:max-w-[640px]",
   lg: "sm:max-w-[760px]",
+  xl: "sm:max-w-[1024px]",
+  "2xl": "sm:max-w-[1280px]",
 }
+
+type Side = "left" | "right"
 
 type ContentProps = React.ComponentProps<typeof SheetContent> & {
   /** Desktop max-width preset. Default: md (640px). */
   size?: Size
+  /** Desktop side anchor. Mobile is always bottom. Default: right. */
+  desktopSide?: Side
 }
 
 function ResponsiveSheetContent({
   className,
   children,
   size = "md",
+  desktopSide = "right",
   showCloseButton = true,
   ...props
 }: ContentProps) {
@@ -98,7 +105,7 @@ function ResponsiveSheetContent({
 
   return (
     <SheetContent
-      side="right"
+      side={desktopSide}
       showCloseButton={showCloseButton}
       className={cn(
         "w-full gap-0 p-0",
