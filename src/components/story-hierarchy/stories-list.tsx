@@ -113,7 +113,7 @@ function StoryGroup({
     <section className="space-y-2">
       <div className="flex items-baseline gap-2">
         <h2
-          className={`inline-flex items-center gap-1.5 font-mono text-sm font-semibold ${
+          className={`inline-flex shrink-0 items-center gap-1.5 font-mono text-sm font-semibold ${
             inbox ? "text-amber-700 dark:text-amber-400" : ""
           }`}
         >
@@ -124,8 +124,13 @@ function StoryGroup({
           )}
           {title}
         </h2>
-        <span className="text-xs text-muted-foreground">· {subtitle}</span>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <p
+          className="min-w-0 flex-1 line-clamp-2 text-xs text-muted-foreground sm:line-clamp-1"
+          title={subtitle}
+        >
+          · {subtitle}
+        </p>
+        <span className="shrink-0 text-xs text-muted-foreground">
           <span className="font-mono tabular-nums">{rows.length}</span> stories
         </span>
       </div>

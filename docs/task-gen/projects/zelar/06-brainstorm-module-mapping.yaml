@@ -1,0 +1,106 @@
+# Brainstorm Hint → Module v2 mapping
+#
+# Os `moduleHint` da DesignSessionBrainstormFeature foram criados antes da
+# consolidação 12→8 modules de 2026-05-09. Este mapa traduz cada hint da
+# brainstorm para o módulo v2 onde a auditoria deve procurar cobertura.
+#
+# Usado por `/task-gen-audit` (dimensão A — cobertura brainstorm→AC).
+#
+# Multi-mapping permitido: feature pode pertencer a mais de um módulo
+# (ex: SISTEMA é transversal — vai pra MATCHING + EXECUCAO).
+#
+# Atualize esta tabela se aparecer hint novo ou reclassificação humana.
+
+modules:
+  ONBOARDING:
+    description: Cadastro, login, KYC, primeiros passos, conta bancária, LGPD
+    brainstorm_hints: [CADASTRO, LOGIN, ONBOARDING, LGPD]
+    feature_overrides: []  # exceções específicas por título (vide §overrides)
+
+  EXECUCAO:
+    description: Stepper de serviço, atípicas, garantia, escrow, avaliação, código de início
+    brainstorm_hints: [SERVIÇO, AVALIAÇÃO]
+    feature_overrides:
+      # Features SISTEMA que pertencem a EXECUCAO via [SISTEMA][SERVIÇO] tag
+      - title_contains: "[SISTEMA][SERVIÇO] Ciclo de Vida"
+        belongs_to: EXECUCAO
+      - title_contains: "[SISTEMA][SERVIÇO] Garantia, Retrabalho"
+        belongs_to: EXECUCAO
+      - title_contains: "[SISTEMA][SERVIÇO] Lógica de Geração do Código"
+        belongs_to: EXECUCAO
+
+  SOLICITACAO:
+    description: Formulário de solicitação, pagamento upfront, confirmação, visita técnica
+    brainstorm_hints: [SOLICITAÇÃO]
+    feature_overrides: []
+
+  MATCHING:
+    description: Motor de matching, pool broadcast, score multivariado, anti-bypass
+    brainstorm_hints: []  # nenhum hint é exclusivamente MATCHING
+    feature_overrides:
+      - title_contains: "[SISTEMA][MATCHING]"
+        belongs_to: MATCHING
+      - title_contains: "Anti-Bypass"
+        belongs_to: MATCHING
+
+  NOTIFICACAO:
+    description: WhatsApp templates, push, email transacional, chat interno
+    brainstorm_hints: [NOTIFICAÇÃO]
+    feature_overrides:
+      - title_contains: "Notificações Push no PWA"
+        belongs_to: NOTIFICACAO
+
+  PERFIL:
+    description: Perfil cliente/prestador, agenda, disponibilidade, carteira, conta suspensa
+    brainstorm_hints: [PERFIL, CONTA, FINANCEIRO]
+    feature_overrides: []
+
+  ADMIN:
+    description: Dashboard operacional, gestão prestadores/KYC, relatórios, feature flags, NPS
+    brainstorm_hints: [ADMIN, OPERAÇÃO, HOME, PRODUTO]
+    feature_overrides:
+      - title_contains: "[SUPORTE][ADMIN] Painel Admin"
+        belongs_to: ADMIN  # admin de suporte mora aqui, não em SUPORTE
+
+  SUPORTE:
+    description: Tickets de suporte geral + gestão de disputas
+    brainstorm_hints: [SUPORTE]
+    feature_overrides:
+      # já listado em ADMIN — fica visível em ambos os relatórios (multi-mapping permitido)
+
+  # Hints transversais que se espalham por múltiplos módulos
+  # — auditor cross-module pega esses
+  _transversal:
+    SISTEMA:
+      description: Hint genérico — features SISTEMA são distribuídas por feature_overrides
+      default_module: SISTEMA  # se nenhum override casar, fica nesse bucket pra revisão humana
+      strategy: classify_by_title
+      classification_hints:
+        - title_contains: "[SISTEMA][MATCHING]" → MATCHING
+        - title_contains: "[SISTEMA][SERVIÇO]" → EXECUCAO
+        - title_contains: "[SISTEMA][TODOS] Matriz de Permissões" → ADMIN  # RLS matrix
+        - title_contains: "[SISTEMA][TODOS] Motor Anti-Bypass" → MATCHING
+        - title_contains: "[SISTEMA][TODOS] Notificações Push" → NOTIFICACAO
+
+# === FEATURES DE BRAINSTORM SEM hint (NULL moduleHint) ===
+# Essas precisam de classificação manual ou heurística por title.
+unhinted_features_strategy: |
+  Se moduleHint IS NULL, auditor classifica por keyword no título:
+    - "ADMIN" no título → ADMIN
+    - "SUPORTE" no título → SUPORTE
+    - default → flag pra revisão humana, não atribui módulo
+
+# === RESUMO ESTATÍSTICO INICIAL (snapshot 2026-05-10) ===
+# 65 features ativas no banco. Distribuição esperada após mapeamento:
+expected_distribution:
+  ONBOARDING: 12   # 4 ONBOARDING + 5 CADASTRO + 2 LOGIN + 1 LGPD
+  EXECUCAO: 18     # 21 SERVIÇO + 1 AVALIAÇÃO − 4 que viram MATCHING/PERFIL via override
+  SOLICITACAO: 3
+  MATCHING: 4      # 3 SISTEMA-MATCHING/Anti-Bypass + 1 reclassificado
+  NOTIFICACAO: 7   # 6 NOTIFICAÇÃO + 1 SISTEMA Push
+  PERFIL: 5        # 3 PERFIL + 1 CONTA + 1 FINANCEIRO
+  ADMIN: 6         # 3 ADMIN + 1 OPERAÇÃO + 1 HOME + 1 PRODUTO
+  SUPORTE: 3       # 2 SUPORTE + 1 painel admin (multi-mapping)
+  _orphan: 1       # NULL hint
+# Total mapeado pode ser >65 por multi-mapping; auditor reporta cobertura
+# por módulo, não unicidade global.
