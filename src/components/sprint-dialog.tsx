@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,10 @@ export type SprintFormData = {
   status: string;
   goal: string;
   projectId?: string;
+  /** Quando true, após criar a sprint o parent abre o SuggestSprintsSheet
+   *  apontando pra ela. Só faz sentido em criação (não edição) e em contexto
+   *  de projeto único. */
+  autoFillFromBacklog?: boolean;
 };
 
 type EditingSprint = {
@@ -67,14 +71,18 @@ type Props = {
   /** All sprints across projects — needed when projects prop is provided
    *  so we can filter by selected project. Each item needs projectId + endDate. */
   allSprints?: (ExistingSprint & { projectId: string })[];
+  /** Habilita o select "Preencher com tasks do backlog" abaixo do status.
+   *  Só faz sentido fora do contexto multi-projeto. */
+  allowAutoFill?: boolean;
 };
 
 export function SprintDialog({
   open, onOpenChange, editing, existingSprints, onSave,
-  projects, allSprints,
+  projects, allSprints, allowAutoFill,
 }: Props) {
   const [form, setForm] = useState<SprintFormData>({
     name: "", startDate: "", endDate: "", status: "upcoming", goal: "", projectId: "",
+    autoFillFromBacklog: false,
   });
   const [saving, setSaving] = useState(false);
 
@@ -102,6 +110,7 @@ export function SprintDialog({
         status: editing.status,
         goal: editing.goal ?? "",
         projectId: "",
+        autoFillFromBacklog: false,
       });
     } else {
       const defaults = getNextSprintDefaults(existingSprints);
@@ -112,6 +121,7 @@ export function SprintDialog({
         status: "upcoming",
         goal: "",
         projectId: "",
+        autoFillFromBacklog: false,
       });
     }
   }, [open, editing]);
@@ -140,6 +150,7 @@ export function SprintDialog({
 
   const defaults = editing ? null : currentDefaults();
   const canSave = !saving && (editing ? !!form.name : (hasProjectSelector ? !!form.projectId : true));
+  const showAutoFill = allowAutoFill && !editing && !hasProjectSelector;
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
@@ -324,6 +335,44 @@ export function SprintDialog({
                 </Field.Hint>
               </Field>
             )}
+
+            {showAutoFill ? (
+              <Field name="sprint-autofill">
+                <Field.Label>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="size-3.5" />
+                    Conteúdo da sprint
+                  </span>
+                </Field.Label>
+                <Field.Control>
+                  <Select
+                    value={form.autoFillFromBacklog ? "auto" : "empty"}
+                    onValueChange={(v) =>
+                      setForm({
+                        ...form,
+                        autoFillFromBacklog: v === "auto",
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="empty">
+                        Criar vazia (eu adiciono as tasks depois)
+                      </SelectItem>
+                      <SelectItem value="auto">
+                        Preencher com tasks do backlog (sugestão automática)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field.Control>
+                <Field.Hint>
+                  Em &quot;automático&quot;, ao salvar você revê e ajusta as
+                  tasks sugeridas antes de confirmar.
+                </Field.Hint>
+              </Field>
+            ) : null}
           </FormBody>
         </ResponsiveDialogBody>
         <ResponsiveDialogFooter>

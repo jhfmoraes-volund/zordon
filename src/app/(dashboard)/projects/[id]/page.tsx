@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Settings as SettingsIcon,
   Shield,
+  Sparkles,
   Target,
   Zap,
 } from "lucide-react";
@@ -45,6 +46,7 @@ import {
   SprintContextSheet,
   type SprintContextSheetMode,
 } from "@/components/sprint/sprint-context-sheet";
+import { SuggestSprintsSheet } from "@/components/sprint/suggest-sprints-sheet";
 import { StatusChip } from "@/components/ui/status-chip";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -252,6 +254,10 @@ export default function ProjectDetailPage({
   const [accessOpen, setAccessOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [sprintDialogOpen, setSprintDialogOpen] = useState(false);
+  const [suggestSheetOpen, setSuggestSheetOpen] = useState(false);
+  const [suggestSheetTargetId, setSuggestSheetTargetId] = useState<
+    string | null
+  >(null);
   const [sprintAction, setSprintAction] = useState<
     | { mode: "activate-replacing" | "activate-fresh"; targetId: string }
     | { mode: "reopen-replacing" | "reopen-fresh"; targetId: string }
@@ -621,8 +627,9 @@ export default function ProjectDetailPage({
     const now = new Date().toISOString();
     setSprintDialogOpen(false);
     const goal = form.goal.trim();
+    const newId = crypto.randomUUID();
     const { error } = await supabase.from("Sprint").insert({
-      id: crypto.randomUUID(),
+      id: newId,
       projectId: id,
       name: form.name,
       startDate: form.startDate,
@@ -642,6 +649,10 @@ export default function ProjectDetailPage({
       return;
     }
     await loadTasksAndSprints();
+    if (form.autoFillFromBacklog) {
+      setSuggestSheetTargetId(newId);
+      setSuggestSheetOpen(true);
+    }
   }
 
   function requestActivateSprint(targetId: string) {
@@ -1896,6 +1907,15 @@ export default function ProjectDetailPage({
                 <Plus className="size-3.5" />
                 Novo sprint
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={() => setSuggestSheetOpen(true)}
+              >
+                <Sparkles className="size-3.5" />
+                Sugerir próximas
+              </Button>
 
               {focused && !isSyntheticView ? (
                 <>
@@ -2209,6 +2229,26 @@ export default function ProjectDetailPage({
         editing={null}
         existingSprints={rawSprints.map((s) => ({ startDate: s.startDate, endDate: s.endDate }))}
         onSave={handleCreateSprint}
+        allowAutoFill
+      />
+
+      <SuggestSprintsSheet
+        open={suggestSheetOpen}
+        onOpenChange={(next) => {
+          setSuggestSheetOpen(next);
+          if (!next) setSuggestSheetTargetId(null);
+        }}
+        projectId={id}
+        backlogHint={backlogTasks.length}
+        emptySprints={rawSprints
+          .filter(
+            (s) =>
+              s.status === "upcoming" &&
+              !rawTasks.some((t) => t.sprintId === s.id),
+          )
+          .map((s) => ({ id: s.id, name: s.name }))}
+        initialTargetSprintId={suggestSheetTargetId}
+        onApplied={() => loadTasksAndSprints()}
       />
 
       {/* Sprint activate / complete / reopen confirmation */}
