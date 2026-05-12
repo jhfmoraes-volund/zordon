@@ -80,8 +80,13 @@ export function useHypotheses(sessionId: string) {
         {
           errorLabel: "Falha ao criar hipótese",
           retry: false,
-          reconcile: (prev, result) =>
-            prev.map((h) => (h.id === tempId ? (result as HypothesisRow) : h)),
+          reconcile: (prev, result) => {
+            const real = result as HypothesisRow;
+            const hasTemp = prev.some((h) => h.id === tempId);
+            if (hasTemp) return prev.map((h) => (h.id === tempId ? real : h));
+            if (prev.some((h) => h.id === real.id)) return prev;
+            return [...prev, real];
+          },
         },
       );
     },
