@@ -25,7 +25,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { getStepsForSession, StepDef } from "@/lib/design-session-steps";
-import type { Note } from "@/components/design-session/sticky-note";
 import { DesignSessionProvider } from "@/contexts/design-session-context";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { genId } from "@/lib/utils";
@@ -53,7 +52,6 @@ export default function StepPage({
   const [session, setSession] = useState<Session | null>(null);
   const [stepData, setStepData] = useState<Record<string, unknown>>({});
   const [stepDataLoaded, setStepDataLoaded] = useState(false);
-  const [notes, setNotes] = useState<Note[]>([]);
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -74,16 +72,15 @@ export default function StepPage({
     fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`)
       .then((r) => r.json())
       .then((r) => {
-        const { _notes, ...rest } = (r.data || {}) as Record<string, unknown>;
+        const { _notes: _ignored, ...rest } = (r.data || {}) as Record<string, unknown>;
         setStepData(rest);
-        setNotes(Array.isArray(_notes) ? (_notes as Note[]) : []);
         setStepDataLoaded(true);
       });
   }, [id, currentStepDef?.key]);
 
-  // Persist step data + notes with debounce
-  const notesRef = useRef(notes);
-  notesRef.current = notes;
+  // Persist step data with debounce. Sticky notes live in their own table now
+  // (DesignSessionStepNote, via useStepNotes inside WizardLayout) and are no
+  // longer round-tripped through the legacy JSON.
   const stepDataRef = useRef(stepData);
   stepDataRef.current = stepData;
 
@@ -101,7 +98,7 @@ export default function StepPage({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 stepIndex,
-                data: { ...stepDataRef.current, _notes: notesRef.current },
+                data: stepDataRef.current,
               }),
             },
           );
@@ -124,37 +121,13 @@ export default function StepPage({
     [debouncedSave]
   );
 
-
-  const handleAddNote = useCallback(() => {
-    const updated = [...notesRef.current, { id: genId(), text: "" }];
-    setNotes(updated);
-    notesRef.current = updated;
-    debouncedSave();
-  }, [debouncedSave]);
-
-  const handleUpdateNote = useCallback((noteId: string, text: string) => {
-    const updated = notesRef.current.map((n) => (n.id === noteId ? { ...n, text } : n));
-    setNotes(updated);
-    notesRef.current = updated;
-    debouncedSave();
-  }, [debouncedSave]);
-
-  const handleDeleteNote = useCallback((noteId: string) => {
-    const updated = notesRef.current.filter((n) => n.id !== noteId);
-    setNotes(updated);
-    notesRef.current = updated;
-    debouncedSave();
-  }, [debouncedSave]);
-
   const refreshStepData = useCallback(async () => {
     if (!currentStepDef) return;
     const r = await fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`);
     const json = await r.json();
-    const { _notes, ...rest } = (json.data || {}) as Record<string, unknown>;
+    const { _notes: _ignored, ...rest } = (json.data || {}) as Record<string, unknown>;
     setStepData(rest);
     stepDataRef.current = rest;
-    setNotes(Array.isArray(_notes) ? (_notes as Note[]) : []);
-    notesRef.current = Array.isArray(_notes) ? (_notes as Note[]) : [];
   }, [id, currentStepDef?.key]);
 
   const navigate = (targetStep: number) => {
@@ -191,6 +164,7 @@ export default function StepPage({
       refreshStepData={refreshStepData}
     >
       <WizardLayout
+        sessionId={id}
         sessionTitle={session.title}
         sessionType={session.type}
         steps={steps}
@@ -203,10 +177,6 @@ export default function StepPage({
         onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
         onStepClick={navigate}
         saving={saving}
-        notes={notes}
-        onAddNote={handleAddNote}
-        onUpdateNote={handleUpdateNote}
-        onDeleteNote={handleDeleteNote}
         hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing"}
         backHref={`/projects/${session.projectId}`}
         memoriaHref={`/design-sessions/${id}/memoria`}

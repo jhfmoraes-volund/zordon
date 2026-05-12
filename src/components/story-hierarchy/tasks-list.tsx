@@ -888,6 +888,7 @@ function FlatList({
   modules: Module[];
   editing: RowEditingProps;
 }) {
+  const isMobile = useIsMobile();
   if (tasks.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-6 text-center text-xs text-muted-foreground">
@@ -900,15 +901,21 @@ function FlatList({
       <TasksTable
         rows={tasks}
         editing={editing}
-        storyHint={(t) => {
-          const story = stories.find((s) => s.reference === t.userStoryRef);
-          if (!story) return { module: null, ref: null };
-          const mod = modules.find((m) => m.id === story.moduleId);
-          return {
-            module: mod?.name ?? null,
-            ref: story.reference,
-          };
-        }}
+        storyHint={
+          isMobile
+            ? undefined
+            : (t) => {
+                const story = stories.find(
+                  (s) => s.reference === t.userStoryRef,
+                );
+                if (!story) return { module: null, ref: null };
+                const mod = modules.find((m) => m.id === story.moduleId);
+                return {
+                  module: mod?.name ?? null,
+                  ref: story.reference,
+                };
+              }
+        }
       />
     </div>
   );
@@ -932,18 +939,22 @@ function TasksTable({
   // classes that appear LITERALLY in source — runtime-built strings don't
   // make it to the CSS bundle, and the layout silently degrades to a
   // single-column stack.
+  const isMobile = useIsMobile();
+  // Title floor is wider on mobile so the title actually breathes once the
+  // Story column drops out (storyHint is undefined on mobile via FlatList).
+  const titleMin = isMobile ? 480 : 220;
   const layoutParts: string[] = [];
   if (editing.bulkEnabled) layoutParts.push("28px");
-  layoutParts.push("110px", "minmax(220px, 1fr)");
+  layoutParts.push("56px", `minmax(${titleMin}px, 1fr)`);
   if (storyHint) layoutParts.push("200px");
   if (editing.showSprint) layoutParts.push("130px");
   layoutParts.push("130px", "44px", "170px");
   if (editing.showMenu) layoutParts.push("40px");
   const gridStyle = { gridTemplateColumns: layoutParts.join(" ") };
 
-  // Min total width = sum of fixed columns + 220 (title min) + (col_count - 1) * 12px gap.
+  // Min total width = sum of fixed columns + title min + (col_count - 1) * 12px gap.
   const fixedSum =
-    (editing.bulkEnabled ? 28 : 0) + 110 + 220
+    (editing.bulkEnabled ? 28 : 0) + 56 + titleMin
     + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0)
     + 130 + 44 + 170 + (editing.showMenu ? 40 : 0);
   const colCount = layoutParts.length;
@@ -1050,8 +1061,11 @@ function TasksTable({
                 </span>
               ) : null}
 
-              <span className="font-mono text-xs text-muted-foreground">
-                {task.reference}
+              <span
+                className="font-mono text-xs tabular-nums text-muted-foreground"
+                title={task.reference}
+              >
+                {task.reference.match(/(\d+)$/)?.[1] ?? task.reference}
               </span>
 
               <span className="flex min-w-0 items-center gap-2">

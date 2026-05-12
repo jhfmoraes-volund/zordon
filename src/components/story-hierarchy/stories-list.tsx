@@ -107,8 +107,8 @@ function StoryGroup({
 }) {
   const showMenu = !!onDeleteStory;
   const gridCols = showMenu
-    ? "grid-cols-[96px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px_40px]"
-    : "grid-cols-[96px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px]";
+    ? "grid-cols-[56px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px_40px]"
+    : "grid-cols-[56px_minmax(200px,1fr)_minmax(180px,220px)_120px_120px_88px_88px]";
   return (
     <section className="space-y-2">
       <div className="flex items-baseline gap-2">
@@ -144,7 +144,7 @@ function StoryGroup({
         }`}
       >
         <div className="overflow-x-auto">
-          <div className={showMenu ? "min-w-[1080px]" : "min-w-[1040px]"}>
+          <div className={showMenu ? "min-w-[1040px]" : "min-w-[1000px]"}>
             <div
               className={`grid ${gridCols} gap-3 border-b bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground`}
             >
@@ -213,8 +213,11 @@ function StoryRow({
         !isLast ? "border-b" : ""
       }`}
     >
-      <span className="font-mono text-xs text-muted-foreground">
-        {story.reference}
+      <span
+        className="font-mono text-xs tabular-nums text-muted-foreground"
+        title={story.reference}
+      >
+        {story.reference.match(/(\d+)$/)?.[1] ?? story.reference}
       </span>
 
       <span className="flex min-w-0 items-center gap-2">
