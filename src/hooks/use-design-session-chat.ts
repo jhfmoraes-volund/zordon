@@ -33,10 +33,8 @@ export function useDesignSessionChat() {
 
   const chat = useChat({
     transport,
-    onFinish: () => {
-      // After AI responds (may have used tools), refresh step data
-      ctx.refreshStepData();
-    },
+    // After AI responds (may have used tools), per-step hooks own their own
+    // revalidation. Nothing to refresh globally here.
   });
 
   // Load existing chat history on mount

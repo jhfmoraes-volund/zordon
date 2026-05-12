@@ -781,6 +781,9 @@ export type Database = {
       DesignSession: {
         Row: {
           actualDurationMin: number | null
+          briefingFirstMessageAt: string | null
+          briefingSubPhase: string | null
+          briefingTargetStoryId: string | null
           completedAt: string | null
           createdAt: string
           createdBy: string | null
@@ -802,6 +805,9 @@ export type Database = {
         }
         Insert: {
           actualDurationMin?: number | null
+          briefingFirstMessageAt?: string | null
+          briefingSubPhase?: string | null
+          briefingTargetStoryId?: string | null
           completedAt?: string | null
           createdAt?: string
           createdBy?: string | null
@@ -823,6 +829,9 @@ export type Database = {
         }
         Update: {
           actualDurationMin?: number | null
+          briefingFirstMessageAt?: string | null
+          briefingSubPhase?: string | null
+          briefingTargetStoryId?: string | null
           completedAt?: string | null
           createdAt?: string
           createdBy?: string | null
@@ -843,6 +852,20 @@ export type Database = {
           updatedAt?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "DesignSession_briefingTargetStoryId_fkey"
+            columns: ["briefingTargetStoryId"]
+            isOneToOne: false
+            referencedRelation: "user_story_overview"
+            referencedColumns: ["userStoryId"]
+          },
+          {
+            foreignKeyName: "DesignSession_briefingTargetStoryId_fkey"
+            columns: ["briefingTargetStoryId"]
+            isOneToOne: false
+            referencedRelation: "UserStory"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "DesignSession_createdBy_fkey"
             columns: ["createdBy"]

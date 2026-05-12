@@ -7,17 +7,17 @@ import { BRIEFING_SUB_PHASE_VALUES } from "@/lib/design-sessions/constants";
 /**
  * POST /api/design-sessions/[id]/sub-phase
  *
- * Persists the briefing sub-phase + target story id in
- * DesignSessionStepData[step="briefing"].data. Vitor's loadContext reads this
- * via getStepData("briefing") and the prompt routes to the correct mode.
- * The set of valid sub-phases lives in @/lib/design-sessions/constants.
+ * Persists briefing sub-phase + target story id em colunas escalares de
+ * `DesignSession` (briefingSubPhase, briefingTargetStoryId). Vitor's
+ * loadContext lê essas colunas e o prompt roteia para o modo correto.
+ * Vocabulário válido vive em @/lib/design-sessions/constants.
  *
- * Called by tree action buttons BEFORE sending a chat message:
+ * Chamado pelos botões de tree action ANTES do envio de mensagem:
  *   await fetch('/sub-phase', { body: { subPhase, targetStoryId } })
  *   sendMessage({ text: "..." })
  *
- * That ordering matters — the agent's loadContext needs the new subPhase
- * already persisted when the request arrives.
+ * A ordem importa — quando o request do chat chega, a coluna já está
+ * persistida e o loadContext lê o valor novo.
  */
 
 const SubPhaseSchema = z.object({
@@ -43,45 +43,15 @@ export async function POST(
   }
   const { subPhase, targetStoryId } = parsed.data;
 
-  const supabase = db();
+  const { error } = await db()
+    .from("DesignSession")
+    .update({
+      briefingSubPhase: subPhase,
+      briefingTargetStoryId: targetStoryId ?? null,
+    })
+    .eq("id", sessionId);
 
-  // Read current data, merge subPhase + targetStoryId, write back.
-  const { data: existing } = await supabase
-    .from("DesignSessionStepData")
-    .select("id, data, stepIndex")
-    .eq("sessionId", sessionId)
-    .eq("stepKey", "briefing")
-    .maybeSingle();
-
-  const current = (existing?.data as Record<string, unknown>) ?? {};
-  const next = {
-    ...current,
-    subPhase,
-    targetStoryId: targetStoryId ?? null,
-  };
-
-  if (existing) {
-    const { error } = await supabase
-      .from("DesignSessionStepData")
-      .update({ data: next, updatedAt: new Date().toISOString() })
-      .eq("id", existing.id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  } else {
-    // briefing row doesn't exist yet — create with stepIndex from session.
-    const { data: session } = await supabase
-      .from("DesignSession")
-      .select("currentStep")
-      .eq("id", sessionId)
-      .single();
-    const { error } = await supabase.from("DesignSessionStepData").insert({
-      sessionId,
-      stepKey: "briefing",
-      stepIndex: session?.currentStep ?? 0,
-      data: next,
-      updatedAt: new Date().toISOString(),
-    });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ subPhase, targetStoryId: targetStoryId ?? null });
 }

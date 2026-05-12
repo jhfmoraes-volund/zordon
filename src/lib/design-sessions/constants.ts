@@ -2,9 +2,9 @@
  * Vocabulary for Design Session briefing flow.
  *
  * The briefing step has 4 sub-phases that drive Vitor's behavior. The string
- * value is persisted in `DesignSessionStepData.data.subPhase` (briefing row).
- * Keep this file as the single source of truth — Zod schemas, prompt branches
- * and UI labels all derive from these constants.
+ * value is persisted in `DesignSession.briefingSubPhase`. Keep this file as
+ * the single source of truth — Zod schemas, prompt branches and UI labels all
+ * derive from these constants.
  */
 
 export const BRIEFING_SUB_PHASES = {

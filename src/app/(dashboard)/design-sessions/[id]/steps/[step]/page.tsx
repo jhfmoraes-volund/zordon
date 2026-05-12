@@ -58,10 +58,6 @@ export default function StepPage({
   const router = useRouter();
 
   const [session, setSession] = useState<Session | null>(null);
-  const [stepData, setStepData] = useState<Record<string, unknown>>({});
-  const [stepDataLoaded, setStepDataLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const steps = session ? getStepsForSession(session) : [];
   const currentStepDef = steps[stepIndex] as StepDef | undefined;
@@ -72,71 +68,6 @@ export default function StepPage({
       .then((r) => r.json())
       .then(setSession);
   }, [id]);
-
-  // Load step data
-  useEffect(() => {
-    if (!currentStepDef) return;
-    setStepDataLoaded(false);
-    fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`)
-      .then((r) => r.json())
-      .then((r) => {
-        const { _notes: _ignored, ...rest } = (r.data || {}) as Record<string, unknown>;
-        setStepData(rest);
-        setStepDataLoaded(true);
-      });
-  }, [id, currentStepDef?.key]);
-
-  // Persist step data with debounce. Sticky notes live in their own table now
-  // (DesignSessionStepNote, via useStepNotes inside WizardLayout) and are no
-  // longer round-tripped through the legacy JSON.
-  const stepDataRef = useRef(stepData);
-  stepDataRef.current = stepData;
-
-  const debouncedSave = useCallback(
-    () => {
-      if (!currentStepDef) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(async () => {
-        setSaving(true);
-        try {
-          await fetchOrThrow(
-            `/api/design-sessions/${id}/steps/${currentStepDef.key}`,
-            {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                stepIndex,
-                data: stepDataRef.current,
-              }),
-            },
-          );
-        } catch (e) {
-          showErrorToast(e, { label: "Falha ao salvar progresso" });
-        } finally {
-          setSaving(false);
-        }
-      }, 500);
-    },
-    [id, stepIndex, currentStepDef?.key]
-  );
-
-  const saveStepData = useCallback(
-    (data: Record<string, unknown>) => {
-      setStepData(data);
-      stepDataRef.current = data;
-      debouncedSave();
-    },
-    [debouncedSave]
-  );
-
-  const refreshStepData = useCallback(async () => {
-    if (!currentStepDef) return;
-    const r = await fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`);
-    const json = await r.json();
-    const { _notes: _ignored, ...rest } = (json.data || {}) as Record<string, unknown>;
-    setStepData(rest);
-    stepDataRef.current = rest;
-  }, [id, currentStepDef?.key]);
 
   const navigate = (targetStep: number) => {
     // Só promove draft → in_progress no primeiro toque. Nunca toca em
@@ -167,9 +98,6 @@ export default function StepPage({
       sessionType={session.type}
       currentStepKey={currentStepDef.key}
       currentStepIndex={stepIndex}
-      stepData={stepData}
-      saveStepData={saveStepData}
-      refreshStepData={refreshStepData}
     >
       <WizardLayout
         sessionId={id}
@@ -184,21 +112,11 @@ export default function StepPage({
         }}
         onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
         onStepClick={navigate}
-        saving={saving}
         hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing"}
         backHref={`/projects/${session.projectId}`}
         memoriaHref={`/design-sessions/${id}/memoria`}
       >
-        {stepDataLoaded ? (
-          <StepContent
-            stepKey={currentStepDef.key}
-            sessionId={id}
-            data={stepData}
-            onChange={saveStepData}
-          />
-        ) : (
-          <div className="p-6 text-muted-foreground">Carregando dados...</div>
-        )}
+        <StepContent stepKey={currentStepDef.key} sessionId={id} />
       </WizardLayout>
     </DesignSessionProvider>
     </div>
@@ -210,13 +128,9 @@ export default function StepPage({
 function StepContent({
   stepKey,
   sessionId,
-  data,
-  onChange,
 }: {
   stepKey: string;
   sessionId: string;
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
 }) {
   switch (stepKey) {
     case "pre_work":
