@@ -910,19 +910,40 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   );
 
   useEffect(() => {
-    const stepKeys = ["product_vision", "scope_definition", "personas_journeys", "brainstorm", "risks_gaps", "prioritization", "technical_specs", "hypotheses"];
-    Promise.all(
-      stepKeys.map((key) =>
-        fetch(`/api/design-sessions/${sessionId}/steps/${key}`)
-          .then((r) => r.json())
-          .then((r) => ({ key, data: r.data || {} })),
-      ),
-    ).then((results) => {
-      const map: Record<string, Record<string, unknown>> = {};
-      for (const r of results) map[r.key] = r.data;
-      setAllData(map);
-      setLoading(false);
-    });
+    fetch(`/api/design-sessions/${sessionId}/full`)
+      .then((r) => r.json())
+      .then((full) => {
+        // Reconstruct the per-step shape that BriefingSheet expects, sourcing
+        // from the normalized tables instead of the legacy step_data JSON.
+        const scope = full.scope as
+          | {
+              inScope?: unknown[];
+              outOfScope?: unknown[];
+              does?: unknown[];
+              doesNot?: unknown[];
+            }
+          | null;
+        const map: Record<string, Record<string, unknown>> = {
+          product_vision: (full.productVision ?? {}) as Record<string, unknown>,
+          scope_definition: scope
+            ? {
+                is: scope.inScope ?? [],
+                isNot: scope.outOfScope ?? [],
+                does: scope.does ?? [],
+                doesNot: scope.doesNot ?? [],
+              }
+            : {},
+          personas_journeys: { personas: full.personas ?? [] },
+          brainstorm: { solutions: full.brainstormFeatures ?? [] },
+          risks_gaps: { risks: full.risks ?? [], gaps: full.gaps ?? [] },
+          prioritization: { items: full.priorityItems ?? [] },
+          technical_specs: (full.technicalSpecs ?? {}) as Record<string, unknown>,
+          hypotheses: { hypotheses: full.hypotheses ?? [] },
+        };
+        setAllData(map);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [sessionId]);
 
   if (loading) {
