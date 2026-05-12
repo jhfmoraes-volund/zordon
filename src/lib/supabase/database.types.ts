@@ -880,6 +880,75 @@ export type Database = {
           },
         ]
       }
+      DesignSessionBrainstormFeature: {
+        Row: {
+          archived: boolean
+          bucket: string | null
+          createdAt: string
+          howItSolves: string | null
+          id: string
+          keyScreens: string | null
+          moduleHint: string | null
+          orderIndex: number
+          painPointRef: string | null
+          sessionId: string
+          targetPersona: string | null
+          technicalNotes: string | null
+          title: string
+          updatedAt: string
+          userFlows: string | null
+        }
+        Insert: {
+          archived?: boolean
+          bucket?: string | null
+          createdAt?: string
+          howItSolves?: string | null
+          id: string
+          keyScreens?: string | null
+          moduleHint?: string | null
+          orderIndex?: number
+          painPointRef?: string | null
+          sessionId: string
+          targetPersona?: string | null
+          technicalNotes?: string | null
+          title: string
+          updatedAt?: string
+          userFlows?: string | null
+        }
+        Update: {
+          archived?: boolean
+          bucket?: string | null
+          createdAt?: string
+          howItSolves?: string | null
+          id?: string
+          keyScreens?: string | null
+          moduleHint?: string | null
+          orderIndex?: number
+          painPointRef?: string | null
+          sessionId?: string
+          targetPersona?: string | null
+          technicalNotes?: string | null
+          title?: string
+          updatedAt?: string
+          userFlows?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionBrainstormFeature_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionBrainstormFeature_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignSessionExportLog: {
         Row: {
           byteSize: number
@@ -949,6 +1018,114 @@ export type Database = {
           },
           {
             foreignKeyName: "DesignSessionExportLog_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionGap: {
+        Row: {
+          category: string | null
+          createdAt: string
+          id: string
+          mitigation: string | null
+          orderIndex: number
+          relatedFeature: string | null
+          sessionId: string
+          severity: string | null
+          text: string
+          updatedAt: string
+        }
+        Insert: {
+          category?: string | null
+          createdAt?: string
+          id?: string
+          mitigation?: string | null
+          orderIndex?: number
+          relatedFeature?: string | null
+          sessionId: string
+          severity?: string | null
+          text?: string
+          updatedAt?: string
+        }
+        Update: {
+          category?: string | null
+          createdAt?: string
+          id?: string
+          mitigation?: string | null
+          orderIndex?: number
+          relatedFeature?: string | null
+          sessionId?: string
+          severity?: string | null
+          text?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionGap_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionGap_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionHypothesis: {
+        Row: {
+          createdAt: string
+          evidence: string | null
+          expectedResult: string
+          hypothesis: string
+          id: string
+          indicator: string
+          orderIndex: number
+          sessionId: string
+          target: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          evidence?: string | null
+          expectedResult?: string
+          hypothesis?: string
+          id?: string
+          indicator?: string
+          orderIndex?: number
+          sessionId: string
+          target?: string
+          updatedAt?: string
+        }
+        Update: {
+          createdAt?: string
+          evidence?: string | null
+          expectedResult?: string
+          hypothesis?: string
+          id?: string
+          indicator?: string
+          orderIndex?: number
+          sessionId?: string
+          target?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionHypothesis_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionHypothesis_sessionId_fkey"
             columns: ["sessionId"]
             isOneToOne: false
             referencedRelation: "DesignSession"
@@ -1080,6 +1257,168 @@ export type Database = {
           },
         ]
       }
+      DesignSessionPersona: {
+        Row: {
+          asIsSteps: Json
+          context: string
+          createdAt: string
+          id: string
+          name: string
+          orderIndex: number
+          role: string
+          sessionId: string
+          toBeSteps: Json
+          updatedAt: string
+        }
+        Insert: {
+          asIsSteps?: Json
+          context?: string
+          createdAt?: string
+          id?: string
+          name?: string
+          orderIndex?: number
+          role?: string
+          sessionId: string
+          toBeSteps?: Json
+          updatedAt?: string
+        }
+        Update: {
+          asIsSteps?: Json
+          context?: string
+          createdAt?: string
+          id?: string
+          name?: string
+          orderIndex?: number
+          role?: string
+          sessionId?: string
+          toBeSteps?: Json
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionPersona_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionPersona_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionPriorityItem: {
+        Row: {
+          bucket: string
+          createdAt: string
+          howItSolves: string
+          id: string
+          keyScreens: string | null
+          orderIndex: number
+          painPointRef: string | null
+          sessionId: string
+          targetPersona: string
+          technicalNotes: string | null
+          title: string
+          updatedAt: string
+          userFlows: string | null
+        }
+        Insert: {
+          bucket?: string
+          createdAt?: string
+          howItSolves?: string
+          id?: string
+          keyScreens?: string | null
+          orderIndex?: number
+          painPointRef?: string | null
+          sessionId: string
+          targetPersona?: string
+          technicalNotes?: string | null
+          title?: string
+          updatedAt?: string
+          userFlows?: string | null
+        }
+        Update: {
+          bucket?: string
+          createdAt?: string
+          howItSolves?: string
+          id?: string
+          keyScreens?: string | null
+          orderIndex?: number
+          painPointRef?: string | null
+          sessionId?: string
+          targetPersona?: string
+          technicalNotes?: string | null
+          title?: string
+          updatedAt?: string
+          userFlows?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionPriorityItem_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionPriorityItem_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionProductVision: {
+        Row: {
+          consequences: string
+          impactMetrics: string
+          problem: string
+          sessionId: string
+          successVision: string
+          updatedAt: string
+          whoSuffers: string
+        }
+        Insert: {
+          consequences?: string
+          impactMetrics?: string
+          problem?: string
+          sessionId: string
+          successVision?: string
+          updatedAt?: string
+          whoSuffers?: string
+        }
+        Update: {
+          consequences?: string
+          impactMetrics?: string
+          problem?: string
+          sessionId?: string
+          successVision?: string
+          updatedAt?: string
+          whoSuffers?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionProductVision_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: true
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionProductVision_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: true
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignSessionResearch: {
         Row: {
           createdAt: string
@@ -1127,6 +1466,102 @@ export type Database = {
             foreignKeyName: "DesignSessionResearch_sessionId_fkey"
             columns: ["sessionId"]
             isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionRisk: {
+        Row: {
+          category: string
+          createdAt: string
+          id: string
+          mitigation: string | null
+          orderIndex: number
+          relatedFeature: string | null
+          sessionId: string
+          severity: string
+          text: string
+          updatedAt: string
+        }
+        Insert: {
+          category?: string
+          createdAt?: string
+          id?: string
+          mitigation?: string | null
+          orderIndex?: number
+          relatedFeature?: string | null
+          sessionId: string
+          severity?: string
+          text?: string
+          updatedAt?: string
+        }
+        Update: {
+          category?: string
+          createdAt?: string
+          id?: string
+          mitigation?: string | null
+          orderIndex?: number
+          relatedFeature?: string | null
+          sessionId?: string
+          severity?: string
+          text?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionRisk_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionRisk_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionScope: {
+        Row: {
+          does: Json
+          doesNot: Json
+          inScope: Json
+          outOfScope: Json
+          sessionId: string
+          updatedAt: string
+        }
+        Insert: {
+          does?: Json
+          doesNot?: Json
+          inScope?: Json
+          outOfScope?: Json
+          sessionId: string
+          updatedAt?: string
+        }
+        Update: {
+          does?: Json
+          doesNot?: Json
+          inScope?: Json
+          outOfScope?: Json
+          sessionId?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionScope_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: true
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionScope_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: true
             referencedRelation: "DesignSession"
             referencedColumns: ["id"]
           },
@@ -1200,6 +1635,120 @@ export type Database = {
           updatedAt?: string | null
         }
         Relationships: []
+      }
+      DesignSessionStepData_backup_20260512: {
+        Row: {
+          data: Json | null
+          id: string | null
+          sessionId: string | null
+          stepIndex: number | null
+          stepKey: string | null
+          updatedAt: string | null
+        }
+        Insert: {
+          data?: Json | null
+          id?: string | null
+          sessionId?: string | null
+          stepIndex?: number | null
+          stepKey?: string | null
+          updatedAt?: string | null
+        }
+        Update: {
+          data?: Json | null
+          id?: string | null
+          sessionId?: string | null
+          stepIndex?: number | null
+          stepKey?: string | null
+          updatedAt?: string | null
+        }
+        Relationships: []
+      }
+      DesignSessionStepNote: {
+        Row: {
+          createdAt: string
+          id: string
+          orderIndex: number
+          sessionId: string
+          stepKey: string
+          text: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          id?: string
+          orderIndex?: number
+          sessionId: string
+          stepKey: string
+          text?: string
+          updatedAt?: string
+        }
+        Update: {
+          createdAt?: string
+          id?: string
+          orderIndex?: number
+          sessionId?: string
+          stepKey?: string
+          text?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionStepNote_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionStepNote_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionTechnicalSpecs: {
+        Row: {
+          integrations: Json
+          performance: string
+          rules: Json
+          sessionId: string
+          stack: string
+          updatedAt: string
+        }
+        Insert: {
+          integrations?: Json
+          performance?: string
+          rules?: Json
+          sessionId: string
+          stack?: string
+          updatedAt?: string
+        }
+        Update: {
+          integrations?: Json
+          performance?: string
+          rules?: Json
+          sessionId?: string
+          stack?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionTechnicalSpecs_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: true
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTechnicalSpecs_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: true
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       DesignSessionTranscript: {
         Row: {
@@ -1368,20 +1917,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "Meeting_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_capacity_overview"
-            referencedColumns: ["sprintId"]
-          },
-          {
-            foreignKeyName: "Meeting_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_member_capacity"
-            referencedColumns: ["sprintId"]
           },
         ]
       }
@@ -1694,20 +2229,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "MeetingTaskAction_targetSprintId_fkey"
-            columns: ["targetSprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_capacity_overview"
-            referencedColumns: ["sprintId"]
-          },
-          {
-            foreignKeyName: "MeetingTaskAction_targetSprintId_fkey"
-            columns: ["targetSprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_member_capacity"
-            referencedColumns: ["sprintId"]
           },
           {
             foreignKeyName: "MeetingTaskAction_taskId_fkey"
@@ -2777,20 +3298,6 @@ export type Database = {
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "SprintDeploy_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_capacity_overview"
-            referencedColumns: ["sprintId"]
-          },
-          {
-            foreignKeyName: "SprintDeploy_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_member_capacity"
-            referencedColumns: ["sprintId"]
-          },
         ]
       }
       SprintMember: {
@@ -2850,20 +3357,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "SprintMember_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_capacity_overview"
-            referencedColumns: ["sprintId"]
-          },
-          {
-            foreignKeyName: "SprintMember_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_member_capacity"
-            referencedColumns: ["sprintId"]
           },
         ]
       }
@@ -2936,20 +3429,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "SprintRetrospective_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_capacity_overview"
-            referencedColumns: ["sprintId"]
-          },
-          {
-            foreignKeyName: "SprintRetrospective_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_member_capacity"
-            referencedColumns: ["sprintId"]
           },
         ]
       }
@@ -3046,10 +3525,13 @@ export type Database = {
           githubPrUrl: string | null
           id: string
           lastMergeError: string | null
+          layer: Database["public"]["Enums"]["TaskLayer"] | null
           mergeAttempts: number
           notes: string | null
+          personaScope: string | null
           priority: number
           projectId: string
+          qualityFlags: string[] | null
           reference: string | null
           scope: string
           sprintId: string | null
@@ -3076,10 +3558,13 @@ export type Database = {
           githubPrUrl?: string | null
           id?: string
           lastMergeError?: string | null
+          layer?: Database["public"]["Enums"]["TaskLayer"] | null
           mergeAttempts?: number
           notes?: string | null
+          personaScope?: string | null
           priority?: number
           projectId: string
+          qualityFlags?: string[] | null
           reference?: string | null
           scope?: string
           sprintId?: string | null
@@ -3106,10 +3591,13 @@ export type Database = {
           githubPrUrl?: string | null
           id?: string
           lastMergeError?: string | null
+          layer?: Database["public"]["Enums"]["TaskLayer"] | null
           mergeAttempts?: number
           notes?: string | null
+          personaScope?: string | null
           priority?: number
           projectId?: string
+          qualityFlags?: string[] | null
           reference?: string | null
           scope?: string
           sprintId?: string | null
@@ -3177,20 +3665,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "Task_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_capacity_overview"
-            referencedColumns: ["sprintId"]
-          },
-          {
-            foreignKeyName: "Task_sprintId_fkey"
-            columns: ["sprintId"]
-            isOneToOne: false
-            referencedRelation: "sprint_member_capacity"
-            referencedColumns: ["sprintId"]
-          },
-          {
             foreignKeyName: "Task_userStoryId_fkey"
             columns: ["userStoryId"]
             isOneToOne: false
@@ -3202,6 +3676,46 @@ export type Database = {
             columns: ["userStoryId"]
             isOneToOne: false
             referencedRelation: "UserStory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      TaskAcceptanceCriterion: {
+        Row: {
+          acceptanceCriterionId: string
+          createdAt: string
+          taskId: string
+        }
+        Insert: {
+          acceptanceCriterionId: string
+          createdAt?: string
+          taskId: string
+        }
+        Update: {
+          acceptanceCriterionId?: string
+          createdAt?: string
+          taskId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "TaskAcceptanceCriterion_acceptanceCriterionId_fkey"
+            columns: ["acceptanceCriterionId"]
+            isOneToOne: false
+            referencedRelation: "AcceptanceCriterion"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "TaskAcceptanceCriterion_acceptanceCriterionId_fkey"
+            columns: ["acceptanceCriterionId"]
+            isOneToOne: false
+            referencedRelation: "task_coverage_v"
+            referencedColumns: ["ac_id"]
+          },
+          {
+            foreignKeyName: "TaskAcceptanceCriterion_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "Task"
             referencedColumns: ["id"]
           },
         ]
@@ -4045,40 +4559,37 @@ export type Database = {
           projectId: string | null
           sprintId: string | null
         }
+        Relationships: []
+      }
+      task_coverage_v: {
+        Row: {
+          ac_id: string | null
+          ac_order: number | null
+          ac_preview: string | null
+          api_tasks: number | null
+          data_tasks: number | null
+          designSessionId: string | null
+          layers_covered: string[] | null
+          ops_tasks: number | null
+          realtime_tasks: number | null
+          story_ref: string | null
+          story_title: string | null
+          total_tasks: number | null
+          ui_tasks: number | null
+        }
         Relationships: [
           {
-            foreignKeyName: "ProjectMember_memberId_fkey"
-            columns: ["memberId"]
+            foreignKeyName: "UserStory_designSessionId_fkey"
+            columns: ["designSessionId"]
             isOneToOne: false
-            referencedRelation: "Member"
+            referencedRelation: "design_session_summary"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ProjectMember_memberId_fkey"
-            columns: ["memberId"]
+            foreignKeyName: "UserStory_designSessionId_fkey"
+            columns: ["designSessionId"]
             isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ProjectMember_memberId_fkey"
-            columns: ["memberId"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ProjectMember_memberId_fkey"
-            columns: ["memberId"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "Sprint_projectId_fkey"
-            columns: ["projectId"]
-            isOneToOne: false
-            referencedRelation: "Project"
+            referencedRelation: "DesignSession"
             referencedColumns: ["id"]
           },
         ]
@@ -4139,6 +4650,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      apply_sprint_suggestion: {
+        Args: { p_project_id: string; p_sprints: Json }
+        Returns: Json
+      }
       bulk_update_tasks: {
         Args: { p_actor_id: string; p_project_id: string; p_updates: Json }
         Returns: Json
@@ -4192,6 +4707,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      extract_module_hint: { Args: { p_title: string }; Returns: string }
       get_member_integration_secret: {
         Args: { p_member_id: string; p_provider: string }
         Returns: string
@@ -4298,7 +4814,7 @@ export type Database = {
       unassigned_active_task_count: { Args: never; Returns: number }
     }
     Enums: {
-      [_ in never]: never
+      TaskLayer: "DATA" | "API" | "REALTIME" | "UI" | "OPS"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4425,6 +4941,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      TaskLayer: ["DATA", "API", "REALTIME", "UI", "OPS"],
+    },
   },
 } as const

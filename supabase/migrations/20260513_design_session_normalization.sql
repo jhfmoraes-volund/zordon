@@ -181,9 +181,15 @@ END $$;
 -- ============================================================
 
 -- 3.1 step notes (genérico, todos os steps) — _notes é array [{id, text}]
+-- IDs legados podem ser nanoids do `genId()` da UI (não-UUID); só preservamos
+-- se já forem UUID válido, senão geramos um novo.
 INSERT INTO "DesignSessionStepNote" (id, "sessionId", "stepKey", text, "orderIndex", "createdAt", "updatedAt")
 SELECT
-  COALESCE((note->>'id')::uuid, gen_random_uuid()),
+  CASE
+    WHEN (note->>'id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN (note->>'id')::uuid
+    ELSE gen_random_uuid()
+  END,
   sd."sessionId"::uuid,
   sd."stepKey",
   COALESCE(note->>'text', ''),
@@ -224,9 +230,14 @@ WHERE "stepKey" = 'scope_definition'
 ON CONFLICT ("sessionId") DO NOTHING;
 
 -- 3.4 personas_journeys → explode data->'personas'
+-- IDs legados de UI são nanoids (ex: "8yzqk0u"), não UUIDs — gera novo se não casar.
 INSERT INTO "DesignSessionPersona" (id, "sessionId", name, role, context, "asIsSteps", "toBeSteps", "orderIndex", "createdAt", "updatedAt")
 SELECT
-  COALESCE((persona->>'id')::uuid, gen_random_uuid()),
+  CASE
+    WHEN (persona->>'id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN (persona->>'id')::uuid
+    ELSE gen_random_uuid()
+  END,
   sd."sessionId"::uuid,
   COALESCE(persona->>'name', ''),
   COALESCE(persona->>'role', ''),
