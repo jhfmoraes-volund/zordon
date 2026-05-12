@@ -15,7 +15,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
-  Loader2,
   Menu,
 } from "lucide-react";
 import type { StepDef } from "@/lib/design-session-steps";
@@ -34,7 +33,6 @@ export function WizardLayout({
   onNext,
   onPrevious,
   onStepClick,
-  saving,
   hideSidePanels,
   backHref,
   memoriaHref,
@@ -48,7 +46,6 @@ export function WizardLayout({
   onNext: () => void;
   onPrevious: () => void;
   onStepClick: (index: number) => void;
-  saving?: boolean;
   hideSidePanels?: boolean;
   backHref?: string;
   memoriaHref?: string;
@@ -170,15 +167,6 @@ export function WizardLayout({
                 <BookOpen className="h-4 w-4 sm:mr-1" />
                 <span className="hidden sm:inline">Memória</span>
               </Button>
-            )}
-            {saving !== undefined && (
-              <span className="text-xs text-muted-foreground hidden sm:flex items-center gap-1">
-                {saving ? (
-                  <><Loader2 className="h-3 w-3 animate-spin" /> Salvando...</>
-                ) : (
-                  "Salvo"
-                )}
-              </span>
             )}
             <Button
               variant="outline"

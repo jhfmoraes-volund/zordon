@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useCallback, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
 interface DesignSessionContextValue {
   sessionId: string;
@@ -8,9 +8,6 @@ interface DesignSessionContextValue {
   sessionType: string;
   currentStepKey: string;
   currentStepIndex: number;
-  stepData: Record<string, unknown>;
-  saveStepData: (data: Record<string, unknown>) => void;
-  refreshStepData: () => Promise<void>;
 }
 
 const DesignSessionContext = createContext<DesignSessionContextValue | null>(null);
@@ -21,9 +18,6 @@ export function DesignSessionProvider({
   sessionType,
   currentStepKey,
   currentStepIndex,
-  stepData,
-  saveStepData,
-  refreshStepData,
   children,
 }: DesignSessionContextValue & { children: ReactNode }) {
   return (
@@ -34,9 +28,6 @@ export function DesignSessionProvider({
         sessionType,
         currentStepKey,
         currentStepIndex,
-        stepData,
-        saveStepData,
-        refreshStepData,
       }}
     >
       {children}

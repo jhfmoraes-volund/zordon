@@ -267,9 +267,9 @@ ${blocks}
 
 // ─── Briefing section — 4 modes (Module Discovery / Story Tree / Story Detail / Task Breakdown) ──
 //
-// The briefing step persists `subPhase` in DesignSessionStepData.data. Vocabulary
-// lives in @/lib/design-sessions/constants — single source of truth shared with
-// the API route (Zod) and the UI.
+// The briefing step persists `subPhase` in DesignSession.briefingSubPhase.
+// Vocabulary lives in @/lib/design-sessions/constants — single source of truth
+// shared with the API route (Zod) and the UI.
 //
 //   - "module_discovery" (default): map product modules from brainstorm
 //   - "story_tree"                 : generate Module → Story skeleton (no AC/tasks)

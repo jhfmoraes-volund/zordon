@@ -61,8 +61,13 @@ export function useStepNotes(sessionId: string, stepKey: StepKey) {
       {
         errorLabel: "Falha ao criar anotação",
         retry: false,
-        reconcile: (prev, result) =>
-          prev.map((n) => (n.id === tempId ? (result as StickyNote) : n)),
+        reconcile: (prev, result) => {
+          const real = result as StickyNote;
+          const hasTemp = prev.some((n) => n.id === tempId);
+          if (hasTemp) return prev.map((n) => (n.id === tempId ? real : n));
+          if (prev.some((n) => n.id === real.id)) return prev;
+          return [...prev, real];
+        },
       },
     );
   }, [sessionId, stepKey, mutate, collection.items.length]);

@@ -41,7 +41,7 @@ export function BriefingTaskChat({
 
   // Canal "web" unificado: mesmo thread dos outros steps. Vitor herda contexto.
   // Visual fica limpo na entrada do briefing porque o GET filtra por
-  // `allFromBriefing=1` (só mensagens >= DesignSessionStepData.briefing.firstMessageAt).
+  // `allFromBriefing=1` (só mensagens >= DesignSession.briefingFirstMessageAt).
   // Histórico anterior é carregado automaticamente conforme o usuário scrolla pro topo.
   const transport = useMemo(
     () =>

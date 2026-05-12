@@ -3,12 +3,12 @@
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { WizardLayout } from "@/components/design-session/wizard-layout";
-import { PersonaJourneyBoard, Persona, JourneyStep } from "@/components/design-session/persona-journey-board";
-import { SolutionCardBoard, SolutionCard } from "@/components/design-session/solution-card-board";
-import { HypothesisBoard, Hypothesis } from "@/components/design-session/hypothesis-board";
-import { PriorityBoard, PrioritizedItem, PriorityBucket } from "@/components/design-session/priority-board";
-import { PostItBoard, PostItItem, PostItSection } from "@/components/design-session/post-it-board";
-import { RiskGapBoard, type Gap, type Risk } from "@/components/design-session/risk-gap-board";
+import { PersonaJourneyBoard, Persona } from "@/components/design-session/persona-journey-board";
+import { SolutionCardBoard } from "@/components/design-session/solution-card-board";
+import { HypothesisBoard } from "@/components/design-session/hypothesis-board";
+import { PriorityBoard } from "@/components/design-session/priority-board";
+import { PostItBoard, PostItSection } from "@/components/design-session/post-it-board";
+import { RiskGapBoard } from "@/components/design-session/risk-gap-board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
 import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
 import {
@@ -28,6 +28,14 @@ import { getStepsForSession, StepDef } from "@/lib/design-session-steps";
 import { DesignSessionProvider } from "@/contexts/design-session-context";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { genId } from "@/lib/utils";
+import { useHypotheses } from "@/hooks/design-session/use-hypotheses";
+import { useProductVision } from "@/hooks/design-session/use-product-vision";
+import { useScope, type ScopeBucket } from "@/hooks/design-session/use-scope";
+import { useRisksGaps } from "@/hooks/design-session/use-risks-gaps";
+import { usePersonas } from "@/hooks/design-session/use-personas";
+import { useTechnicalSpecs } from "@/hooks/design-session/use-technical-specs";
+import { useBrainstormFeatures } from "@/hooks/design-session/use-brainstorm-features";
+import { usePriorityItems } from "@/hooks/design-session/use-priority-items";
 
 type Session = {
   id: string;
@@ -50,10 +58,6 @@ export default function StepPage({
   const router = useRouter();
 
   const [session, setSession] = useState<Session | null>(null);
-  const [stepData, setStepData] = useState<Record<string, unknown>>({});
-  const [stepDataLoaded, setStepDataLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const steps = session ? getStepsForSession(session) : [];
   const currentStepDef = steps[stepIndex] as StepDef | undefined;
@@ -64,71 +68,6 @@ export default function StepPage({
       .then((r) => r.json())
       .then(setSession);
   }, [id]);
-
-  // Load step data
-  useEffect(() => {
-    if (!currentStepDef) return;
-    setStepDataLoaded(false);
-    fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`)
-      .then((r) => r.json())
-      .then((r) => {
-        const { _notes: _ignored, ...rest } = (r.data || {}) as Record<string, unknown>;
-        setStepData(rest);
-        setStepDataLoaded(true);
-      });
-  }, [id, currentStepDef?.key]);
-
-  // Persist step data with debounce. Sticky notes live in their own table now
-  // (DesignSessionStepNote, via useStepNotes inside WizardLayout) and are no
-  // longer round-tripped through the legacy JSON.
-  const stepDataRef = useRef(stepData);
-  stepDataRef.current = stepData;
-
-  const debouncedSave = useCallback(
-    () => {
-      if (!currentStepDef) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(async () => {
-        setSaving(true);
-        try {
-          await fetchOrThrow(
-            `/api/design-sessions/${id}/steps/${currentStepDef.key}`,
-            {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                stepIndex,
-                data: stepDataRef.current,
-              }),
-            },
-          );
-        } catch (e) {
-          showErrorToast(e, { label: "Falha ao salvar progresso" });
-        } finally {
-          setSaving(false);
-        }
-      }, 500);
-    },
-    [id, stepIndex, currentStepDef?.key]
-  );
-
-  const saveStepData = useCallback(
-    (data: Record<string, unknown>) => {
-      setStepData(data);
-      stepDataRef.current = data;
-      debouncedSave();
-    },
-    [debouncedSave]
-  );
-
-  const refreshStepData = useCallback(async () => {
-    if (!currentStepDef) return;
-    const r = await fetch(`/api/design-sessions/${id}/steps/${currentStepDef.key}`);
-    const json = await r.json();
-    const { _notes: _ignored, ...rest } = (json.data || {}) as Record<string, unknown>;
-    setStepData(rest);
-    stepDataRef.current = rest;
-  }, [id, currentStepDef?.key]);
 
   const navigate = (targetStep: number) => {
     // Só promove draft → in_progress no primeiro toque. Nunca toca em
@@ -159,9 +98,6 @@ export default function StepPage({
       sessionType={session.type}
       currentStepKey={currentStepDef.key}
       currentStepIndex={stepIndex}
-      stepData={stepData}
-      saveStepData={saveStepData}
-      refreshStepData={refreshStepData}
     >
       <WizardLayout
         sessionId={id}
@@ -176,21 +112,11 @@ export default function StepPage({
         }}
         onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
         onStepClick={navigate}
-        saving={saving}
         hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing"}
         backHref={`/projects/${session.projectId}`}
         memoriaHref={`/design-sessions/${id}/memoria`}
       >
-        {stepDataLoaded ? (
-          <StepContent
-            stepKey={currentStepDef.key}
-            sessionId={id}
-            data={stepData}
-            onChange={saveStepData}
-          />
-        ) : (
-          <div className="p-6 text-muted-foreground">Carregando dados...</div>
-        )}
+        <StepContent stepKey={currentStepDef.key} sessionId={id} />
       </WizardLayout>
     </DesignSessionProvider>
     </div>
@@ -202,33 +128,29 @@ export default function StepPage({
 function StepContent({
   stepKey,
   sessionId,
-  data,
-  onChange,
 }: {
   stepKey: string;
   sessionId: string;
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
 }) {
   switch (stepKey) {
     case "pre_work":
-      return <PreWorkStep sessionId={sessionId} data={data} onChange={onChange} />;
+      return <PreWorkStep sessionId={sessionId} />;
     case "product_vision":
-      return <ProductVisionStep data={data} onChange={onChange} />;
+      return <ProductVisionStep sessionId={sessionId} />;
     case "scope_definition":
-      return <ScopeDefinitionStep data={data} onChange={onChange} />;
+      return <ScopeDefinitionStep sessionId={sessionId} />;
     case "personas_journeys":
-      return <PersonasJourneysStep data={data} onChange={onChange} />;
+      return <PersonasJourneysStep sessionId={sessionId} />;
     case "brainstorm":
-      return <BrainstormStep data={data} onChange={onChange} sessionId={sessionId} />;
+      return <BrainstormStep sessionId={sessionId} />;
     case "risks_gaps":
-      return <RisksGapsStep data={data} onChange={onChange} sessionId={sessionId} />;
+      return <RisksGapsStep sessionId={sessionId} />;
     case "prioritization":
-      return <PrioritizationStep data={data} onChange={onChange} sessionId={sessionId} />;
+      return <PrioritizationStep sessionId={sessionId} />;
     case "technical_specs":
-      return <TechnicalSpecsStep data={data} onChange={onChange} />;
+      return <TechnicalSpecsStep sessionId={sessionId} />;
     case "hypotheses":
-      return <HypothesesStep data={data} onChange={onChange} />;
+      return <HypothesesStep sessionId={sessionId} />;
     case "briefing":
       return <BriefingStep sessionId={sessionId} />;
     // CI steps
@@ -251,15 +173,12 @@ function StepContent({
 
 // ─── Step 0: Visao do Produto ─────────────────────────────
 
-function ProductVisionStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const get = (key: string) => (data[key] as string) || "";
-  const set = (key: string, value: string) => onChange({ ...data, [key]: value });
+function ProductVisionStep({ sessionId }: { sessionId: string }) {
+  const { value, loaded, updateField } = useProductVision(sessionId);
+
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando visão de produto...</div>;
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -276,8 +195,8 @@ function ProductVisionStep({
               <Label>Qual o problema central?</Label>
               <Textarea
                 placeholder="Descreva o problema que este produto resolve..."
-                value={get("problem")}
-                onChange={(e) => set("problem", e.target.value)}
+                value={value.problem}
+                onChange={(e) => updateField("problem", e.target.value)}
                 rows={3}
               />
             </div>
@@ -285,8 +204,8 @@ function ProductVisionStep({
               <Label>Quem sofre com esse problema?</Label>
               <Textarea
                 placeholder="Ex: Gestores de vendas em empresas B2B de medio porte"
-                value={get("whoSuffers")}
-                onChange={(e) => set("whoSuffers", e.target.value)}
+                value={value.whoSuffers}
+                onChange={(e) => updateField("whoSuffers", e.target.value)}
                 rows={2}
               />
             </div>
@@ -294,8 +213,8 @@ function ProductVisionStep({
               <Label>O que acontece se nao resolver?</Label>
               <Textarea
                 placeholder="Consequencias de manter o status quo..."
-                value={get("consequences")}
-                onChange={(e) => set("consequences", e.target.value)}
+                value={value.consequences}
+                onChange={(e) => updateField("consequences", e.target.value)}
                 rows={2}
               />
             </div>
@@ -316,8 +235,8 @@ function ProductVisionStep({
               <Label>Como e o sucesso?</Label>
               <Textarea
                 placeholder="Descreva o cenario ideal quando o produto estiver funcionando..."
-                value={get("successVision")}
-                onChange={(e) => set("successVision", e.target.value)}
+                value={value.successVision}
+                onChange={(e) => updateField("successVision", e.target.value)}
                 rows={3}
               />
             </div>
@@ -325,8 +244,8 @@ function ProductVisionStep({
               <Label>Metricas de impacto</Label>
               <Textarea
                 placeholder="Como vamos medir que deu certo? Ex: reducao de 50% no tempo de resposta a leads"
-                value={get("impactMetrics")}
-                onChange={(e) => set("impactMetrics", e.target.value)}
+                value={value.impactMetrics}
+                onChange={(e) => updateField("impactMetrics", e.target.value)}
                 rows={2}
               />
             </div>
@@ -341,28 +260,24 @@ function ProductVisionStep({
 // ─── Step: E / Nao E / Faz / Nao Faz ──────────────────────
 
 const SCOPE_BUCKETS = [
-  { key: "is", title: "É", tone: "emerald" },
-  { key: "isNot", title: "NÃO É", tone: "rose" },
+  { key: "inScope", title: "É", tone: "emerald" },
+  { key: "outOfScope", title: "NÃO É", tone: "rose" },
   { key: "does", title: "FAZ", tone: "sky" },
   { key: "doesNot", title: "NÃO FAZ", tone: "amber" },
 ] as const;
 
-type ScopeBucketKey = (typeof SCOPE_BUCKETS)[number]["key"];
+function ScopeDefinitionStep({ sessionId }: { sessionId: string }) {
+  const { value, loaded, addItem, updateItem, deleteItem } = useScope(sessionId);
 
-function ScopeDefinitionStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const getItems = (key: ScopeBucketKey) => (data[key] as PostItItem[]) || [];
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando escopo...</div>;
+  }
 
   const sections: PostItSection[] = SCOPE_BUCKETS.map((b) => ({
     key: b.key,
     title: b.title,
     tone: b.tone,
-    items: getItems(b.key),
+    items: value[b.key],
   }));
 
   return (
@@ -381,21 +296,15 @@ function ScopeDefinitionStep({
       <PostItBoard
         sections={sections}
         columns={2}
-        onAdd={(sectionKey, text) => {
-          const key = sectionKey as ScopeBucketKey;
-          onChange({ ...data, [key]: [...getItems(key), { id: genId(), text }] });
-        }}
-        onUpdate={(sectionKey, itemId, text) => {
-          const key = sectionKey as ScopeBucketKey;
-          onChange({
-            ...data,
-            [key]: getItems(key).map((i) => (i.id === itemId ? { ...i, text } : i)),
-          });
-        }}
-        onDelete={(sectionKey, itemId) => {
-          const key = sectionKey as ScopeBucketKey;
-          onChange({ ...data, [key]: getItems(key).filter((i) => i.id !== itemId) });
-        }}
+        onAdd={(sectionKey, text) =>
+          addItem(sectionKey as ScopeBucket, { id: genId(), text })
+        }
+        onUpdate={(sectionKey, itemId, text) =>
+          updateItem(sectionKey as ScopeBucket, itemId, text)
+        }
+        onDelete={(sectionKey, itemId) =>
+          deleteItem(sectionKey as ScopeBucket, itemId)
+        }
       />
     </div>
   );
@@ -403,23 +312,23 @@ function ScopeDefinitionStep({
 
 // ─── Step 1: Personas & Jornadas ──────────────────────────
 
-function PersonasJourneysStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const personas = ((data.personas as Persona[]) || []).map((p) => ({
-    ...p,
-    id: p.id || genId(),
-    asIsSteps: (p.asIsSteps || []).map((s) => ({ ...s, id: s.id || genId() })),
-    toBeSteps: (p.toBeSteps || []).map((s) => ({ ...s, id: s.id || genId() })),
-  }));
+function PersonasJourneysStep({ sessionId }: { sessionId: string }) {
+  const { personas, loaded, addPersona, updatePersona, deletePersona } =
+    usePersonas(sessionId);
 
-  const updatePersonas = (updated: Persona[]) => {
-    onChange({ ...data, personas: updated });
-  };
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando personas...</div>;
+  }
+
+  // Map row → Persona shape used by the board.
+  const boardPersonas: Persona[] = personas.map((p) => ({
+    id: p.id,
+    name: p.name,
+    role: p.role,
+    context: p.context,
+    asIsSteps: p.asIsSteps,
+    toBeSteps: p.toBeSteps,
+  }));
 
   return (
     <div className="space-y-4">
@@ -427,46 +336,45 @@ function PersonasJourneysStep({
         Defina as personas que sofrem com o problema. Para cada uma, mapeie a jornada atual (AS-IS) e a jornada futura (TO-BE).
       </p>
       <PersonaJourneyBoard
-        personas={personas}
-        onAdd={(persona) => updatePersonas([...personas, persona])}
-        onUpdate={(personaId, updates) =>
-          updatePersonas(personas.map((p) => (p.id === personaId ? { ...p, ...updates } : p)))
+        personas={boardPersonas}
+        onAdd={(persona) =>
+          addPersona({
+            name: persona.name,
+            role: persona.role,
+            context: persona.context,
+            asIsSteps: persona.asIsSteps,
+            toBeSteps: persona.toBeSteps,
+          })
         }
-        onDelete={(personaId) => updatePersonas(personas.filter((p) => p.id !== personaId))}
+        onUpdate={(personaId, updates) =>
+          updatePersona(personaId, {
+            ...(updates.name !== undefined && { name: updates.name }),
+            ...(updates.role !== undefined && { role: updates.role }),
+            ...(updates.context !== undefined && { context: updates.context }),
+            ...(updates.asIsSteps !== undefined && { asIsSteps: updates.asIsSteps }),
+            ...(updates.toBeSteps !== undefined && { toBeSteps: updates.toBeSteps }),
+          })
+        }
+        onDelete={(personaId) => deletePersona(personaId)}
         onAddJourneyStep={(personaId, type, step) => {
-          updatePersonas(
-            personas.map((p) => {
-              if (p.id !== personaId) return p;
-              const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
-              return { ...p, [key]: [...p[key], step] };
-            })
-          );
+          const p = personas.find((x) => x.id === personaId);
+          if (!p) return;
+          const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
+          updatePersona(personaId, { [key]: [...p[key], step] });
         }}
         onUpdateJourneyStep={(personaId, type, stepId, updates) => {
-          updatePersonas(
-            personas.map((p) => {
-              if (p.id !== personaId) return p;
-              const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
-              return {
-                ...p,
-                [key]: p[key].map((s: JourneyStep) =>
-                  s.id === stepId ? { ...s, ...updates } : s
-                ),
-              };
-            })
-          );
+          const p = personas.find((x) => x.id === personaId);
+          if (!p) return;
+          const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
+          updatePersona(personaId, {
+            [key]: p[key].map((s) => (s.id === stepId ? { ...s, ...updates } : s)),
+          });
         }}
         onDeleteJourneyStep={(personaId, type, stepId) => {
-          updatePersonas(
-            personas.map((p) => {
-              if (p.id !== personaId) return p;
-              const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
-              return {
-                ...p,
-                [key]: p[key].filter((s: JourneyStep) => s.id !== stepId),
-              };
-            })
-          );
+          const p = personas.find((x) => x.id === personaId);
+          if (!p) return;
+          const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
+          updatePersona(personaId, { [key]: p[key].filter((s) => s.id !== stepId) });
         }}
       />
     </div>
@@ -475,28 +383,25 @@ function PersonasJourneysStep({
 
 // ─── Step 2: Brainstorm de Solucoes ───────────────────────
 
-function BrainstormStep({
-  data,
-  onChange,
-  sessionId,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-  sessionId: string;
-}) {
-  const solutions = (data.solutions as SolutionCard[]) || [];
+function BrainstormStep({ sessionId }: { sessionId: string }) {
+  const { features, loaded, addFeature, updateFeature, deleteFeature } =
+    useBrainstormFeatures(sessionId);
   const [personaNames, setPersonaNames] = useState<string[]>([]);
 
-  // Load persona names from previous step
+  // Load persona names from the personas table (replaces legacy /steps/personas_journeys).
   useEffect(() => {
-    fetch(`/api/design-sessions/${sessionId}/steps/personas_journeys`)
+    fetch(`/api/design-sessions/${sessionId}/personas`)
       .then((r) => r.json())
       .then((r) => {
-        const personas = (r.data?.personas as Persona[]) || [];
+        const personas = (r.personas as { name: string }[]) || [];
         setPersonaNames(personas.map((p) => p.name));
       })
       .catch(() => {});
   }, [sessionId]);
+
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando ideias...</div>;
+  }
 
   return (
     <div className="space-y-4">
@@ -504,18 +409,51 @@ function BrainstormStep({
         Hora de gerar ideias sem filtro. Cada solution card descreve uma ideia, como ela resolve o problema e pra qual persona.
       </p>
       <SolutionCardBoard
-        solutions={solutions}
+        solutions={features.map((f) => ({
+          id: f.id,
+          title: f.title,
+          howItSolves: f.howItSolves ?? "",
+          targetPersona: f.targetPersona ?? "",
+          keyScreens: f.keyScreens ?? undefined,
+          userFlows: f.userFlows ?? undefined,
+          painPointRef: f.painPointRef ?? undefined,
+          technicalNotes: f.technicalNotes ?? undefined,
+          archived: f.archived,
+        }))}
         personaNames={personaNames}
-        onAdd={(sol) => onChange({ ...data, solutions: [...solutions, sol] })}
-        onUpdate={(id, updates) =>
-          onChange({
-            ...data,
-            solutions: solutions.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+        onAdd={(sol) =>
+          addFeature({
+            title: sol.title,
+            howItSolves: sol.howItSolves,
+            targetPersona: sol.targetPersona,
+            keyScreens: sol.keyScreens ?? null,
+            userFlows: sol.userFlows ?? null,
+            painPointRef: sol.painPointRef ?? null,
+            technicalNotes: sol.technicalNotes ?? null,
+            archived: sol.archived ?? false,
           })
         }
-        onDelete={(id) =>
-          onChange({ ...data, solutions: solutions.filter((s) => s.id !== id) })
+        onUpdate={(id, updates) =>
+          updateFeature(id, {
+            ...(updates.title !== undefined && { title: updates.title }),
+            ...(updates.howItSolves !== undefined && { howItSolves: updates.howItSolves }),
+            ...(updates.targetPersona !== undefined && {
+              targetPersona: updates.targetPersona,
+            }),
+            ...(updates.keyScreens !== undefined && {
+              keyScreens: updates.keyScreens ?? null,
+            }),
+            ...(updates.userFlows !== undefined && { userFlows: updates.userFlows ?? null }),
+            ...(updates.painPointRef !== undefined && {
+              painPointRef: updates.painPointRef ?? null,
+            }),
+            ...(updates.technicalNotes !== undefined && {
+              technicalNotes: updates.technicalNotes ?? null,
+            }),
+            ...(updates.archived !== undefined && { archived: updates.archived }),
+          })
         }
+        onDelete={(id) => deleteFeature(id)}
       />
     </div>
   );
@@ -523,30 +461,35 @@ function BrainstormStep({
 
 // ─── Step: Riscos & Lacunas ───────────────────────────────
 
-function RisksGapsStep({
-  data,
-  onChange,
-  sessionId,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-  sessionId: string;
-}) {
-  const gaps = (data.gaps as Gap[]) || [];
-  const risks = (data.risks as Risk[]) || [];
+function RisksGapsStep({ sessionId }: { sessionId: string }) {
+  const {
+    risks,
+    gaps,
+    loaded,
+    addRisk,
+    updateRisk,
+    deleteRisk,
+    addGap,
+    updateGap,
+    deleteGap,
+  } = useRisksGaps(sessionId);
   const [features, setFeatures] = useState<{ id: string; title: string }[]>([]);
 
   useEffect(() => {
-    fetch(`/api/design-sessions/${sessionId}/steps/brainstorm`)
+    fetch(`/api/design-sessions/${sessionId}/brainstorm-features`)
       .then((r) => r.json())
       .then((r) => {
-        const solutions = ((r.data?.solutions as SolutionCard[]) || []).filter(
+        const list = ((r.features as { id: string; title: string; archived: boolean }[]) || []).filter(
           (s) => !s.archived,
         );
-        setFeatures(solutions.map((s) => ({ id: s.id, title: s.title })));
+        setFeatures(list.map((s) => ({ id: s.id, title: s.title })));
       })
       .catch(() => {});
   }, [sessionId]);
+
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando riscos e gaps...</div>;
+  }
 
   return (
     <div className="space-y-4">
@@ -555,29 +498,69 @@ function RisksGapsStep({
         Use isso como criterio na priorizacao.
       </p>
       <RiskGapBoard
-        gaps={gaps}
-        risks={risks}
+        gaps={gaps.map((g) => ({
+          id: g.id,
+          text: g.text,
+          category: g.category ?? undefined,
+          severity: g.severity ?? undefined,
+          relatedFeature: g.relatedFeature ?? undefined,
+          mitigation: g.mitigation ?? undefined,
+        }))}
+        risks={risks.map((r) => ({
+          id: r.id,
+          text: r.text,
+          category: r.category,
+          severity: r.severity,
+          relatedFeature: r.relatedFeature ?? undefined,
+          mitigation: r.mitigation ?? undefined,
+        }))}
         features={features}
-        onAddGap={(gap) => onChange({ ...data, gaps: [...gaps, gap] })}
+        onAddGap={(gap) =>
+          addGap({
+            text: gap.text,
+            category: gap.category ?? null,
+            severity: gap.severity ?? null,
+            relatedFeature: gap.relatedFeature ?? null,
+            mitigation: gap.mitigation ?? null,
+          })
+        }
         onUpdateGap={(id, updates) =>
-          onChange({
-            ...data,
-            gaps: gaps.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+          updateGap(id, {
+            ...(updates.text !== undefined && { text: updates.text }),
+            ...(updates.category !== undefined && { category: updates.category ?? null }),
+            ...(updates.severity !== undefined && { severity: updates.severity ?? null }),
+            ...(updates.relatedFeature !== undefined && {
+              relatedFeature: updates.relatedFeature ?? null,
+            }),
+            ...(updates.mitigation !== undefined && {
+              mitigation: updates.mitigation ?? null,
+            }),
           })
         }
-        onDeleteGap={(id) =>
-          onChange({ ...data, gaps: gaps.filter((g) => g.id !== id) })
+        onDeleteGap={(id) => deleteGap(id)}
+        onAddRisk={(risk) =>
+          addRisk({
+            text: risk.text,
+            category: risk.category,
+            severity: risk.severity,
+            relatedFeature: risk.relatedFeature ?? null,
+            mitigation: risk.mitigation ?? null,
+          })
         }
-        onAddRisk={(risk) => onChange({ ...data, risks: [...risks, risk] })}
         onUpdateRisk={(id, updates) =>
-          onChange({
-            ...data,
-            risks: risks.map((r) => (r.id === id ? { ...r, ...updates } : r)),
+          updateRisk(id, {
+            ...(updates.text !== undefined && { text: updates.text }),
+            ...(updates.category !== undefined && { category: updates.category }),
+            ...(updates.severity !== undefined && { severity: updates.severity }),
+            ...(updates.relatedFeature !== undefined && {
+              relatedFeature: updates.relatedFeature ?? null,
+            }),
+            ...(updates.mitigation !== undefined && {
+              mitigation: updates.mitigation ?? null,
+            }),
           })
         }
-        onDeleteRisk={(id) =>
-          onChange({ ...data, risks: risks.filter((r) => r.id !== id) })
-        }
+        onDeleteRisk={(id) => deleteRisk(id)}
       />
     </div>
   );
@@ -585,45 +568,12 @@ function RisksGapsStep({
 
 // ─── Step 3: Priorizacao & Escopo ─────────────────────────
 
-function PrioritizationStep({
-  data,
-  onChange,
-  sessionId,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-  sessionId: string;
-}) {
-  const items = (data.items as PrioritizedItem[]) || [];
-  const [loaded, setLoaded] = useState(false);
+function PrioritizationStep({ sessionId }: { sessionId: string }) {
+  const { items, loaded, updateItem, deleteItem } = usePriorityItems(sessionId);
 
-  // On first load, pull solutions from brainstorm step and seed as unclassified MVP items
-  useEffect(() => {
-    if (loaded || items.length > 0) return;
-    fetch(`/api/design-sessions/${sessionId}/steps/brainstorm`)
-      .then((r) => r.json())
-      .then((r) => {
-        const solutions = ((r.data?.solutions as SolutionCard[]) || []).filter(
-          (s) => !s.archived,
-        );
-        if (solutions.length > 0) {
-          const seeded: PrioritizedItem[] = solutions.map((s) => ({
-            id: s.id,
-            title: s.title,
-            howItSolves: s.howItSolves,
-            targetPersona: s.targetPersona,
-            bucket: "mvp" as PriorityBucket,
-            keyScreens: s.keyScreens,
-            userFlows: s.userFlows,
-            painPointRef: s.painPointRef,
-            technicalNotes: s.technicalNotes,
-          }));
-          onChange({ ...data, items: seeded });
-        }
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-  }, [sessionId, loaded, items.length]);
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando priorização...</div>;
+  }
 
   return (
     <div className="space-y-4">
@@ -632,16 +582,19 @@ function PrioritizationStep({
         Todas comecam no MVP — mova o que nao e essencial.
       </p>
       <PriorityBoard
-        items={items}
-        onMove={(itemId, toBucket) =>
-          onChange({
-            ...data,
-            items: items.map((i) => (i.id === itemId ? { ...i, bucket: toBucket } : i)),
-          })
-        }
-        onDelete={(itemId) =>
-          onChange({ ...data, items: items.filter((i) => i.id !== itemId) })
-        }
+        items={items.map((i) => ({
+          id: i.id,
+          title: i.title,
+          howItSolves: i.howItSolves,
+          targetPersona: i.targetPersona,
+          bucket: i.bucket,
+          keyScreens: i.keyScreens ?? undefined,
+          userFlows: i.userFlows ?? undefined,
+          painPointRef: i.painPointRef ?? undefined,
+          technicalNotes: i.technicalNotes ?? undefined,
+        }))}
+        onMove={(itemId, toBucket) => updateItem(itemId, { bucket: toBucket })}
+        onDelete={(itemId) => deleteItem(itemId)}
       />
     </div>
   );
@@ -651,64 +604,63 @@ function PrioritizationStep({
 
 // ─── Step 5: Hipoteses & Metricas ────────────────────────
 
-function HypothesesStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const hypotheses = (data.hypotheses as Hypothesis[]) || [];
+function HypothesesStep({ sessionId }: { sessionId: string }) {
+  const { hypotheses, loaded, addHypothesis, updateHypothesis, deleteHypothesis } =
+    useHypotheses(sessionId);
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Defina as hipoteses que precisam ser validadas com o MVP. Para cada uma, estabeleca o indicador, a meta e a evidencia necessaria.
       </p>
-      <HypothesisBoard
-        hypotheses={hypotheses}
-        onAdd={(h) => onChange({ ...data, hypotheses: [...hypotheses, h] })}
-        onUpdate={(id, updates) =>
-          onChange({
-            ...data,
-            hypotheses: hypotheses.map((h) => (h.id === id ? { ...h, ...updates } : h)),
-          })
-        }
-        onDelete={(id) =>
-          onChange({ ...data, hypotheses: hypotheses.filter((h) => h.id !== id) })
-        }
-      />
+      {!loaded ? (
+        <div className="text-sm text-muted-foreground">Carregando hipóteses...</div>
+      ) : (
+        <HypothesisBoard
+          hypotheses={hypotheses.map((h) => ({
+            id: h.id,
+            hypothesis: h.hypothesis,
+            indicator: h.indicator,
+            target: h.target,
+            expectedResult: h.expectedResult,
+            evidence: h.evidence ?? "",
+          }))}
+          onAdd={(h) =>
+            addHypothesis({
+              hypothesis: h.hypothesis,
+              indicator: h.indicator,
+              target: h.target,
+              expectedResult: h.expectedResult,
+              evidence: h.evidence ?? null,
+            })
+          }
+          onUpdate={(id, updates) =>
+            updateHypothesis(id, {
+              ...(updates.hypothesis !== undefined && { hypothesis: updates.hypothesis }),
+              ...(updates.indicator !== undefined && { indicator: updates.indicator }),
+              ...(updates.target !== undefined && { target: updates.target }),
+              ...(updates.expectedResult !== undefined && {
+                expectedResult: updates.expectedResult,
+              }),
+              ...(updates.evidence !== undefined && { evidence: updates.evidence ?? null }),
+            })
+          }
+          onDelete={(id) => deleteHypothesis(id)}
+        />
+      )}
     </div>
   );
 }
 
 // ─── Step 6: Especificacoes Tecnicas ──────────────────────
 
-type TechSpecItem = { id: string; text: string };
+function TechnicalSpecsStep({ sessionId }: { sessionId: string }) {
+  const { value, loaded, updateField, addItem, updateItem, deleteItem } =
+    useTechnicalSpecs(sessionId);
 
-function TechnicalSpecsStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const get = (key: string) => (data[key] as string) || "";
-  const set = (key: string, value: string) => onChange({ ...data, [key]: value });
-  const getItems = (key: string) => (data[key] as TechSpecItem[]) || [];
-
-  const addItem = (key: string, text: string) => {
-    if (!text.trim()) return;
-    onChange({ ...data, [key]: [...getItems(key), { id: genId(), text: text.trim() }] });
-  };
-
-  const removeItem = (key: string, id: string) => {
-    onChange({ ...data, [key]: getItems(key).filter((i) => i.id !== id) });
-  };
-
-  const updateItem = (key: string, id: string, text: string) => {
-    onChange({ ...data, [key]: getItems(key).map((i) => (i.id === id ? { ...i, text } : i)) });
-  };
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando specs técnicas...</div>;
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -722,8 +674,8 @@ function TechnicalSpecsStep({
         <CardContent>
           <Textarea
             placeholder="Ex: Next.js + TypeScript, PostgreSQL, deploy na Vercel, monorepo..."
-            value={get("stack")}
-            onChange={(e) => set("stack", e.target.value)}
+            value={value.stack}
+            onChange={(e) => updateField("stack", e.target.value)}
             rows={3}
           />
         </CardContent>
@@ -738,11 +690,11 @@ function TechnicalSpecsStep({
         </CardHeader>
         <CardContent>
           <ItemList
-            items={getItems("integrations")}
+            items={value.integrations}
             placeholder="Ex: API do Stripe para pagamentos"
-            onAdd={(text) => addItem("integrations", text)}
+            onAdd={(text) => addItem("integrations", { id: genId(), text: text.trim() })}
             onUpdate={(id, text) => updateItem("integrations", id, text)}
-            onDelete={(id) => removeItem("integrations", id)}
+            onDelete={(id) => deleteItem("integrations", id)}
           />
         </CardContent>
       </Card>
@@ -756,11 +708,11 @@ function TechnicalSpecsStep({
         </CardHeader>
         <CardContent>
           <ItemList
-            items={getItems("rules")}
+            items={value.rules}
             placeholder="Ex: LGPD — dados pessoais devem ser criptografados em repouso"
-            onAdd={(text) => addItem("rules", text)}
+            onAdd={(text) => addItem("rules", { id: genId(), text: text.trim() })}
             onUpdate={(id, text) => updateItem("rules", id, text)}
-            onDelete={(id) => removeItem("rules", id)}
+            onDelete={(id) => deleteItem("rules", id)}
           />
         </CardContent>
       </Card>
@@ -775,23 +727,9 @@ function TechnicalSpecsStep({
         <CardContent>
           <Textarea
             placeholder="Ex: Suportar 500 usuarios simultaneos, tempo de resposta < 200ms, pico no fim do mes..."
-            value={get("performance")}
-            onChange={(e) => set("performance", e.target.value)}
+            value={value.performance}
+            onChange={(e) => updateField("performance", e.target.value)}
             rows={3}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Observacoes Adicionais</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="Qualquer outra informacao tecnica relevante..."
-            value={get("notes")}
-            onChange={(e) => set("notes", e.target.value)}
-            rows={2}
           />
         </CardContent>
       </Card>
@@ -806,7 +744,7 @@ function ItemList({
   onUpdate,
   onDelete,
 }: {
-  items: TechSpecItem[];
+  items: { id: string; text: string }[];
   placeholder: string;
   onAdd: (text: string) => void;
   onUpdate: (id: string, text: string) => void;
@@ -886,19 +824,40 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
   );
 
   useEffect(() => {
-    const stepKeys = ["product_vision", "scope_definition", "personas_journeys", "brainstorm", "risks_gaps", "prioritization", "technical_specs", "hypotheses"];
-    Promise.all(
-      stepKeys.map((key) =>
-        fetch(`/api/design-sessions/${sessionId}/steps/${key}`)
-          .then((r) => r.json())
-          .then((r) => ({ key, data: r.data || {} })),
-      ),
-    ).then((results) => {
-      const map: Record<string, Record<string, unknown>> = {};
-      for (const r of results) map[r.key] = r.data;
-      setAllData(map);
-      setLoading(false);
-    });
+    fetch(`/api/design-sessions/${sessionId}/full`)
+      .then((r) => r.json())
+      .then((full) => {
+        // Reconstruct the per-step shape that BriefingSheet expects, sourcing
+        // from the normalized tables instead of the legacy step_data JSON.
+        const scope = full.scope as
+          | {
+              inScope?: unknown[];
+              outOfScope?: unknown[];
+              does?: unknown[];
+              doesNot?: unknown[];
+            }
+          | null;
+        const map: Record<string, Record<string, unknown>> = {
+          product_vision: (full.productVision ?? {}) as Record<string, unknown>,
+          scope_definition: scope
+            ? {
+                is: scope.inScope ?? [],
+                isNot: scope.outOfScope ?? [],
+                does: scope.does ?? [],
+                doesNot: scope.doesNot ?? [],
+              }
+            : {},
+          personas_journeys: { personas: full.personas ?? [] },
+          brainstorm: { solutions: full.brainstormFeatures ?? [] },
+          risks_gaps: { risks: full.risks ?? [], gaps: full.gaps ?? [] },
+          prioritization: { items: full.priorityItems ?? [] },
+          technical_specs: (full.technicalSpecs ?? {}) as Record<string, unknown>,
+          hypotheses: { hypotheses: full.hypotheses ?? [] },
+        };
+        setAllData(map);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [sessionId]);
 
   if (loading) {

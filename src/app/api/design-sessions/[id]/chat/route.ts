@@ -23,7 +23,7 @@ const MAX_LIMIT = 200;
  *
  * Special flag `allFromBriefing=1` (used by the briefing chat on first mount):
  *   instead of returning ANY recent message from the thread, returns ONLY messages
- *   created at or after a marker stored in DesignSessionStepData.briefing.firstMessageAt.
+ *   created at or after a marker stored in DesignSession.briefingFirstMessageAt.
  *   When the marker doesn't exist yet, returns an empty array (briefing visually starts
  *   clean — even though the underlying thread may already contain pre_work / vision /
  *   brainstorm conversations).
@@ -63,14 +63,12 @@ export async function GET(
   // Resolve briefing-scope marker.
   let briefingFromIso: string | null = null;
   if (briefingScope) {
-    const { data: stepRow } = await supabase
-      .from("DesignSessionStepData")
-      .select("data")
-      .eq("sessionId", sessionId)
-      .eq("stepKey", "briefing")
+    const { data: sessionRow } = await supabase
+      .from("DesignSession")
+      .select("briefingFirstMessageAt")
+      .eq("id", sessionId)
       .maybeSingle();
-    const stepData = (stepRow?.data ?? {}) as Record<string, unknown>;
-    briefingFromIso = (stepData.firstMessageAt as string | undefined) ?? null;
+    briefingFromIso = sessionRow?.briefingFirstMessageAt ?? null;
     if (!briefingFromIso) {
       // No briefing turn happened yet — return zero messages, signal no more.
       return NextResponse.json({

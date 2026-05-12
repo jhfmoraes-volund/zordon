@@ -781,6 +781,9 @@ export type Database = {
       DesignSession: {
         Row: {
           actualDurationMin: number | null
+          briefingFirstMessageAt: string | null
+          briefingSubPhase: string | null
+          briefingTargetStoryId: string | null
           completedAt: string | null
           createdAt: string
           createdBy: string | null
@@ -802,6 +805,9 @@ export type Database = {
         }
         Insert: {
           actualDurationMin?: number | null
+          briefingFirstMessageAt?: string | null
+          briefingSubPhase?: string | null
+          briefingTargetStoryId?: string | null
           completedAt?: string | null
           createdAt?: string
           createdBy?: string | null
@@ -823,6 +829,9 @@ export type Database = {
         }
         Update: {
           actualDurationMin?: number | null
+          briefingFirstMessageAt?: string | null
+          briefingSubPhase?: string | null
+          briefingTargetStoryId?: string | null
           completedAt?: string | null
           createdAt?: string
           createdBy?: string | null
@@ -843,6 +852,20 @@ export type Database = {
           updatedAt?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "DesignSession_briefingTargetStoryId_fkey"
+            columns: ["briefingTargetStoryId"]
+            isOneToOne: false
+            referencedRelation: "user_story_overview"
+            referencedColumns: ["userStoryId"]
+          },
+          {
+            foreignKeyName: "DesignSession_briefingTargetStoryId_fkey"
+            columns: ["briefingTargetStoryId"]
+            isOneToOne: false
+            referencedRelation: "UserStory"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "DesignSession_createdBy_fkey"
             columns: ["createdBy"]
@@ -1021,6 +1044,88 @@ export type Database = {
             columns: ["sessionId"]
             isOneToOne: false
             referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      DesignSessionFile: {
+        Row: {
+          createdAt: string
+          extractedText: string | null
+          extractionStatus: string
+          id: string
+          mimeType: string
+          name: string
+          sessionId: string
+          size: number
+          storagePath: string
+          uploadedByMemberId: string | null
+        }
+        Insert: {
+          createdAt?: string
+          extractedText?: string | null
+          extractionStatus?: string
+          id?: string
+          mimeType: string
+          name: string
+          sessionId: string
+          size: number
+          storagePath: string
+          uploadedByMemberId?: string | null
+        }
+        Update: {
+          createdAt?: string
+          extractedText?: string | null
+          extractionStatus?: string
+          id?: string
+          mimeType?: string
+          name?: string
+          sessionId?: string
+          size?: number
+          storagePath?: string
+          uploadedByMemberId?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionFile_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_uploadedByMemberId_fkey"
+            columns: ["uploadedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_uploadedByMemberId_fkey"
+            columns: ["uploadedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_uploadedByMemberId_fkey"
+            columns: ["uploadedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_uploadedByMemberId_fkey"
+            columns: ["uploadedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
         ]
