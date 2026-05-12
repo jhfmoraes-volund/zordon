@@ -21,9 +21,12 @@ import {
 import type { StepDef } from "@/lib/design-session-steps";
 import { useDesignSessionChat } from "@/hooks/use-design-session-chat";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { StickyNoteBoard, type Note } from "./sticky-note";
+import { StickyNoteBoard } from "./sticky-note";
+import { useStepNotes } from "@/hooks/design-session/use-step-notes";
+import { isStepKey, type StepKey } from "@/lib/design-session/types";
 
 export function WizardLayout({
+  sessionId,
   sessionTitle,
   sessionType,
   steps,
@@ -32,15 +35,12 @@ export function WizardLayout({
   onPrevious,
   onStepClick,
   saving,
-  notes,
-  onAddNote,
-  onUpdateNote,
-  onDeleteNote,
   hideSidePanels,
   backHref,
   memoriaHref,
   children,
 }: {
+  sessionId: string;
   sessionTitle: string;
   sessionType: string;
   steps: StepDef[];
@@ -49,10 +49,6 @@ export function WizardLayout({
   onPrevious: () => void;
   onStepClick: (index: number) => void;
   saving?: boolean;
-  notes: Note[];
-  onAddNote: () => void;
-  onUpdateNote: (id: string, text: string) => void;
-  onDeleteNote: (id: string) => void;
   hideSidePanels?: boolean;
   backHref?: string;
   memoriaHref?: string;
@@ -235,12 +231,9 @@ export function WizardLayout({
               </aside>
             ) : (
               <aside className="hidden lg:block shrink-0">
-                <StickyNoteBoard
-                  notes={notes}
-                  onAdd={onAddNote}
-                  onUpdate={onUpdateNote}
-                  onDelete={onDeleteNote}
-                />
+                {step && isStepKey(step.key) ? (
+                  <StepNotesPanel sessionId={sessionId} stepKey={step.key} />
+                ) : null}
               </aside>
             )
           )}
@@ -270,5 +263,23 @@ export function WizardLayout({
         </>
       )}
     </div>
+  );
+}
+
+function StepNotesPanel({
+  sessionId,
+  stepKey,
+}: {
+  sessionId: string;
+  stepKey: StepKey;
+}) {
+  const { notes, addNote, updateNote, deleteNote } = useStepNotes(sessionId, stepKey);
+  return (
+    <StickyNoteBoard
+      notes={notes}
+      onAdd={addNote}
+      onUpdate={updateNote}
+      onDelete={deleteNote}
+    />
   );
 }
