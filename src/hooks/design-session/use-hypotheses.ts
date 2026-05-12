@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { useDSCollectionRealtime } from "@/hooks/design-session/use-ds-collection-realtime";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
 
 export type HypothesisRow = {
@@ -44,6 +45,8 @@ export function useHypotheses(sessionId: string) {
       cancelled = true;
     };
   }, [sessionId, setCommitted]);
+
+  useDSCollectionRealtime<HypothesisRow>(sessionId, "hypothesis", collection);
 
   const addHypothesis = useCallback(
     async (initial?: Partial<HypothesisRow>) => {

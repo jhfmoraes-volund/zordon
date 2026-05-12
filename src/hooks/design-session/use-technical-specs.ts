@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { useDesignSessionRealtime } from "@/hooks/use-design-session-realtime";
 
 export type TechSpecItem = { id: string; text: string };
 
@@ -56,6 +57,23 @@ export function useTechnicalSpecs(sessionId: string) {
       cancelled = true;
     };
   }, [sessionId]);
+
+  useDesignSessionRealtime(
+    sessionId,
+    (entity, event, row) => {
+      if (entity !== "tech_specs" || event === "DELETE") return;
+      const incoming: TechnicalSpecs = {
+        stack: (row.stack as string) ?? "",
+        performance: (row.performance as string) ?? "",
+        integrations: (row.integrations as TechSpecItem[]) ?? [],
+        rules: (row.rules as TechSpecItem[]) ?? [],
+      };
+      const cur = valueRef.current;
+      if (JSON.stringify(cur) === JSON.stringify(incoming)) return;
+      setValue(incoming);
+    },
+    { entities: ["tech_specs"] },
+  );
 
   const persistNow = useCallback(async () => {
     try {

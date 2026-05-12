@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { useDesignSessionRealtime } from "@/hooks/use-design-session-realtime";
 
 export type ScopeItem = { id: string; text: string };
 export type ScopeBucket = "inScope" | "outOfScope" | "does" | "doesNot";
@@ -52,6 +53,23 @@ export function useScope(sessionId: string) {
       cancelled = true;
     };
   }, [sessionId]);
+
+  useDesignSessionRealtime(
+    sessionId,
+    (entity, event, row) => {
+      if (entity !== "scope" || event === "DELETE") return;
+      const incoming: ScopeState = {
+        inScope: (row.inScope as ScopeItem[]) ?? [],
+        outOfScope: (row.outOfScope as ScopeItem[]) ?? [],
+        does: (row.does as ScopeItem[]) ?? [],
+        doesNot: (row.doesNot as ScopeItem[]) ?? [],
+      };
+      const cur = valueRef.current;
+      if (JSON.stringify(cur) === JSON.stringify(incoming)) return;
+      setValue(incoming);
+    },
+    { entities: ["scope"] },
+  );
 
   const persistNow = useCallback(async () => {
     try {

@@ -31,23 +31,6 @@ export async function getStepData(
 }
 
 /**
- * Loads step data for prompt injection — strips client-side draft state
- * (`_draft`, `_drafts`) recursively. Drafts are intermediate UI state that
- * the agent should never read; including them inflates the prompt with
- * abandoned tool calls. `_notes` are kept (facilitator-facing notes the
- * agent acts on).
- */
-export async function getStepDataForPrompt(
-  sessionId: string,
-  stepKey: string
-): Promise<Record<string, unknown>> {
-  const raw = await getStepData(sessionId, stepKey);
-  return JSON.parse(
-    JSON.stringify(raw, (k, v) => (k.startsWith("_draft") ? undefined : v))
-  );
-}
-
-/**
  * Applies a mutation to step data (read-modify-write).
  */
 export async function updateStepData(
