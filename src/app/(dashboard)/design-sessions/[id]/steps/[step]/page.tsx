@@ -7,8 +7,8 @@ import { PersonaJourneyBoard, Persona, JourneyStep } from "@/components/design-s
 import { SolutionCardBoard, SolutionCard } from "@/components/design-session/solution-card-board";
 import { HypothesisBoard } from "@/components/design-session/hypothesis-board";
 import { PriorityBoard, PrioritizedItem, PriorityBucket } from "@/components/design-session/priority-board";
-import { PostItBoard, PostItItem, PostItSection } from "@/components/design-session/post-it-board";
-import { RiskGapBoard, type Gap, type Risk } from "@/components/design-session/risk-gap-board";
+import { PostItBoard, PostItSection } from "@/components/design-session/post-it-board";
+import { RiskGapBoard } from "@/components/design-session/risk-gap-board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
 import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
 import {
@@ -29,6 +29,11 @@ import { DesignSessionProvider } from "@/contexts/design-session-context";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { genId } from "@/lib/utils";
 import { useHypotheses } from "@/hooks/design-session/use-hypotheses";
+import { useProductVision } from "@/hooks/design-session/use-product-vision";
+import { useScope, type ScopeBucket } from "@/hooks/design-session/use-scope";
+import { useRisksGaps } from "@/hooks/design-session/use-risks-gaps";
+import { usePersonas } from "@/hooks/design-session/use-personas";
+import { useTechnicalSpecs } from "@/hooks/design-session/use-technical-specs";
 
 type Session = {
   id: string;
@@ -215,19 +220,19 @@ function StepContent({
     case "pre_work":
       return <PreWorkStep sessionId={sessionId} data={data} onChange={onChange} />;
     case "product_vision":
-      return <ProductVisionStep data={data} onChange={onChange} />;
+      return <ProductVisionStep sessionId={sessionId} />;
     case "scope_definition":
-      return <ScopeDefinitionStep data={data} onChange={onChange} />;
+      return <ScopeDefinitionStep sessionId={sessionId} />;
     case "personas_journeys":
-      return <PersonasJourneysStep data={data} onChange={onChange} />;
+      return <PersonasJourneysStep sessionId={sessionId} />;
     case "brainstorm":
       return <BrainstormStep data={data} onChange={onChange} sessionId={sessionId} />;
     case "risks_gaps":
-      return <RisksGapsStep data={data} onChange={onChange} sessionId={sessionId} />;
+      return <RisksGapsStep sessionId={sessionId} />;
     case "prioritization":
       return <PrioritizationStep data={data} onChange={onChange} sessionId={sessionId} />;
     case "technical_specs":
-      return <TechnicalSpecsStep data={data} onChange={onChange} />;
+      return <TechnicalSpecsStep sessionId={sessionId} />;
     case "hypotheses":
       return <HypothesesStep sessionId={sessionId} />;
     case "briefing":
@@ -252,15 +257,12 @@ function StepContent({
 
 // ─── Step 0: Visao do Produto ─────────────────────────────
 
-function ProductVisionStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const get = (key: string) => (data[key] as string) || "";
-  const set = (key: string, value: string) => onChange({ ...data, [key]: value });
+function ProductVisionStep({ sessionId }: { sessionId: string }) {
+  const { value, loaded, updateField } = useProductVision(sessionId);
+
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando visão de produto...</div>;
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -277,8 +279,8 @@ function ProductVisionStep({
               <Label>Qual o problema central?</Label>
               <Textarea
                 placeholder="Descreva o problema que este produto resolve..."
-                value={get("problem")}
-                onChange={(e) => set("problem", e.target.value)}
+                value={value.problem}
+                onChange={(e) => updateField("problem", e.target.value)}
                 rows={3}
               />
             </div>
@@ -286,8 +288,8 @@ function ProductVisionStep({
               <Label>Quem sofre com esse problema?</Label>
               <Textarea
                 placeholder="Ex: Gestores de vendas em empresas B2B de medio porte"
-                value={get("whoSuffers")}
-                onChange={(e) => set("whoSuffers", e.target.value)}
+                value={value.whoSuffers}
+                onChange={(e) => updateField("whoSuffers", e.target.value)}
                 rows={2}
               />
             </div>
@@ -295,8 +297,8 @@ function ProductVisionStep({
               <Label>O que acontece se nao resolver?</Label>
               <Textarea
                 placeholder="Consequencias de manter o status quo..."
-                value={get("consequences")}
-                onChange={(e) => set("consequences", e.target.value)}
+                value={value.consequences}
+                onChange={(e) => updateField("consequences", e.target.value)}
                 rows={2}
               />
             </div>
@@ -317,8 +319,8 @@ function ProductVisionStep({
               <Label>Como e o sucesso?</Label>
               <Textarea
                 placeholder="Descreva o cenario ideal quando o produto estiver funcionando..."
-                value={get("successVision")}
-                onChange={(e) => set("successVision", e.target.value)}
+                value={value.successVision}
+                onChange={(e) => updateField("successVision", e.target.value)}
                 rows={3}
               />
             </div>
@@ -326,8 +328,8 @@ function ProductVisionStep({
               <Label>Metricas de impacto</Label>
               <Textarea
                 placeholder="Como vamos medir que deu certo? Ex: reducao de 50% no tempo de resposta a leads"
-                value={get("impactMetrics")}
-                onChange={(e) => set("impactMetrics", e.target.value)}
+                value={value.impactMetrics}
+                onChange={(e) => updateField("impactMetrics", e.target.value)}
                 rows={2}
               />
             </div>
@@ -342,28 +344,24 @@ function ProductVisionStep({
 // ─── Step: E / Nao E / Faz / Nao Faz ──────────────────────
 
 const SCOPE_BUCKETS = [
-  { key: "is", title: "É", tone: "emerald" },
-  { key: "isNot", title: "NÃO É", tone: "rose" },
+  { key: "inScope", title: "É", tone: "emerald" },
+  { key: "outOfScope", title: "NÃO É", tone: "rose" },
   { key: "does", title: "FAZ", tone: "sky" },
   { key: "doesNot", title: "NÃO FAZ", tone: "amber" },
 ] as const;
 
-type ScopeBucketKey = (typeof SCOPE_BUCKETS)[number]["key"];
+function ScopeDefinitionStep({ sessionId }: { sessionId: string }) {
+  const { value, loaded, addItem, updateItem, deleteItem } = useScope(sessionId);
 
-function ScopeDefinitionStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const getItems = (key: ScopeBucketKey) => (data[key] as PostItItem[]) || [];
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando escopo...</div>;
+  }
 
   const sections: PostItSection[] = SCOPE_BUCKETS.map((b) => ({
     key: b.key,
     title: b.title,
     tone: b.tone,
-    items: getItems(b.key),
+    items: value[b.key],
   }));
 
   return (
@@ -382,21 +380,15 @@ function ScopeDefinitionStep({
       <PostItBoard
         sections={sections}
         columns={2}
-        onAdd={(sectionKey, text) => {
-          const key = sectionKey as ScopeBucketKey;
-          onChange({ ...data, [key]: [...getItems(key), { id: genId(), text }] });
-        }}
-        onUpdate={(sectionKey, itemId, text) => {
-          const key = sectionKey as ScopeBucketKey;
-          onChange({
-            ...data,
-            [key]: getItems(key).map((i) => (i.id === itemId ? { ...i, text } : i)),
-          });
-        }}
-        onDelete={(sectionKey, itemId) => {
-          const key = sectionKey as ScopeBucketKey;
-          onChange({ ...data, [key]: getItems(key).filter((i) => i.id !== itemId) });
-        }}
+        onAdd={(sectionKey, text) =>
+          addItem(sectionKey as ScopeBucket, { id: genId(), text })
+        }
+        onUpdate={(sectionKey, itemId, text) =>
+          updateItem(sectionKey as ScopeBucket, itemId, text)
+        }
+        onDelete={(sectionKey, itemId) =>
+          deleteItem(sectionKey as ScopeBucket, itemId)
+        }
       />
     </div>
   );
@@ -404,23 +396,23 @@ function ScopeDefinitionStep({
 
 // ─── Step 1: Personas & Jornadas ──────────────────────────
 
-function PersonasJourneysStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const personas = ((data.personas as Persona[]) || []).map((p) => ({
-    ...p,
-    id: p.id || genId(),
-    asIsSteps: (p.asIsSteps || []).map((s) => ({ ...s, id: s.id || genId() })),
-    toBeSteps: (p.toBeSteps || []).map((s) => ({ ...s, id: s.id || genId() })),
-  }));
+function PersonasJourneysStep({ sessionId }: { sessionId: string }) {
+  const { personas, loaded, addPersona, updatePersona, deletePersona } =
+    usePersonas(sessionId);
 
-  const updatePersonas = (updated: Persona[]) => {
-    onChange({ ...data, personas: updated });
-  };
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando personas...</div>;
+  }
+
+  // Map row → Persona shape used by the board.
+  const boardPersonas: Persona[] = personas.map((p) => ({
+    id: p.id,
+    name: p.name,
+    role: p.role,
+    context: p.context,
+    asIsSteps: p.asIsSteps,
+    toBeSteps: p.toBeSteps,
+  }));
 
   return (
     <div className="space-y-4">
@@ -428,46 +420,45 @@ function PersonasJourneysStep({
         Defina as personas que sofrem com o problema. Para cada uma, mapeie a jornada atual (AS-IS) e a jornada futura (TO-BE).
       </p>
       <PersonaJourneyBoard
-        personas={personas}
-        onAdd={(persona) => updatePersonas([...personas, persona])}
-        onUpdate={(personaId, updates) =>
-          updatePersonas(personas.map((p) => (p.id === personaId ? { ...p, ...updates } : p)))
+        personas={boardPersonas}
+        onAdd={(persona) =>
+          addPersona({
+            name: persona.name,
+            role: persona.role,
+            context: persona.context,
+            asIsSteps: persona.asIsSteps,
+            toBeSteps: persona.toBeSteps,
+          })
         }
-        onDelete={(personaId) => updatePersonas(personas.filter((p) => p.id !== personaId))}
+        onUpdate={(personaId, updates) =>
+          updatePersona(personaId, {
+            ...(updates.name !== undefined && { name: updates.name }),
+            ...(updates.role !== undefined && { role: updates.role }),
+            ...(updates.context !== undefined && { context: updates.context }),
+            ...(updates.asIsSteps !== undefined && { asIsSteps: updates.asIsSteps }),
+            ...(updates.toBeSteps !== undefined && { toBeSteps: updates.toBeSteps }),
+          })
+        }
+        onDelete={(personaId) => deletePersona(personaId)}
         onAddJourneyStep={(personaId, type, step) => {
-          updatePersonas(
-            personas.map((p) => {
-              if (p.id !== personaId) return p;
-              const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
-              return { ...p, [key]: [...p[key], step] };
-            })
-          );
+          const p = personas.find((x) => x.id === personaId);
+          if (!p) return;
+          const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
+          updatePersona(personaId, { [key]: [...p[key], step] });
         }}
         onUpdateJourneyStep={(personaId, type, stepId, updates) => {
-          updatePersonas(
-            personas.map((p) => {
-              if (p.id !== personaId) return p;
-              const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
-              return {
-                ...p,
-                [key]: p[key].map((s: JourneyStep) =>
-                  s.id === stepId ? { ...s, ...updates } : s
-                ),
-              };
-            })
-          );
+          const p = personas.find((x) => x.id === personaId);
+          if (!p) return;
+          const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
+          updatePersona(personaId, {
+            [key]: p[key].map((s) => (s.id === stepId ? { ...s, ...updates } : s)),
+          });
         }}
         onDeleteJourneyStep={(personaId, type, stepId) => {
-          updatePersonas(
-            personas.map((p) => {
-              if (p.id !== personaId) return p;
-              const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
-              return {
-                ...p,
-                [key]: p[key].filter((s: JourneyStep) => s.id !== stepId),
-              };
-            })
-          );
+          const p = personas.find((x) => x.id === personaId);
+          if (!p) return;
+          const key = type === "asIs" ? "asIsSteps" : "toBeSteps";
+          updatePersona(personaId, { [key]: p[key].filter((s) => s.id !== stepId) });
         }}
       />
     </div>
@@ -524,17 +515,18 @@ function BrainstormStep({
 
 // ─── Step: Riscos & Lacunas ───────────────────────────────
 
-function RisksGapsStep({
-  data,
-  onChange,
-  sessionId,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-  sessionId: string;
-}) {
-  const gaps = (data.gaps as Gap[]) || [];
-  const risks = (data.risks as Risk[]) || [];
+function RisksGapsStep({ sessionId }: { sessionId: string }) {
+  const {
+    risks,
+    gaps,
+    loaded,
+    addRisk,
+    updateRisk,
+    deleteRisk,
+    addGap,
+    updateGap,
+    deleteGap,
+  } = useRisksGaps(sessionId);
   const [features, setFeatures] = useState<{ id: string; title: string }[]>([]);
 
   useEffect(() => {
@@ -549,6 +541,10 @@ function RisksGapsStep({
       .catch(() => {});
   }, [sessionId]);
 
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando riscos e gaps...</div>;
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
@@ -556,29 +552,69 @@ function RisksGapsStep({
         Use isso como criterio na priorizacao.
       </p>
       <RiskGapBoard
-        gaps={gaps}
-        risks={risks}
+        gaps={gaps.map((g) => ({
+          id: g.id,
+          text: g.text,
+          category: g.category ?? undefined,
+          severity: g.severity ?? undefined,
+          relatedFeature: g.relatedFeature ?? undefined,
+          mitigation: g.mitigation ?? undefined,
+        }))}
+        risks={risks.map((r) => ({
+          id: r.id,
+          text: r.text,
+          category: r.category,
+          severity: r.severity,
+          relatedFeature: r.relatedFeature ?? undefined,
+          mitigation: r.mitigation ?? undefined,
+        }))}
         features={features}
-        onAddGap={(gap) => onChange({ ...data, gaps: [...gaps, gap] })}
+        onAddGap={(gap) =>
+          addGap({
+            text: gap.text,
+            category: gap.category ?? null,
+            severity: gap.severity ?? null,
+            relatedFeature: gap.relatedFeature ?? null,
+            mitigation: gap.mitigation ?? null,
+          })
+        }
         onUpdateGap={(id, updates) =>
-          onChange({
-            ...data,
-            gaps: gaps.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+          updateGap(id, {
+            ...(updates.text !== undefined && { text: updates.text }),
+            ...(updates.category !== undefined && { category: updates.category ?? null }),
+            ...(updates.severity !== undefined && { severity: updates.severity ?? null }),
+            ...(updates.relatedFeature !== undefined && {
+              relatedFeature: updates.relatedFeature ?? null,
+            }),
+            ...(updates.mitigation !== undefined && {
+              mitigation: updates.mitigation ?? null,
+            }),
           })
         }
-        onDeleteGap={(id) =>
-          onChange({ ...data, gaps: gaps.filter((g) => g.id !== id) })
+        onDeleteGap={(id) => deleteGap(id)}
+        onAddRisk={(risk) =>
+          addRisk({
+            text: risk.text,
+            category: risk.category,
+            severity: risk.severity,
+            relatedFeature: risk.relatedFeature ?? null,
+            mitigation: risk.mitigation ?? null,
+          })
         }
-        onAddRisk={(risk) => onChange({ ...data, risks: [...risks, risk] })}
         onUpdateRisk={(id, updates) =>
-          onChange({
-            ...data,
-            risks: risks.map((r) => (r.id === id ? { ...r, ...updates } : r)),
+          updateRisk(id, {
+            ...(updates.text !== undefined && { text: updates.text }),
+            ...(updates.category !== undefined && { category: updates.category }),
+            ...(updates.severity !== undefined && { severity: updates.severity }),
+            ...(updates.relatedFeature !== undefined && {
+              relatedFeature: updates.relatedFeature ?? null,
+            }),
+            ...(updates.mitigation !== undefined && {
+              mitigation: updates.mitigation ?? null,
+            }),
           })
         }
-        onDeleteRisk={(id) =>
-          onChange({ ...data, risks: risks.filter((r) => r.id !== id) })
-        }
+        onDeleteRisk={(id) => deleteRisk(id)}
       />
     </div>
   );
@@ -702,31 +738,13 @@ function HypothesesStep({ sessionId }: { sessionId: string }) {
 
 // ─── Step 6: Especificacoes Tecnicas ──────────────────────
 
-type TechSpecItem = { id: string; text: string };
+function TechnicalSpecsStep({ sessionId }: { sessionId: string }) {
+  const { value, loaded, updateField, addItem, updateItem, deleteItem } =
+    useTechnicalSpecs(sessionId);
 
-function TechnicalSpecsStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const get = (key: string) => (data[key] as string) || "";
-  const set = (key: string, value: string) => onChange({ ...data, [key]: value });
-  const getItems = (key: string) => (data[key] as TechSpecItem[]) || [];
-
-  const addItem = (key: string, text: string) => {
-    if (!text.trim()) return;
-    onChange({ ...data, [key]: [...getItems(key), { id: genId(), text: text.trim() }] });
-  };
-
-  const removeItem = (key: string, id: string) => {
-    onChange({ ...data, [key]: getItems(key).filter((i) => i.id !== id) });
-  };
-
-  const updateItem = (key: string, id: string, text: string) => {
-    onChange({ ...data, [key]: getItems(key).map((i) => (i.id === id ? { ...i, text } : i)) });
-  };
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando specs técnicas...</div>;
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -740,8 +758,8 @@ function TechnicalSpecsStep({
         <CardContent>
           <Textarea
             placeholder="Ex: Next.js + TypeScript, PostgreSQL, deploy na Vercel, monorepo..."
-            value={get("stack")}
-            onChange={(e) => set("stack", e.target.value)}
+            value={value.stack}
+            onChange={(e) => updateField("stack", e.target.value)}
             rows={3}
           />
         </CardContent>
@@ -756,11 +774,11 @@ function TechnicalSpecsStep({
         </CardHeader>
         <CardContent>
           <ItemList
-            items={getItems("integrations")}
+            items={value.integrations}
             placeholder="Ex: API do Stripe para pagamentos"
-            onAdd={(text) => addItem("integrations", text)}
+            onAdd={(text) => addItem("integrations", { id: genId(), text: text.trim() })}
             onUpdate={(id, text) => updateItem("integrations", id, text)}
-            onDelete={(id) => removeItem("integrations", id)}
+            onDelete={(id) => deleteItem("integrations", id)}
           />
         </CardContent>
       </Card>
@@ -774,11 +792,11 @@ function TechnicalSpecsStep({
         </CardHeader>
         <CardContent>
           <ItemList
-            items={getItems("rules")}
+            items={value.rules}
             placeholder="Ex: LGPD — dados pessoais devem ser criptografados em repouso"
-            onAdd={(text) => addItem("rules", text)}
+            onAdd={(text) => addItem("rules", { id: genId(), text: text.trim() })}
             onUpdate={(id, text) => updateItem("rules", id, text)}
-            onDelete={(id) => removeItem("rules", id)}
+            onDelete={(id) => deleteItem("rules", id)}
           />
         </CardContent>
       </Card>
@@ -793,23 +811,9 @@ function TechnicalSpecsStep({
         <CardContent>
           <Textarea
             placeholder="Ex: Suportar 500 usuarios simultaneos, tempo de resposta < 200ms, pico no fim do mes..."
-            value={get("performance")}
-            onChange={(e) => set("performance", e.target.value)}
+            value={value.performance}
+            onChange={(e) => updateField("performance", e.target.value)}
             rows={3}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Observacoes Adicionais</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="Qualquer outra informacao tecnica relevante..."
-            value={get("notes")}
-            onChange={(e) => set("notes", e.target.value)}
-            rows={2}
           />
         </CardContent>
       </Card>
@@ -824,7 +828,7 @@ function ItemList({
   onUpdate,
   onDelete,
 }: {
-  items: TechSpecItem[];
+  items: { id: string; text: string }[];
   placeholder: string;
   onAdd: (text: string) => void;
   onUpdate: (id: string, text: string) => void;
