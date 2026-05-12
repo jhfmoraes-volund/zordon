@@ -109,10 +109,9 @@ type TaskAdapterInput = {
     memberId?: string | null;
     member?: { id: string } | null;
   }>;
-  /** Tag rows joined via `tags:TaskTagAssignment(TaskTag(*))`. */
-  tags?: Array<{
-    TaskTag?: { id: string; name: string; tone: string } | null;
-  }>;
+  /** Flat tag list — embed rows must be flattened via `flattenTagEmbed`
+   *  at the data-fetching boundary before being passed here. */
+  tags?: TaskTag[];
 };
 
 export function adaptTask(
@@ -132,11 +131,9 @@ export function adaptTask(
 
   const ac = (ctx.acByTaskId.get(row.id) ?? []).map(adaptAc);
 
-  const tags: TaskTag[] = (row.tags ?? [])
-    .map((j) => j.TaskTag)
-    .filter((t): t is { id: string; name: string; tone: string } => Boolean(t))
-    .map((t) => ({ id: t.id, name: t.name, tone: t.tone }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const tags: TaskTag[] = [...(row.tags ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
   return {
     __id: row.id,

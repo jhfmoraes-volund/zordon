@@ -4,6 +4,10 @@
 // Mock data and real fetched data both conform to these — the components in
 // this folder don't care about the source.
 
+import type { TaskTag } from "@/lib/task-tags";
+
+export type { TaskTag };
+
 export type Persona = {
   id: string;
   name: string;
@@ -53,12 +57,6 @@ export type TaskType =
 
 export type TaskScope = "micro" | "small" | "medium" | "large";
 export type TaskComplexity = "trivial" | "low" | "medium" | "high";
-
-export type TaskTag = {
-  id: string;
-  name: string;
-  tone: string;
-};
 
 export type Task = {
   reference: string;

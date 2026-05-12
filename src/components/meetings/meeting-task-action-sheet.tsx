@@ -30,6 +30,7 @@ import {
 } from "@/components/story-hierarchy/adapters";
 import type { AcceptanceCriterionRow } from "@/lib/dal/story-hierarchy";
 import { createClient } from "@/lib/supabase/client";
+import { flattenTagEmbed } from "@/lib/task-tags";
 import { ProposalShell, type ProposalDecisionPayload } from "./proposal-shell";
 import {
   DeleteProposalView,
@@ -139,7 +140,7 @@ function Body({
         supabase
           .from("Task")
           .select(
-            "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+            "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
           )
           .eq("id", action.taskId!)
           .single(),
@@ -156,8 +157,14 @@ function Body({
       }
       const acRows = (acRes.data ?? []) as AcceptanceCriterionRow[];
       const adapterCtx = buildTaskAdapterContext(ctx.stories, acRows);
+      const flatTask = {
+        ...taskRes.data,
+        tags: flattenTagEmbed(
+          (taskRes.data as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
+        ),
+      };
       const adapted = adaptTask(
-        taskRes.data as Parameters<typeof adaptTask>[0],
+        flatTask as Parameters<typeof adaptTask>[0],
         adapterCtx,
       );
       setBoundTask(adapted);

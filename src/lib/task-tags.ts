@@ -18,6 +18,40 @@ export const TAG_TONES: ChipTone[] = [
   "muted",
 ];
 
+export type TaskTag = {
+  id: string;
+  projectId: string;
+  name: string;
+  tone: ChipTone;
+};
+
+/** Shape devolvido pelo embed `tags:TaskTagAssignment(TaskTag(...))` do Supabase. */
+export type TaskTagEmbedRow = { TaskTag: TaskTag | null };
+
+/** Normaliza string crua do Postgres pra `ChipTone`. Fallback: "muted". */
+export function normalizeTone(t: string): ChipTone {
+  return (TAG_TONES as readonly string[]).includes(t)
+    ? (t as ChipTone)
+    : "muted";
+}
+
+/** Achata `TaskTagAssignment(TaskTag(...))` em `TaskTag[]`, ordenado por nome.
+ *  Roda `normalizeTone` em cada item — input vem do Postgres como `string` solto. */
+export function flattenTagEmbed(
+  rows: TaskTagEmbedRow[] | null | undefined,
+): TaskTag[] {
+  return (rows ?? [])
+    .map((r) => r.TaskTag)
+    .filter((t): t is TaskTag => Boolean(t))
+    .map((t) => ({
+      id: t.id,
+      projectId: t.projectId,
+      name: t.name,
+      tone: normalizeTone(t.tone),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export type TagDefault = { name: string; tone: ChipTone };
 
 // Seeded into every project on creation and during the area→tags backfill.

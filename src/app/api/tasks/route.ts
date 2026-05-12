@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { suggestFunctionPoints } from "@/lib/function-points";
 import { getCurrentMember, getUser, requireProjectMemberApi } from "@/lib/dal";
 import { recordTaskCreated } from "@/lib/dal/task-activity-recorder";
+import { flattenTagEmbed, type TaskTagEmbedRow } from "@/lib/task-tags";
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -111,15 +112,23 @@ export async function POST(req: NextRequest) {
     }
 
     // Re-fetch with the same shape RawTask expects on the client (assignments
-    // + tags). Missing `tags` would leave optimistic-reconciled rows with
-    // undefined relations and crash any consumer that reads `raw.tags.length`.
+    // + tags). Tags are flattened to canonical TaskTag[] at the boundary.
     const { data: full } = await supabase
       .from("Task")
       .select(
-        "*, project:Project(name), assignments:TaskAssignment(*, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+        "*, project:Project(name), assignments:TaskAssignment(*, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
       )
       .eq("id", task.id)
       .single();
+
+    const result = full
+      ? {
+          ...full,
+          tags: flattenTagEmbed(
+            (full as typeof full & { tags?: TaskTagEmbedRow[] }).tags,
+          ),
+        }
+      : full;
 
     recordTaskCreated(task.id, {
       title: task.title,
@@ -128,7 +137,7 @@ export async function POST(req: NextRequest) {
       console.error("[task-activity] recordTaskCreated failed", e),
     );
 
-    return NextResponse.json(full, { status: 201 });
+    return NextResponse.json(result, { status: 201 });
   }
 
   return NextResponse.json(

@@ -2,23 +2,16 @@ import "server-only";
 import { db } from "@/lib/db";
 import type { Database } from "@/lib/supabase/database.types";
 import type { ChipTone } from "@/lib/status-chips";
-import { TAG_NAME_MAX, TASK_TAG_LIMIT, TAG_TONES } from "@/lib/task-tags";
+import {
+  TAG_NAME_MAX,
+  TASK_TAG_LIMIT,
+  TAG_TONES,
+  normalizeTone,
+  type TaskTag,
+} from "@/lib/task-tags";
 
 type Tables = Database["public"]["Tables"];
 type TaskTagRow = Tables["TaskTag"]["Row"];
-
-export type TaskTag = {
-  id: string;
-  projectId: string;
-  name: string;
-  tone: ChipTone;
-};
-
-function normalizeTone(t: string): ChipTone {
-  return (TAG_TONES as readonly string[]).includes(t)
-    ? (t as ChipTone)
-    : "muted";
-}
 
 function toTag(row: TaskTagRow): TaskTag {
   return {

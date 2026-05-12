@@ -1,8 +1,12 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getActorMemberId, getUser, requireProjectMemberApi } from "@/lib/dal";
-import { listTagsForTask, setTagsForTask } from "@/lib/dal/task-tags";
-import { TASK_TAG_LIMIT } from "@/lib/task-tags";
+import { setTagsForTask } from "@/lib/dal/task-tags";
+import {
+  TASK_TAG_LIMIT,
+  flattenTagEmbed,
+  type TaskTagEmbedRow,
+} from "@/lib/task-tags";
 import { snapshotTaskHydrated } from "@/lib/dal/task-snapshot";
 import { recordTaskChanges } from "@/lib/dal/task-activity-recorder";
 import { notifyMembers } from "@/lib/dal/notifications";
@@ -12,7 +16,8 @@ const TASK_SELECT = `
   project:Project(name),
   sprint:Sprint(name),
   assignments:TaskAssignment(*, member:Member(id, name)),
-  iterations:TaskIteration(id, number, type, trigger, resultSummary, success, startedAt, completedAt)
+  iterations:TaskIteration(id, number, type, trigger, resultSummary, success, startedAt, completedAt),
+  tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))
 `;
 
 async function fetchTask(id: string) {
@@ -26,9 +31,13 @@ async function fetchTask(id: string) {
   if (!task) return null;
 
   // Sort iterations desc and add _count
-  const iterations = (task as any).iterations ?? [];
-  iterations.sort((a: any, b: any) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-  const tags = await listTagsForTask(id);
+  const taskAny = task as typeof task & {
+    iterations?: Array<{ startedAt: string }>;
+    tags?: TaskTagEmbedRow[];
+  };
+  const iterations = taskAny.iterations ?? [];
+  iterations.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  const tags = flattenTagEmbed(taskAny.tags);
   return { ...task, iterations, tags, _count: { iterations: iterations.length } };
 }
 

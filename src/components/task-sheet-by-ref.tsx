@@ -32,6 +32,7 @@ import type {
 } from "@/lib/dal/story-hierarchy";
 import { createClient } from "@/lib/supabase/client";
 import type { ChipTone } from "@/lib/status-chips";
+import { flattenTagEmbed } from "@/lib/task-tags";
 
 type SprintLite = {
   id: string;
@@ -152,7 +153,7 @@ function TaskSheetByRefInner({
       supabase
         .from("Task")
         .select(
-          "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+          "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
         )
         .eq("id", id)
         .single(),
@@ -163,7 +164,7 @@ function TaskSheetByRefInner({
         .order("startDate"),
       supabase
         .from("TaskTag")
-        .select("id, name, tone")
+        .select("id, projectId, name, tone")
         .eq("projectId", projectId)
         .order("name"),
       supabase
@@ -180,7 +181,13 @@ function TaskSheetByRefInner({
     );
     const acRows = (taskAcRes.data ?? []) as AcceptanceCriterionRow[];
     const adapterCtx = buildTaskAdapterContext(stories, acRows);
-    const task = adaptTask(tasksRes.data as Parameters<typeof adaptTask>[0], adapterCtx);
+    const flatTask = {
+      ...tasksRes.data,
+      tags: flattenTagEmbed(
+        (tasksRes.data as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
+      ),
+    };
+    const task = adaptTask(flatTask as Parameters<typeof adaptTask>[0], adapterCtx);
 
     const memberRows = (membersRes.data ?? [])
       .map((pm) => {
@@ -235,7 +242,7 @@ function TaskSheetByRefInner({
       supabase
         .from("Task")
         .select(
-          "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+          "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
         )
         .eq("id", dbTaskId)
         .single(),
@@ -247,7 +254,13 @@ function TaskSheetByRefInner({
     if (!tasksRes.data) return;
     const acRows = (taskAcRes.data ?? []) as AcceptanceCriterionRow[];
     const adapterCtx = buildTaskAdapterContext(ctx.stories, acRows);
-    const task = adaptTask(tasksRes.data as Parameters<typeof adaptTask>[0], adapterCtx);
+    const flatTask = {
+      ...tasksRes.data,
+      tags: flattenTagEmbed(
+        (tasksRes.data as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
+      ),
+    };
+    const task = adaptTask(flatTask as Parameters<typeof adaptTask>[0], adapterCtx);
     setCtx((cur) => (cur ? { ...cur, task } : cur));
     onAfterChange?.();
   }, [ctx, taskId, supabase, onAfterChange]);
@@ -415,16 +428,7 @@ function TaskSheetByRefInner({
         showErrorToast(error, { label: "Tags" });
         throw error;
       }
-      const updated = (await res.json()) as Array<{
-        id: string;
-        name: string;
-        tone: string;
-      }>;
-      const tags: TaskTag[] = updated.map((t) => ({
-        id: t.id,
-        name: t.name,
-        tone: t.tone,
-      }));
+      const tags = (await res.json()) as TaskTag[];
       setCtx((cur) =>
         cur ? { ...cur, task: { ...cur.task, tags } } : cur,
       );
