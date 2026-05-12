@@ -382,7 +382,11 @@ export default function ProjectDetailPage({
       supabase
         .from("UserStory")
         .select(
-          "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description, approvedAt), persona:ProjectPersona(id, name, description), designSession:DesignSession(status)",
+          // designSession embed precisa do nome explícito da FK porque há
+          // 2 relações UserStory↔DesignSession (FK direta `designSessionId` e
+          // reverse via `DesignSession.briefingTargetStoryId`). PostgREST recusa
+          // embed ambíguo (PGRST201) — sempre nomear UserStory_designSessionId_fkey.
+          "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description, approvedAt), persona:ProjectPersona(id, name, description), designSession:DesignSession!UserStory_designSessionId_fkey(status)",
         )
         .eq("projectId", id)
         .order("createdAt", { ascending: false }),
