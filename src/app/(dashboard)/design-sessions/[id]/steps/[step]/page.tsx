@@ -3,10 +3,10 @@
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { WizardLayout } from "@/components/design-session/wizard-layout";
-import { PersonaJourneyBoard, Persona, JourneyStep } from "@/components/design-session/persona-journey-board";
-import { SolutionCardBoard, SolutionCard } from "@/components/design-session/solution-card-board";
+import { PersonaJourneyBoard, Persona } from "@/components/design-session/persona-journey-board";
+import { SolutionCardBoard } from "@/components/design-session/solution-card-board";
 import { HypothesisBoard } from "@/components/design-session/hypothesis-board";
-import { PriorityBoard, PrioritizedItem, PriorityBucket } from "@/components/design-session/priority-board";
+import { PriorityBoard } from "@/components/design-session/priority-board";
 import { PostItBoard, PostItSection } from "@/components/design-session/post-it-board";
 import { RiskGapBoard } from "@/components/design-session/risk-gap-board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
@@ -34,6 +34,8 @@ import { useScope, type ScopeBucket } from "@/hooks/design-session/use-scope";
 import { useRisksGaps } from "@/hooks/design-session/use-risks-gaps";
 import { usePersonas } from "@/hooks/design-session/use-personas";
 import { useTechnicalSpecs } from "@/hooks/design-session/use-technical-specs";
+import { useBrainstormFeatures } from "@/hooks/design-session/use-brainstorm-features";
+import { usePriorityItems } from "@/hooks/design-session/use-priority-items";
 
 type Session = {
   id: string;
@@ -226,11 +228,11 @@ function StepContent({
     case "personas_journeys":
       return <PersonasJourneysStep sessionId={sessionId} />;
     case "brainstorm":
-      return <BrainstormStep data={data} onChange={onChange} sessionId={sessionId} />;
+      return <BrainstormStep sessionId={sessionId} />;
     case "risks_gaps":
       return <RisksGapsStep sessionId={sessionId} />;
     case "prioritization":
-      return <PrioritizationStep data={data} onChange={onChange} sessionId={sessionId} />;
+      return <PrioritizationStep sessionId={sessionId} />;
     case "technical_specs":
       return <TechnicalSpecsStep sessionId={sessionId} />;
     case "hypotheses":
@@ -467,28 +469,25 @@ function PersonasJourneysStep({ sessionId }: { sessionId: string }) {
 
 // ─── Step 2: Brainstorm de Solucoes ───────────────────────
 
-function BrainstormStep({
-  data,
-  onChange,
-  sessionId,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-  sessionId: string;
-}) {
-  const solutions = (data.solutions as SolutionCard[]) || [];
+function BrainstormStep({ sessionId }: { sessionId: string }) {
+  const { features, loaded, addFeature, updateFeature, deleteFeature } =
+    useBrainstormFeatures(sessionId);
   const [personaNames, setPersonaNames] = useState<string[]>([]);
 
-  // Load persona names from previous step
+  // Load persona names from the personas table (replaces legacy /steps/personas_journeys).
   useEffect(() => {
-    fetch(`/api/design-sessions/${sessionId}/steps/personas_journeys`)
+    fetch(`/api/design-sessions/${sessionId}/personas`)
       .then((r) => r.json())
       .then((r) => {
-        const personas = (r.data?.personas as Persona[]) || [];
+        const personas = (r.personas as { name: string }[]) || [];
         setPersonaNames(personas.map((p) => p.name));
       })
       .catch(() => {});
   }, [sessionId]);
+
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando ideias...</div>;
+  }
 
   return (
     <div className="space-y-4">
@@ -496,18 +495,51 @@ function BrainstormStep({
         Hora de gerar ideias sem filtro. Cada solution card descreve uma ideia, como ela resolve o problema e pra qual persona.
       </p>
       <SolutionCardBoard
-        solutions={solutions}
+        solutions={features.map((f) => ({
+          id: f.id,
+          title: f.title,
+          howItSolves: f.howItSolves ?? "",
+          targetPersona: f.targetPersona ?? "",
+          keyScreens: f.keyScreens ?? undefined,
+          userFlows: f.userFlows ?? undefined,
+          painPointRef: f.painPointRef ?? undefined,
+          technicalNotes: f.technicalNotes ?? undefined,
+          archived: f.archived,
+        }))}
         personaNames={personaNames}
-        onAdd={(sol) => onChange({ ...data, solutions: [...solutions, sol] })}
-        onUpdate={(id, updates) =>
-          onChange({
-            ...data,
-            solutions: solutions.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+        onAdd={(sol) =>
+          addFeature({
+            title: sol.title,
+            howItSolves: sol.howItSolves,
+            targetPersona: sol.targetPersona,
+            keyScreens: sol.keyScreens ?? null,
+            userFlows: sol.userFlows ?? null,
+            painPointRef: sol.painPointRef ?? null,
+            technicalNotes: sol.technicalNotes ?? null,
+            archived: sol.archived ?? false,
           })
         }
-        onDelete={(id) =>
-          onChange({ ...data, solutions: solutions.filter((s) => s.id !== id) })
+        onUpdate={(id, updates) =>
+          updateFeature(id, {
+            ...(updates.title !== undefined && { title: updates.title }),
+            ...(updates.howItSolves !== undefined && { howItSolves: updates.howItSolves }),
+            ...(updates.targetPersona !== undefined && {
+              targetPersona: updates.targetPersona,
+            }),
+            ...(updates.keyScreens !== undefined && {
+              keyScreens: updates.keyScreens ?? null,
+            }),
+            ...(updates.userFlows !== undefined && { userFlows: updates.userFlows ?? null }),
+            ...(updates.painPointRef !== undefined && {
+              painPointRef: updates.painPointRef ?? null,
+            }),
+            ...(updates.technicalNotes !== undefined && {
+              technicalNotes: updates.technicalNotes ?? null,
+            }),
+            ...(updates.archived !== undefined && { archived: updates.archived }),
+          })
         }
+        onDelete={(id) => deleteFeature(id)}
       />
     </div>
   );
@@ -530,13 +562,13 @@ function RisksGapsStep({ sessionId }: { sessionId: string }) {
   const [features, setFeatures] = useState<{ id: string; title: string }[]>([]);
 
   useEffect(() => {
-    fetch(`/api/design-sessions/${sessionId}/steps/brainstorm`)
+    fetch(`/api/design-sessions/${sessionId}/brainstorm-features`)
       .then((r) => r.json())
       .then((r) => {
-        const solutions = ((r.data?.solutions as SolutionCard[]) || []).filter(
+        const list = ((r.features as { id: string; title: string; archived: boolean }[]) || []).filter(
           (s) => !s.archived,
         );
-        setFeatures(solutions.map((s) => ({ id: s.id, title: s.title })));
+        setFeatures(list.map((s) => ({ id: s.id, title: s.title })));
       })
       .catch(() => {});
   }, [sessionId]);
@@ -622,45 +654,12 @@ function RisksGapsStep({ sessionId }: { sessionId: string }) {
 
 // ─── Step 3: Priorizacao & Escopo ─────────────────────────
 
-function PrioritizationStep({
-  data,
-  onChange,
-  sessionId,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-  sessionId: string;
-}) {
-  const items = (data.items as PrioritizedItem[]) || [];
-  const [loaded, setLoaded] = useState(false);
+function PrioritizationStep({ sessionId }: { sessionId: string }) {
+  const { items, loaded, updateItem, deleteItem } = usePriorityItems(sessionId);
 
-  // On first load, pull solutions from brainstorm step and seed as unclassified MVP items
-  useEffect(() => {
-    if (loaded || items.length > 0) return;
-    fetch(`/api/design-sessions/${sessionId}/steps/brainstorm`)
-      .then((r) => r.json())
-      .then((r) => {
-        const solutions = ((r.data?.solutions as SolutionCard[]) || []).filter(
-          (s) => !s.archived,
-        );
-        if (solutions.length > 0) {
-          const seeded: PrioritizedItem[] = solutions.map((s) => ({
-            id: s.id,
-            title: s.title,
-            howItSolves: s.howItSolves,
-            targetPersona: s.targetPersona,
-            bucket: "mvp" as PriorityBucket,
-            keyScreens: s.keyScreens,
-            userFlows: s.userFlows,
-            painPointRef: s.painPointRef,
-            technicalNotes: s.technicalNotes,
-          }));
-          onChange({ ...data, items: seeded });
-        }
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-  }, [sessionId, loaded, items.length]);
+  if (!loaded) {
+    return <div className="text-sm text-muted-foreground">Carregando priorização...</div>;
+  }
 
   return (
     <div className="space-y-4">
@@ -669,16 +668,19 @@ function PrioritizationStep({
         Todas comecam no MVP — mova o que nao e essencial.
       </p>
       <PriorityBoard
-        items={items}
-        onMove={(itemId, toBucket) =>
-          onChange({
-            ...data,
-            items: items.map((i) => (i.id === itemId ? { ...i, bucket: toBucket } : i)),
-          })
-        }
-        onDelete={(itemId) =>
-          onChange({ ...data, items: items.filter((i) => i.id !== itemId) })
-        }
+        items={items.map((i) => ({
+          id: i.id,
+          title: i.title,
+          howItSolves: i.howItSolves,
+          targetPersona: i.targetPersona,
+          bucket: i.bucket,
+          keyScreens: i.keyScreens ?? undefined,
+          userFlows: i.userFlows ?? undefined,
+          painPointRef: i.painPointRef ?? undefined,
+          technicalNotes: i.technicalNotes ?? undefined,
+        }))}
+        onMove={(itemId, toBucket) => updateItem(itemId, { bucket: toBucket })}
+        onDelete={(itemId) => deleteItem(itemId)}
       />
     </div>
   );
