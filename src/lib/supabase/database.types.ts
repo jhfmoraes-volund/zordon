@@ -1025,6 +1025,88 @@ export type Database = {
           },
         ]
       }
+      DesignSessionFile: {
+        Row: {
+          createdAt: string
+          extractedText: string | null
+          extractionStatus: string
+          id: string
+          mimeType: string
+          name: string
+          sessionId: string
+          size: number
+          storagePath: string
+          uploadedByMemberId: string | null
+        }
+        Insert: {
+          createdAt?: string
+          extractedText?: string | null
+          extractionStatus?: string
+          id?: string
+          mimeType: string
+          name: string
+          sessionId: string
+          size: number
+          storagePath: string
+          uploadedByMemberId?: string | null
+        }
+        Update: {
+          createdAt?: string
+          extractedText?: string | null
+          extractionStatus?: string
+          id?: string
+          mimeType?: string
+          name?: string
+          sessionId?: string
+          size?: number
+          storagePath?: string
+          uploadedByMemberId?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionFile_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_uploadedByMemberId_fkey"
+            columns: ["uploadedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_uploadedByMemberId_fkey"
+            columns: ["uploadedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_uploadedByMemberId_fkey"
+            columns: ["uploadedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionFile_uploadedByMemberId_fkey"
+            columns: ["uploadedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignSessionGap: {
         Row: {
           category: string | null

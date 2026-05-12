@@ -16,14 +16,10 @@ import {
   RoamTranscriptModal,
   type ImportedTranscript,
 } from "./roam-transcript-modal";
-
-type UploadedFile = {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  extractedText: string;
-};
+import {
+  useSessionFiles,
+  type SessionFileRow,
+} from "@/hooks/design-session/use-session-files";
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -34,20 +30,15 @@ function formatSize(bytes: number) {
 const WELCOME_TEXT =
   "Olá! Sou o Vitor, seu assistente de design de produto. Me conte sobre o projeto — pode descrever em texto livre ou anexar documentos.";
 
-export function PreWorkStep({
-  sessionId,
-  data,
-  onChange,
-}: {
-  sessionId: string;
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const [files, setFiles] = useState<UploadedFile[]>(
-    (data.files as UploadedFile[]) || [],
-  );
-  const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
-  const [uploading, setUploading] = useState(false);
+export function PreWorkStep({ sessionId }: { sessionId: string }) {
+  const {
+    files,
+    uploading,
+    uploadFiles: uploadFilesHook,
+    deleteFile,
+    getExtractedText,
+  } = useSessionFiles(sessionId);
+  const [pendingFiles, setPendingFiles] = useState<SessionFileRow[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [inputText, setInputText] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -61,13 +52,6 @@ export function PreWorkStep({
 
   const isMobile = useIsMobile();
   const { planMode, setPlanMode } = useChatPlanMode("vitor");
-
-  const persistState = useCallback(
-    (updates: Record<string, unknown>) => {
-      onChange({ ...data, ...updates });
-    },
-    [data, onChange],
-  );
 
   const transport = useMemo(
     () =>
@@ -96,9 +80,6 @@ export function PreWorkStep({
   const { messages, status, sendMessage, stop, setMessages } = useChat({
     transport,
     messages: [initialMsg],
-    onFinish: () => {
-      onChange({ ...data });
-    },
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
@@ -165,47 +146,36 @@ export function PreWorkStep({
 
   const uploadFiles = useCallback(
     async (fileList: FileList) => {
-      setUploading(true);
-      const formData = new FormData();
-      Array.from(fileList).forEach((f) => formData.append("files", f));
-      try {
-        const res = await fetch(
-          `/api/design-sessions/${sessionId}/upload`,
-          { method: "POST", body: formData },
-        );
-        const result = await res.json();
-        const uploaded = (result.files || []) as UploadedFile[];
-        const newFiles = [...files, ...uploaded];
-        setFiles(newFiles);
+      const uploaded = await uploadFilesHook(fileList);
+      if (uploaded.length > 0) {
         setPendingFiles((prev) => [...prev, ...uploaded]);
-        persistState({ files: newFiles });
-      } catch {
-        // silently handle
       }
-      setUploading(false);
     },
-    [sessionId, files, persistState],
+    [uploadFilesHook],
   );
 
   const removePendingFile = (id: string) => {
     setPendingFiles((prev) => prev.filter((f) => f.id !== id));
-    const updated = files.filter((f) => f.id !== id);
-    setFiles(updated);
-    persistState({ files: updated });
+    void deleteFile(id);
   };
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     if ((!inputText.trim() && !pendingFiles.length) || uploading || isStreaming)
       return;
     let fullMessage = inputText.trim();
     if (pendingFiles.length > 0) {
-      const fileTexts = pendingFiles
-        .filter((f) => f.extractedText)
-        .map(
-          (f) =>
-            `\n---\nArquivo: ${f.name} (${formatSize(f.size)})\n${f.extractedText}`,
-        )
-        .join("");
+      // Pull extracted text for each pending file. Files with no extractable
+      // content (status='unsupported'/'failed') are mentioned by name only
+      // so Vitor knows they exist.
+      const texts = await Promise.all(
+        pendingFiles.map(async (f) => {
+          const text = await getExtractedText(f.id);
+          const header = `\n---\nArquivo: ${f.name} (${formatSize(f.size)})`;
+          if (text && text.trim()) return `${header}\n${text}`;
+          return `${header}\n[Conteúdo não extraído — formato não suportado ou falha na leitura]`;
+        }),
+      );
+      const fileTexts = texts.join("");
       if (fileTexts) {
         fullMessage = fullMessage
           ? `${fullMessage}\n${fileTexts}`
@@ -216,7 +186,14 @@ export function PreWorkStep({
     setInputText("");
     setPendingFiles([]);
     sendMessage({ text: fullMessage });
-  }, [inputText, pendingFiles, uploading, isStreaming, sendMessage]);
+  }, [
+    inputText,
+    pendingFiles,
+    uploading,
+    isStreaming,
+    sendMessage,
+    getExtractedText,
+  ]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -235,7 +212,7 @@ export function PreWorkStep({
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.docx,.txt,.md,.html,.htm"
+        accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.xlsx,.xls"
         className="hidden"
         onChange={(e) => {
           if (e.target.files) uploadFiles(e.target.files);
@@ -401,7 +378,7 @@ export function PreWorkStep({
                 Solte os arquivos aqui
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                PDF, DOCX, TXT, MD, HTML
+                PDF, DOCX, TXT, MD, HTML, CSV, XLSX
               </p>
             </div>
           </div>

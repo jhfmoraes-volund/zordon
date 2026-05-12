@@ -50,6 +50,7 @@ export async function GET(
     notesResp,
     researchResp,
     transcriptsResp,
+    filesResp,
   ] = await Promise.all([
     stepKeys.has("product_vision")
       ? db().from("DesignSessionProductVision").select("*").eq("sessionId", id).maybeSingle()
@@ -113,6 +114,13 @@ export async function GET(
     stepKeys.has("pre_work")
       ? db().from("DesignSessionTranscript").select("*").eq("sessionId", id)
       : Promise.resolve({ data: [], error: null }),
+    stepKeys.has("pre_work")
+      ? db()
+          .from("DesignSessionFile")
+          .select("id, sessionId, name, size, mimeType, extractionStatus, uploadedByMemberId, createdAt")
+          .eq("sessionId", id)
+          .order("createdAt", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const stepNotes: Partial<Record<StepKey, StickyNote[]>> = {};
@@ -136,5 +144,6 @@ export async function GET(
     stepNotes,
     research: researchResp.data ?? [],
     transcripts: transcriptsResp.data ?? [],
+    files: filesResp.data ?? [],
   });
 }

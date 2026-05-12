@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionAccessApi } from "@/lib/dal";
+import { requireSessionEditApi } from "@/lib/dal";
 import { db } from "@/lib/db";
-import type { Json } from "@/lib/supabase/database.types";
+import {
+  extractTextFromBuffer,
+  isOverSizeLimit,
+} from "@/lib/design-session/file-extraction";
+
+const BUCKET = "design-session-files";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: sessionId } = await params;
-  const denied = await requireSessionAccessApi(sessionId);
+  const denied = await requireSessionEditApi(sessionId);
   if (denied) return denied;
 
   const formData = await req.formData();
@@ -18,78 +23,86 @@ export async function POST(
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
   }
 
-  const extracted: Array<{
+  for (const file of files) {
+    if (isOverSizeLimit(file.size)) {
+      return NextResponse.json(
+        { error: `File "${file.name}" exceeds 25MB limit` },
+        { status: 413 },
+      );
+    }
+  }
+
+  const supabase = db();
+  const inserted: Array<{
     id: string;
     name: string;
     size: number;
-    type: string;
-    extractedText: string;
+    mimeType: string;
+    storagePath: string;
+    extractionStatus: string;
   }> = [];
 
   for (const file of files) {
+    const fileId = crypto.randomUUID();
     const buffer = Buffer.from(await file.arrayBuffer());
-    let text = "";
+    const mimeType = file.type || "application/octet-stream";
 
-    if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse");
-      const result = await pdfParse(buffer);
-      text = result.text;
-    } else if (
-      file.type ===
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-      file.name.endsWith(".docx")
-    ) {
-      const mammoth = await import("mammoth");
-      const result = await mammoth.extractRawText({ buffer });
-      text = result.value;
-    } else if (
-      file.type === "text/html" ||
-      file.name.endsWith(".html") ||
-      file.name.endsWith(".htm")
-    ) {
-      const { parse } = await import("node-html-parser");
-      const root = parse(buffer.toString("utf-8"));
-      root.querySelectorAll("script, style, noscript").forEach((el) => el.remove());
-      text = root.text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-    } else {
-      // TXT, MD, etc
-      text = buffer.toString("utf-8");
+    const extraction = await extractTextFromBuffer(buffer, file.name, mimeType);
+
+    const storagePath = `${sessionId}/${fileId}/${sanitizeFilename(file.name)}`;
+    const { error: uploadErr } = await supabase.storage
+      .from(BUCKET)
+      .upload(storagePath, buffer, {
+        contentType: mimeType,
+        upsert: false,
+      });
+    if (uploadErr) {
+      return NextResponse.json(
+        { error: `Storage upload failed for "${file.name}": ${uploadErr.message}` },
+        { status: 500 },
+      );
     }
 
-    extracted.push({
-      id: crypto.randomUUID().slice(0, 7),
-      name: file.name,
-      size: file.size,
-      type: file.type || "text/plain",
-      extractedText: text,
+    const { data, error: dbErr } = await supabase
+      .from("DesignSessionFile")
+      .insert({
+        id: fileId,
+        sessionId,
+        name: file.name,
+        size: file.size,
+        mimeType,
+        storagePath,
+        extractedText: extraction.text || null,
+        extractionStatus: extraction.status,
+      })
+      .select()
+      .single();
+    if (dbErr) {
+      // Best-effort cleanup of the storage object on row insert failure.
+      await supabase.storage.from(BUCKET).remove([storagePath]);
+      return NextResponse.json(
+        { error: `DB insert failed for "${file.name}": ${dbErr.message}` },
+        { status: 500 },
+      );
+    }
+
+    inserted.push({
+      id: data.id,
+      name: data.name,
+      size: data.size,
+      mimeType: data.mimeType,
+      storagePath: data.storagePath,
+      extractionStatus: data.extractionStatus,
     });
   }
 
-  // Save extracted files to pre_work step data
-  const { data: existing } = await db()
-    .from("DesignSessionStepData")
-    .select("data")
-    .eq("sessionId", sessionId)
-    .eq("stepKey", "pre_work")
-    .maybeSingle();
+  return NextResponse.json({ files: inserted });
+}
 
-  const currentData = (existing?.data as Record<string, unknown>) || {};
-  const currentFiles = (currentData.files as typeof extracted) || [];
-
-  await db()
-    .from("DesignSessionStepData")
-    .upsert(
-      {
-        id: crypto.randomUUID(),
-        sessionId,
-        stepKey: "pre_work",
-        stepIndex: 0,
-        data: { ...currentData, files: [...currentFiles, ...extracted] } as unknown as Json,
-        updatedAt: new Date().toISOString(),
-      },
-      { onConflict: "sessionId,stepKey" }
-    );
-
-  return NextResponse.json({ files: extracted });
+function sanitizeFilename(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(0, 200);
 }
