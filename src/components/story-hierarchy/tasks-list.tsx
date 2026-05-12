@@ -939,18 +939,22 @@ function TasksTable({
   // classes that appear LITERALLY in source — runtime-built strings don't
   // make it to the CSS bundle, and the layout silently degrades to a
   // single-column stack.
+  const isMobile = useIsMobile();
+  // Title floor is wider on mobile so the title actually breathes once the
+  // Story column drops out (storyHint is undefined on mobile via FlatList).
+  const titleMin = isMobile ? 480 : 220;
   const layoutParts: string[] = [];
   if (editing.bulkEnabled) layoutParts.push("28px");
-  layoutParts.push("56px", "minmax(220px, 1fr)");
+  layoutParts.push("56px", `minmax(${titleMin}px, 1fr)`);
   if (storyHint) layoutParts.push("200px");
   if (editing.showSprint) layoutParts.push("130px");
   layoutParts.push("130px", "44px", "170px");
   if (editing.showMenu) layoutParts.push("40px");
   const gridStyle = { gridTemplateColumns: layoutParts.join(" ") };
 
-  // Min total width = sum of fixed columns + 220 (title min) + (col_count - 1) * 12px gap.
+  // Min total width = sum of fixed columns + title min + (col_count - 1) * 12px gap.
   const fixedSum =
-    (editing.bulkEnabled ? 28 : 0) + 56 + 220
+    (editing.bulkEnabled ? 28 : 0) + 56 + titleMin
     + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0)
     + 130 + 44 + 170 + (editing.showMenu ? 40 : 0);
   const colCount = layoutParts.length;
