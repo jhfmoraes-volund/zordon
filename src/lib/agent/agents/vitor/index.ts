@@ -2,7 +2,6 @@ import { buildSystemPrompt } from "../../prompt";
 import { assembleTools } from "../../tools";
 import {
   buildSessionContext,
-  getStepDataForPrompt,
   type SessionContextVerbosity,
 } from "../../context";
 import { db } from "@/lib/db";
@@ -67,7 +66,9 @@ export const vitorAgent: AgentDefinition = {
 
     const { data: session } = await db()
       .from("DesignSession")
-      .select("title, type, projectId, selectedSteps")
+      .select(
+        "title, type, projectId, selectedSteps, briefingSubPhase, briefingTargetStoryId",
+      )
       .eq("id", sessionId)
       .single();
 
@@ -75,17 +76,16 @@ export const vitorAgent: AgentDefinition = {
 
     const isBriefing = currentStepKey === "briefing";
 
-    // Load step data first so we can pick context verbosity from subPhase.
-    // Cheap (single row) and unblocks the parallel fan-out below.
-    // F4: use the prompt-sanitized version (sem `_drafts`) pra reduzir tokens.
-    // subPhase nao mora dentro de `_draft*`, entao o filtro nao afeta.
-    const currentStepData = await getStepDataForPrompt(sessionId, currentStepKey);
-    const subPhase = (currentStepData as { subPhase?: string } | null)?.subPhase;
+    // briefingSubPhase agora vive em coluna escalar de DesignSession (não mais em step_data JSON).
+    const briefingSubPhase =
+      (session as { briefingSubPhase?: string | null }).briefingSubPhase ?? null;
+    const briefingTargetStoryId =
+      (session as { briefingTargetStoryId?: string | null }).briefingTargetStoryId ?? null;
     const sessionSelectedSteps =
       (session as { selectedSteps?: string[] | null }).selectedSteps ?? null;
     const verbosity = pickVerbosity(
       currentStepKey,
-      subPhase,
+      briefingSubPhase ?? undefined,
       session.type,
       sessionSelectedSteps,
     );
@@ -161,7 +161,8 @@ export const vitorAgent: AgentDefinition = {
       selectedSteps: (session as { selectedSteps?: string[] | null }).selectedSteps ?? null,
       currentStepKey,
       sessionContext,
-      currentStepData,
+      briefingSubPhase,
+      briefingTargetStoryId,
       activeDecisions: activeDecisions.data ?? [],
       openQuestions: openQuestions.data ?? [],
       businessContext: businessContext.data ?? null,
@@ -182,7 +183,8 @@ export const vitorAgent: AgentDefinition = {
       selectedSteps: agentContext.selectedSteps as string[] | null,
       currentStepKey: agentContext.currentStepKey as string,
       sessionContext: agentContext.sessionContext as string,
-      currentStepData: agentContext.currentStepData as Record<string, unknown>,
+      briefingSubPhase: agentContext.briefingSubPhase as string | null,
+      briefingTargetStoryId: agentContext.briefingTargetStoryId as string | null,
       hasWebSearch: !!capabilities.webSearch,
       activeDecisions: agentContext.activeDecisions as ActiveDecision[],
       openQuestions: agentContext.openQuestions as OpenQuestion[],

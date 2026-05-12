@@ -21,7 +21,7 @@ import type {
   ModuleRow,
   StoryWithRelations,
 } from "@/lib/dal/story-hierarchy";
-import type { TaskTag } from "./types";
+import { flattenTagEmbed, type TaskTag } from "@/lib/task-tags";
 
 type SprintLite = { id: string; name: string; status?: string };
 
@@ -92,7 +92,7 @@ export function useTaskSheetContext(opts: UseTaskSheetContextOptions): Result {
           .order("startDate"),
         supabase
           .from("TaskTag")
-          .select("id, name, tone")
+          .select("id, projectId, name, tone")
           .eq("projectId", projectId)
           .order("name"),
         supabase
@@ -140,7 +140,7 @@ export function useTaskSheetContext(opts: UseTaskSheetContextOptions): Result {
         supabase
           .from("Task")
           .select(
-            "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+            "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
           )
           .eq("id", taskId)
           .single(),
@@ -152,7 +152,13 @@ export function useTaskSheetContext(opts: UseTaskSheetContextOptions): Result {
       if (!taskRes.data) return null;
       const acRows = (taskAcRes.data ?? []) as AcceptanceCriterionRow[];
       const adapterCtx = buildTaskAdapterContext(stories, acRows);
-      return adaptTask(taskRes.data as Parameters<typeof adaptTask>[0], adapterCtx);
+      const flatTask = {
+        ...taskRes.data,
+        tags: flattenTagEmbed(
+          (taskRes.data as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
+        ),
+      };
+      return adaptTask(flatTask as Parameters<typeof adaptTask>[0], adapterCtx);
     },
     [supabase],
   );

@@ -63,6 +63,7 @@ import {
   type TaskTag,
 } from "@/components/story-hierarchy";
 import type { ChipTone } from "@/lib/status-chips";
+import { flattenTagEmbed } from "@/lib/task-tags";
 import {
   adaptMember,
   adaptModule,
@@ -150,9 +151,7 @@ type RawTask = {
   projectId: string;
   createdByAgent: boolean | null;
   assignments: Array<{ memberId: string; member: { id: string; name: string } | null }>;
-  tags: Array<{
-    TaskTag: { id: string; name: string; tone: string } | null;
-  }>;
+  tags: TaskTag[];
 };
 
 type RawSprint = {
@@ -418,7 +417,7 @@ export default function ProjectDetailPage({
       supabase
         .from("Task")
         .select(
-          "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+          "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
         )
         .eq("projectId", id)
         .neq("status", "draft")
@@ -430,11 +429,17 @@ export default function ProjectDetailPage({
         .order("startDate"),
       supabase
         .from("TaskTag")
-        .select("id, name, tone")
+        .select("id, projectId, name, tone")
         .eq("projectId", id)
         .order("name"),
     ]);
-    setRawTasks((tasksRes.data ?? []) as unknown as RawTask[]);
+    const flatTasks = (tasksRes.data ?? []).map((t) => ({
+      ...t,
+      tags: flattenTagEmbed(
+        (t as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
+      ),
+    }));
+    setRawTasks(flatTasks as unknown as RawTask[]);
     setRawSprints((sprintsRes.data ?? []) as RawSprint[]);
     setProjectTags((tagsRes.data ?? []) as TaskTag[]);
   }, [id, supabase]);
@@ -1553,10 +1558,6 @@ export default function ProjectDetailPage({
     const tag = projectTags.find((t) => t.id === tagId);
     if (!tag) return;
 
-    const optimisticTagEntry = {
-      TaskTag: { id: tag.id, name: tag.name, tone: tag.tone ?? "" },
-    };
-
     await taskMutate(
       { type: "bulkPatch", ids: taskIds, patch: {} as Partial<RawTask> },
       async (signal) => {
@@ -1590,11 +1591,9 @@ export default function ProjectDetailPage({
           }
           return prev.map((t) => {
             if (!taskIds.includes(t.id) || skipped.has(t.id)) return t;
-            const has = t.tags.some(
-              (entry) => entry.TaskTag?.id === tagId,
-            );
+            const has = t.tags.some((tg) => tg.id === tagId);
             if (has) return t;
-            return { ...t, tags: [...t.tags, optimisticTagEntry] };
+            return { ...t, tags: [...t.tags, tag] };
           });
         },
       },
@@ -1626,9 +1625,7 @@ export default function ProjectDetailPage({
             taskIds.includes(t.id)
               ? {
                   ...t,
-                  tags: t.tags.filter(
-                    (entry) => entry.TaskTag?.id !== tagId,
-                  ),
+                  tags: t.tags.filter((tg) => tg.id !== tagId),
                 }
               : t,
           ),

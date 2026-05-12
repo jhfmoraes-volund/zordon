@@ -20,6 +20,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { flattenTagEmbed } from "@/lib/task-tags";
 import { MeetingTaskActionSheet, type MeetingTaskAction } from "./meeting-task-action-sheet";
 import { toast } from "sonner";
 import { showErrorToast } from "@/lib/optimistic/toast";
@@ -100,7 +101,7 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
       supabase
         .from("Task")
         .select(
-          "id, reference, title, description, status, type, scope, complexity, priority, sprintId, userStoryId, functionPoints, billable, dueDate, notes, assignments:TaskAssignment(memberId), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+          "id, reference, title, description, status, type, scope, complexity, priority, sprintId, userStoryId, functionPoints, billable, dueDate, notes, assignments:TaskAssignment(memberId), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
         )
         .eq("projectId", project.id),
       supabase
@@ -116,7 +117,7 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
         .order("name"),
       supabase
         .from("TaskTag")
-        .select("id, name, tone")
+        .select("id, projectId, name, tone")
         .eq("projectId", project.id)
         .order("name"),
       supabase
@@ -135,7 +136,15 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
     setActiveSprint(allSprints.find((s) => s.status === "active") ?? null);
 
     const taskMap = new Map<string, RawTaskForRow>();
-    for (const t of (tasksRes.data ?? []) as RawTaskForRow[]) taskMap.set(t.id, t);
+    for (const t of tasksRes.data ?? []) {
+      const flat = {
+        ...t,
+        tags: flattenTagEmbed(
+          (t as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
+        ),
+      } as RawTaskForRow;
+      taskMap.set(flat.id, flat);
+    }
     setTasksById(taskMap);
 
     const adaptedStories = (

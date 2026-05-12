@@ -8,6 +8,7 @@ import {
 } from "@/lib/dal";
 import { getAcForTask, createAc } from "@/lib/dal/story-hierarchy";
 import { createActivity } from "@/lib/dal/task-activity";
+import { flattenTagEmbed, type TaskTagEmbedRow } from "@/lib/task-tags";
 import type { Database } from "@/lib/supabase/database.types";
 
 type TaskRow = Database["public"]["Tables"]["Task"]["Row"];
@@ -30,7 +31,8 @@ const SELECT_FULL = `
   *,
   project:Project(name),
   sprint:Sprint(name),
-  assignments:TaskAssignment(*, member:Member(id, name))
+  assignments:TaskAssignment(*, member:Member(id, name)),
+  tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))
 `;
 
 export async function POST(
@@ -172,8 +174,17 @@ export async function POST(
     .eq("id", newId)
     .single();
 
+  const result = full
+    ? {
+        ...full,
+        tags: flattenTagEmbed(
+          (full as typeof full & { tags?: TaskTagEmbedRow[] }).tags,
+        ),
+      }
+    : full;
+
   return NextResponse.json(
-    { task: full, targetProjectName: targetProject.name },
+    { task: result, targetProjectName: targetProject.name },
     { status: 201 },
   );
 }

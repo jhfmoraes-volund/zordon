@@ -13,16 +13,6 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getStepData } from "../context";
-
-interface BrainstormFeature {
-  id: string;
-  title: string;
-  targetPersona?: string;
-  painPointRef?: string;
-  howItSolves?: string;
-  technicalNotes?: string;
-}
 
 interface AsIsStep {
   id: string;
@@ -30,29 +20,26 @@ interface AsIsStep {
   painOrGain?: string;
 }
 
-interface Persona {
-  id: string;
-  name: string;
-  asIsSteps?: AsIsStep[];
-}
-
 export function createMvpCheckTool(sessionId: string, projectId: string) {
   return tool({
     description:
-      "Avalia se uma feature pode entrar no MVP. CHAME ESTA TOOL ANTES de mover qualquer item pra bucket=mvp via update_item. Retorna pass=false se faltar dor priorizada, evidência ou se contraditar uma decisão ativa. Não é prompt rule frouxa — é gate estrutural pra disciplina de escopo.",
+      "Avalia se uma feature pode entrar no MVP. CHAME ESTA TOOL ANTES de mover qualquer item pra bucket=mvp via write_priority({action:'move'}). Retorna pass=false se faltar dor priorizada, evidência ou se contraditar uma decisão ativa. Não é prompt rule frouxa — é gate estrutural pra disciplina de escopo.",
     inputSchema: z.object({
       featureId: z
         .string()
-        .describe("ID do item em brainstorm.features que se quer marcar como MVP"),
+        .describe("ID da feature em brainstorm (ou priority item) que se quer marcar como MVP"),
     }),
     execute: async ({ featureId }) => {
       const blockers: string[] = [];
       const warnings: string[] = [];
 
-      const brainstorm = (await getStepData(sessionId, "brainstorm")) as {
-        features?: BrainstormFeature[];
-      };
-      const feature = brainstorm.features?.find((f) => f.id === featureId);
+      const { data: feature } = await db()
+        .from("DesignSessionBrainstormFeature")
+        .select("id, title, painPointRef")
+        .eq("sessionId", sessionId)
+        .eq("id", featureId)
+        .maybeSingle();
+
       if (!feature) {
         return {
           pass: false,
@@ -62,15 +49,17 @@ export function createMvpCheckTool(sessionId: string, projectId: string) {
         };
       }
 
-      // --- Check 1: dor priorizada
-      const personas = (await getStepData(sessionId, "personas_journeys")) as {
-        personas?: Persona[];
-      };
+      // --- Check 1: dor priorizada (busca o id em asIsSteps de qualquer persona)
+      const { data: personas } = await db()
+        .from("DesignSessionPersona")
+        .select("id, name, \"asIsSteps\"")
+        .eq("sessionId", sessionId);
       const painRef = feature.painPointRef;
       let dorOk = false;
       if (painRef) {
-        for (const p of personas.personas ?? []) {
-          if (p.asIsSteps?.some((s) => s.id === painRef)) {
+        for (const p of personas ?? []) {
+          const steps = (p.asIsSteps as AsIsStep[] | null) ?? [];
+          if (steps.some((s) => s.id === painRef)) {
             dorOk = true;
             break;
           }

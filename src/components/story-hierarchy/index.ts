@@ -16,9 +16,10 @@ export type {
   TaskComplexity,
   TaskScope,
   TaskStatus,
-  TaskTag,
   TaskType,
 } from "./types";
+
+export type { TaskTag } from "@/lib/task-tags";
 
 export {
   acProgress,

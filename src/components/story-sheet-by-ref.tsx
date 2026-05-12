@@ -32,6 +32,7 @@ import type {
 } from "@/lib/dal/story-hierarchy";
 import { createClient } from "@/lib/supabase/client";
 import { suggestFunctionPoints } from "@/lib/function-points";
+import { flattenTagEmbed } from "@/lib/task-tags";
 
 type Ctx = {
   story: AdaptedStory;
@@ -117,7 +118,7 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
         supabase
           .from("Task")
           .select(
-            "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+            "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
           )
           .eq("projectId", projectId),
         supabase
@@ -135,7 +136,13 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
 
       const acRows = (taskAcRes.data ?? []) as AcceptanceCriterionRow[];
       const adapterCtx = buildTaskAdapterContext(allStories, acRows);
-      const tasks = ((tasksRes.data ?? []) as Parameters<typeof adaptTask>[0][]).map((t) =>
+      const flatTasks = (tasksRes.data ?? []).map((t) => ({
+        ...t,
+        tags: flattenTagEmbed(
+          (t as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
+        ),
+      }));
+      const tasks = (flatTasks as Parameters<typeof adaptTask>[0][]).map((t) =>
         adaptTask(t, adapterCtx),
       );
 
@@ -190,7 +197,7 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
     const { data: tasksRes } = await supabase
       .from("Task")
       .select(
-        "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, name, tone))",
+        "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
       )
       .eq("projectId", ctx.projectId);
     const { data: taskAcRes } = await supabase
@@ -203,7 +210,13 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
       [ctx.story],
       acRows,
     );
-    const tasks = ((tasksRes ?? []) as Parameters<typeof adaptTask>[0][]).map((t) =>
+    const flatTasks = (tasksRes ?? []).map((t) => ({
+      ...t,
+      tags: flattenTagEmbed(
+        (t as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
+      ),
+    }));
+    const tasks = (flatTasks as Parameters<typeof adaptTask>[0][]).map((t) =>
       adaptTask(t, adapterCtx),
     );
     setCtx((cur) => (cur ? { ...cur, tasks } : cur));

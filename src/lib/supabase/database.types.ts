@@ -4828,6 +4828,14 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: string
       }
+      persona_journey_delete: {
+        Args: { p_kind: string; p_persona_id: string; p_step_id: string }
+        Returns: boolean
+      }
+      persona_journey_upsert: {
+        Args: { p_kind: string; p_persona_id: string; p_step: Json }
+        Returns: Json
+      }
       renumber_sprints_chronologically: {
         Args: { p_project_id: string }
         Returns: undefined
@@ -4853,6 +4861,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      scope_item_delete: {
+        Args: { p_bucket: string; p_item_id: string; p_session_id: string }
+        Returns: boolean
+      }
+      scope_item_upsert: {
+        Args: { p_bucket: string; p_item: Json; p_session_id: string }
+        Returns: Json
       }
       set_member_integration: {
         Args: {
@@ -4915,6 +4931,14 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      tech_specs_item_delete: {
+        Args: { p_item_id: string; p_kind: string; p_session_id: string }
+        Returns: boolean
+      }
+      tech_specs_item_upsert: {
+        Args: { p_item: Json; p_kind: string; p_session_id: string }
+        Returns: Json
       }
       unassigned_active_task_count: { Args: never; Returns: number }
     }

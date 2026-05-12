@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { useDSCollectionRealtime } from "@/hooks/design-session/use-ds-collection-realtime";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
 
 export type PriorityBucket = "mvp" | "next" | "out";
@@ -65,6 +66,8 @@ export function usePriorityItems(sessionId: string) {
       cancelled = true;
     };
   }, [sessionId, setCommitted]);
+
+  useDSCollectionRealtime<PriorityItemRow>(sessionId, "priority", collection);
 
   const updateItem = useCallback(
     async (itemId: string, patch: Partial<PriorityItemRow>) => {

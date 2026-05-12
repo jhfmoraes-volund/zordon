@@ -42,6 +42,19 @@ import {
 } from "./tools/memory";
 import { createMvpCheckTool } from "./tools/mvp-check";
 import { createSearchDocTool } from "./tools/search-doc";
+import {
+  createReadProductVisionTool,
+  createReadScopeTool,
+  createReadPersonaTool,
+  createReadBrainstormTool,
+  createReadPriorityTool,
+  createReadRiskTool,
+  createReadGapTool,
+  createReadTechSpecsTool,
+  createReadHypothesisTool,
+  createReadFilesTool,
+  createReadFileTextTool,
+} from "./tools/ds-entities";
 import type { Capabilities } from "./types";
 
 import { genId } from "@/lib/utils";
@@ -82,6 +95,19 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
   });
 
   tools.search_doc = createSearchDocTool(sessionId);
+
+  // Entity reads (Vitor normalization v2) — 9 entidades + files
+  tools.read_product_vision = createReadProductVisionTool(sessionId);
+  tools.read_scope = createReadScopeTool(sessionId);
+  tools.read_persona = createReadPersonaTool(sessionId);
+  tools.read_brainstorm = createReadBrainstormTool(sessionId);
+  tools.read_priority = createReadPriorityTool(sessionId);
+  tools.read_risk = createReadRiskTool(sessionId);
+  tools.read_gap = createReadGapTool(sessionId);
+  tools.read_tech_specs = createReadTechSpecsTool(sessionId);
+  tools.read_hypothesis = createReadHypothesisTool(sessionId);
+  tools.read_files = createReadFilesTool(sessionId);
+  tools.read_file_text = createReadFileTextTool(sessionId);
 
   // Write tools
   if (capabilities?.writeTools !== false) {

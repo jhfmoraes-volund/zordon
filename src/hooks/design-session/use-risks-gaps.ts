@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { useDSCollectionRealtime } from "@/hooks/design-session/use-ds-collection-realtime";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
 
 type Category = "business" | "technical";
@@ -70,6 +71,9 @@ export function useRisksGaps(sessionId: string) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  useDSCollectionRealtime<RiskRow>(sessionId, "risk", risks);
+  useDSCollectionRealtime<GapRow>(sessionId, "gap", gaps);
 
   const addRisk = useCallback(
     async (initial: Partial<RiskRow>) => {

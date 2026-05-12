@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
+import { useDSCollectionRealtime } from "@/hooks/design-session/use-ds-collection-realtime";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
 
 export type JourneyStep = {
@@ -117,6 +118,8 @@ export function usePersonas(sessionId: string) {
     },
     [sessionId, mutate],
   );
+
+  useDSCollectionRealtime<PersonaRow>(sessionId, "persona", collection);
 
   const deletePersona = useCallback(
     async (personaId: string) => {

@@ -17,7 +17,7 @@
 
 import { tool } from "ai";
 import { z } from "zod";
-import { getStepData } from "../context";
+import { db } from "@/lib/db";
 
 interface PreWorkFile {
   id: string;
@@ -25,6 +25,56 @@ interface PreWorkFile {
   size: number;
   type: string;
   extractedText: string;
+}
+
+interface LegacyPreWorkFile {
+  id: string;
+  name: string;
+  size?: number;
+  type?: string;
+  extractedText?: string;
+}
+
+async function loadSearchableFiles(sessionId: string): Promise<PreWorkFile[]> {
+  const out: PreWorkFile[] = [];
+
+  // Canonical
+  const { data: rows } = await db()
+    .from("DesignSessionFile")
+    .select("id, name, size, mimeType, extractedText, extractionStatus")
+    .eq("sessionId", sessionId);
+  for (const r of rows ?? []) {
+    if (r.extractionStatus === "success" && r.extractedText) {
+      out.push({
+        id: r.id,
+        name: r.name ?? "",
+        size: Number(r.size ?? 0),
+        type: r.mimeType ?? "",
+        extractedText: r.extractedText,
+      });
+    }
+  }
+
+  // Legacy fallback
+  const { data: legacyRow } = await db()
+    .from("DesignSessionStepData")
+    .select("data")
+    .eq("sessionId", sessionId)
+    .eq("stepKey", "pre_work")
+    .maybeSingle();
+  const legacy = (legacyRow?.data as { files?: LegacyPreWorkFile[] } | null)?.files ?? [];
+  for (const f of legacy) {
+    if (out.some((o) => o.id === f.id)) continue;
+    if (!f.extractedText) continue;
+    out.push({
+      id: f.id,
+      name: f.name ?? "",
+      size: Number(f.size ?? 0),
+      type: f.type ?? "",
+      extractedText: f.extractedText,
+    });
+  }
+  return out;
 }
 
 interface RawMatch {
@@ -91,10 +141,10 @@ function mergeOverlapping(matches: RawMatch[]): RawMatch[] {
 export function createSearchDocTool(sessionId: string) {
   return tool({
     description:
-      "Busca trechos literais nos documentos persistidos no pre_work. " +
+      "Busca trechos literais nos documentos persistidos na sessao (uploads do pre_work). " +
       "Use SEMPRE que precisar verificar valor especifico (numero, faixa, prazo, percentual, regra com excecao) " +
       "antes de cravar em scope/risks/brainstorm/etc. Tambem use quando o usuario perguntar 'o que diz o doc sobre X'. " +
-      "Nunca afirme valor citando 'os docs dizem' sem ter chamado esta tool ou get_step_data antes — sua memoria do doc e fraca pra detalhes. " +
+      "Nunca afirme valor citando 'os docs dizem' sem ter chamado esta tool antes — sua memoria do doc e fraca pra detalhes. " +
       "Query suporta multiplos termos (separa por espaco). Retorna trechos com 3 linhas antes + 8 depois do match, ordenados por relevancia.",
     inputSchema: z.object({
       query: z
@@ -118,14 +168,13 @@ export function createSearchDocTool(sessionId: string) {
       query: string;
       maxResults: number;
     }) => {
-      const data = await getStepData(sessionId, "pre_work");
-      const files = (data.files as PreWorkFile[]) || [];
+      const files = await loadSearchableFiles(sessionId);
 
       if (files.length === 0) {
         return {
           ok: false,
           error:
-            "Nenhum arquivo persistido no pre_work. Use get_step_data('pre_work') pra confirmar — pode ser que o doc nao tenha sido feito upload ou a sessao esteja vazia.",
+            "Nenhum arquivo persistido na sessao com texto extraido. Use read_files() pra ver o que existe.",
         };
       }
 

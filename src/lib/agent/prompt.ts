@@ -23,7 +23,9 @@ interface PromptInput {
   selectedSteps?: string[] | null;
   currentStepKey: string;
   sessionContext: string;
-  currentStepData: Record<string, unknown>;
+  /** Briefing-only metadata (cols DesignSession.briefingSubPhase / briefingTargetStoryId). */
+  briefingSubPhase?: string | null;
+  briefingTargetStoryId?: string | null;
   hasWebSearch?: boolean;
   activeDecisions?: ActiveDecision[];
   openQuestions?: OpenQuestion[];
@@ -143,7 +145,7 @@ function buildBehaviorRules(): string {
    Tools: \`delete_item\`, \`delete_task\`, \`delete_user_story\`, \`revise_decision(status: "reverted")\`, \`compact_session_to_project\`.
    Se o usuario disser "deleta X" — voce ainda confirma uma vez ("vou deletar X (id, titulo). Confirma?"). Operacao destrutiva merece pausa explicita.
 
-   **Tools de leitura sao sempre livres** (sem confirmacao). Exemplos: \`get_step_data\`, \`list_decisions\`, \`list_open_questions\`, \`list_research\`, \`list_tasks\`, \`list_project_tasks\`, \`read_session_memory\`, \`mvp_check\`, \`search_doc\`.
+   **Tools de leitura sao sempre livres** (sem confirmacao). Exemplos: \`read_persona\`, \`read_brainstorm\`, \`read_priority\`, \`read_files\`, \`read_file_text\`, \`list_decisions\`, \`list_open_questions\`, \`list_research\`, \`list_tasks\`, \`list_project_tasks\`, \`read_session_memory\`, \`mvp_check\`, \`search_doc\`.
 
    **Em sequencia multi-tool**, se uma tool falhar no meio, PARE e replanje com o usuario — nao recupere silenciosamente em loop.
 
@@ -185,7 +187,7 @@ function buildBehaviorRules(): string {
     - regra com excecao ("aceita ate X EXCETO se Y")
     - tabela com varias entradas (categorias, multiplicadores, niveis)
 
-    voce DEVE chamar **search_doc** com termo da regra (ou get_step_data('pre_work') se quiser o doc inteiro) e citar trecho literal na resposta. Se nao conseguir achar, NAO chute o valor — marque explicitamente como "nao encontrei no doc, posso estar errando" ou peca pro usuario confirmar.
+    voce DEVE chamar **search_doc** com termo da regra (ou \`read_file_text({ fileId, range })\` se quiser ler o doc paginado) e citar trecho literal na resposta. Se nao conseguir achar, NAO chute o valor — marque explicitamente como "nao encontrei no doc, posso estar errando" ou peca pro usuario confirmar.
 
     Exemplo correto:
     > "Conferindo no doc — search_doc('M_horario noturno') retorna: 'Noturno (18h–22h qualquer dia) | 1,35×' (linha 558 de zelar_precificacao.md). Entao o noturno vai ate 22h, e a faixa comercial comeca as 8h — sobra um buraco 22h-8h sem multiplicador definido."
@@ -193,7 +195,7 @@ function buildBehaviorRules(): string {
     Exemplo errado:
     > "M_horario termina as 22h" (afirmou de cor, sem search, e errou — na verdade tem 3 faixas, a noturna vai ate 22h mas existe a comercial 8h-18h tambem).
 
-14. **search_doc / get_step_data antes de responder pergunta sobre regra do doc.** Quando o usuario perguntar "o que diz o doc sobre X" ou "tem alguma regra sobre Y" ou "qual o valor de Z", chame search_doc PRIMEIRO. Sua resposta deve citar trecho exato. Sem fonte literal, marque a resposta como "do que lembro, mas nao verifiquei". Verificar e barato — chutar e caro.
+14. **search_doc / read_file_text antes de responder pergunta sobre regra do doc.** Quando o usuario perguntar "o que diz o doc sobre X" ou "tem alguma regra sobre Y" ou "qual o valor de Z", chame search_doc PRIMEIRO. Sua resposta deve citar trecho exato. Sem fonte literal, marque a resposta como "do que lembro, mas nao verifiquei". Verificar e barato — chutar e caro.
 
 15. **Output ESTRUTURADO volumoso → escreva direto no array final, chat enxuto.**
 
@@ -415,7 +417,7 @@ ${hierarchy}
 
 ### Sequencia obrigatoria
 
-1. Use \`get_step_data\` em "brainstorm", "personas_journeys", "scope_definition", "prioritization", "technical_specs" pra entender o escopo e as personas.
+1. Use \`read_brainstorm\`, \`read_persona({ includeJourney:true })\`, \`read_scope\`, \`read_priority\`, \`read_tech_specs\` pra entender o escopo e as personas.
 
 2. **Apresente em texto** (sem chamar tool ainda):
    - **Lista de modulos propostos.** Para cada um:
@@ -551,8 +553,8 @@ Posso persistir as 8 stories?
 ### Sequencia obrigatoria
 
 1. **Leitura do brainstorm** (chame as tools so se voce precisar de \`bs#ids\` pra ancorar — o conteudo do brainstorm ja vem no system prompt em "Solucoes Levantadas" e "Priorizacao"):
-   - \`get_step_data({ stepKey: "brainstorm" })\` — pra pegar \`bs#ids\` que vao em \`UserStory.notes\` (metadata interna).
-   - \`get_step_data({ stepKey: "prioritization" })\` — confirme \`bucket\` de cada card. **APENAS bucket="mvp" vira story.** Itens \`next\` e \`out\` ficam de fora.
+   - \`read_brainstorm({})\` — pra pegar \`bs#ids\` que vao em \`UserStory.notes\` (metadata interna).
+   - \`read_priority({ buckets:["mvp"] })\` — confirme \`bucket\` de cada card. **APENAS bucket="mvp" vira story.** Itens \`next\` e \`out\` ficam de fora.
 
 2. **Filtragem por modulo.** Identifique mentalmente quais cards MVP do brainstorm pertencem ao modulo do escopo. Se o PM restringiu a 1 modulo, filtre — outros cards ficam de fora.
 
@@ -858,7 +860,8 @@ export function buildSystemPrompt({
   selectedSteps,
   currentStepKey,
   sessionContext,
-  currentStepData,
+  briefingSubPhase,
+  briefingTargetStoryId,
   hasWebSearch,
   activeDecisions,
   openQuestions,
@@ -913,7 +916,7 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
   - userFlows: fluxo principal do usuario (ex: "usuario busca -> seleciona -> agenda -> confirma")
   - painPointRef: qual dor da jornada AS-IS esta funcionalidade resolve
   - technicalNotes: APIs, integracoes ou migracoes necessarias
-  Pense como product designer + tech lead: referencie as jornadas das personas. Antes de criar os cards, consulte personas_journeys com get_step_data para obter os nomes exatos das personas e suas dores — use esses nomes no targetPersona
+  Pense como product designer + tech lead: referencie as jornadas das personas. Antes de criar os cards, consulte personas com \`read_persona({ includeJourney:true })\` para obter os nomes exatos das personas e suas dores — use esses nomes no targetPersona
 - **risks_gaps**: depois do brainstorm, levante (1) gaps — ambiguidades de regra de negocio que precisam de decisao explicita; (2) risks — o que pode dar errado no MVP, com category (business|technical), severity (high|medium|low) e mitigation quando severity=high. Use add_item com arrayKey "gaps" ou "risks"
 - **hypotheses**: crie hipoteses de validacao com indicador, meta e evidencia
 - **technical_specs**: stack, integrations, rules, performance (se houver info tecnica)
@@ -926,7 +929,7 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
 `
       : "";
 
-  const rawSubPhase = currentStepData?.subPhase as string | undefined;
+  const rawSubPhase = briefingSubPhase ?? undefined;
   const subPhase: BriefingSubPhase = (
     BRIEFING_SUB_PHASE_VALUES as readonly string[]
   ).includes(rawSubPhase ?? "")
@@ -937,7 +940,7 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
     currentStepKey === "briefing"
       ? buildBriefingSection({
           subPhase,
-          targetStoryId: currentStepData?.targetStoryId as string | undefined,
+          targetStoryId: briefingTargetStoryId ?? undefined,
           existingModules: existingModules ?? [],
           existingStories: existingStories ?? [],
           existingPersonas: existingPersonas ?? [],
@@ -1008,7 +1011,7 @@ Voce esta ajudando a delimitar identidade e fronteiras do produto. Esse exercici
 - Simetria opcional: se algo e "nao e X", muitas vezes existe um "e Y" complementar.
 
 ### Antes de preencher:
-1. Use get_step_data pra ler "product_vision" — alinhe scope_definition com problema e visao de sucesso ja definidos
+1. Use \`read_product_vision()\` pra ler a Vision — alinhe scope_definition com problema e visao de sucesso ja definidos
 2. Se a visao estiver vazia, sugira voltar pro product_vision antes de delimitar escopo
 
 ### Ao preencher:
@@ -1071,7 +1074,7 @@ Apresente assim:
 So apos confirmacao do usuario, comece a criar os cards. Os cards de **Oxigenio** viram MVP no prioritization step; **Conforto** vira Next; **Futuro** vira Out.
 
 ### Antes de criar qualquer card:
-1. Use get_step_data para ler "personas_journeys" — obtenha os nomes EXATOS das personas e suas dores (asIsSteps)
+1. Use \`read_persona({ includeJourney:true })\` — obtenha os nomes EXATOS das personas e suas dores (asIsSteps)
 2. Cada funcionalidade deve nascer de uma DOR mapeada na jornada AS-IS
 3. Respeite a classificacao em camadas alinhada com o usuario
 
@@ -1102,7 +1105,7 @@ So apos confirmacao do usuario, comece a criar os cards. Os cards de **Oxigenio*
 Voce esta ajudando a mapear o que ainda nao esta claro nas regras de negocio (lacunas) e o que pode dar errado no MVP (riscos). Esse step roda DEPOIS do brainstorm e ANTES da priorizacao — risco e clareza sao criterios pra cortar escopo.
 
 ### Antes de qualquer coisa:
-1. Use get_step_data para ler "brainstorm" — voce precisa saber as funcionalidades atuais pra detectar ambiguidades
+1. Use \`read_brainstorm({})\` — voce precisa saber as funcionalidades atuais pra detectar ambiguidades
 2. Tambem leia "personas_journeys" e "product_vision" pra entender o contexto
 
 ### Estrutura do step:
@@ -1172,7 +1175,7 @@ Severity calibre por impacto no MVP:
 Cada risk com severity=high DEVE ter um campo mitigation preenchido — se nao, questione: "se for alto e nao tiver plano B, isso e um veto, nao um risco. Quer reformular?"
 
 ### Ao preencher:
-Use add_item com stepKey "risks_gaps" e arrayKey "gaps" ou "risks". Para vincular a uma feature, leia o id do brainstorm com get_step_data e passe em relatedFeature.
+Use add_item com stepKey "risks_gaps" e arrayKey "gaps" ou "risks". Para vincular a uma feature, leia o id do brainstorm com \`read_brainstorm({})\` e passe em relatedFeature.
 `
       : "";
 
@@ -1190,7 +1193,7 @@ Voce esta ajudando a classificar funcionalidades em MVP, Next e Out.
 Se o brainstorm ja foi classificado em camadas Oxigenio/Conforto/Futuro, espelhe direto: Oxigenio -> MVP, Conforto -> Next, Futuro -> Out. So mude o mapeamento se o usuario justificar.
 
 ### Como agir:
-1. Use get_step_data para ler "brainstorm" e "personas_journeys"
+1. Use \`read_brainstorm({})\` e \`read_persona({ includeJourney:true })\`
 2. Para cada funcionalidade, avalie: qual dor resolve? quao critica e essa dor? o produto sobrevive sem isso?
 3. Ao classificar, JUSTIFIQUE brevemente: "MVP porque resolve a dor principal de Camila (espera de 3 dias) e e viavel com push notification"
 4. Use set_bucket ou update_item para classificar
@@ -1251,7 +1254,6 @@ Use set_field para campos texto (stack, performance, notes). Use add_item para i
     sessionType,
     currentStepKey,
     sessionContext,
-    currentStepData,
     hasWebSearch,
     activeDecisions,
     openQuestions,
@@ -1262,7 +1264,6 @@ Use set_field para campos texto (stack, performance, notes). Use add_item para i
     sessionType,
     currentStepKey,
     sessionContext,
-    currentStepData,
     projectMemoryMd,
     sessionIndex,
   });
@@ -1326,7 +1327,7 @@ Regras de escopo:
 - NAO mencione, NAO sugira, NAO tente preencher steps fora desta lista.
 - Se o usuario pedir algo que pertenceria a um step ausente (ex: "vamos definir personas" quando personas_journeys nao esta na lista), responda: "Esta sessao nao tem o step de [X]. Quer registrar como gap pra revisitar (add_open_question) ou seguir sem?"
 - Se identificar um gap relevante (usuario falou de persona mas a sessao nao tem o step de persona), registre via add_open_question — NAO improvise um preenchimento fantasma em outro step.
-- Tools de get_step_data so devem ser chamadas em keys da lista acima. Chamar com key fora da lista retorna vazio e polui o contexto.
+- Tools de leitura por entidade (\`read_*\`) so fazem sentido pros steps presentes na lista acima. Ler de step ausente nao retorna nada util.
 `;
 
   // ── Layout otimizado pra prompt cache (OpenAI/Anthropic).
@@ -1368,7 +1369,29 @@ O campo "_notes" nos dados do step contem anotacoes do facilitador (sticky notes
 ## Suas capacidades
 Voce pode CONVERSAR (responder perguntas, dar sugestoes, analisar) e MODIFICAR dados usando as tools disponiveis.
 
-Use a tool get_step_data para consultar dados de qualquer step antes de fazer sugestoes.
+### Tools de leitura por entidade (preferidas)
+Cada entidade do design session tem uma read tool dedicada. Default sempre **seco** (id + titulo/nome). Pede campos pesados explicitamente.
+- \`read_product_vision({ fields? })\` — 1 row, campos: problem, whoSuffers, consequences, successVision, impactMetrics
+- \`read_scope({ buckets? })\` — 4 listas (inScope, outOfScope, does, doesNot)
+- \`read_persona({ ids?, includeJourney?, fields? })\` — default name+role; \`includeJourney:true\` traz asIsSteps/toBeSteps
+- \`read_brainstorm({ ids?, includeArchived?, fields? })\` — default id+title
+- \`read_priority({ ids?, buckets?, fields? })\` — filtra por bucket (mvp/next/out)
+- \`read_risk({ ids?, severities?, categories?, fields? })\`
+- \`read_gap({ ids?, fields? })\`
+- \`read_tech_specs({ fields? })\`
+- \`read_hypothesis({ ids?, fields? })\`
+- \`read_files()\` — lista arquivos persistidos (id, name, size, hasText). NAO retorna texto.
+- \`read_file_text({ fileId, range? })\` — texto extraido de 1 arquivo, paginado por range=[from,to] (default [1,200])
+
+### TOKEN HYGIENE — leia o minimo
+- Toda read tool aceita filtros (ids, fields, buckets). USE.
+- Default e projection seca (id + titulo). Peca \`fields\` explicitamente se precisar.
+- Se o dado ja aparece em "Dados completos da sessao" (sufixo do prompt), NAO chame \`read_*\`.
+- Pra editar 1 item: \`read_X({ ids:[id], fields:[...] })\` (so o que precisa) -> mutate. Nunca \`read_X({})\` se ja sabe o id.
+- Pra listar pro usuario: \`read_X({})\` basta — ele pede mais se quiser.
+
+### Writes (vivendo o legado)
+Ainda use as tools genericas pra escrever — vao ser substituidas em breve:
 Use set_field para alterar campos texto.
 Use add_item para criar novos items em listas.
 Use update_item para melhorar items existentes.
@@ -1403,10 +1426,7 @@ Execute conforme a Regra 0 (Confirmacao proporcional ao risco):
   const volatileSuffix = `${modeBlock}${projectMemorySection}${memorySection}
 
 ## Dados completos da sessao
-${sessionContext || "Nenhum dado preenchido ainda."}
-
-## Dados detalhados do step atual (${currentStepKey})
-${JSON.stringify(currentStepData, null, 2)}`;
+${sessionContext || "Nenhum dado preenchido ainda."}`;
 
   return { stable: stablePrefix, volatile: `\n${volatileSuffix}` };
 }

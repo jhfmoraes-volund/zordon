@@ -43,7 +43,9 @@ export type RawTaskForRow = {
   dueDate: string | null;
   notes: string | null;
   assignments?: { memberId: string }[];
-  tags?: { TaskTag: { id: string; name: string; tone: string } }[];
+  /** Flat tag list — embed rows must be flattened via `flattenTagEmbed`
+   *  at the data-fetching boundary before being passed here. */
+  tags?: TaskTag[];
 };
 
 export type RowTask = Task & { __id: string | null };
@@ -65,9 +67,7 @@ export type ActionRow = {
 const VIRTUAL_REF = "—"; // placeholder shown for create rows
 
 function rawToTask(raw: RawTaskForRow, storyRefById: Map<string, string>): RowTask {
-  const tags: TaskTag[] = (raw.tags ?? [])
-    .map((t) => t.TaskTag)
-    .filter((t): t is { id: string; name: string; tone: string } => !!t);
+  const tags: TaskTag[] = raw.tags ?? [];
   return {
     __id: raw.id,
     reference: raw.reference ?? VIRTUAL_REF,

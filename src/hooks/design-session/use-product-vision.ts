@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { useDesignSessionRealtime } from "@/hooks/use-design-session-realtime";
 
 export type ProductVision = {
   problem: string;
@@ -60,6 +61,33 @@ export function useProductVision(sessionId: string) {
       showErrorToast(e, { label: "Falha ao salvar visão de produto" });
     }
   }, [sessionId]);
+
+  useDesignSessionRealtime(
+    sessionId,
+    (entity, event, row) => {
+      if (entity !== "product_vision" || event === "DELETE") return;
+      const incoming: ProductVision = {
+        problem: (row.problem as string) ?? "",
+        whoSuffers: (row.whoSuffers as string) ?? "",
+        consequences: (row.consequences as string) ?? "",
+        successVision: (row.successVision as string) ?? "",
+        impactMetrics: (row.impactMetrics as string) ?? "",
+      };
+      // Skip if echo — same payload já no client.
+      const cur = valueRef.current;
+      if (
+        cur.problem === incoming.problem &&
+        cur.whoSuffers === incoming.whoSuffers &&
+        cur.consequences === incoming.consequences &&
+        cur.successVision === incoming.successVision &&
+        cur.impactMetrics === incoming.impactMetrics
+      ) {
+        return;
+      }
+      setValue(incoming);
+    },
+    { entities: ["product_vision"] },
+  );
 
   const updateField = useCallback(
     <K extends keyof ProductVision>(field: K, fieldValue: ProductVision[K]) => {
