@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { WizardLayout } from "@/components/design-session/wizard-layout";
 import { PersonaJourneyBoard, Persona, JourneyStep } from "@/components/design-session/persona-journey-board";
 import { SolutionCardBoard, SolutionCard } from "@/components/design-session/solution-card-board";
-import { HypothesisBoard, Hypothesis } from "@/components/design-session/hypothesis-board";
+import { HypothesisBoard } from "@/components/design-session/hypothesis-board";
 import { PriorityBoard, PrioritizedItem, PriorityBucket } from "@/components/design-session/priority-board";
 import { PostItBoard, PostItItem, PostItSection } from "@/components/design-session/post-it-board";
 import { RiskGapBoard, type Gap, type Risk } from "@/components/design-session/risk-gap-board";
@@ -28,6 +28,7 @@ import { getStepsForSession, StepDef } from "@/lib/design-session-steps";
 import { DesignSessionProvider } from "@/contexts/design-session-context";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { genId } from "@/lib/utils";
+import { useHypotheses } from "@/hooks/design-session/use-hypotheses";
 
 type Session = {
   id: string;
@@ -228,7 +229,7 @@ function StepContent({
     case "technical_specs":
       return <TechnicalSpecsStep data={data} onChange={onChange} />;
     case "hypotheses":
-      return <HypothesesStep data={data} onChange={onChange} />;
+      return <HypothesesStep sessionId={sessionId} />;
     case "briefing":
       return <BriefingStep sessionId={sessionId} />;
     // CI steps
@@ -651,33 +652,50 @@ function PrioritizationStep({
 
 // ─── Step 5: Hipoteses & Metricas ────────────────────────
 
-function HypothesesStep({
-  data,
-  onChange,
-}: {
-  data: Record<string, unknown>;
-  onChange: (data: Record<string, unknown>) => void;
-}) {
-  const hypotheses = (data.hypotheses as Hypothesis[]) || [];
+function HypothesesStep({ sessionId }: { sessionId: string }) {
+  const { hypotheses, loaded, addHypothesis, updateHypothesis, deleteHypothesis } =
+    useHypotheses(sessionId);
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Defina as hipoteses que precisam ser validadas com o MVP. Para cada uma, estabeleca o indicador, a meta e a evidencia necessaria.
       </p>
-      <HypothesisBoard
-        hypotheses={hypotheses}
-        onAdd={(h) => onChange({ ...data, hypotheses: [...hypotheses, h] })}
-        onUpdate={(id, updates) =>
-          onChange({
-            ...data,
-            hypotheses: hypotheses.map((h) => (h.id === id ? { ...h, ...updates } : h)),
-          })
-        }
-        onDelete={(id) =>
-          onChange({ ...data, hypotheses: hypotheses.filter((h) => h.id !== id) })
-        }
-      />
+      {!loaded ? (
+        <div className="text-sm text-muted-foreground">Carregando hipóteses...</div>
+      ) : (
+        <HypothesisBoard
+          hypotheses={hypotheses.map((h) => ({
+            id: h.id,
+            hypothesis: h.hypothesis,
+            indicator: h.indicator,
+            target: h.target,
+            expectedResult: h.expectedResult,
+            evidence: h.evidence ?? "",
+          }))}
+          onAdd={(h) =>
+            addHypothesis({
+              hypothesis: h.hypothesis,
+              indicator: h.indicator,
+              target: h.target,
+              expectedResult: h.expectedResult,
+              evidence: h.evidence ?? null,
+            })
+          }
+          onUpdate={(id, updates) =>
+            updateHypothesis(id, {
+              ...(updates.hypothesis !== undefined && { hypothesis: updates.hypothesis }),
+              ...(updates.indicator !== undefined && { indicator: updates.indicator }),
+              ...(updates.target !== undefined && { target: updates.target }),
+              ...(updates.expectedResult !== undefined && {
+                expectedResult: updates.expectedResult,
+              }),
+              ...(updates.evidence !== undefined && { evidence: updates.evidence ?? null }),
+            })
+          }
+          onDelete={(id) => deleteHypothesis(id)}
+        />
+      )}
     </div>
   );
 }
