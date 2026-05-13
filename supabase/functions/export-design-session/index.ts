@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
       `id, title, type, status, currentStep, totalSteps, selectedSteps,
        createdBy, projectId, createdAt, updatedAt, scheduledAt,
        completedAt, actualDurationMin,
+       briefingSubPhase, briefingTargetStoryId, briefingFirstMessageAt,
        project:Project(id, name)`,
     )
     .eq("id", sessionId)
@@ -98,29 +99,77 @@ Deno.serve(async (req) => {
     return new Response("Session not found", { status: 404, headers: cors });
   }
 
-  const { data: rawSteps, error: stepsErr } = await userClient
-    .from("DesignSessionStepData")
-    .select("stepIndex, stepKey, data, updatedAt")
-    .eq("sessionId", sessionId)
-    .order("stepIndex", { ascending: true });
+  // Vitor v2: cada entidade vive na sua tabela. Mantemos o shape steps[]
+  // pra compat com consumers do export, hidratando data por entidade.
+  const [
+    productVision,
+    scope,
+    personas,
+    brainstormFeatures,
+    priorityItems,
+    risks,
+    gaps,
+    technicalSpecs,
+    hypotheses,
+    files,
+  ] = await Promise.all([
+    userClient.from("DesignSessionProductVision").select("*").eq("sessionId", sessionId).maybeSingle(),
+    userClient.from("DesignSessionScope").select("*").eq("sessionId", sessionId).maybeSingle(),
+    userClient.from("DesignSessionPersona").select("*").eq("sessionId", sessionId).order("orderIndex"),
+    userClient.from("DesignSessionBrainstormFeature").select("*").eq("sessionId", sessionId).order("orderIndex"),
+    userClient.from("DesignSessionPriorityItem").select("*").eq("sessionId", sessionId).order("orderIndex"),
+    userClient.from("DesignSessionRisk").select("*").eq("sessionId", sessionId).order("orderIndex"),
+    userClient.from("DesignSessionGap").select("*").eq("sessionId", sessionId).order("orderIndex"),
+    userClient.from("DesignSessionTechnicalSpecs").select("*").eq("sessionId", sessionId).maybeSingle(),
+    userClient.from("DesignSessionHypothesis").select("*").eq("sessionId", sessionId).order("orderIndex"),
+    userClient.from("DesignSessionFile").select("id, name, size, mimeType, extractedText, extractionStatus, createdAt").eq("sessionId", sessionId),
+  ]);
 
-  if (stepsErr) {
-    return new Response(stepsErr.message, { status: 500, headers: cors });
-  }
-
-  const steps = (rawSteps ?? []).map((s) => ({
-    stepIndex: s.stepIndex,
-    stepKey: s.stepKey,
-    data: stripDrafts(s.data),
-    updatedAt: s.updatedAt,
-  }));
+  const steps = [
+    {
+      stepKey: "pre_work",
+      data: stripDrafts({ files: files.data ?? [] }),
+    },
+    {
+      stepKey: "product_vision",
+      data: stripDrafts(productVision.data ?? {}),
+    },
+    {
+      stepKey: "scope_definition",
+      data: stripDrafts(scope.data ?? {}),
+    },
+    {
+      stepKey: "personas_journeys",
+      data: stripDrafts({ personas: personas.data ?? [] }),
+    },
+    {
+      stepKey: "brainstorm",
+      data: stripDrafts({ features: brainstormFeatures.data ?? [] }),
+    },
+    {
+      stepKey: "risks_gaps",
+      data: stripDrafts({ risks: risks.data ?? [], gaps: gaps.data ?? [] }),
+    },
+    {
+      stepKey: "prioritization",
+      data: stripDrafts({ items: priorityItems.data ?? [] }),
+    },
+    {
+      stepKey: "technical_specs",
+      data: stripDrafts(technicalSpecs.data ?? {}),
+    },
+    {
+      stepKey: "hypotheses",
+      data: stripDrafts({ hypotheses: hypotheses.data ?? [] }),
+    },
+  ];
 
   const payload = {
     _meta: {
-      format: "Perke design session export v1",
+      format: "Perke design session export v2",
       exportedAt: new Date().toISOString(),
       instructions:
-        "Each entry in 'steps' is one phase of the design session. The 'data' shape varies by 'stepKey'. Internal '_drafts' fields are stripped.",
+        "Each entry in 'steps' is one phase of the design session, hydrated from normalized tables. 'briefing*' fields live on the session row.",
     },
     project: session.project,
     session: {
@@ -137,6 +186,9 @@ Deno.serve(async (req) => {
       scheduledAt: session.scheduledAt,
       completedAt: session.completedAt,
       actualDurationMin: session.actualDurationMin,
+      briefingSubPhase: session.briefingSubPhase,
+      briefingTargetStoryId: session.briefingTargetStoryId,
+      briefingFirstMessageAt: session.briefingFirstMessageAt,
     },
     steps,
   };

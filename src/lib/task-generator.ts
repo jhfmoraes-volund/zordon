@@ -17,7 +17,7 @@ import { db } from "@/lib/db";
  *                        risks_gaps) quando o brainstorm/priorizacao ja foram
  *                        feitos. Renderiza brainstorm/priorizacao compact (sem
  *                        keyScreens/userFlows/technicalNotes) — agente puxa o
- *                        JSON cru via get_step_data sob demanda.
+ *                        detalhe via read_brainstorm({ ids, fields }) sob demanda.
  */
 export type SessionContextVerbosity =
   | "full"
@@ -196,7 +196,7 @@ ${gains}`;
       sections.push(`## Soluções Levantadas\n${text}`);
     } else if (verbosity === "compact-vision") {
       const text = brainstormFeatures.map(renderCardCompact).join("\n\n");
-      sections.push(`## Soluções Levantadas (compact — use get_step_data("brainstorm") pra detalhes)\n${text}`);
+      sections.push(`## Soluções Levantadas (compact — use read_brainstorm({ ids, fields }) pra detalhes)\n${text}`);
     }
     // refinement & execution: skip raw brainstorm — refinement reads via
     // prioritization (MVP-only), execution doesn't need brainstorm at all.
