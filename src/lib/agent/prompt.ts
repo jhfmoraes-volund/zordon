@@ -1386,12 +1386,44 @@ Cada entidade do design session tem uma read tool dedicada. Default sempre **sec
 - \`read_files()\` — lista arquivos persistidos (id, name, size, hasText). NAO retorna texto.
 - \`read_file_text({ fileId, range? })\` — texto extraido de 1 arquivo, paginado por range=[from,to] (default [1,200])
 
-### TOKEN HYGIENE — leia o minimo
-- Toda read tool aceita filtros (ids, fields, buckets). USE.
-- Default e projection seca (id + titulo). Peca \`fields\` explicitamente se precisar.
-- Se o dado ja aparece em "Dados completos da sessao" (sufixo do prompt), NAO chame \`read_*\`.
-- Pra editar 1 item: \`read_X({ ids:[id], fields:[...] })\` (so o que precisa) -> mutate. Nunca \`read_X({})\` se ja sabe o id.
-- Pra listar pro usuario: \`read_X({})\` basta — ele pede mais se quiser.
+### TOKEN HYGIENE — leia o minimo (regra dura)
+
+Toda read tool aceita filtros (\`ids\`, \`fields\`, \`buckets\`, \`severities\`, etc.). **Sempre escolha o filtro mais estreito que ainda responde a pergunta.** Pedir tudo "por garantia" e a forma mais cara e comum de regressao de token.
+
+**Heuristica de decisao antes de cada \`read_*\`:**
+1. **O dado ja esta em "Dados completos da sessao" (sufixo deste prompt)?** Se sim, NAO chame \`read_*\`. Use o que ja tem.
+2. **Voce ja sabe o \`id\` do item?** Use \`{ ids:[id] }\`. Nunca \`{}\` se ja sabe qual e.
+3. **Voce precisa de 1 campo so?** Use \`{ fields:['nomeDoCampo'] }\`. Nao puxe \`technicalNotes\` se vai usar so \`title\`.
+4. **O usuario perguntou sobre 1 item especifico?** Filtre por \`ids\`. Nao retorne os 13 quando ele pediu 1.
+5. **O bucket/severity/categoria importa?** Filtre. \`read_priority({ buckets:['mvp'] })\` em vez de varrer tudo.
+
+**Comparativo real (medido):**
+- \`read_brainstorm({})\` (default seco, 13 cards) — ~1.3 KB de output
+- \`read_brainstorm({ fields:['howItSolves','targetPersona','painPointRef','technicalNotes'] })\` (13 cards cheios) — ~10 KB
+- \`read_brainstorm({ ids:[id], fields:['technicalNotes'] })\` (1 card, 1 campo) — ~0.4 KB
+
+Diferenca de 25-30x entre o pior e o melhor caso. Multiplicado por turnos da conversa, e a diferenca entre Vitor caber no contexto ou nao.
+
+**Antipatterns proibidos:**
+- ❌ Chamar \`read_X({})\` quando ja se sabe o id do item (\`PADRAO_DE_LEITURA_TOTAL\`).
+- ❌ Pedir \`fields:['howItSolves','targetPersona','keyScreens','userFlows','painPointRef','technicalNotes','moduleHint','bucket']\` quando vai usar 1 ou 2 (\`PADRAO_FIELDS_TUDO\`).
+- ❌ Chamar \`read_*\` duas vezes seguidas com o mesmo input (\`PADRAO_RELEITURA\`). Reuse o resultado anterior na mesma conversa.
+- ❌ Chamar \`read_persona({ includeJourney:true })\` quando so vai mostrar nome (\`PADRAO_JOURNEY_DESNECESSARIO\`).
+
+**Exemplos lado a lado:**
+
+| Pedido do usuario | ❌ Ruim | ✅ Bom |
+|---|---|---|
+| "me lista os MVP" | \`read_priority({})\` + filtra no codigo | \`read_priority({ buckets:['mvp'] })\` |
+| "o que diz o technicalNotes do card de auditoria?" | \`read_brainstorm({})\` (puxa 13) | \`read_brainstorm({ ids:[id], fields:['technicalNotes'] })\` |
+| "tem algum risco high?" | \`read_risk({})\` | \`read_risk({ severities:['high'] })\` |
+| "vou editar o painPointRef da feature X" (id ja conhecido) | \`read_brainstorm({})\` -> write | \`read_brainstorm({ ids:[id], fields:['painPointRef'] })\` -> write |
+| "lista os gaps" (listagem geral pro usuario) | \`read_gap({ fields:['text','severity','category','relatedFeature','mitigation'] })\` | \`read_gap({})\` (default seco basta) |
+
+**Quando \`{}\` (sem filtro) e aceitavel:**
+- Listagem inicial pro usuario ("me da um overview"). Default seco e barato.
+- Quando voce nao sabe quais ids existem ainda.
+Fora desses dois casos, sempre filtre.
 
 ### Tools de escrita por entidade
 Cada entidade tem 1 write tool com discriminated union sobre \`action\`. Write atomico por id, sem read-modify-write.
