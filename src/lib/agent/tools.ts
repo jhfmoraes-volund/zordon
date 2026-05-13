@@ -1,8 +1,4 @@
-import { tool, type ToolSet } from "ai";
-import { z } from "zod";
-import { db } from "@/lib/db";
-import type { Json } from "@/lib/supabase/database.types";
-import { getStepData, updateStepData } from "./context";
+import { type ToolSet } from "ai";
 import { createWebSearchTool } from "./tools/web-search";
 import { createTaskTool } from "./tools/create-task";
 import { createUserStoryTool } from "./tools/create-user-story";
@@ -55,23 +51,18 @@ import {
   createReadFilesTool,
   createReadFileTextTool,
 } from "./tools/ds-entities";
+import {
+  createWriteProductVisionTool,
+  createWriteScopeItemTool,
+  createWritePersonaTool,
+  createWriteBrainstormTool,
+  createWritePriorityTool,
+  createWriteRiskTool,
+  createWriteGapTool,
+  createWriteTechSpecsTool,
+  createWriteHypothesisTool,
+} from "./tools/ds-entities-write";
 import type { Capabilities } from "./types";
-
-import { genId } from "@/lib/utils";
-
-const stepKeySchema = z
-  .enum([
-    "pre_work",
-    "product_vision",
-    "scope_definition",
-    "personas_journeys",
-    "brainstorm",
-    "risks_gaps",
-    "prioritization",
-    "technical_specs",
-    "hypotheses",
-  ])
-  .describe("Chave do step");
 
 /**
  * Assembles the tool set for the design session agent.
@@ -80,19 +71,6 @@ const stepKeySchema = z
 export function assembleTools(sessionId: string, capabilities?: Capabilities): ToolSet {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tools: Record<string, any> = {};
-
-  // Read tools
-  tools.get_step_data = tool({
-    description:
-      "Lê os dados de um step específico da design session. Use para consultar o que já foi preenchido.",
-    inputSchema: z.object({
-      stepKey: stepKeySchema,
-    }),
-    execute: async ({ stepKey }: { stepKey: string }) => {
-      const data = await getStepData(sessionId, stepKey);
-      return { stepKey, data };
-    },
-  });
 
   tools.search_doc = createSearchDocTool(sessionId);
 
@@ -109,99 +87,17 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
   tools.read_files = createReadFilesTool(sessionId);
   tools.read_file_text = createReadFileTextTool(sessionId);
 
-  // Write tools
+  // Entity writes (Vitor normalization v2)
   if (capabilities?.writeTools !== false) {
-    tools.set_field = tool({
-      description:
-        "Define o valor de um campo texto em um step. Use para preencher ou atualizar campos como problem, whoSuffers, successVision, stack, performance, etc.",
-      inputSchema: z.object({
-        stepKey: stepKeySchema,
-        field: z.string().describe("Nome do campo (ex: problem)"),
-        value: z.string().describe("Novo valor do campo"),
-      }),
-      execute: async ({ stepKey, field, value }: { stepKey: string; field: string; value: string }) => {
-        await updateStepData(sessionId, stepKey, (data) => ({
-          ...data,
-          [field]: value,
-        }));
-        return { success: true, stepKey, field, updatedValue: value };
-      },
-    });
-
-    // Atomic via Postgres RPC (step_array_add). Idempotent on id collision.
-    tools.add_item = tool({
-      description:
-        "Adiciona um novo item a uma lista em um step. Use para criar novas personas, soluções, hipóteses, integrações, regras técnicas, etc.",
-      inputSchema: z.object({
-        stepKey: stepKeySchema,
-        arrayKey: z
-          .string()
-          .describe("Nome do array (ex: personas, solutions, hypotheses, integrations, rules)"),
-        item: z
-          .record(z.string(), z.unknown())
-          .describe("Objeto do item com os campos do tipo."),
-      }),
-      execute: async ({ stepKey, arrayKey, item }: { stepKey: string; arrayKey: string; item: Record<string, unknown> }) => {
-        const itemWithId = { id: (item.id as string) || genId(), ...item };
-        const { data, error } = await db().rpc("step_array_add", {
-          p_session_id: sessionId,
-          p_step_key: stepKey,
-          p_array_key: arrayKey,
-          p_item: itemWithId as Json,
-        });
-        if (error) throw new Error(`add_item failed: ${error.message}`);
-        return { success: true, stepKey, arrayKey, addedItem: data };
-      },
-    });
-
-    tools.update_item = tool({
-      description:
-        "Atualiza campos de um item existente em uma lista. Use para melhorar descrições, corrigir textos, mudar prioridades, etc.",
-      inputSchema: z.object({
-        stepKey: stepKeySchema,
-        arrayKey: z.string().describe("Nome do array"),
-        itemId: z.string().describe("ID do item a atualizar"),
-        updates: z
-          .record(z.string(), z.unknown())
-          .describe("Campos a atualizar (merge parcial)"),
-      }),
-      execute: async ({ stepKey, arrayKey, itemId, updates }: { stepKey: string; arrayKey: string; itemId: string; updates: Record<string, unknown> }) => {
-        const { data, error } = await db().rpc("step_array_update", {
-          p_session_id: sessionId,
-          p_step_key: stepKey,
-          p_array_key: arrayKey,
-          p_item_id: itemId,
-          p_updates: updates as Json,
-        });
-        if (error) {
-          if (error.code === "P0002") {
-            return { success: false, stepKey, arrayKey, itemId, error: "item_not_found" };
-          }
-          throw new Error(`update_item failed: ${error.message}`);
-        }
-        return { success: true, stepKey, arrayKey, itemId, updatedItem: data };
-      },
-    });
-
-    tools.delete_item = tool({
-      description:
-        "Remove um item de uma lista. Use quando o usuário pedir para excluir uma persona, solução, hipótese, etc.",
-      inputSchema: z.object({
-        stepKey: stepKeySchema,
-        arrayKey: z.string().describe("Nome do array"),
-        itemId: z.string().describe("ID do item a remover"),
-      }),
-      execute: async ({ stepKey, arrayKey, itemId }: { stepKey: string; arrayKey: string; itemId: string }) => {
-        const { data, error } = await db().rpc("step_array_delete", {
-          p_session_id: sessionId,
-          p_step_key: stepKey,
-          p_array_key: arrayKey,
-          p_item_id: itemId,
-        });
-        if (error) throw new Error(`delete_item failed: ${error.message}`);
-        return { success: true, stepKey, arrayKey, removedItemId: itemId, removed: !!data };
-      },
-    });
+    tools.write_product_vision = createWriteProductVisionTool(sessionId);
+    tools.write_scope_item = createWriteScopeItemTool(sessionId);
+    tools.write_persona = createWritePersonaTool(sessionId);
+    tools.write_brainstorm = createWriteBrainstormTool(sessionId);
+    tools.write_priority = createWritePriorityTool(sessionId);
+    tools.write_risk = createWriteRiskTool(sessionId);
+    tools.write_gap = createWriteGapTool(sessionId);
+    tools.write_tech_specs = createWriteTechSpecsTool(sessionId);
+    tools.write_hypothesis = createWriteHypothesisTool(sessionId);
   }
 
   // Web search — requires projectId for research auto-capture

@@ -5,9 +5,9 @@ import type { ToolSet } from "ai";
 export interface Capabilities {
   /** Maximum tool-call steps per run */
   maxSteps: number;
-  /** Whether the agent can use write tools (set_field, add_item, etc) */
+  /** Whether the agent can use write tools (write_X per entity) */
   writeTools: boolean;
-  /** Whether the agent can use read tools (get_step_data) */
+  /** Whether the agent can use read tools (read_X per entity) */
   readTools: boolean;
   /** Whether the agent can search the web */
   webSearch?: boolean;

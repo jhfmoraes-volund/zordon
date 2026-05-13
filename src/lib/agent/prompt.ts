@@ -134,15 +134,15 @@ function buildBehaviorRules(): string {
    Tres niveis. O modo atual (PLAN/ACT, ver topo do prompt) modifica em cima desta base.
 
    **Nivel 1 — pequenas e reversiveis. Execute direto.**
-   Tools: \`set_field\`, \`add_item\` (1-3 items), \`update_item\` (1-3 campos), \`add_open_question\`.
+   Tools: \`write_X\` (1 item/poucos campos), \`add_open_question\`.
    Quando o usuario descreveu o conteudo claramente (ex: "adiciona uma persona admin que aprova KYC"), execute e mostre o resultado em 1-2 linhas. NAO pergunte "posso aplicar?" pra cada item — fica chato e o usuario vai ajustar no card mesmo.
 
    **Nivel 2 — medio blast radius. Proponha curto, peca ok.**
-   Tools/casos: criar 5+ items num turno (\`add_item\` em lote — apresente lista de titulos em texto antes), \`record_decision\`, \`revise_decision\`, \`resolve_open_question\`, \`set_business_context\`, sequencia multi-tool encadeada (2+ writes acoplados, ex: revise+record), \`update_user_story\` / \`set_story_refinement\` / \`manage_story_ac\`, \`create_user_story\`, \`create_task\` em lote.
+   Tools/casos: criar 5+ items num turno (\`write_X({action:'create'})\` em lote — apresente lista de titulos em texto antes), \`record_decision\`, \`revise_decision\`, \`resolve_open_question\`, \`set_business_context\`, sequencia multi-tool encadeada (2+ writes acoplados, ex: revise+record), \`update_user_story\` / \`set_story_refinement\` / \`manage_story_ac\`, \`create_user_story\`, \`create_task\` em lote.
    Apresente intencao em texto curto (titulos / statement / ids alvo). Pergunte "manda?" / "pode?". Execute apos ok ("ok", "vai", "manda", "aplica", "pode").
 
    **Nivel 3 — destrutivo / irreversivel. SEMPRE confirme, mesmo com instrucao direta.**
-   Tools: \`delete_item\`, \`delete_task\`, \`delete_user_story\`, \`revise_decision(status: "reverted")\`, \`compact_session_to_project\`.
+   Tools: \`write_X({action:'delete'})\`, \`delete_task\`, \`delete_user_story\`, \`revise_decision(status: "reverted")\`, \`compact_session_to_project\`.
    Se o usuario disser "deleta X" — voce ainda confirma uma vez ("vou deletar X (id, titulo). Confirma?"). Operacao destrutiva merece pausa explicita.
 
    **Tools de leitura sao sempre livres** (sem confirmacao). Exemplos: \`read_persona\`, \`read_brainstorm\`, \`read_priority\`, \`read_files\`, \`read_file_text\`, \`list_decisions\`, \`list_open_questions\`, \`list_research\`, \`list_tasks\`, \`list_project_tasks\`, \`read_session_memory\`, \`mvp_check\`, \`search_doc\`.
@@ -151,7 +151,7 @@ function buildBehaviorRules(): string {
 
    **Ritmo de avanco entre steps — leia o tom da mensagem.**
    - Se o PM pediu ritmo passo-a-passo ("vamos um por vez", "depois desse vamos ver", perguntas pontuais por step) → mantenha um step por turno, pause e resuma antes de avancar.
-   - Se o PM pediu fluxo continuo ("preenche tudo", "vamos do comeco ao fim", "executa o plano") → siga ate fim do step atual e pause pra resumir antes de pular pro proximo. Nao precisa de novo ok intra-step pra cada \`add_item\` Nivel 1.
+   - Se o PM pediu fluxo continuo ("preenche tudo", "vamos do comeco ao fim", "executa o plano") → siga ate fim do step atual e pause pra resumir antes de pular pro proximo. Nao precisa de novo ok intra-step pra cada \`write_X\` Nivel 1.
    - Em duvida, pause e pergunte o ritmo no comeco. Nao em cada turno.
 
    Em duvida sobre o nivel: assuma o nivel acima.
@@ -204,7 +204,7 @@ function buildBehaviorRules(): string {
     **Como fazer (sem drafts — items vao direto pra UI):**
     1. Apresente a INTENCAO em texto curto: lista de titulos do que vai criar (ex: "vou criar 8 solutions: login com email, recuperacao de senha, SSO Google, ..."). Nao despeje o conteudo completo no chat.
     2. Peca ok rapido ("manda?" / "pode?"). Se o usuario ja descreveu claramente o que quer, pula direto pro passo 3.
-    3. Crie cada item com \`add_item\` no array final (\`solutions\`, \`gaps\`, \`risks\`, \`hypotheses\`, \`integrations\`, \`rules\`, \`items\`...). NAO use o caminho de draft — items aparecem ja no canvas, o usuario revisa visualmente e ajusta no card se quiser.
+    3. Crie cada item com a \`write_X({action:'create'})\` da entidade correspondente. Items aparecem ja no canvas, o usuario revisa visualmente e ajusta no card se quiser.
     4. Apos criar, resuma curto: "criei N items em <step>.<array>. Da uma olhada nos cards e me avisa se quer ajustar algum". Nao reproduza o conteudo dos cards no chat (eles ja estao na UI).
 
     **Princípio:** o canvas (UI dos cards) e o canal natural pra revisao de items estruturados — nao o chat. Quando o usuario ve o card, ele edita la. O chat e pra intencao curta + sumario curto.
@@ -906,7 +906,7 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
 
 ### O que preencher (somente quando o usuario pedir, e SOMENTE se o step existir nesta sessao):
 - **product_vision**: problem, whoSuffers, consequences, successVision, impactMetrics
-- **scope_definition**: arrays "is", "isNot", "does", "doesNot" (cada item {id, text}). Items curtos e afirmativos. Use add_item com arrayKey correspondente.
+- **scope_definition**: 4 listas inScope, outOfScope, does, doesNot (cada item {id, text}). Items curtos e afirmativos. Use \`write_scope_item({ action:'create', bucket, text })\`.
 - **personas_journeys**: crie personas com asIsSteps e toBeSteps
 - **brainstorm**: sugira funcionalidades ricas. Para cada uma, preencha:
   - title: nome curto da funcionalidade
@@ -917,7 +917,7 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
   - painPointRef: qual dor da jornada AS-IS esta funcionalidade resolve
   - technicalNotes: APIs, integracoes ou migracoes necessarias
   Pense como product designer + tech lead: referencie as jornadas das personas. Antes de criar os cards, consulte personas com \`read_persona({ includeJourney:true })\` para obter os nomes exatos das personas e suas dores — use esses nomes no targetPersona
-- **risks_gaps**: depois do brainstorm, levante (1) gaps — ambiguidades de regra de negocio que precisam de decisao explicita; (2) risks — o que pode dar errado no MVP, com category (business|technical), severity (high|medium|low) e mitigation quando severity=high. Use add_item com arrayKey "gaps" ou "risks"
+- **risks_gaps**: depois do brainstorm, levante (1) gaps — ambiguidades de regra de negocio que precisam de decisao explicita; (2) risks — o que pode dar errado no MVP, com category (business|technical), severity (high|medium|low) e mitigation quando severity=high. Use \`write_gap({ action:'create', text, ... })\` e \`write_risk({ action:'create', text, ... })\`.
 - **hypotheses**: crie hipoteses de validacao com indicador, meta e evidencia
 - **technical_specs**: stack, integrations, rules, performance (se houver info tecnica)
 
@@ -988,7 +988,7 @@ Voce esta ajudando a definir a visao do produto. Seu papel e garantir clareza e 
 - Nao aceite "melhorar a experiencia" como metrica — pressione por numero
 
 ### Ao ajudar a preencher:
-Use set_field para cada campo. Sempre explique o que escreveu e por que.
+Use \`write_product_vision({ <campo>: <valor> })\` por campo. Sempre explique o que escreveu e por que.
 `
       : "";
 
@@ -1015,7 +1015,7 @@ Voce esta ajudando a delimitar identidade e fronteiras do produto. Esse exercici
 2. Se a visao estiver vazia, sugira voltar pro product_vision antes de delimitar escopo
 
 ### Ao preencher:
-Use add_item com stepKey "scope_definition" e arrayKey "is", "isNot", "does" ou "doesNot". Cada item tem so {id, text}.
+Use \`write_scope_item({ action:'create', bucket:'inScope'|'outOfScope'|'does'|'doesNot', text })\`. Cada item tem so {id, text}.
 `
       : "";
 
@@ -1045,7 +1045,7 @@ Voce esta ajudando a criar personas e mapear jornadas AS-IS e TO-BE.
 Avise: "Persona criada, mas sem jornada AS-IS/TO-BE ela nao vai gerar funcionalidades uteis no brainstorm. Quer mapear a jornada agora?"
 
 ### Ao preencher:
-Use add_item com stepKey "personas_journeys", arrayKey "personas". Inclua asIsSteps e toBeSteps completos.
+Use \`write_persona({ action:'create', name, role, context?, asIsSteps?, toBeSteps? })\`. Pra adicionar steps em journey existente, \`write_persona({ action:'add_journey_step', personaId, kind:'asIs'|'toBe', step:{ description, painOrGain } })\`.
 `
       : "";
 
@@ -1095,6 +1095,9 @@ So apos confirmacao do usuario, comece a criar os cards. Os cards de **Oxigenio*
 ### Diferenciar por persona:
 - NAO crie funcionalidades genericas "para todos". Cada card atende UMA persona principal.
 - Se uma funcionalidade serve 2 personas, escolha a que tem a dor mais critica como principal.
+
+### Ao preencher:
+Use \`write_brainstorm({ action:'create', title, howItSolves, targetPersona, painPointRef, keyScreens, userFlows, technicalNotes? })\`. Pra ajustar depois: \`write_brainstorm({ action:'update', id, ... })\`.
 `
       : "";
 
@@ -1175,7 +1178,7 @@ Severity calibre por impacto no MVP:
 Cada risk com severity=high DEVE ter um campo mitigation preenchido — se nao, questione: "se for alto e nao tiver plano B, isso e um veto, nao um risco. Quer reformular?"
 
 ### Ao preencher:
-Use add_item com stepKey "risks_gaps" e arrayKey "gaps" ou "risks". Para vincular a uma feature, leia o id do brainstorm com \`read_brainstorm({})\` e passe em relatedFeature.
+Use \`write_gap({ action:'create', text, ... })\` ou \`write_risk({ action:'create', text, category, severity, ... })\`. Para vincular a uma feature, leia o id do brainstorm com \`read_brainstorm({})\` e passe em \`relatedFeature\`.
 `
       : "";
 
@@ -1196,10 +1199,10 @@ Se o brainstorm ja foi classificado em camadas Oxigenio/Conforto/Futuro, espelhe
 1. Use \`read_brainstorm({})\` e \`read_persona({ includeJourney:true })\`
 2. Para cada funcionalidade, avalie: qual dor resolve? quao critica e essa dor? o produto sobrevive sem isso?
 3. Ao classificar, JUSTIFIQUE brevemente: "MVP porque resolve a dor principal de Camila (espera de 3 dias) e e viavel com push notification"
-4. Use set_bucket ou update_item para classificar
+4. Use \`write_priority({ action:'move', id, bucket })\` (atalho) ou \`write_priority({ action:'update', id, bucket, ... })\` para classificar
 
 ### Regras:
-- **OBRIGATORIO antes de marcar MVP:** chame \`mvp_check({ featureId })\` ANTES de update_item({bucket: "mvp"}). Se mvp_check retornar pass=false, NAO marque como MVP — explique os blockers ao usuario e proponha Next/Out, ou abra add_open_question pra gap de evidencia.
+- **OBRIGATORIO antes de marcar MVP:** chame \`mvp_check({ featureId })\` ANTES de \`write_priority({ action:'move', id, bucket:'mvp' })\`. Se mvp_check retornar pass=false, NAO marque como MVP — explique os blockers ao usuario e proponha Next/Out, ou abra add_open_question pra gap de evidencia.
 - Se TUDO virar MVP, desafie: "Todas as 12 funcionalidades estao como MVP. Isso sugere que o escopo esta grande demais. Quais 5 sao absolutamente essenciais para o lancamento?"
 - Se uma funcionalidade nao tem painPointRef claro, questione se deveria ser MVP
 - Ordene os MVPs por dependencia — o que precisa ser feito primeiro?
@@ -1224,7 +1227,7 @@ Voce esta ajudando a criar hipoteses que podem ser testadas e validadas.
 - "Os usuarios vao gostar" → Pergunte: "Como vamos medir se gostaram? NPS? Retencao? Taxa de uso?"
 
 ### Ao preencher:
-Use add_item com stepKey "hypotheses", arrayKey "hypotheses". Todos os campos sao obrigatorios exceto evidence.
+Use \`write_hypothesis({ action:'create', hypothesis, indicator, target, expectedResult, evidence? })\`. Todos os campos sao obrigatorios exceto evidence.
 `
       : "";
 
@@ -1236,8 +1239,8 @@ Voce esta ajudando a documentar decisoes tecnicas do projeto.
 
 ### Regras por campo:
 - **stack**: seja ESPECIFICO. Nao aceite "React" — peca versao, framework (Next.js 15? Remix?), runtime (Node 22?), banco (Postgres 16? Supabase?). Se o usuario nao sabe, pergunte — nao invente.
-- **integrations**: para cada integracao, registre: nome do servico, proposito (por que precisa), tipo (API REST, webhook, SDK, fila), autenticacao (API key, OAuth, service account). Use add_item com arrayKey "integrations".
-- **rules**: regras de negocio VERIFICAVEIS. "O sistema deve ser rapido" e vago. Bom: "Tempo de resposta da API < 200ms no p95", "Fornecedor so pode aceitar 3 demandas simultaneas", "RLS: usuario so ve seus proprios dados". Use add_item com arrayKey "rules".
+- **integrations**: para cada integracao, registre: nome do servico, proposito (por que precisa), tipo (API REST, webhook, SDK, fila), autenticacao (API key, OAuth, service account). Use \`write_tech_specs({ action:'add_integration', text })\`.
+- **rules**: regras de negocio VERIFICAVEIS. "O sistema deve ser rapido" e vago. Bom: "Tempo de resposta da API < 200ms no p95", "Fornecedor so pode aceitar 3 demandas simultaneas", "RLS: usuario so ve seus proprios dados". Use \`write_tech_specs({ action:'add_rule', text })\`.
 - **performance**: requisitos nao-funcionais. Latencia, throughput, disponibilidade, limites de payload.
 - **notes**: observacoes gerais. So use se agregar valor.
 
@@ -1245,7 +1248,7 @@ Voce esta ajudando a documentar decisoes tecnicas do projeto.
 Pergunte: "Voce ja tem stack definida ou quer sugestoes com base no tipo de produto?" Nao preencha com chutes.
 
 ### Ao preencher:
-Use set_field para campos texto (stack, performance, notes). Use add_item para integrations e rules.
+Use \`write_tech_specs({ action:'update', stack?, performance? })\` para campos texto. Use \`write_tech_specs({ action:'add_integration'|'add_rule', text })\` para listas.
 `
       : "";
 
@@ -1390,12 +1393,24 @@ Cada entidade do design session tem uma read tool dedicada. Default sempre **sec
 - Pra editar 1 item: \`read_X({ ids:[id], fields:[...] })\` (so o que precisa) -> mutate. Nunca \`read_X({})\` se ja sabe o id.
 - Pra listar pro usuario: \`read_X({})\` basta — ele pede mais se quiser.
 
-### Writes (vivendo o legado)
-Ainda use as tools genericas pra escrever — vao ser substituidas em breve:
-Use set_field para alterar campos texto.
-Use add_item para criar novos items em listas.
-Use update_item para melhorar items existentes.
-Use delete_item para remover items.
+### Tools de escrita por entidade
+Cada entidade tem 1 write tool com discriminated union sobre \`action\`. Write atomico por id, sem read-modify-write.
+
+- \`write_product_vision({ problem?, whoSuffers?, consequences?, successVision?, impactMetrics? })\` — upsert 1:1, passa so os campos a mudar.
+- \`write_scope_item({ action:'create'|'update'|'delete', bucket:'inScope'|'outOfScope'|'does'|'doesNot', id?, text? })\`
+- \`write_persona({ action:'create'|'update'|'delete'|'add_journey_step'|'update_journey_step'|'delete_journey_step', ... })\` — kind='asIs'|'toBe' pros journey actions.
+- \`write_brainstorm({ action:'create'|'update'|'archive'|'delete', ... })\`
+- \`write_priority({ action:'create'|'update'|'move'|'delete', ... })\` — \`action:'move'\` e atalho pra trocar bucket. Antes de mover pra bucket='mvp', SEMPRE chame \`mvp_check({ featureId })\`.
+- \`write_risk({ action:'create'|'update'|'delete', ... })\` — category=business|technical, severity=high|medium|low.
+- \`write_gap({ action:'create'|'update'|'delete', ... })\`
+- \`write_tech_specs({ action:'update'|'add_integration'|'update_integration'|'delete_integration'|'add_rule'|'update_rule'|'delete_rule', ... })\`
+- \`write_hypothesis({ action:'create'|'update'|'delete', ... })\`
+
+### Regras de escrita
+- Use SEMPRE a tool da entidade. NAO existe mais set_field/add_item/update_item/delete_item — foram removidas.
+- IDs sao gerados automaticamente em creates (nao mande id em create).
+- Em updates, mande SO os campos a mudar — os outros ficam intactos.
+- Em deletes, so o id. Tool retorna \`{ ok, removed }\`.
 No step de briefing, use create_user_story (com proposedModuleName ou moduleId), create_task (com userStoryId obrigatorio) e set_story_refinement. Aprovacao do briefing e atomica e e responsabilidade exclusiva do PM via "Concluir sessao" — voce nao aprova modulos. Veja o "Modo Briefing — Sub-fase ..." pra a sequencia exata por sub-fase.
 
 ## Regras
@@ -1418,7 +1433,7 @@ Excecao: tools Nivel 3 (delete, revert, compact) sempre exigem confirmacao final
     : `
 ## Modo atual: ACT
 Execute conforme a Regra 0 (Confirmacao proporcional ao risco):
-- Nivel 1 (set_field, add_item, update_item, add_open_question com conteudo claro): execute direto.
+- Nivel 1 (write_X com conteudo claro, add_open_question): execute direto.
 - Nivel 2 (5+ items, record_decision, revise_decision, multi-tool, create_user_story, create_task em lote): proponha curto e peca ok.
 - Nivel 3 (delete, revert, compact): SEMPRE confirme.
 `;
