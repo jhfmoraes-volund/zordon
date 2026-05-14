@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,6 +79,7 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
 
   const [activeAction, setActiveAction] = useState<MeetingTaskAction | null>(null);
   const [pickerAction, setPickerAction] = useState<PickerAction | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -201,24 +203,31 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
   };
 
   const apply = async () => {
-    if (!confirm("Aplicar todas as ações aprovadas? Isso vai modificar tasks no projeto.")) return;
-    setApplying(true);
-    try {
-      const res = await fetch(
-        `/api/meetings/${meetingId}/task-actions/apply`,
-        { method: "POST" },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "erro");
-      const msg = `Aplicado: ${data.applied} | Falhas: ${data.failed} | Pulado: ${data.skipped}`;
-      toast.success(msg);
-      await load();
-    } catch (e) {
-      console.error("apply failed:", e);
-      showErrorToast(e, { label: "Falha ao aplicar" });
-    } finally {
-      setApplying(false);
-    }
+    setConfirm({
+      title: "Aplicar plano?",
+      description:
+        "Todas as ações aprovadas serão aplicadas — isso vai modificar tasks no projeto.",
+      confirmLabel: "Aplicar",
+      onConfirm: async () => {
+        setApplying(true);
+        try {
+          const res = await fetch(
+            `/api/meetings/${meetingId}/task-actions/apply`,
+            { method: "POST" },
+          );
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error ?? "erro");
+          const msg = `Aplicado: ${data.applied} | Falhas: ${data.failed} | Pulado: ${data.skipped}`;
+          toast.success(msg);
+          await load();
+        } catch (e) {
+          console.error("apply failed:", e);
+          showErrorToast(e, { label: "Falha ao aplicar" });
+        } finally {
+          setApplying(false);
+        }
+      },
+    });
   };
 
   const decideOne = useCallback(
@@ -261,6 +270,36 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
         }
       }
       await load();
+    },
+    [meetingId, load],
+  );
+
+  const deleteOne = useCallback(
+    async (id: string) => {
+      return new Promise<void>((resolve) => {
+        setConfirm({
+          title: "Excluir proposta?",
+          description:
+            "A proposta será removida do plano. Isso é diferente de rejeitar — não fica histórico.",
+          confirmLabel: "Excluir",
+          destructive: true,
+          onConfirm: async () => {
+            try {
+              const res = await fetch(
+                `/api/meetings/${meetingId}/task-actions/${id}`,
+                { method: "DELETE" },
+              );
+              if (!res.ok) throw new Error(await res.text());
+              await load();
+            } catch (e) {
+              console.error("delete failed:", e);
+              showErrorToast(e, { label: "Falha ao excluir" });
+            } finally {
+              resolve();
+            }
+          },
+        });
+      });
     },
     [meetingId, load],
   );
@@ -428,6 +467,7 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
           onOpenAction={setActiveAction}
           onApprove={(id) => decideOne(id, "approved")}
           onReject={(id) => decideOne(id, "rejected")}
+          onDelete={deleteOne}
           onBulkApprove={(ids) => bulkDecide(ids, "approved")}
           onBulkReject={(ids) => bulkDecide(ids, "rejected")}
         />
@@ -467,6 +507,8 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
           onPick={handlePickerPick}
         />
       )}
+
+      <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </div>
   );
 }

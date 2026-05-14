@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMinLevelApi } from "@/lib/dal";
-import { ADMIN } from "@/lib/roles";
+import { MANAGER } from "@/lib/roles";
 
 type Range = "7d" | "30d" | "all";
 
@@ -15,13 +15,13 @@ function rangeToDate(range: Range): string | null {
 
 /**
  * GET /api/agents/[slug]/usage?range=7d|30d|all
- * Aggregated agent usage + cost. Admin only.
+ * Aggregated agent usage + cost. Manager+.
  */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
-  const denied = await requireMinLevelApi(ADMIN);
+  const denied = await requireMinLevelApi(MANAGER);
   if (denied) return denied;
 
   const { slug } = await params;

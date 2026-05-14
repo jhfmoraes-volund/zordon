@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
@@ -13,6 +14,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
 
 type Thread = {
   id: string;
@@ -63,11 +65,14 @@ function toUIMessages(messages: StoredMessage[]): UIMessage[] {
 
 export default function OpsPage() {
   const isMobile = useIsMobile();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [threadId, setThreadId] = useState<string | null>(null);
   const [forceNewThread, setForceNewThread] = useState(false);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const kickoffFiredRef = useRef(false);
 
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/agents/alpha/chat" }),
@@ -97,6 +102,33 @@ export default function OpsPage() {
 
   useEffect(() => {
     refreshThreads();
+
+    // Kickoff de ingestão de reunião do Roam (chega via /ops?kickoff=ingest&...).
+    // Forçamos thread nova + seed prompt e o Alpha trabalha sozinho. Limpa a
+    // URL pra não disparar de novo em refresh/back. Guard ref garante uma vez.
+    const kickoff = searchParams.get("kickoff");
+    const meetingId = searchParams.get("meetingId");
+    const roamTranscriptId = searchParams.get("roamTranscriptId");
+    const overwrite = searchParams.get("overwrite") === "1";
+    if (
+      kickoff === "ingest" &&
+      meetingId &&
+      roamTranscriptId &&
+      !kickoffFiredRef.current
+    ) {
+      kickoffFiredRef.current = true;
+      const seed = buildIngestSeed(meetingId, roamTranscriptId, overwrite);
+      setThreadId(null);
+      setForceNewThread(true);
+      chat.setMessages([]);
+      chat.sendMessage(
+        { text: seed },
+        { body: { threadId: null, newThread: true, meetingId } },
+      );
+      router.replace("/ops");
+      return;
+    }
+
     fetch("/api/agents/alpha/chat")
       .then((r) => r.json())
       .then((data) => {

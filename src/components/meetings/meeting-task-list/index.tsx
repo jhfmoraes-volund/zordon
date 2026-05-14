@@ -7,8 +7,25 @@
 // caller decides which sheet to open).
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronRight,
+  Loader2,
+  MoreHorizontal,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ACTION_TYPE, lookupChip, type ChipTone } from "@/lib/status-chips";
 import { TaskStatusChip } from "@/components/story-hierarchy";
@@ -38,6 +55,7 @@ export type MeetingTaskListProps = {
   onOpenAction: (action: MeetingTaskAction) => void;
   onApprove: (id: string) => Promise<void>;
   onReject: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
   onBulkApprove?: (ids: string[]) => Promise<void>;
   onBulkReject?: (ids: string[]) => Promise<void>;
 };
@@ -71,6 +89,7 @@ export function MeetingTaskList({
   onOpenAction,
   onApprove,
   onReject,
+  onDelete,
   onBulkApprove,
   onBulkReject,
 }: MeetingTaskListProps) {
@@ -279,6 +298,9 @@ export function MeetingTaskList({
                       onReject={() =>
                         wrapBusy(row.action.id, () => onReject(row.action.id))
                       }
+                      onDelete={() =>
+                        wrapBusy(row.action.id, () => onDelete(row.action.id))
+                      }
                     />
                   ))}
                 </div>
@@ -321,7 +343,6 @@ function ListHeader({
       <span>Ação</span>
       <SortHead k="ref" label="Ref" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <SortHead k="title" label="Título" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-      <SortHead k="story" label="Story" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <SortHead k="sprint" label="Sprint" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <SortHead k="status" label="Status" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <SortHead k="assignee" label="Assignee" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -362,6 +383,7 @@ function Row({
   onOpen,
   onApprove,
   onReject,
+  onDelete,
 }: {
   row: ActionRow;
   stories: Story[];
@@ -374,6 +396,7 @@ function Row({
   onOpen: () => void;
   onApprove: () => Promise<void>;
   onReject: () => Promise<void>;
+  onDelete: () => Promise<void>;
 }) {
   const { action, task, displaySprintId, originalSprintId, changedFields, strikethrough } = row;
   const story = task.userStoryRef
@@ -436,39 +459,38 @@ function Row({
         {task.reference}
       </span>
 
-      <span className="flex min-w-0 items-center gap-2">
-        <span
-          className={`truncate ${strikethrough ? "line-through text-muted-foreground" : ""} ${
-            changedFields.has("title") ? "italic" : ""
-          }`}
-        >
-          {task.title}
-        </span>
-        {task.tags.length > 0 && (
-          <span className="flex shrink-0 items-center gap-1">
-            {task.tags.slice(0, 2).map((tg) => (
-              <TagChip
-                key={tg.id}
-                name={tg.name}
-                tone={tg.tone as ChipTone}
+      <span className="flex min-w-0 flex-col">
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            className={`truncate ${strikethrough ? "line-through text-muted-foreground" : ""} ${
+              changedFields.has("title") ? "italic" : ""
+            }`}
+          >
+            {task.title}
+          </span>
+          {task.tags.length > 0 && (
+            <span className="flex shrink-0 items-center gap-1">
+              {task.tags.slice(0, 2).map((tg) => (
+                <TagChip
+                  key={tg.id}
+                  name={tg.name}
+                  tone={tg.tone as ChipTone}
+                  variant="linear"
+                  size="sm"
+                />
+              ))}
+              <TagChipOverflow
+                count={Math.max(0, task.tags.length - 2)}
                 variant="linear"
                 size="sm"
               />
-            ))}
-            <TagChipOverflow
-              count={Math.max(0, task.tags.length - 2)}
-              variant="linear"
-              size="sm"
-            />
+            </span>
+          )}
+        </span>
+        {story && (
+          <span className="font-mono text-[11px] text-muted-foreground truncate">
+            {story.reference}
           </span>
-        )}
-      </span>
-
-      <span className="text-xs text-muted-foreground truncate">
-        {story ? (
-          <span className="font-mono">{story.reference}</span>
-        ) : (
-          <span className="opacity-50">—</span>
         )}
       </span>
 
@@ -504,31 +526,60 @@ function Row({
         {action.decision === "approved" && action.execution === "failed" && (
           <StatusChip tone="red" label="Falhou" />
         )}
-        {isPending && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-green-700"
-              disabled={busy}
-              onClick={onApprove}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                disabled={busy}
+                aria-label="Mais ações"
+              >
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <MoreHorizontal className="size-4" />
+                )}
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-44">
+            {isPending && (
+              <>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onApprove();
+                  }}
+                >
+                  <Check className="mr-2 size-3.5 text-green-700" />
+                  Aprovar
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onReject();
+                  }}
+                >
+                  <X className="mr-2 size-3.5 text-red-700" />
+                  Rejeitar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                void onDelete();
+              }}
             >
-              {busy ? <Loader2 className="size-3 animate-spin" /> : "Aprovar"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-red-700"
-              disabled={busy}
-              onClick={onReject}
-            >
-              Rejeitar
-            </Button>
-          </>
-        )}
-        <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onOpen}>
-          Abrir
-        </Button>
+              <Trash2 className="mr-2 size-3.5" />
+              Excluir proposta
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </span>
     </div>
   );
@@ -591,14 +642,14 @@ function FilterSelect({
   );
 }
 
-// 8 cols (no bulk) or 9 (bulk): [bulk?] action ref title story sprint status assignee actions
+// 7 cols (no bulk) or 8 (bulk): [bulk?] action ref title sprint status assignee actions
 //
-// Title gets the lion's share (3fr); story/sprint stay tight (max-content) so
-// "—" placeholders don't waste space. Status uses 110px fixed to fit the
-// largest TaskStatusChip ("In progress") without jitter.
+// Story ref vira sub-linha do título (não tem coluna própria). Title fica com
+// minmax(220px, 3fr) pra absorver o espaço liberado. Status 110px pra caber
+// "In progress" sem jitter.
 const GRID_STYLE: React.CSSProperties = {
   gridTemplateColumns:
-    "auto 92px 70px minmax(200px, 3fr) minmax(56px, max-content) minmax(80px, max-content) 110px minmax(90px, 1fr) auto",
+    "auto 92px 88px minmax(220px, 3fr) minmax(80px, max-content) 110px minmax(90px, 1fr) auto",
 };
 
 // Re-export adapter types for callers

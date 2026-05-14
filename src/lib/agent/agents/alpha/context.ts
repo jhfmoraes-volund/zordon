@@ -1152,6 +1152,7 @@ async function renderSuperPlanningMeeting(m: MeetingRow, pendingBlock: string): 
   }
 
   let backlogBlock = "_Backlog não disponível (sem sprint-objeto vinculada)._";
+  let storiesBlock = "_User Stories não disponíveis (sem sprint-objeto vinculada)._";
   if (projectId) {
     const { data: backlog } = await supabase
       .from("Task")
@@ -1167,6 +1168,33 @@ async function renderSuperPlanningMeeting(m: MeetingRow, pendingBlock: string): 
       ? ["_Backlog vazio._"]
       : list.map((t) => `- [${t.reference}] ${t.title} | ${t.type} | ${t.scope}/${t.complexity} | ${t.functionPoints ?? "?"}FP | prio ${t.priority}`);
     backlogBlock = [`### Backlog do projeto (top ${list.length})`, ...lines].join("\n");
+
+    // Stories refined/committed pra Alpha vincular tasks novas a US existente
+    // durante propose_task_action. Limit 50 — projetos maiores precisarão
+    // depender de list_stories pra cobrir o restante.
+    const { data: stories } = await supabase
+      .from("UserStory")
+      .select("id, reference, title, refinementStatus, module:Module(name), persona:ProjectPersona(name)")
+      .eq("projectId", projectId)
+      .in("refinementStatus", ["refined", "committed"])
+      .order("reference", { ascending: true })
+      .limit(50);
+
+    const storyList = stories || [];
+    if (storyList.length === 0) {
+      storiesBlock = "### User Stories do projeto\n_Nenhuma story refined/committed. Tasks novas podem ficar isoladas (sem userStoryId)._";
+    } else {
+      const storyLines = storyList.map((s) => {
+        const moduleName = (s.module as { name: string } | null)?.name ?? "—";
+        const personaName = (s.persona as { name: string } | null)?.name ?? "—";
+        return `- ${s.id} [${s.reference}] ${s.title} | ${moduleName} | ${personaName} | ${s.refinementStatus}`;
+      });
+      storiesBlock = [
+        `### User Stories do projeto (${storyList.length} refined/committed)`,
+        "_Use o UUID (1ª coluna) em `propose_task_action.payload.userStoryId` quando a task nova encaixar numa story existente._",
+        ...storyLines,
+      ].join("\n");
+    }
   }
 
   return [
@@ -1182,6 +1210,8 @@ async function renderSuperPlanningMeeting(m: MeetingRow, pendingBlock: string): 
     sprintBlock,
     "",
     backlogBlock,
+    "",
+    storiesBlock,
     "",
     pendingBlock,
   ].join("\n");

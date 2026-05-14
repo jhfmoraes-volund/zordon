@@ -14,6 +14,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useAuth } from "@/contexts/auth-context";
 import { hasMinLevel, MANAGER } from "@/lib/roles";
+import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
 
 /**
  * Idle threshold: if the bubble is reopened more than this after the last
@@ -32,6 +33,16 @@ type AlphaChatValue = {
   isLoading: boolean;
   status: "idle" | "submitted" | "streaming" | "error" | "ready";
   sendMessage: (text: string) => void;
+  /**
+   * Abre o sheet e dispara uma ingestão de transcrição Roam em thread nova,
+   * com `meetingId` no body (Alpha recebe no `loadContext.params.meetingId`).
+   * Usado pelos botões "Importar reunião" — não é fluxo de chat livre.
+   */
+  kickoffIngest: (args: {
+    meetingId: string;
+    roamTranscriptId: string;
+    overwrite: boolean;
+  }) => void;
   /** Current thread ID. null = fresh conversation (next send creates a new one). */
   threadId: string | null;
   /** Load an existing thread's messages into the current chat. */
@@ -52,6 +63,7 @@ const STUB: AlphaChatValue = {
   isLoading: false,
   status: "idle",
   sendMessage: () => {},
+  kickoffIngest: () => {},
   threadId: null,
   loadThread: async () => {},
   newConversation: () => {},
@@ -185,6 +197,40 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     lastOpenedAtRef.current = Date.now();
   }, [chat]);
 
+  const kickoffIngest = useCallback(
+    ({
+      meetingId,
+      roamTranscriptId,
+      overwrite,
+    }: {
+      meetingId: string;
+      roamTranscriptId: string;
+      overwrite: boolean;
+    }) => {
+      if (isLoading) return;
+      // Abre o sheet, zera estado, dispara thread nova com meetingId no body.
+      // Idle-reset não roda aqui (setIsOpen direto) porque já estamos zerando
+      // explicitamente — toggle() correria a lógica de timeout sem efeito.
+      setIsOpen(true);
+      lastOpenedAtRef.current = Date.now();
+      setThreadId(null);
+      chat.setMessages([]);
+      const seed = buildIngestSeed(meetingId, roamTranscriptId, overwrite);
+      chat.sendMessage(
+        { text: seed },
+        {
+          body: {
+            currentPath: pathname,
+            threadId: null,
+            newThread: true,
+            meetingId,
+          },
+        },
+      );
+    },
+    [chat, isLoading, pathname],
+  );
+
   const value: AlphaChatValue = {
     enabled: true,
     isOpen,
@@ -194,6 +240,7 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     isLoading,
     status: chat.status,
     sendMessage,
+    kickoffIngest,
     threadId,
     loadThread,
     newConversation,

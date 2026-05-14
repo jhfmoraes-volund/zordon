@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMinLevelApi } from "@/lib/dal";
-import { ADMIN } from "@/lib/roles";
+import { MANAGER } from "@/lib/roles";
 import { invalidateAgentConfigCache } from "@/lib/agent/config";
 import { getSettingsSchema } from "@/lib/agent/settings-registry";
 import type { SettingField } from "@/lib/agent/settings-schema";
@@ -14,7 +14,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string; key: string }> },
 ) {
-  const denied = await requireMinLevelApi(ADMIN);
+  const denied = await requireMinLevelApi(MANAGER);
   if (denied) return denied;
 
   const { slug, key } = await params;

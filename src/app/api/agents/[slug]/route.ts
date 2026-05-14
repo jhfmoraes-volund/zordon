@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMinLevelApi } from "@/lib/dal";
-import { ADMIN } from "@/lib/roles";
+import { MANAGER } from "@/lib/roles";
 
 /**
  * GET /api/agents/[slug] — retorna o agente, seus configs e índice de heurísticas.
@@ -10,7 +10,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
-  const denied = await requireMinLevelApi(ADMIN);
+  const denied = await requireMinLevelApi(MANAGER);
   if (denied) return denied;
 
   const { slug } = await params;

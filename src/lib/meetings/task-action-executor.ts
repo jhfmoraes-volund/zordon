@@ -105,12 +105,17 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
   }
 
   const taskId = crypto.randomUUID();
+  const sprintId = (p.sprintId as string | null) ?? null;
+  // Default de status acompanha sprintId: sem sprint = backlog, com sprint = todo.
+  // Protege contra Alpha propondo create sem sprint+status (resultado seria
+  // task "todo" órfã, que não aparece no kanban da sprint nem no backlog).
+  const defaultStatus = sprintId ? "todo" : "backlog";
   const { error: insErr } = await supabase.from("Task").insert({
     id: taskId,
     reference: reference as string,
     title: (p.title as string) ?? "Nova task",
     description: (p.description as string) ?? null,
-    status: (p.status as string) ?? "todo",
+    status: (p.status as string) ?? defaultStatus,
     type: (p.type as string) ?? "feature",
     scope: (p.scope as string) ?? "small",
     complexity: (p.complexity as string) ?? "medium",
@@ -120,7 +125,7 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
     notes: (p.notes as string) ?? null,
     dueDate: (p.dueDate as string) ?? null,
     projectId: action.projectId,
-    sprintId: (p.sprintId as string | null) ?? null,
+    sprintId,
     userStoryId,
     createdById: action.decidedById,
     createdByAgent: action.source === "ai",

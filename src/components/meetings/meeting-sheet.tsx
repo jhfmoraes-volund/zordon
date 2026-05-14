@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast, fetchOrThrow } from "@/lib/optimistic/toast";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Download } from "lucide-react";
+import { ImportRoamMeetingModal } from "./import-roam-meeting-modal";
+import { ProjectPicker } from "@/components/projects/project-picker";
 
 type Member = { id: string; name: string; role: string };
 type Project = { id: string; name: string; status: string };
@@ -82,6 +84,7 @@ export function MeetingSheet({
 }: Props) {
   const isMobile = useIsMobile();
   const [saving, setSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const [members, setMembers] = useState<Member[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -266,9 +269,6 @@ export function MeetingSheet({
 
   const togglePm = toggleInSet(setPmIds);
   const toggleMember = toggleInSet(setMemberIds);
-  const toggleProject = toggleInSet(setProjectIds);
-
-  const selectSingleProject = (id: string) => setProjectIds(new Set([id]));
 
   const addExternal = () => {
     if (!extName.trim()) return;
@@ -333,33 +333,35 @@ export function MeetingSheet({
     return memberIds.size > 0 || externals.length > 0;
   };
 
+  function buildAttendees() {
+    if (type === "pm_review") {
+      return Array.from(pmIds).map((id) => ({ memberId: id, role: "pm" }));
+    }
+    if (type === "daily" || type === "super_planning") {
+      return Array.from(memberIds).map((id) => ({
+        memberId: id,
+        role: "attendee",
+      }));
+    }
+    return [
+      ...Array.from(memberIds).map((id) => ({
+        memberId: id,
+        role: "attendee",
+      })),
+      ...externals.map((e) => ({
+        externalName: e.name,
+        externalEmail: e.email || null,
+        externalRole: e.role || null,
+        role: "external",
+      })),
+    ];
+  }
+
   async function save() {
     if (saving) return;
     setSaving(true);
     try {
-      // Monta attendees pelo tipo
-      let attendees;
-      if (type === "pm_review") {
-        attendees = Array.from(pmIds).map((id) => ({ memberId: id, role: "pm" }));
-      } else if (type === "daily" || type === "super_planning") {
-        attendees = Array.from(memberIds).map((id) => ({
-          memberId: id,
-          role: "attendee",
-        }));
-      } else {
-        attendees = [
-          ...Array.from(memberIds).map((id) => ({
-            memberId: id,
-            role: "attendee",
-          })),
-          ...externals.map((e) => ({
-            externalName: e.name,
-            externalEmail: e.email || null,
-            externalRole: e.role || null,
-            role: "external",
-          })),
-        ];
-      }
+      const attendees = buildAttendees();
 
       if (mode === "create") {
         const body = {
@@ -534,39 +536,28 @@ export function MeetingSheet({
                   <span className="ml-2 text-xs text-muted-foreground">(travado)</span>
                 )}
               </Label>
-              <div className="flex flex-wrap gap-2">
-                {projects.length === 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    Nenhum projeto ativo.
-                  </span>
-                )}
-                {projects.map((p) => {
-                  const selected = projectIds.has(p.id);
-                  const hasSprint = sprints.some((s) => s.projectId === p.id);
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      disabled={projectsLocked}
-                      onClick={() =>
-                        type === "super_planning" || type === "daily"
-                          ? selectSingleProject(p.id)
-                          : toggleProject(p.id)
-                      }
-                      className={`px-3 py-1.5 rounded-md border text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                        selected
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background hover:bg-accent"
-                      }`}
-                    >
-                      {p.name}
-                      {type === "super_planning" && !hasSprint && (
-                        <span className="ml-1 text-xs opacity-70">(sem sprint ativa)</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              <ProjectPicker
+                mode={
+                  type === "super_planning" || type === "daily"
+                    ? "single"
+                    : "multi"
+                }
+                available={projects.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  hasActiveSprint: sprints.some((s) => s.projectId === p.id),
+                }))}
+                selectedIds={Array.from(projectIds)}
+                onChange={(ids) => setProjectIds(new Set(ids))}
+                disabled={projectsLocked}
+                showSprintHint={type === "super_planning"}
+                placeholder={
+                  type === "super_planning" || type === "daily"
+                    ? "Selecionar projeto"
+                    : "Vincular projetos"
+                }
+                emptyText="Nenhum projeto ativo"
+              />
               {type === "super_planning" &&
                 selectedProjectId &&
                 !selectedProjectHasSprint && (
@@ -666,10 +657,21 @@ export function MeetingSheet({
           </div>
         </div>
 
-        <div className="shrink-0 sticky bottom-0 border-t bg-popover px-6 py-3 pb-safe flex items-center justify-end gap-2">
+        <div className="shrink-0 sticky bottom-0 border-t bg-popover px-6 py-3 pb-safe flex flex-wrap items-center justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
+          {mode === "create" && (
+            <Button
+              variant="outline"
+              onClick={() => setImportOpen(true)}
+              disabled={saving || !canSubmit()}
+              title="Cria a reunião e deixa o Alpha popular a partir de uma transcrição do Roam"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Importar reunião
+            </Button>
+          )}
           <Button onClick={save} disabled={!canSubmit() || saving}>
             {saving
               ? mode === "create"
@@ -680,6 +682,21 @@ export function MeetingSheet({
                 : "Salvar"}
           </Button>
         </div>
+        {mode === "create" && (
+          <ImportRoamMeetingModal
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            mode="create"
+            type={type}
+            pmMemberIds={Array.from(pmIds)}
+            attendees={buildAttendees()}
+            projectIds={
+              ["general", "daily", "super_planning"].includes(type)
+                ? Array.from(projectIds)
+                : []
+            }
+          />
+        )}
       </SheetContent>
     </Sheet>
   );

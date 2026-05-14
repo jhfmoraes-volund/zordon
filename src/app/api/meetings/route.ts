@@ -183,40 +183,12 @@ export async function POST(req: NextRequest) {
         .map((p) => ({ memberId: p.memberId, role: "attendee" }));
     }
 
-    // Carry over pending actions from the most recent past meeting (any type).
-    // "Past" = date strictly before now; status field is no longer maintained.
-    const { data: lastMeeting } = await supabase
-      .from("Meeting")
-      .select("id")
-      .lt("date", new Date().toISOString())
-      .order("date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    let carryActions: Array<{
-      description: string;
-      assigneeId: string;
-      dueDate: string | null;
-    }> = [];
-    if (lastMeeting) {
-      const { data: pendingActions } = await supabase
-        .from("Todo")
-        .select("description, assigneeId, dueDate")
-        .eq("meetingId", lastMeeting.id)
-        .in("status", ["todo", "doing"]);
-      carryActions = (pendingActions ?? []).map((a) => ({
-        description: a.description,
-        assigneeId: a.assigneeId,
-        dueDate: a.dueDate,
-      }));
-    }
-
     const { data: meetingId, error: rpcError } = await supabase.rpc(
       "create_meeting_with_reviews",
       {
         p_date: new Date(date).toISOString(),
         p_reviews: reviews,
-        p_carry_actions: carryActions,
+        p_carry_actions: [],
         p_type: type,
         p_title: title ?? undefined,
         p_attendees: resolvedAttendees,
