@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMinLevelApi } from "@/lib/dal";
-import { ADMIN } from "@/lib/roles";
+import { MANAGER } from "@/lib/roles";
 
 /**
- * GET /api/agents — lista agentes ativos (Admin only).
+ * GET /api/agents — lista agentes ativos (Manager+).
  */
 export async function GET() {
   try {
-    const denied = await requireMinLevelApi(ADMIN);
+    const denied = await requireMinLevelApi(MANAGER);
     if (denied) return denied;
 
     const { data, error } = await db()

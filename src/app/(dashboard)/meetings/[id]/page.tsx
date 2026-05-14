@@ -4,28 +4,22 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PageTitle } from "@/components/app-shell";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogFooter,
-  ResponsiveDialogBody,
-} from "@/components/ui/responsive-dialog";
-import {
-  ArrowLeft, Plus, Trash2, CheckCircle2, Circle, Clock,
-  ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink,
+  ArrowLeft, Plus, CheckCircle2, Circle, Clock,
+  ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink, Download,
 } from "lucide-react";
 import { TaskActionWidget } from "@/components/meetings/task-action-widget";
+import { ImportRoamMeetingModal } from "@/components/meetings/import-roam-meeting-modal";
+import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
+import {
+  TodoSheet,
+  type Todo as TodoSheetTodo,
+} from "@/components/todo-sheet";
 import {
   MEETING_STATUS, MEETING_TYPE, HEALTH, ACTION_ITEM_STATUS, lookupChip,
   meetingStatusFromDate,
@@ -45,6 +39,7 @@ type ActionItem = {
   status: string;
   sourceReviewId: string | null;
   sourceReview?: { project: { name: string } } | null;
+  notes: string | null;
   createdAt: string;
 };
 
@@ -130,15 +125,12 @@ export default function MeetingDetailPage({
   const [loadError, setLoadError] = useState<"forbidden" | "notfound" | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [notes, setNotes] = useState("");
-  const [actionDialogOpen, setActionDialogOpen] = useState(false);
-  const [actionForm, setActionForm] = useState({
-    description: "",
-    assigneeId: "",
-    dueDate: "",
-    sourceReviewId: "",
-  });
+  const [todoSheetOpen, setTodoSheetOpen] = useState(false);
+  const [editingTodo, setEditingTodo] = useState<TodoSheetTodo | null>(null);
   const [collapsedPms, setCollapsedPms] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [importOpen, setImportOpen] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   const load = async () => {
     const r = await fetch(`/api/meetings/${id}`);
@@ -270,41 +262,26 @@ export default function MeetingDetailPage({
     }
   };
 
-  const deleteAction = async (actionId: string) => {
-    const snapshot = meeting?.actionItems ?? [];
-    setMeeting((cur) =>
-      cur
-        ? { ...cur, actionItems: cur.actionItems.filter((a) => a.id !== actionId) }
-        : cur,
-    );
-    try {
-      await fetchOrThrow(`/api/meetings/${id}/actions/${actionId}`, {
-        method: "DELETE",
-      });
-    } catch (e) {
-      setMeeting((cur) => (cur ? { ...cur, actionItems: snapshot } : cur));
-      showErrorToast(e, { label: "Falha ao remover action item" });
-    }
+  const openCreateTodo = () => {
+    setEditingTodo(null);
+    setTodoSheetOpen(true);
   };
 
-  const createAction = async () => {
-    setActionDialogOpen(false);
-    setActionForm({ description: "", assigneeId: "", dueDate: "", sourceReviewId: "" });
-    try {
-      await fetchOrThrow(`/api/meetings/${id}/actions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: actionForm.description,
-          assigneeId: actionForm.assigneeId,
-          dueDate: actionForm.dueDate || null,
-          sourceReviewId: actionForm.sourceReviewId || null,
-        }),
-      });
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao criar action item" });
-    }
-    load();
+  const openEditTodo = (action: ActionItem) => {
+    setEditingTodo({
+      id: action.id,
+      description: action.description,
+      status: action.status as TodoSheetTodo["status"],
+      dueDate: action.dueDate,
+      notes: action.notes ?? null,
+      source: "meeting",
+      meetingId: meeting?.id ?? null,
+      sourceReviewId: action.sourceReviewId,
+      assigneeId: action.assigneeId,
+      createdAt: action.createdAt,
+      resolvedAt: null,
+    });
+    setTodoSheetOpen(true);
   };
 
   const reviewsByPm = meeting.projectReviews.reduce<Record<string, ProjectReview[]>>(
@@ -367,6 +344,35 @@ export default function MeetingDetailPage({
           : "Reunião geral";
   const headerTitle = meeting.title || derivedHeaderTitle;
 
+  // "Conteúdo" = qualquer dado que o Alpha possa sobrescrever ao ingerir.
+  // Notes/reviews preenchidos e To-dos contam; sprintHealth default ("healthy"
+  // sem outros campos) NÃO conta — é o estado zerado de pm_review.
+  const meetingHasContent =
+    !!(meeting.notes && meeting.notes.trim()) ||
+    meeting.actionItems.length > 0 ||
+    meeting.projectReviews.some(
+      (r) =>
+        (r.nextSteps && r.nextSteps.trim()) ||
+        (r.attentionPoints && r.attentionPoints.trim()) ||
+        (r.additionalNotes && r.additionalNotes.trim()) ||
+        r.sprintHealth !== "healthy",
+    );
+
+  const handleImportClick = () => {
+    if (!meetingHasContent) {
+      setImportOpen(true);
+      return;
+    }
+    setConfirmState({
+      title: "Sobrescrever conteúdo da reunião?",
+      description:
+        "Essa reunião já tem conteúdo (notas, reviews ou To-dos). A ingestão pelo Alpha pode sobrescrever ou duplicar esses dados. Deseja prosseguir?",
+      confirmLabel: "Prosseguir",
+      destructive: true,
+      onConfirm: () => setImportOpen(true),
+    });
+  };
+
   return (
     <div className="space-y-6">
       <PageTitle title={headerTitle} subtitle={fmtDate(meeting.date)} />
@@ -393,6 +399,16 @@ export default function MeetingDetailPage({
             <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
           )}
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleImportClick}
+          className="shrink-0"
+          title="Ingerir uma transcrição do Roam nesta reunião"
+        >
+          <Download className="h-4 w-4 mr-1" />
+          Importar reunião
+        </Button>
       </div>
 
       {/* Attendees + project links (general/daily/super_planning) */}
@@ -524,11 +540,7 @@ export default function MeetingDetailPage({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">To-dos</h2>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setActionDialogOpen(true)}
-          >
+          <Button size="sm" variant="outline" onClick={openCreateTodo}>
             <Plus className="mr-1 h-4 w-4" />
             Nova To-do
           </Button>
@@ -548,12 +560,24 @@ export default function MeetingDetailPage({
             return (
               <div
                 key={action.id}
-                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3"
+                role="button"
+                tabIndex={0}
+                onClick={() => openEditTodo(action)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openEditTodo(action);
+                  }
+                }}
+                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/40"
               >
                 {/* Linha 1 mobile / bloco principal desktop */}
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <button
-                    onClick={() => cycleActionStatus(action)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cycleActionStatus(action);
+                    }}
                     className={`shrink-0 mt-0.5 ${iconColor} hover:opacity-70 transition-opacity`}
                     title={`Clique para mudar: ${chip.label}`}
                   >
@@ -578,7 +602,10 @@ export default function MeetingDetailPage({
                 </div>
 
                 {/* Linha 2 mobile / bloco direito desktop */}
-                <div className="flex items-center gap-2 flex-wrap pl-8 sm:pl-0 sm:shrink-0">
+                <div
+                  className="flex items-center gap-2 flex-wrap pl-8 sm:pl-0 sm:shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Badge variant="outline" className="text-xs">
                     {action.assignee.name}
                   </Badge>
@@ -601,14 +628,6 @@ export default function MeetingDetailPage({
                   >
                     <StatusChip {...chip} />
                   </button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => deleteAction(action.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               </div>
             );
@@ -628,90 +647,39 @@ export default function MeetingDetailPage({
         />
       </div>
 
-      {/* New Action Dialog */}
-      <ResponsiveDialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>Nova To-do</ResponsiveDialogTitle>
-          </ResponsiveDialogHeader>
-          <ResponsiveDialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Descrição</Label>
-              <Input
-                value={actionForm.description}
-                onChange={(e) =>
-                  setActionForm({ ...actionForm, description: e.target.value })
-                }
-                placeholder="O que precisa ser feito..."
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Responsável</Label>
-              <Select
-                value={actionForm.assigneeId}
-                onValueChange={(v) =>
-                  v && setActionForm({ ...actionForm, assigneeId: v })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {members.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Prazo (opcional)</Label>
-              <Input
-                type="date"
-                value={actionForm.dueDate}
-                onChange={(e) =>
-                  setActionForm({ ...actionForm, dueDate: e.target.value })
-                }
-              />
-            </div>
-            {meeting.type === "pm_review" && (
-              <div className="grid gap-2">
-                <Label>Vinculado ao projeto (opcional)</Label>
-                <Select
-                  value={actionForm.sourceReviewId}
-                  onValueChange={(v) =>
-                    v && setActionForm({ ...actionForm, sourceReviewId: v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Nenhum" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {meeting.projectReviews.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.project.name} ({r.member.name})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </ResponsiveDialogBody>
-          <ResponsiveDialogFooter>
-            <Button variant="outline" onClick={() => setActionDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={createAction}
-              disabled={!actionForm.description || !actionForm.assigneeId}
-            >
-              Criar
-            </Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      </ResponsiveDialog>
+      <TodoSheet
+        todo={editingTodo}
+        open={todoSheetOpen}
+        onOpenChange={(v) => {
+          setTodoSheetOpen(v);
+          if (!v) load();
+        }}
+        onChange={() => load()}
+        endpoint={{
+          create: `/api/meetings/${id}/actions`,
+          itemUrl: (todoId) => `/api/meetings/${id}/actions/${todoId}`,
+          updateMethod: "PUT",
+        }}
+        members={members}
+        projectReviews={
+          meeting.type === "pm_review"
+            ? meeting.projectReviews.map((r) => ({
+                id: r.id,
+                projectName: r.project.name,
+                pmName: r.member.name,
+              }))
+            : undefined
+        }
+      />
 
+      <ImportRoamMeetingModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        mode="existing"
+        meetingId={meeting.id}
+      />
+
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }

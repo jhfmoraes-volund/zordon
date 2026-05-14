@@ -1566,6 +1566,27 @@ export function assembleAlphaTools(
       },
     });
 
+    tools.update_meeting_notes = tool({
+      description:
+        "Atualiza o campo `notes` da reunião — o resumo livre/markdown que aparece em 'Notas gerais' na UI. Use durante ingestão de transcrição pra registrar um resumo rico do que foi discutido (tópicos, decisões, contexto, citações relevantes). Substitui o conteúdo atual; mescle manualmente se quiser preservar.",
+      inputSchema: z.object({
+        meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
+        notes: z.string().describe("Conteúdo markdown das notas. Pode ser longo — não há limite prático."),
+      }),
+      execute: async ({ meetingId, notes }) => {
+        const targetId = meetingId || activeMeetingId;
+        if (!targetId) return { error: "Nenhuma reunião no contexto. Informe meetingId." };
+
+        const { error } = await supabase
+          .from("Meeting")
+          .update({ notes, updatedAt: new Date().toISOString() })
+          .eq("id", targetId);
+        if (error) return { error: `Erro ao atualizar notas: ${error.message}` };
+
+        return { updated: true, meetingId: targetId, length: notes.length };
+      },
+    });
+
     tools.create_todo = tool({
       description:
         "Cria uma To-do — obrigação atribuída a um membro. Pode nascer de uma reunião (origem='meeting') ou ser uma tarefa solta atribuída a alguém (origem='manual'). Use sem meetingId para registrar To-do pessoal/operacional fora de reunião.",
@@ -1629,6 +1650,128 @@ export function assembleAlphaTools(
       },
     });
 
+    tools.extract_meeting_actions = tool({
+      description:
+        "Sub-agente especialista que lê a transcrição completa da reunião e devolve {tasks, todos, skipped} estruturados. USE SEMPRE NA INGESTÃO DE TRANSCRIÇÃO (daily/super_planning/pm_review) ANTES de chamar propose_task_action/create_todo — o sub-agente cobre a transcrição inteira por tópico, identifica matches com Tasks existentes (REF citada ou título similar), vincula US ativas e diferencia Task (sistema) de Todo (pessoas/processo) pela heurística de domínio. Você (Alpha) RECEBE o resultado e EXECUTA propose_task_action / create_todo em paralelo pra cada item. Não duplique trabalho — se chamou extract_meeting_actions, NÃO releia a transcrição pra extrair ações de novo.",
+      inputSchema: z.object({
+        meetingId: z.string().uuid().optional().describe("UUID da reunião (default: reunião do contexto)"),
+        transcript: z.string().min(1).describe("Transcrição completa da reunião (cues+summary do Roam, vindo de get_meeting_transcript)."),
+      }),
+      execute: async ({ meetingId, transcript }) => {
+        const targetMeetingId = meetingId || activeMeetingId;
+        if (!targetMeetingId) {
+          return { error: "Nenhuma reunião no contexto. extract_meeting_actions só funciona dentro de uma reunião." };
+        }
+
+        const { extractActions } = await import("./extractors/actions");
+
+        // Hidrata contexto do banco — projetos vinculados, members do squad,
+        // US ativas, Tasks ativas (top 500 por updatedAt).
+        const { data: meeting } = await supabase
+          .from("Meeting")
+          .select(
+            "id, type, projectLinks:MeetingProjectLink(project:Project(id, name))",
+          )
+          .eq("id", targetMeetingId)
+          .maybeSingle();
+
+        if (!meeting) {
+          return { error: `Reunião "${targetMeetingId}" não encontrada.` };
+        }
+
+        const projects = (meeting.projectLinks || [])
+          .map((l: { project: { id: string; name: string } | null }) => l.project)
+          .filter((p): p is { id: string; name: string } => !!p);
+
+        if (projects.length === 0) {
+          return {
+            error:
+              "Reunião sem projetos vinculados — sub-agente precisa de ao menos 1 projeto pra resolver assignees/tasks.",
+          };
+        }
+
+        const projectIds = projects.map((p) => p.id);
+
+        // Members do squad (PM + ProjectMembers) — todos os projetos vinculados.
+        const { data: projectMembers } = await supabase
+          .from("ProjectMember")
+          .select("member:Member(id, name, role)")
+          .in("projectId", projectIds);
+        const memberMap = new Map<string, { id: string; name: string; role: string }>();
+        for (const pm of projectMembers || []) {
+          const m = (pm as { member: { id: string; name: string; role: string } | null }).member;
+          if (m) memberMap.set(m.id, m);
+        }
+        // Inclui PMs dos projetos
+        const { data: projectsWithPm } = await supabase
+          .from("Project")
+          .select("pm:Member!Project_pmId_fkey(id, name, role)")
+          .in("id", projectIds);
+        for (const p of projectsWithPm || []) {
+          const pm = (p as { pm: { id: string; name: string; role: string } | null }).pm;
+          if (pm) memberMap.set(pm.id, pm);
+        }
+        const members = Array.from(memberMap.values());
+
+        // User Stories ativas (refined/committed)
+        const { data: storiesRaw } = await supabase
+          .from("UserStory")
+          .select("id, reference, title, refinementStatus")
+          .in("projectId", projectIds)
+          .in("refinementStatus", ["refined", "committed"])
+          .order("reference", { ascending: true });
+        const userStories = (storiesRaw || []).map((s) => ({
+          id: s.id as string,
+          reference: s.reference as string,
+          title: s.title as string,
+        }));
+
+        // Tasks ativas (não 'done') — top 500 por updatedAt.
+        const { data: tasksRaw } = await supabase
+          .from("Task")
+          .select("reference, title, status, updatedAt")
+          .in("projectId", projectIds)
+          .neq("status", "done")
+          .order("updatedAt", { ascending: false })
+          .limit(500);
+        const tasks = (tasksRaw || []).map((t) => ({
+          reference: t.reference as string,
+          title: t.title as string,
+          status: t.status as string,
+        }));
+
+        try {
+          const result = await extractActions({
+            transcript,
+            meetingType: meeting.type as "pm_review" | "general" | "daily" | "super_planning",
+            projects: projects.map((p) => ({ id: p.id, name: p.name })),
+            members,
+            userStories,
+            tasks,
+          });
+
+          return {
+            ok: true,
+            counts: {
+              tasks: result.tasks.length,
+              todos: result.todos.length,
+              skipped: result.skipped.length,
+            },
+            tasks: result.tasks,
+            todos: result.todos,
+            skipped: result.skipped,
+            note:
+              "Agora execute propose_task_action pra cada task e create_todo pra cada todo. Resolva assigneeName→memberId via lista de members do contexto. Pra type=update use o taskReference. Pra type=review marque reviewReasons=['other'] e reviewNote com o reasoning. NÃO releia a transcrição.",
+          };
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return {
+            error: `Sub-agente falhou: ${msg}. Fallback: leia a transcrição manualmente e classifique Task/Todo pela heurística de domínio.`,
+          };
+        }
+      },
+    });
+
     tools.propose_task_action = tool({
       description:
         "Propõe uma mudança em Task no contexto de uma reunião — NÃO executa, só registra como proposta pendente em MeetingTaskAction. O PM aprova/edita/rejeita pela UI da reunião e o sistema aplica em batch. Use SEMPRE em vez de create_task/update_task/bulk_update_tasks quando houver reunião ativa do tipo daily, super_planning ou pm_review.",
@@ -1641,7 +1784,7 @@ export function assembleAlphaTools(
         taskReference: z.string().optional().describe("Referência da task (ex: TASK-042) — obrigatória pra update/delete/move/review"),
         targetSprintName: z.string().optional().describe("Nome parcial do sprint destino (obrigatório pra type=move)"),
         payload: z.record(z.string(), z.unknown()).optional().describe(
-          "Campos da ação. Pra create: { title, description?, scope, complexity, type, priority?, status?, assigneeNames? }. Pra update: campos a mudar. Pra review: ignorado (use reviewReasons/reviewNote)."
+          "Campos da ação. Pra create: { title, description?, scope, complexity, type, priority?, status?, assigneeIds?, sprintId?, userStoryId? }. **assigneeIds são UUIDs** (resolva nomes via get_allocated_project_members ANTES — não passe nomes). **userStoryId é UUID de uma US existente** — escolha da lista `### User Stories do projeto` no contexto (ou chame `list_stories`). NUNCA invente UUID; se nenhuma US bate, omita o campo (task isolada). Sem sprintId, status default = 'backlog'. Pra update: campos a mudar (mesmas chaves). Pra review: ignorado (use reviewReasons/reviewNote)."
         ),
         reasoning: z.string().min(1).describe("1-2 frases em pt-BR explicando o porquê da proposta"),
         confidence: z.number().min(0).max(1).default(0.7).describe("0..1, sua confiança na proposta. <0.5 considere usar type=review."),

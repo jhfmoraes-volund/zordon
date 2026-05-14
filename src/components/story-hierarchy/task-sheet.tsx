@@ -717,7 +717,7 @@ export function TaskSheetInner({
 
           {(() => {
             const dbTaskId = (task as Task & { __id?: string }).__id ?? null;
-            if (!dbTaskId) return null;
+            if (!dbTaskId || dbTaskId === "virtual-create") return null;
             return (
               <>
                 <Separator />

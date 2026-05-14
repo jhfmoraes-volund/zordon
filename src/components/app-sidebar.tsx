@@ -66,8 +66,8 @@ const managerOnlyNav: NavItem[] = [
   { title: "Reuniões", href: "/meetings", icon: CalendarCheck },
 ];
 
-// Admin only (head-ops, CEO) — tuning de agentes.
-const adminOnlyNav: NavItem[] = [
+// Manager+ (PM, head-ops, CEO) — tuning de agentes.
+const agentsTuningNav: NavItem[] = [
   { title: "Agentes", href: "/agents", icon: SlidersHorizontal },
 ];
 
@@ -94,10 +94,11 @@ export function AppSidebar() {
     if (isMobile) setOpenMobile(false);
   };
 
-  // Real admin: can impersonate (dropdown) and tune agents.
-  // Manager (incl. admins and PMs; via effective role): can see the Gestão menu.
+  // Real admin: can impersonate (dropdown).
+  // Manager (incl. admins and PMs; via effective role): can see the Gestão menu
+  // e tunar agentes.
   const canImpersonate = hasMinLevel(realRole, ADMIN);
-  const canTuneAgents = hasMinLevel(effectiveRole, ADMIN);
+  const canTuneAgents = hasMinLevel(effectiveRole, MANAGER);
   const canSeeManagement = hasMinLevel(effectiveRole, MANAGER);
   // Guests only see project navigation. Hide personal/settings/management.
   const isGuest = !hasMinLevel(effectiveRole, BUILDER);
@@ -194,7 +195,7 @@ export function AppSidebar() {
             {[
               ...(canSeeManagement ? managerOnlyNav : []),
               ...sharedNav,
-              ...(canTuneAgents ? adminOnlyNav : []),
+              ...(canTuneAgents ? agentsTuningNav : []),
               ...(canSeeManagement ? managerSandboxNav : []),
             ].map((item) => {
               const isActive =

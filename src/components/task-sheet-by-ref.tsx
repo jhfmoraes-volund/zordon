@@ -132,7 +132,9 @@ function TaskSheetByRefInner({
     ] = await Promise.all([
       supabase
         .from("Project")
-        .select("definitionOfDone")
+        .select(
+          "definitionOfDone, pm:Member!Project_pmId_fkey(id, name, role, position)",
+        )
         .eq("id", projectId)
         .single(),
       supabase
@@ -189,18 +191,24 @@ function TaskSheetByRefInner({
     };
     const task = adaptTask(flatTask as Parameters<typeof adaptTask>[0], adapterCtx);
 
-    const memberRows = (membersRes.data ?? [])
-      .map((pm) => {
-        const m = pm.member as
-          | { id: string; name: string; role: string | null }
-          | { id: string; name: string; role: string | null }[]
-          | null;
-        return Array.isArray(m) ? m[0] ?? null : m;
-      })
-      .filter((m): m is { id: string; name: string; role: string | null } => m !== null);
-    const members = memberRows.map((m) => adaptMember(m));
-
     const project = projectRes.data;
+
+    // União de Project.pmId ∪ ProjectMember. PM ganha precedência — costuma
+    // não ter linha em ProjectMember (caso comum no banco), então adicionamos
+    // explicitamente. Mesma cascata usada em /api/projects/[id]/members.
+    type MemberLite = { id: string; name: string; role: string | null };
+    const byId = new Map<string, MemberLite>();
+
+    const pm = Array.isArray(project?.pm) ? project?.pm[0] : project?.pm;
+    if (pm) byId.set(pm.id, { id: pm.id, name: pm.name, role: pm.role });
+
+    for (const pmRow of membersRes.data ?? []) {
+      const m = pmRow.member as MemberLite | MemberLite[] | null;
+      const row = Array.isArray(m) ? m[0] ?? null : m;
+      if (row && !byId.has(row.id)) byId.set(row.id, row);
+    }
+    const members = Array.from(byId.values()).map((m) => adaptMember(m));
+
     const definitionOfDone = Array.isArray(project?.definitionOfDone)
       ? (project.definitionOfDone as string[])
       : [];

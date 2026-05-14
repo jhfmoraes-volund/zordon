@@ -21,6 +21,16 @@ export async function PUT(
   if (body.description !== undefined) data.description = body.description;
   if (body.assigneeId !== undefined) data.assigneeId = body.assigneeId;
   if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate).toISOString() : null;
+  if (body.notes !== undefined) {
+    if (body.notes === null) data.notes = null;
+    else {
+      const trimmed = String(body.notes).trim();
+      data.notes = trimmed === "" ? null : trimmed;
+    }
+  }
+  if (body.sourceReviewId !== undefined) {
+    data.sourceReviewId = body.sourceReviewId || null;
+  }
 
   if (body.status === "done") data.resolvedAt = new Date().toISOString();
   if (body.status && body.status !== "done") data.resolvedAt = null;

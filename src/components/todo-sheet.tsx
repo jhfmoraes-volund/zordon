@@ -1,12 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Trash2, Calendar, FileText, Link2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Trash2, Calendar, FileText, Link2, User2, FolderKanban } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
@@ -39,10 +46,33 @@ export type Todo = {
   source: string;
   meetingId: string | null;
   sourceReviewId: string | null;
+  assigneeId?: string | null;
   createdAt: string;
   resolvedAt: string | null;
   meeting?: { id: string; date: string; title: string | null } | null;
   sourceReview?: { project: { name: string } | null } | null;
+};
+
+export type TodoMember = { id: string; name: string };
+export type TodoProjectReview = {
+  id: string;
+  projectName: string;
+  pmName?: string | null;
+};
+
+export type TodoEndpoint = {
+  /** POST URL to create. Body shape matches /api/profile/todos. */
+  create: string;
+  /** Function returning PATCH/PUT URL for a given todo id. */
+  itemUrl: (id: string) => string;
+  /** HTTP verb for updates. Defaults to PATCH. */
+  updateMethod?: "PATCH" | "PUT";
+};
+
+const DEFAULT_ENDPOINT: TodoEndpoint = {
+  create: "/api/profile/todos",
+  itemUrl: (id) => `/api/profile/todos/${id}`,
+  updateMethod: "PATCH",
 };
 
 type TodoSheetProps = {
@@ -51,12 +81,29 @@ type TodoSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Called after create / update / delete. Parent should refresh. */
-  onChange?: () => void;
+  onChange?: (todo?: Todo) => void;
+  /** Custom API endpoint. Defaults to /api/profile/todos. */
+  endpoint?: TodoEndpoint;
+  /** When provided, shows assignee picker (required in create mode). */
+  members?: TodoMember[];
+  /** When provided, shows "vincular a projeto" picker (optional). */
+  projectReviews?: TodoProjectReview[];
+  /** Default assignee id used when creating. */
+  defaultAssigneeId?: string;
 };
 
 // ─── Wrapper ──────────────────────────────────────────────
 
-export function TodoSheet({ todo, open, onOpenChange, onChange }: TodoSheetProps) {
+export function TodoSheet({
+  todo,
+  open,
+  onOpenChange,
+  onChange,
+  endpoint = DEFAULT_ENDPOINT,
+  members,
+  projectReviews,
+  defaultAssigneeId,
+}: TodoSheetProps) {
   const isMobile = useIsMobile();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -80,6 +127,10 @@ export function TodoSheet({ todo, open, onOpenChange, onChange }: TodoSheetProps
             todo={todo}
             onChange={onChange}
             onClose={() => onOpenChange(false)}
+            endpoint={endpoint}
+            members={members}
+            projectReviews={projectReviews}
+            defaultAssigneeId={defaultAssigneeId}
           />
         )}
       </SheetContent>
@@ -89,17 +140,37 @@ export function TodoSheet({ todo, open, onOpenChange, onChange }: TodoSheetProps
 
 // ─── Body ──────────────────────────────────────────────────
 
+type PatchChanges = Partial<{
+  description: string;
+  status: Status;
+  dueDate: string | null;
+  notes: string | null;
+  assigneeId: string;
+  sourceReviewId: string | null;
+}>;
+
 function TodoSheetBody({
   todo: initial,
   onChange,
   onClose,
+  endpoint,
+  members,
+  projectReviews,
+  defaultAssigneeId,
 }: {
   todo: Todo | null;
-  onChange?: () => void;
+  onChange?: (todo?: Todo) => void;
   onClose: () => void;
+  endpoint: TodoEndpoint;
+  members?: TodoMember[];
+  projectReviews?: TodoProjectReview[];
+  defaultAssigneeId?: string;
 }) {
   const isCreate = !initial;
   const [todo, setTodo] = useState<Todo | null>(initial);
+  const showAssignee = !!members && members.length > 0;
+  const showProjectReview = !!projectReviews && projectReviews.length > 0;
+  const updateMethod = endpoint.updateMethod ?? "PATCH";
 
   // Local draft for text fields (save on blur / explicit action)
   const [draft, setDraft] = useState({
@@ -107,6 +178,8 @@ function TodoSheetBody({
     dueDate: initial?.dueDate ? initial.dueDate.slice(0, 10) : "",
     status: (initial?.status ?? "todo") as Status,
     notes: initial?.notes ?? "",
+    assigneeId: initial?.assigneeId ?? defaultAssigneeId ?? "",
+    sourceReviewId: initial?.sourceReviewId ?? "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -114,49 +187,53 @@ function TodoSheetBody({
   const persistCreate = useCallback(async (): Promise<Todo | null> => {
     const description = draft.description.trim();
     if (!description) return null;
+    if (showAssignee && !draft.assigneeId) return null;
     setSaving(true);
     try {
       const notes = draft.notes.trim();
-      const res = await fetch("/api/profile/todos", {
+      const body: Record<string, unknown> = {
+        description,
+        status: draft.status,
+        dueDate: draft.dueDate || null,
+        notes: notes === "" ? null : notes,
+      };
+      if (showAssignee) body.assigneeId = draft.assigneeId;
+      if (showProjectReview) body.sourceReviewId = draft.sourceReviewId || null;
+      const res = await fetch(endpoint.create, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description,
-          status: draft.status,
-          dueDate: draft.dueDate || null,
-          notes: notes === "" ? null : notes,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) return null;
       const created = (await res.json()) as Todo;
       setTodo(created);
-      onChange?.();
+      onChange?.(created);
       return created;
     } finally {
       setSaving(false);
     }
-  }, [draft, onChange]);
+  }, [draft, onChange, endpoint, showAssignee, showProjectReview]);
 
   const patch = useCallback(
-    async (changes: Partial<{ description: string; status: Status; dueDate: string | null; notes: string | null }>) => {
+    async (changes: PatchChanges) => {
       if (!todo) return;
       const previous = todo;
       setTodo((prev) => (prev ? ({ ...prev, ...changes } as Todo) : prev));
       try {
-        const res = await fetchOrThrow(`/api/profile/todos/${todo.id}`, {
-          method: "PATCH",
+        const res = await fetchOrThrow(endpoint.itemUrl(todo.id), {
+          method: updateMethod,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(changes),
         });
         const fresh = (await res.json()) as Todo;
         setTodo(fresh);
-        onChange?.();
+        onChange?.(fresh);
       } catch (e) {
         setTodo(previous);
         showErrorToast(e, { label: "Falha ao salvar to-do" });
       }
     },
-    [todo, onChange],
+    [todo, onChange, endpoint, updateMethod],
   );
 
   const handleStatus = async (next: Status) => {
@@ -198,6 +275,23 @@ function TodoSheetBody({
     await persistCreate();
   };
 
+  const handleAssignee = async (value: string | null) => {
+    if (!value) return;
+    setDraft((d) => ({ ...d, assigneeId: value }));
+    if (!todo) return;
+    if (value === (todo.assigneeId ?? "")) return;
+    await patch({ assigneeId: value });
+  };
+
+  const handleSourceReview = async (value: string | null) => {
+    const next = !value || value === "__none" ? "" : value;
+    setDraft((d) => ({ ...d, sourceReviewId: next }));
+    if (!todo) return;
+    const current = todo.sourceReviewId ?? "";
+    if (next === current) return;
+    await patch({ sourceReviewId: next || null });
+  };
+
   const handleDelete = async () => {
     if (!todo) {
       onClose();
@@ -207,7 +301,7 @@ function TodoSheetBody({
     onClose();
     onChange?.();
     try {
-      await fetchOrThrow(`/api/profile/todos/${todo.id}`, { method: "DELETE" });
+      await fetchOrThrow(endpoint.itemUrl(todo.id), { method: "DELETE" });
     } catch (e) {
       showErrorToast(e, { label: "Falha ao remover to-do" });
       onChange?.();
@@ -266,6 +360,26 @@ function TodoSheetBody({
           />
         </FieldBlock>
 
+        {showAssignee && (
+          <FieldBlock label="Responsável" icon={<User2 className="h-3.5 w-3.5" />}>
+            <Select
+              value={draft.assigneeId || undefined}
+              onValueChange={handleAssignee}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {members!.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+        )}
+
         <FieldBlock label="Prazo" icon={<Calendar className="h-3.5 w-3.5" />}>
           <Input
             type="date"
@@ -274,6 +388,31 @@ function TodoSheetBody({
             className="h-8 text-sm"
           />
         </FieldBlock>
+
+        {showProjectReview && (
+          <FieldBlock
+            label="Vinculado ao projeto"
+            icon={<FolderKanban className="h-3.5 w-3.5" />}
+          >
+            <Select
+              value={draft.sourceReviewId || "__none"}
+              onValueChange={handleSourceReview}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Nenhum" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">Nenhum</SelectItem>
+                {projectReviews!.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.projectName}
+                    {r.pmName ? ` (${r.pmName})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldBlock>
+        )}
 
         <FieldBlock label="Notas" icon={<FileText className="h-3.5 w-3.5" />}>
           <Textarea
@@ -311,7 +450,11 @@ function TodoSheetBody({
             </Button>
             <Button
               size="sm"
-              disabled={saving || !draft.description.trim()}
+              disabled={
+                saving ||
+                !draft.description.trim() ||
+                (showAssignee && !draft.assigneeId)
+              }
               onClick={handleCreate}
             >
               {saving ? "Criando..." : "Criar"}
