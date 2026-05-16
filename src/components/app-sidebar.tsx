@@ -16,6 +16,7 @@ import {
   Settings,
   SlidersHorizontal,
   FlaskConical,
+  Flame,
 } from "lucide-react";
 import {
   Sidebar,
@@ -48,6 +49,11 @@ const projectNav: NavItem[] = [
   { title: "Projetos", href: "/projects", icon: FolderKanban },
   { title: "Clientes", href: "/clients", icon: Users },
   { title: "Workflow", href: "/workflow", icon: BookOpen },
+];
+
+// Forge — observatório de agentes por projeto. Builder+.
+const forgeNav: NavItem[] = [
+  { title: "Forge", href: "/forge", icon: Flame },
 ];
 
 // Items shared by Builder and Manager — visibility of squads/members.
@@ -181,6 +187,24 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               );
             })}
+            {!isGuest &&
+              forgeNav.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      render={<Link href={item.href} />}
+                      tooltip={item.title}
+                      onClick={closeOnMobile}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                      <NavItemPending />
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
           </SidebarMenu>
         </SidebarGroup>
 
