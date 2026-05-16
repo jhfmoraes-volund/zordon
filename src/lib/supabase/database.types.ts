@@ -1953,6 +1953,332 @@ export type Database = {
           },
         ]
       }
+      ForgeAgent: {
+        Row: {
+          costUsd: number
+          endedAt: string | null
+          id: string
+          meta: Json
+          name: string
+          parentId: string | null
+          progress: number
+          role: string
+          runId: string
+          startedAt: string | null
+          status: string
+          tokensIn: number
+          tokensOut: number
+        }
+        Insert: {
+          costUsd?: number
+          endedAt?: string | null
+          id?: string
+          meta?: Json
+          name: string
+          parentId?: string | null
+          progress?: number
+          role: string
+          runId: string
+          startedAt?: string | null
+          status: string
+          tokensIn?: number
+          tokensOut?: number
+        }
+        Update: {
+          costUsd?: number
+          endedAt?: string | null
+          id?: string
+          meta?: Json
+          name?: string
+          parentId?: string | null
+          progress?: number
+          role?: string
+          runId?: string
+          startedAt?: string | null
+          status?: string
+          tokensIn?: number
+          tokensOut?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ForgeAgent_parentId_fkey"
+            columns: ["parentId"]
+            isOneToOne: false
+            referencedRelation: "ForgeAgent"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeAgent_runId_fkey"
+            columns: ["runId"]
+            isOneToOne: false
+            referencedRelation: "ForgeRun"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ForgeEvent: {
+        Row: {
+          agentId: string | null
+          kind: string
+          payload: Json
+          runId: string
+          seq: number
+          taskId: string | null
+          ts: string
+        }
+        Insert: {
+          agentId?: string | null
+          kind: string
+          payload: Json
+          runId: string
+          seq: number
+          taskId?: string | null
+          ts?: string
+        }
+        Update: {
+          agentId?: string | null
+          kind?: string
+          payload?: Json
+          runId?: string
+          seq?: number
+          taskId?: string | null
+          ts?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ForgeEvent_agentId_fkey"
+            columns: ["agentId"]
+            isOneToOne: false
+            referencedRelation: "ForgeAgent"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeEvent_runId_fkey"
+            columns: ["runId"]
+            isOneToOne: false
+            referencedRelation: "ForgeRun"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeEvent_taskId_fkey"
+            columns: ["taskId"]
+            isOneToOne: false
+            referencedRelation: "ForgeTask"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ForgeRun: {
+        Row: {
+          createdAt: string
+          endedAt: string | null
+          id: string
+          meta: Json
+          ownerId: string
+          progress: number
+          projectId: string
+          startedAt: string | null
+          status: string
+          title: string
+          trigger: string
+          triggerRef: string | null
+        }
+        Insert: {
+          createdAt?: string
+          endedAt?: string | null
+          id?: string
+          meta?: Json
+          ownerId: string
+          progress?: number
+          projectId: string
+          startedAt?: string | null
+          status: string
+          title: string
+          trigger: string
+          triggerRef?: string | null
+        }
+        Update: {
+          createdAt?: string
+          endedAt?: string | null
+          id?: string
+          meta?: Json
+          ownerId?: string
+          progress?: number
+          projectId?: string
+          startedAt?: string | null
+          status?: string
+          title?: string
+          trigger?: string
+          triggerRef?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ForgeRun_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeRun_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeRun_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeRun_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeRun_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ForgeTask: {
+        Row: {
+          agentId: string | null
+          assigneeId: string | null
+          costUsd: number
+          currentTool: string | null
+          dueDate: string | null
+          endedAt: string | null
+          id: string
+          meta: Json
+          ord: number
+          progress: number
+          projectId: string
+          runId: string | null
+          startedAt: string | null
+          status: string
+          title: string
+          tokensIn: number
+          tokensOut: number
+          type: string
+          userStoryId: string | null
+        }
+        Insert: {
+          agentId?: string | null
+          assigneeId?: string | null
+          costUsd?: number
+          currentTool?: string | null
+          dueDate?: string | null
+          endedAt?: string | null
+          id?: string
+          meta?: Json
+          ord: number
+          progress?: number
+          projectId: string
+          runId?: string | null
+          startedAt?: string | null
+          status: string
+          title: string
+          tokensIn?: number
+          tokensOut?: number
+          type?: string
+          userStoryId?: string | null
+        }
+        Update: {
+          agentId?: string | null
+          assigneeId?: string | null
+          costUsd?: number
+          currentTool?: string | null
+          dueDate?: string | null
+          endedAt?: string | null
+          id?: string
+          meta?: Json
+          ord?: number
+          progress?: number
+          projectId?: string
+          runId?: string | null
+          startedAt?: string | null
+          status?: string
+          title?: string
+          tokensIn?: number
+          tokensOut?: number
+          type?: string
+          userStoryId?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ForgeTask_agentId_fkey"
+            columns: ["agentId"]
+            isOneToOne: false
+            referencedRelation: "ForgeAgent"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeTask_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeTask_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeTask_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeTask_assigneeId_fkey"
+            columns: ["assigneeId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeTask_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeTask_runId_fkey"
+            columns: ["runId"]
+            isOneToOne: false
+            referencedRelation: "ForgeRun"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeTask_userStoryId_fkey"
+            columns: ["userStoryId"]
+            isOneToOne: false
+            referencedRelation: "user_story_overview"
+            referencedColumns: ["userStoryId"]
+          },
+          {
+            foreignKeyName: "ForgeTask_userStoryId_fkey"
+            columns: ["userStoryId"]
+            isOneToOne: false
+            referencedRelation: "UserStory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       Meeting: {
         Row: {
           createdAt: string
@@ -4813,6 +5139,7 @@ export type Database = {
         }
       }
       extract_module_hint: { Args: { p_title: string }; Returns: string }
+      forge_next_seq: { Args: { p_run: string }; Returns: number }
       get_member_integration_secret: {
         Args: { p_member_id: string; p_provider: string }
         Returns: string

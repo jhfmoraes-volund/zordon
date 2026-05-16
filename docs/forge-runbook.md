@@ -130,122 +130,165 @@ Sidebar
 
 ```sql
 -- supabase/migrations/<date>_forge_v1.sql
--- TUDO em uma transação. RLS via ProjectAccess. Realtime ligado em forge_event.
+-- TUDO em uma transação. RLS via ProjectAccess (can_view_project + is_manager
+-- bypass; mutações usam can_edit_tasks). Realtime ligado nas 4 tabelas.
+-- Convenção: tabelas PascalCase quoted, colunas camelCase quoted.
 
-create extension if not exists pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-create table forge_run (
-  id           uuid primary key default gen_random_uuid(),
-  project_id   uuid not null references "Project"(id) on delete cascade,
-  owner_id     uuid not null references "Member"(id) on delete cascade,
-  title        text not null,
-  status       text not null check (status in ('queued','running','done','error','aborted')),
-  progress     int  not null default 0 check (progress between 0 and 100),
-  trigger      text not null check (trigger in ('story','task','ad_hoc')),
-  trigger_ref  uuid,                            -- id da story/task que disparou (nullable p/ ad_hoc)
-  started_at   timestamptz,
-  ended_at     timestamptz,
-  meta         jsonb not null default '{}'::jsonb,
-  created_at   timestamptz not null default now()
+CREATE TABLE "ForgeRun" (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "projectId"   uuid NOT NULL REFERENCES "Project"(id) ON DELETE CASCADE,
+  "ownerId"     uuid NOT NULL REFERENCES "Member"(id) ON DELETE CASCADE,
+  title         text NOT NULL,
+  status        text NOT NULL CHECK (status IN ('queued','running','done','error','aborted')),
+  progress      int  NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  trigger       text NOT NULL CHECK (trigger IN ('story','task','ad_hoc')),
+  "triggerRef"  uuid,                                -- id da story/task; null p/ ad_hoc
+  "startedAt"   timestamptz,
+  "endedAt"     timestamptz,
+  meta          jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "createdAt"   timestamptz NOT NULL DEFAULT now()
 );
 
-create table forge_agent (
-  id           uuid primary key default gen_random_uuid(),
-  run_id       uuid not null references forge_run(id) on delete cascade,
-  parent_id    uuid references forge_agent(id) on delete cascade,
-  name         text not null,
-  role         text not null,                  -- 'root' | 'subagent' | 'tool'
-  status       text not null check (status in ('idle','spawning','thinking','tool','streaming','done','error')),
-  progress     int  not null default 0 check (progress between 0 and 100),
-  tokens_in    int  not null default 0,
-  tokens_out   int  not null default 0,
-  cost_usd     numeric(10,4) not null default 0,
-  started_at   timestamptz,
-  ended_at     timestamptz,
-  meta         jsonb not null default '{}'::jsonb
+CREATE TABLE "ForgeAgent" (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "runId"       uuid NOT NULL REFERENCES "ForgeRun"(id) ON DELETE CASCADE,
+  "parentId"    uuid REFERENCES "ForgeAgent"(id) ON DELETE CASCADE,
+  name          text NOT NULL,
+  role          text NOT NULL,                       -- 'root' | 'subagent' | 'tool'
+  status        text NOT NULL CHECK (status IN ('idle','spawning','thinking','tool','streaming','done','error')),
+  progress      int  NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  "tokensIn"    int  NOT NULL DEFAULT 0,
+  "tokensOut"   int  NOT NULL DEFAULT 0,
+  "costUsd"     numeric(10,4) NOT NULL DEFAULT 0,
+  "startedAt"   timestamptz,
+  "endedAt"     timestamptz,
+  meta          jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
 -- Linha de produção da FORGE. Unidade atômica de execução.
--- type=agentic → roda no agente. type=human → marca pra Builder/Designer/Ops.
-create table forge_task (
-  id            uuid primary key default gen_random_uuid(),
-  project_id    uuid not null references "Project"(id) on delete cascade,
-  user_story_id uuid references "UserStory"(id) on delete set null,
-  run_id        uuid references forge_run(id) on delete set null,  -- null se ainda na queue
-  agent_id      uuid references forge_agent(id) on delete set null,
-  ord           int  not null,                       -- ordem dentro do projeto (#001, #002, ...)
-  title         text not null,
-  type          text not null default 'agentic' check (type in ('agentic','human')),
-  assignee_id   uuid references "Member"(id),       -- só relevante p/ type=human
-  due_date      timestamptz,                        -- só relevante p/ type=human
-  status        text not null check (status in (
-                  'queued','idle','spawning','thinking','tool','streaming','done','error',
-                  'todo','doing','blocked'           -- estados humanos
+-- type=agentic → roda no agente. type=human → marca p/ Builder/Designer/Ops.
+CREATE TABLE "ForgeTask" (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "projectId"     uuid NOT NULL REFERENCES "Project"(id) ON DELETE CASCADE,
+  "userStoryId"   uuid REFERENCES "UserStory"(id) ON DELETE SET NULL,
+  "runId"         uuid REFERENCES "ForgeRun"(id) ON DELETE SET NULL,  -- null se ainda na queue
+  "agentId"       uuid REFERENCES "ForgeAgent"(id) ON DELETE SET NULL,
+  ord             int  NOT NULL,                     -- ordem dentro do projeto (#001, #002, ...)
+  title           text NOT NULL,
+  type            text NOT NULL DEFAULT 'agentic' CHECK (type IN ('agentic','human')),
+  "assigneeId"    uuid REFERENCES "Member"(id),      -- só relevante p/ type=human
+  "dueDate"       timestamptz,                       -- só relevante p/ type=human
+  status          text NOT NULL CHECK (status IN (
+                    'queued','idle','spawning','thinking','tool','streaming','done','error',
+                    'todo','doing','blocked'         -- estados humanos
+                  )),
+  progress        int  NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  "currentTool"   text,
+  "tokensIn"      int  NOT NULL DEFAULT 0,
+  "tokensOut"     int  NOT NULL DEFAULT 0,
+  "costUsd"       numeric(10,4) NOT NULL DEFAULT 0,
+  "startedAt"     timestamptz,
+  "endedAt"       timestamptz,
+  meta            jsonb NOT NULL DEFAULT '{}'::jsonb,
+  UNIQUE ("projectId", ord)
+);
+
+CREATE TABLE "ForgeEvent" (
+  "runId"       uuid NOT NULL REFERENCES "ForgeRun"(id) ON DELETE CASCADE,
+  seq           bigint NOT NULL,
+  "agentId"     uuid REFERENCES "ForgeAgent"(id) ON DELETE CASCADE,
+  "taskId"      uuid REFERENCES "ForgeTask"(id) ON DELETE CASCADE,
+  ts            timestamptz NOT NULL DEFAULT clock_timestamp(),
+  kind          text NOT NULL CHECK (kind IN (
+                  'thought','tool_call','tool_result','token','status','spawn','task_spawn','metric','error','done'
                 )),
-  progress      int  not null default 0 check (progress between 0 and 100),
-  current_tool  text,
-  tokens_in     int  not null default 0,
-  tokens_out    int  not null default 0,
-  cost_usd      numeric(10,4) not null default 0,
-  started_at    timestamptz,
-  ended_at      timestamptz,
-  meta          jsonb not null default '{}'::jsonb,
-  unique (project_id, ord)
+  payload       jsonb NOT NULL,
+  PRIMARY KEY ("runId", seq)
 );
 
-create table forge_event (
-  run_id       uuid not null references forge_run(id) on delete cascade,
-  seq          bigint not null,
-  agent_id     uuid references forge_agent(id) on delete cascade,
-  task_id      uuid references forge_task(id) on delete cascade,
-  ts           timestamptz not null default clock_timestamp(),
-  kind         text not null check (kind in (
-                 'thought','tool_call','tool_result','token','status','spawn','task_spawn','metric','error','done'
-               )),
-  payload      jsonb not null,
-  primary key (run_id, seq)
-);
+CREATE INDEX "ForgeRun_project_idx"     ON "ForgeRun"("projectId", "createdAt" DESC);
+CREATE INDEX "ForgeAgent_run_idx"       ON "ForgeAgent"("runId");
+CREATE INDEX "ForgeTask_project_idx"    ON "ForgeTask"("projectId", ord);
+CREATE INDEX "ForgeTask_story_idx"      ON "ForgeTask"("userStoryId");
+CREATE INDEX "ForgeEvent_agent_idx"     ON "ForgeEvent"("agentId", seq);
+CREATE INDEX "ForgeEvent_task_idx"      ON "ForgeEvent"("taskId", seq);
 
-create index forge_run_project_idx   on forge_run(project_id, created_at desc);
-create index forge_agent_run_idx     on forge_agent(run_id);
-create index forge_task_project_idx  on forge_task(project_id, ord);
-create index forge_task_story_idx    on forge_task(user_story_id);
-create index forge_event_agent_idx   on forge_event(agent_id, seq);
-create index forge_event_task_idx    on forge_event(task_id, seq);
+-- seq monotônico por run (advisory lock serializa sem trancar a tabela)
+CREATE OR REPLACE FUNCTION public.forge_next_seq(p_run uuid) RETURNS bigint
+LANGUAGE plpgsql AS $$
+DECLARE s bigint;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext(p_run::text));
+  SELECT coalesce(max(seq), 0) + 1 INTO s
+  FROM "ForgeEvent" WHERE "runId" = p_run;
+  RETURN s;
+END$$;
 
--- seq monotônico por run
-create or replace function forge_next_seq(p_run uuid) returns bigint as $$
-declare s bigint;
-begin
-  select coalesce(max(seq),0)+1 into s from forge_event where run_id = p_run for update;
-  return s;
-end$$ language plpgsql;
+-- RLS — view via can_view_project; mutação via can_edit_tasks; is_manager bypass
+ALTER TABLE "ForgeRun"   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ForgeAgent" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ForgeTask"  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ForgeEvent" ENABLE ROW LEVEL SECURITY;
 
--- RLS — via ProjectAccess (Builder vê forja de projetos onde tem acesso)
-alter table forge_run    enable row level security;
-alter table forge_agent  enable row level security;
-alter table forge_task   enable row level security;
-alter table forge_event  enable row level security;
+CREATE POLICY "ForgeRun_select" ON "ForgeRun"
+  FOR SELECT USING (public.is_manager() OR public.can_view_project("projectId"));
+CREATE POLICY "ForgeRun_mutate" ON "ForgeRun"
+  FOR ALL USING (public.is_manager() OR public.can_edit_tasks("projectId"))
+  WITH CHECK (public.is_manager() OR public.can_edit_tasks("projectId"));
 
-create policy forge_run_access on forge_run
-  using (can_view_project(project_id))
-  with check (can_contribute_project(project_id));
+CREATE POLICY "ForgeTask_select" ON "ForgeTask"
+  FOR SELECT USING (public.is_manager() OR public.can_view_project("projectId"));
+CREATE POLICY "ForgeTask_mutate" ON "ForgeTask"
+  FOR ALL USING (public.is_manager() OR public.can_edit_tasks("projectId"))
+  WITH CHECK (public.is_manager() OR public.can_edit_tasks("projectId"));
 
-create policy forge_task_access on forge_task
-  using (can_view_project(project_id))
-  with check (can_contribute_project(project_id));
+CREATE POLICY "ForgeAgent_select" ON "ForgeAgent"
+  FOR SELECT USING (
+    public.is_manager() OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeAgent"."runId" AND public.can_view_project(r."projectId")
+    )
+  );
+CREATE POLICY "ForgeAgent_mutate" ON "ForgeAgent"
+  FOR ALL USING (
+    public.is_manager() OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeAgent"."runId" AND public.can_edit_tasks(r."projectId")
+    )
+  ) WITH CHECK (
+    public.is_manager() OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeAgent"."runId" AND public.can_edit_tasks(r."projectId")
+    )
+  );
 
-create policy forge_agent_access on forge_agent
-  using (exists (select 1 from forge_run r where r.id = run_id and can_view_project(r.project_id)));
-
-create policy forge_event_access on forge_event
-  using (exists (select 1 from forge_run r where r.id = run_id and can_view_project(r.project_id)));
+CREATE POLICY "ForgeEvent_select" ON "ForgeEvent"
+  FOR SELECT USING (
+    public.is_manager() OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeEvent"."runId" AND public.can_view_project(r."projectId")
+    )
+  );
+CREATE POLICY "ForgeEvent_mutate" ON "ForgeEvent"
+  FOR ALL USING (
+    public.is_manager() OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeEvent"."runId" AND public.can_edit_tasks(r."projectId")
+    )
+  ) WITH CHECK (
+    public.is_manager() OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeEvent"."runId" AND public.can_edit_tasks(r."projectId")
+    )
+  );
 
 -- realtime
-alter publication supabase_realtime add table forge_event;
-alter publication supabase_realtime add table forge_agent;
-alter publication supabase_realtime add table forge_task;
-alter publication supabase_realtime add table forge_run;
+ALTER PUBLICATION supabase_realtime ADD TABLE "ForgeEvent";
+ALTER PUBLICATION supabase_realtime ADD TABLE "ForgeAgent";
+ALTER PUBLICATION supabase_realtime ADD TABLE "ForgeTask";
+ALTER PUBLICATION supabase_realtime ADD TABLE "ForgeRun";
 ```
 
 **Pós-migration:**
@@ -294,8 +337,8 @@ Cada FASE roda este loop. **Não há atalho.**
 | 2 | Store & Contrato | `[LOCKED]` |
 | 3 | Mock Source | `[LOCKED]` |
 | 4 | Migração de rota `/dev/forge` → `/forge` | `[LOCKED]` |
-| 5 | Schema Supabase forge_v1 | `[IN PROGRESS]` |
-| 6 | Hub `/forge` (lista de projetos vivos) | `[OPEN]` |
+| 5 | Schema Supabase forge_v1 | `[LOCKED]` |
+| 6 | Hub `/forge` (lista de projetos vivos) | `[IN PROGRESS]` |
 | 7 | Observatório `/forge/[projectId]` | `[OPEN]` |
 | 8 | TaskSheet (Mind/Tools/Metrics) | `[OPEN]` |
 | 9 | forge_task type=human + filtros | `[OPEN]` |
@@ -371,7 +414,7 @@ Arquivos: `src/lib/forge/sources/{mock-script,mock}.ts`.
 
 ---
 
-### FASE 5 — SCHEMA forge_v1 `[IN PROGRESS]`
+### FASE 5 — SCHEMA forge_v1 `[LOCKED]`
 
 ```
    ╔════════════════════════════════════════╗
@@ -380,16 +423,16 @@ Arquivos: `src/lib/forge/sources/{mock-script,mock}.ts`.
    ╚════════════════════════════════════════╝
 ```
 
-**Objetivo**: criar as 4 tabelas (`forge_run`, `forge_agent`, `forge_task`, `forge_event`) com escopo de projeto, tipo agentic/human, RLS via `ProjectAccess`. Sem usar ainda — o mock continua mandando.
+**Objetivo**: criar as 4 tabelas (`ForgeRun`, `ForgeAgent`, `ForgeTask`, `ForgeEvent`) com escopo de projeto, tipo agentic/human, RLS via helpers existentes (`is_manager`, `can_view_project`, `can_edit_tasks`). Sem usar ainda — o mock continua mandando.
 
 **Tarefas:**
 
 - [ ] Migration `supabase/migrations/<date>_forge_v1.sql` com schema da Seção 2
-- [ ] Garantir helpers `can_view_project()` e `can_contribute_project()` existem (caso contrário, criar como prereq)
+- [ ] Helpers já existem em `20260501_text_to_uuid.sql`: `is_manager()`, `can_view_project(uuid)`, `can_edit_tasks(uuid)` — reusar
 - [ ] Rodar migration via `psql "$DIRECT_URL" -f ...`
 - [ ] Regenerar `src/lib/supabase/database.types.ts` (`npm run db:types`)
 - [ ] Smoke RLS: usuário A não vê run de projeto onde não tem `ProjectAccess`
-- [ ] Smoke `forge_next_seq`: chamadas concorrentes não duplicam seq
+- [ ] Smoke `forge_next_seq`: 2 chamadas seguidas retornam 1 e 2
 
 **Acceptance gate:**
 - [ ] Migration roda sem erro
