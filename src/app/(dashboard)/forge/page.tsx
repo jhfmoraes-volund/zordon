@@ -1,9 +1,9 @@
-import { ForgeShell } from "./_components/forge-shell";
+import { ForgeHub } from "./_components/forge-hub";
 
 export const metadata = {
-  title: "FORGE · Agent Factory",
+  title: "FORGE · Hub",
 };
 
 export default function ForgePage() {
-  return <ForgeShell />;
+  return <ForgeHub />;
 }
