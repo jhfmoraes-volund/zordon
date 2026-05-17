@@ -2,7 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
-import { useForge, useForgeSlice } from "@/hooks/use-forge-store";
+import {
+  useForge,
+  useForgeSlice,
+  useTaskSelection,
+} from "@/hooks/use-forge-store";
 import type { AgentStatus, ForgeState, ForgeTask } from "@/lib/forge/types";
 
 const GRID_COLS =
@@ -177,10 +181,13 @@ function FactoryLineRow({
     return () => cancelAnimationFrame(raf);
   }, [store, taskId]);
 
+  const { selectedTaskId, setSelectedTaskId } = useTaskSelection();
+
   if (!initial) return null;
   const agent = agents[initial.agent_id];
   const isSub = agent?.parent_id !== null;
   const ord = initial.ord.toString().padStart(3, "0");
+  const isSelected = selectedTaskId === taskId;
 
   return (
     <div
@@ -188,7 +195,15 @@ function FactoryLineRow({
       role="button"
       tabIndex={0}
       data-status={initial.status}
-      className="grid items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-muted/40 data-[status=done]:opacity-70 data-[status=error]:border-l-2 data-[status=error]:border-destructive/50"
+      data-selected={isSelected ? "1" : "0"}
+      onClick={() => setSelectedTaskId(taskId)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setSelectedTaskId(taskId);
+        }
+      }}
+      className="grid cursor-pointer items-center gap-3 px-3 py-2 text-sm transition-colors hover:bg-muted/40 data-[selected=1]:bg-muted/50 data-[status=done]:opacity-70 data-[status=error]:border-l-2 data-[status=error]:border-destructive/50"
       style={{ gridTemplateColumns: GRID_COLS }}
     >
       <span

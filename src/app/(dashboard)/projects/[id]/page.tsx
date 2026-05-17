@@ -1,38 +1,24 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   BookOpen,
-  CheckCircle2,
   FileText,
   Lightbulb,
-  MoreHorizontal,
   Pencil,
-  Play,
-  Plus,
-  RotateCcw,
   Settings as SettingsIcon,
   Shield,
-  Sparkles,
-  Target,
   Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ConfirmDialog,
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { PageTitle } from "@/components/app-shell";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { ProjectEditSheet } from "@/components/project-edit-sheet";
@@ -52,10 +38,8 @@ import { createClient } from "@/lib/supabase/client";
 import {
   ModuleDialog,
   PersonaDialog,
-  SettingsPanel,
   StoriesList,
   StorySheet,
-  TasksList,
   TaskSheet,
   TaskDuplicateDialog,
   TaskCloneDialog,
@@ -63,7 +47,6 @@ import {
   type TaskTag,
 } from "@/components/story-hierarchy";
 import type { ChipTone } from "@/lib/status-chips";
-import { flattenTagEmbed } from "@/lib/task-tags";
 import {
   adaptMember,
   adaptModule,
@@ -76,8 +59,6 @@ import {
 } from "@/components/story-hierarchy/adapters";
 import {
   findCurrentSprint,
-  SprintDetail,
-  SprintNavigator,
   SprintActionDialog,
   SprintDeleteDialog,
   SprintRibbon,
@@ -86,102 +67,21 @@ import {
   type SprintDeleteAction,
   type SprintMemberCapacity,
 } from "@/components/sprint";
-import type {
-  AcceptanceCriterionRow,
-  ModuleRow,
-  PersonaRow,
-  StoryWithRelations,
-} from "@/lib/dal/story-hierarchy";
+import type { AcceptanceCriterionRow } from "@/lib/dal/story-hierarchy";
 import { toast } from "sonner";
-import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { tempId as makeTempId } from "@/lib/optimistic/reconcile";
 import { suggestFunctionPoints } from "@/lib/function-points";
 import { useAuth } from "@/contexts/auth-context";
 import { hasMinAccessLevel } from "@/lib/roles";
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-type TabKey =
-  | "stories"
-  | "sprints"
-  | "sessions"
-  | "wiki"
-  | "settings";
-
-type ProjectMeta = {
-  id: string;
-  name: string;
-  status: string;
-  client: { name: string } | null;
-  clientId: string;
-  pmId: string | null;
-  pm: {
-    id: string;
-    name: string;
-    role: string | null;
-    fpCapacity: number | null;
-  } | null;
-  repoUrl: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  githubRepoOwner: string | null;
-  githubRepoName: string | null;
-  githubDefaultBranch: string | null;
-  referenceKey: string | null;
-  definitionOfDone: string[];
-};
-
-type RawTask = {
-  id: string;
-  reference: string;
-  title: string;
-  description: string | null;
-  status: string;
-  type: string | null;
-  scope: string | null;
-  complexity: string | null;
-  functionPoints: number | null;
-  billable: boolean | null;
-  dueDate: string | null;
-  doneAt: string | null;
-  notes: string | null;
-  sprintId: string | null;
-  userStoryId: string | null;
-  projectId: string;
-  createdByAgent: boolean | null;
-  assignments: Array<{ memberId: string; member: { id: string; name: string } | null }>;
-  tags: TaskTag[];
-};
-
-type RawSprint = {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  status: string;
-  goal: string | null;
-  deployedToStagingAt: string | null;
-  deployedToProductionAt: string | null;
-};
-
-type RawMember = {
-  id: string;
-  name: string;
-  role: string | null;
-  fpCapacity: number | null;
-};
-
-type RawSprintMember = {
-  sprintId: string;
-  memberId: string;
-  fpAllocation: number;
-};
-
-type RawProjectMember = {
-  memberId: string;
-  fpAllocation: number;
-};
+import type { RawTask, TabKey } from "./_types";
+import { useProjectMeta } from "./_hooks/use-project-meta";
+import { useStoryHierarchy } from "./_hooks/use-story-hierarchy";
+import { useTasksAndSprints } from "./_hooks/use-tasks-and-sprints";
+import { useProjectMembers } from "./_hooks/use-project-members";
+import { SprintsTab } from "./_tabs/sprints-tab";
+import { SettingsTab } from "./_tabs/settings-tab";
 
 const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
@@ -227,35 +127,35 @@ export default function ProjectDetailPage({
         ? viewParam
         : sprintParam ?? null;
   const [sprintView, setSprintView] = useState<NavValue | null>(initialSprintView);
-  const [project, setProject] = useState<ProjectMeta | null>(null);
 
-  const [rawModules, setRawModules] = useState<ModuleRow[]>([]);
-  const [rawPersonas, setRawPersonas] = useState<PersonaRow[]>([]);
-  const [rawStories, setRawStories] = useState<StoryWithRelations[]>([]);
-  const tasksCollection = useOptimisticCollection<RawTask>([]);
-  const rawTasks = tasksCollection.items;
-  const setRawTasks = tasksCollection.setCommitted;
-  const taskMutate = tasksCollection.mutate;
-  const [projectTags, setProjectTags] = useState<TaskTag[]>([]);
-  const acRowsCollection =
-    useOptimisticCollection<AcceptanceCriterionRow>([]);
-  const taskAcRows = acRowsCollection.items;
-  const setTaskAcRows = acRowsCollection.setCommitted;
-  // Map client-side tempId → real DB id. Lets us keep the tempId as the React
-  // key after the create resolves, avoiding a remount/flicker on the row.
-  const acIdAliasRef = useRef<Map<string, string>>(new Map());
-  const resolveAcId = useCallback(
-    (clientId: string) => acIdAliasRef.current.get(clientId) ?? clientId,
-    [],
-  );
-  const [rawSprints, setRawSprints] = useState<RawSprint[]>([]);
-  const [rawMembers, setRawMembers] = useState<RawMember[]>([]);
-  const [rawProjectMembers, setRawProjectMembers] = useState<RawProjectMember[]>(
-    [],
-  );
-  const [rawSprintMembers, setRawSprintMembers] = useState<RawSprintMember[]>(
-    [],
-  );
+  // ─── Data hooks ────────────────────────────────────────────────────────────
+  const { project, reload: loadProject } = useProjectMeta(id);
+  const {
+    rawModules,
+    rawPersonas,
+    rawStories,
+    setRawStories,
+    taskAcRows,
+    acRowsCollection,
+    acIdAliasRef,
+    resolveAcId,
+    reload: loadStoryHierarchy,
+  } = useStoryHierarchy(id);
+  const {
+    rawTasks,
+    taskMutate,
+    rawSprints,
+    projectTags,
+    setProjectTags,
+    reload: loadTasksAndSprints,
+  } = useTasksAndSprints(id);
+  const sprintIds = useMemo(() => rawSprints.map((s) => s.id), [rawSprints]);
+  const {
+    rawMembers,
+    rawProjectMembers,
+    rawSprintMembers,
+    reloadMembers: loadMembers,
+  } = useProjectMembers(id, sprintIds);
 
   const [accessOpen, setAccessOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -318,187 +218,6 @@ export default function ProjectDetailPage({
       router.replace(next, { scroll: false });
     }
   }, [activeTab, sprintView, pathname, router]);
-
-  // ─── Loaders ───────────────────────────────────────────────────────────────
-
-  const loadProject = useCallback(async () => {
-    const { data } = await supabase
-      .from("Project")
-      .select(
-        "id, name, status, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role, fpCapacity)",
-      )
-      .eq("id", id)
-      .single();
-    if (!data) return;
-    setProject({
-      id: data.id,
-      name: data.name,
-      status: data.status,
-      client: (data.client as { name: string } | null) ?? null,
-      clientId: data.clientId,
-      pmId: data.pmId ?? null,
-      pm:
-        (data.pm as {
-          id: string;
-          name: string;
-          role: string | null;
-          fpCapacity: number | null;
-        } | null) ?? null,
-      repoUrl: data.repoUrl ?? null,
-      startDate: data.startDate ?? null,
-      endDate: data.endDate ?? null,
-      githubRepoOwner: data.githubRepoOwner ?? null,
-      githubRepoName: data.githubRepoName ?? null,
-      githubDefaultBranch: data.githubDefaultBranch ?? null,
-      referenceKey: data.referenceKey ?? null,
-      definitionOfDone: Array.isArray(data.definitionOfDone)
-        ? (data.definitionOfDone as string[])
-        : [],
-    });
-  }, [id, supabase]);
-
-  const loadStoryHierarchy = useCallback(async () => {
-    // Story visibility no projeto = "tudo ou nada" da Design Session.
-    // - Stories manuais (designSessionId IS NULL): aparecem sempre — universo
-    //   paralelo ao da DS.
-    // - Stories de DS: aparecem só quando a sessão estiver `completed`. Drafts
-    //   da sessão e qualquer story de sessão ainda aberta ficam invisíveis aqui
-    //   e vivem na briefing tree.
-    // O JOIN inclui `designSession:DesignSession(status)` pra filtrar no
-    // cliente — a quantidade de stories por projeto é pequena o bastante pra
-    // não justificar uma RPC dedicada.
-    const [modulesRes, personasRes, storiesRes, taskAcRes] = await Promise.all([
-      supabase
-        .from("Module")
-        .select("*")
-        .eq("projectId", id)
-        .order("name"),
-      supabase
-        .from("ProjectPersona")
-        .select("*")
-        .eq("projectId", id)
-        .order("name"),
-      supabase
-        .from("UserStory")
-        .select(
-          // designSession embed precisa do nome explícito da FK porque há
-          // 2 relações UserStory↔DesignSession (FK direta `designSessionId` e
-          // reverse via `DesignSession.briefingTargetStoryId`). PostgREST recusa
-          // embed ambíguo (PGRST201) — sempre nomear UserStory_designSessionId_fkey.
-          "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description, approvedAt), persona:ProjectPersona(id, name, description), designSession:DesignSession!UserStory_designSessionId_fkey(status)",
-        )
-        .eq("projectId", id)
-        .order("createdAt", { ascending: false }),
-      supabase
-        .from("AcceptanceCriterion")
-        .select("*")
-        .not("taskId", "is", null),
-    ]);
-
-    setRawModules((modulesRes.data ?? []) as ModuleRow[]);
-    setRawPersonas((personasRes.data ?? []) as PersonaRow[]);
-    const visibleStories = ((storiesRes.data ?? []) as Array<
-      StoryWithRelations & {
-        designSessionId: string | null;
-        designSession: { status: string } | null;
-      }
-    >).filter((s) => {
-      if (s.designSessionId === null) return true;
-      return s.designSession?.status === "completed";
-    });
-    setRawStories(visibleStories as unknown as StoryWithRelations[]);
-    setTaskAcRows((taskAcRes.data ?? []) as AcceptanceCriterionRow[]);
-    // After a hard reload, all rows carry real ids — aliases are obsolete.
-    acIdAliasRef.current.clear();
-  }, [id, supabase]);
-
-  const loadTasksAndSprints = useCallback(async () => {
-    const [tasksRes, sprintsRes, tagsRes] = await Promise.all([
-      supabase
-        .from("Task")
-        .select(
-          "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
-        )
-        .eq("projectId", id)
-        .neq("status", "draft")
-        .order("createdAt", { ascending: false }),
-      supabase
-        .from("Sprint")
-        .select("*")
-        .eq("projectId", id)
-        .order("startDate"),
-      supabase
-        .from("TaskTag")
-        .select("id, projectId, name, tone")
-        .eq("projectId", id)
-        .order("name"),
-    ]);
-    const flatTasks = (tasksRes.data ?? []).map((t) => ({
-      ...t,
-      tags: flattenTagEmbed(
-        (t as { tags?: Parameters<typeof flattenTagEmbed>[0] }).tags,
-      ),
-    }));
-    setRawTasks(flatTasks as unknown as RawTask[]);
-    setRawSprints((sprintsRes.data ?? []) as RawSprint[]);
-    setProjectTags((tagsRes.data ?? []) as TaskTag[]);
-  }, [id, supabase]);
-
-  const loadMembers = useCallback(async () => {
-    const { data: pms, error } = await supabase
-      .from("ProjectMember")
-      .select(
-        "memberId, fpAllocation, member:Member!ProjectMember_memberId_fkey(id, name, role, fpCapacity)",
-      )
-      .eq("projectId", id);
-    if (error) {
-      console.error("[loadMembers]", error);
-      return;
-    }
-
-    const projectMemberRows: RawProjectMember[] = (pms ?? []).map((pm) => ({
-      memberId: pm.memberId,
-      fpAllocation: pm.fpAllocation ?? 0,
-    }));
-    setRawProjectMembers(projectMemberRows);
-
-    const memberRows: RawMember[] = (pms ?? [])
-      .map((pm) => {
-        const m = pm.member as
-          | RawMember
-          | RawMember[]
-          | null
-          | undefined;
-        if (!m) return null;
-        return Array.isArray(m) ? m[0] ?? null : m;
-      })
-      .filter((m): m is RawMember => m !== null);
-    setRawMembers(memberRows);
-  }, [id, supabase]);
-
-  const loadSprintMembers = useCallback(async () => {
-    const sprintIds = rawSprints.map((s) => s.id);
-    if (sprintIds.length === 0) {
-      setRawSprintMembers([]);
-      return;
-    }
-    const { data: sm } = await supabase
-      .from("SprintMember")
-      .select("sprintId, memberId, fpAllocation")
-      .in("sprintId", sprintIds);
-    setRawSprintMembers((sm ?? []) as RawSprintMember[]);
-  }, [supabase, rawSprints]);
-
-  useEffect(() => {
-    loadProject();
-    loadStoryHierarchy();
-    loadTasksAndSprints();
-    loadMembers();
-  }, [loadProject, loadStoryHierarchy, loadTasksAndSprints, loadMembers]);
-
-  useEffect(() => {
-    loadSprintMembers();
-  }, [loadSprintMembers]);
 
   // ─── Adapt ─────────────────────────────────────────────────────────────────
 
@@ -1920,267 +1639,45 @@ export default function ProjectDetailPage({
           onDeleteStory={handleDeleteStory}
         />
       ) : activeTab === "sprints" ? (
-        <div className="space-y-5">
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <h3 className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Sprints
-            </h3>
-
-            {focused && !isSyntheticView ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setSprintContextSheet({
-                    sprintId: focused.id,
-                    mode: focused.status === "completed" ? "view" : "edit-goal",
-                  })
-                }
-                title={focused.goal ?? "Definir objetivo do sprint"}
-                className={`hidden lg:flex flex-1 min-w-0 items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-muted/40 ${
-                  focused.goal ? "text-foreground" : "text-muted-foreground italic"
-                }`}
-              >
-                <Target className="size-3.5 shrink-0 text-primary" />
-                <span className="truncate">
-                  {focused.goal ?? "Definir objetivo do sprint…"}
-                </span>
-              </button>
-            ) : (
-              <div className="hidden lg:block flex-1" />
-            )}
-
-            <div className="flex min-w-0 items-center gap-2 overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={<Button size="sm" className="shrink-0" />}
-                >
-                  <Plus className="size-3.5" />
-                  Nova
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-52">
-                  <DropdownMenuItem
-                    className="whitespace-nowrap"
-                    onClick={() =>
-                      handleCreateTask(
-                        focused && !isSyntheticView
-                          ? { sprintId: focused.id }
-                          : undefined,
-                      )
-                    }
-                  >
-                    <Plus className="size-3.5" />
-                    Task
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="whitespace-nowrap"
-                    onClick={() => setSprintDialogOpen(true)}
-                  >
-                    <Zap className="size-3.5" />
-                    Sprint
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="whitespace-nowrap"
-                    onClick={() => setSuggestSheetOpen(true)}
-                  >
-                    <Sparkles className="size-3.5" />
-                    Sugestão de sprint
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {focused && !isSyntheticView ? (
-                <>
-                  <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border/70" />
-
-                  {focused.status === "upcoming" ? (
-                    <Button
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => requestActivateSprint(focused.id)}
-                    >
-                      <Play className="size-3.5" />
-                      Ativar sprint
-                    </Button>
-                  ) : focused.status === "active" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0"
-                      onClick={() => requestCompleteSprint(focused.id)}
-                    >
-                      <CheckCircle2 className="size-3.5" />
-                      Concluir
-                    </Button>
-                  ) : null}
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          aria-label="Mais ações da sprint"
-                          className="shrink-0 px-2"
-                        />
-                      }
-                    >
-                      <MoreHorizontal className="size-3.5" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-44">
-                      <DropdownMenuItem
-                        className="whitespace-nowrap"
-                        onClick={() =>
-                          setSprintContextSheet({
-                            sprintId: focused.id,
-                            mode:
-                              focused.status === "completed" ? "view" : "edit-goal",
-                          })
-                        }
-                      >
-                        <Target className="size-3.5" />
-                        {focused.status === "completed"
-                          ? "Ver retrospectiva"
-                          : focused.goal
-                          ? "Editar objetivo"
-                          : "Definir objetivo"}
-                      </DropdownMenuItem>
-                      {focused.status === "completed" ? (
-                        <DropdownMenuItem
-                          className="whitespace-nowrap"
-                          onClick={() => requestReopenSprint(focused.id)}
-                        >
-                          <RotateCcw className="size-3.5" />
-                          Reabrir sprint
-                        </DropdownMenuItem>
-                      ) : null}
-                      {focused.status === "active" ? (
-                        <DropdownMenuItem
-                          className="whitespace-nowrap"
-                          onClick={() => requestCompleteSprint(focused.id)}
-                        >
-                          <CheckCircle2 className="size-3.5" />
-                          Concluir sprint
-                        </DropdownMenuItem>
-                      ) : null}
-                      {focused.status === "upcoming" ? (
-                        <DropdownMenuItem
-                          className="whitespace-nowrap"
-                          onClick={() => requestActivateSprint(focused.id)}
-                        >
-                          <Play className="size-3.5" />
-                          Ativar sprint
-                        </DropdownMenuItem>
-                      ) : null}
-                      {canManageSprint ? (
-                        <DropdownMenuItem
-                          className="whitespace-nowrap"
-                          onClick={() => setSprintEditingId(focused.id)}
-                        >
-                          <Pencil className="size-3.5" />
-                          Editar sprint
-                        </DropdownMenuItem>
-                      ) : null}
-                      {canManageSprint ? (
-                        <DropdownMenuItem
-                          variant="destructive"
-                          className="whitespace-nowrap"
-                          onClick={() => handleDeleteSprint(focused.id)}
-                        >
-                          <Trash2 className="size-3.5" />
-                          Excluir sprint
-                        </DropdownMenuItem>
-                      ) : null}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          {sprints.length === 0 && !isSyntheticView ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Nenhum sprint cadastrado</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                Crie o primeiro sprint pra começar a planejar — ou navegue pro
-                Backlog/Todas pra ver tasks soltas.
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <SprintNavigator
-                sprints={sprints}
-                currentId={
-                  isSyntheticView
-                    ? sprintView!
-                    : focused?.id ?? "all"
-                }
-                activeId={activeSprintId}
-                tasks={tasks}
-                onChange={(v) => setSprintView(v)}
-                onJumpToActive={() =>
-                  activeSprintId && setSprintView(activeSprintId)
-                }
-                showSyntheticViews
-                backlogCount={backlogCount}
-                allCount={allCount}
-              />
-
-              {isSyntheticView ? (
-                <section className="space-y-2">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {sprintView === "backlog" ? "Backlog" : "Todas as tasks"}
-                  </h3>
-                  <TasksList
-                    tasks={sprintView === "backlog" ? backlogTasks : tasks}
-                    stories={stories}
-                    modules={modules}
-                    members={members}
-                    sprints={sprints}
-                    availableTags={projectTags}
-                    onOpenTask={(ref) => setSelectedTaskRef(ref)}
-                    onChangeStatus={handleInlineStatusChange}
-                    onChangeAssignee={handleInlineAssigneeChange}
-                    onChangeSprint={handleInlineSprintChange}
-                    onDuplicate={openDuplicateDialog}
-                    onClone={openCloneDialog}
-                    onCopyRef={handleCopyTaskRef}
-                    onDelete={handleDeleteTask}
-                    onBulkUpdate={handleBulkUpdate}
-                    onBulkDelete={handleBulkDelete}
-                    onBulkDuplicate={handleBulkDuplicate}
-                    onBulkAddTag={handleBulkAddTag}
-                    onBulkRemoveTag={handleBulkRemoveTag}
-                  />
-                </section>
-              ) : focused ? (
-                <SprintDetail
-                  sprint={focused}
-                  tasks={tasks}
-                  stories={stories}
-                  modules={modules}
-                  members={members}
-                  onOpenTask={(ref) => setSelectedTaskRef(ref)}
-                  allSprints={sprints}
-                  onChangeTaskStatus={handleInlineStatusChange}
-                  onChangeTaskAssignee={handleInlineAssigneeChange}
-                  onChangeTaskSprint={handleInlineSprintChange}
-                  onDuplicateTask={openDuplicateDialog}
-                  onCloneTask={openCloneDialog}
-                  onCopyTaskRef={handleCopyTaskRef}
-                  onDeleteTask={handleDeleteTask}
-                  onBulkUpdate={handleBulkUpdate}
-                  onBulkDelete={handleBulkDelete}
-                  onBulkDuplicate={handleBulkDuplicate}
-                  onBulkAddTag={handleBulkAddTag}
-                  onBulkRemoveTag={handleBulkRemoveTag}
-                  availableTags={projectTags}
-                />
-              ) : null}
-            </>
-          )}
-        </div>
+        <SprintsTab
+          sprints={sprints}
+          tasks={tasks}
+          backlogTasks={backlogTasks}
+          stories={stories}
+          modules={modules}
+          members={members}
+          projectTags={projectTags}
+          backlogCount={backlogCount}
+          allCount={allCount}
+          activeSprintId={activeSprintId}
+          focused={focused ?? null}
+          isSyntheticView={isSyntheticView}
+          sprintView={sprintView}
+          canManageSprint={canManageSprint}
+          setSprintView={setSprintView}
+          setSelectedTaskRef={setSelectedTaskRef}
+          setSprintContextSheet={setSprintContextSheet}
+          setSprintDialogOpen={setSprintDialogOpen}
+          setSuggestSheetOpen={setSuggestSheetOpen}
+          setSprintEditingId={setSprintEditingId}
+          requestActivateSprint={requestActivateSprint}
+          requestCompleteSprint={requestCompleteSprint}
+          requestReopenSprint={requestReopenSprint}
+          handleDeleteSprint={handleDeleteSprint}
+          handleCreateTask={handleCreateTask}
+          handleInlineStatusChange={handleInlineStatusChange}
+          handleInlineAssigneeChange={handleInlineAssigneeChange}
+          handleInlineSprintChange={handleInlineSprintChange}
+          openDuplicateDialog={openDuplicateDialog}
+          openCloneDialog={openCloneDialog}
+          handleCopyTaskRef={handleCopyTaskRef}
+          handleDeleteTask={handleDeleteTask}
+          handleBulkUpdate={handleBulkUpdate}
+          handleBulkDelete={handleBulkDelete}
+          handleBulkDuplicate={handleBulkDuplicate}
+          handleBulkAddTag={handleBulkAddTag}
+          handleBulkRemoveTag={handleBulkRemoveTag}
+        />
       ) : activeTab === "sessions" ? (
         <ProjectSessionsTab
           projectId={id}
@@ -2494,222 +1991,3 @@ export default function ProjectDetailPage({
   );
 }
 
-// ─── Settings Tab ───────────────────────────────────────────────────────────
-
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Trash2 } from "lucide-react";
-
-function SettingsTab({
-  project,
-  modules,
-  personas,
-  moduleUsage,
-  personaUsage,
-  onCreateModule,
-  onUpdateModule,
-  onDeleteModule,
-  onCreatePersona,
-  onUpdatePersona,
-  onDeletePersona,
-  onUpdateProject,
-}: {
-  project: ProjectMeta;
-  modules: ReturnType<typeof adaptModule>[];
-  personas: ReturnType<typeof adaptPersona>[];
-  moduleUsage: Record<string, number>;
-  personaUsage: Record<string, number>;
-  onCreateModule: (data: { name: string; description?: string }) => Promise<void>;
-  onUpdateModule: (
-    id: string,
-    data: { name?: string; description?: string },
-  ) => Promise<void>;
-  onDeleteModule: (id: string) => Promise<void>;
-  onCreatePersona: (data: { name: string; description?: string }) => Promise<void>;
-  onUpdatePersona: (
-    id: string,
-    data: { name?: string; description?: string },
-  ) => Promise<void>;
-  onDeletePersona: (id: string) => Promise<void>;
-  onUpdateProject: () => Promise<void>;
-}) {
-  const [refKey, setRefKey] = useState(project.referenceKey ?? "");
-  const [savingRef, setSavingRef] = useState(false);
-  const [dod, setDod] = useState<string[]>(project.definitionOfDone);
-  const [dodNew, setDodNew] = useState("");
-  const [savingDod, setSavingDod] = useState(false);
-
-  useEffect(() => {
-    setRefKey(project.referenceKey ?? "");
-    setDod(project.definitionOfDone);
-  }, [project]);
-
-  async function saveRef() {
-    setSavingRef(true);
-    try {
-      const supabase = createClient();
-      const normalized = refKey.trim().toUpperCase();
-      const { error } = await supabase
-        .from("Project")
-        .update({ referenceKey: normalized })
-        .eq("id", project.id);
-      if (error) {
-        const isDup = /duplicate key|project_reference_key_unique/i.test(
-          error.message,
-        );
-        showErrorToast(
-          new Error(
-            isDup
-              ? `Reference "${normalized}" já está em uso por outro projeto.`
-              : error.message,
-          ),
-          { label: "Falha ao salvar reference" },
-        );
-        return;
-      }
-      await onUpdateProject();
-    } finally {
-      setSavingRef(false);
-    }
-  }
-
-  async function saveDod(items: string[]) {
-    setSavingDod(true);
-    try {
-      const res = await fetch(`/api/projects/${project.id}/dod`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      if (!res.ok) {
-        showErrorToast(new Error("Falha ao salvar DoD"), {
-          label: "DoD",
-        });
-        return;
-      }
-      await onUpdateProject();
-    } finally {
-      setSavingDod(false);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* referenceKey */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Reference key</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Prefixo único pro código de stories deste projeto (CRM-US-001).
-            Gerado automaticamente ao criar o projeto; só edite se precisar.
-            2-5 caracteres (letras + dígitos), iniciando por letra.
-          </p>
-          <div className="flex items-center gap-2">
-            <Input
-              value={refKey}
-              onChange={(e) =>
-                setRefKey(
-                  e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
-                )
-              }
-              maxLength={5}
-              className="w-32 font-mono"
-              placeholder="CRM"
-            />
-            <Button
-              onClick={saveRef}
-              disabled={
-                savingRef ||
-                !/^[A-Z][A-Z0-9]{1,4}$/.test(refKey) ||
-                refKey === project.referenceKey
-              }
-            >
-              {savingRef ? "Salvando…" : "Salvar"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* DoD */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Definition of Done</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Critérios globais aplicados a todas as stories deste projeto.
-          </p>
-          <ul className="space-y-1.5">
-            {dod.map((item, i) => (
-              <li
-                key={i}
-                className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm"
-              >
-                <span className="flex-1">{item}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  onClick={async () => {
-                    const next = dod.filter((_, j) => j !== i);
-                    setDod(next);
-                    await saveDod(next);
-                  }}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <div className="flex gap-2">
-            <Input
-              value={dodNew}
-              onChange={(e) => setDodNew(e.target.value)}
-              placeholder="ex: PR review aprovado"
-              className="flex-1"
-            />
-            <Button
-              onClick={async () => {
-                if (!dodNew.trim()) return;
-                const next = [...dod, dodNew.trim()];
-                setDod(next);
-                setDodNew("");
-                await saveDod(next);
-              }}
-              disabled={savingDod || !dodNew.trim()}
-            >
-              Adicionar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <SettingsPanel
-        modules={modules}
-        personas={personas}
-        moduleUsage={moduleUsage}
-        personaUsage={personaUsage}
-        onCreateModule={(data) => {
-          onCreateModule(data);
-        }}
-        onUpdateModule={(id, data) => {
-          onUpdateModule(id, data);
-        }}
-        onDeleteModule={(id) => {
-          onDeleteModule(id);
-        }}
-        onCreatePersona={(data) => {
-          onCreatePersona(data);
-        }}
-        onUpdatePersona={(id, data) => {
-          onUpdatePersona(id, data);
-        }}
-        onDeletePersona={(id) => {
-          onDeletePersona(id);
-        }}
-      />
-    </div>
-  );
-}

@@ -79,8 +79,12 @@ export type ForgeState = {
   tasks: Record<string, ForgeTask>;
   taskOrder: string[];
   agentOrder: string[];
+  /** Eventos retidos por task (cap por TASK_EVENT_CAP). Usado pelo TaskSheet. */
+  taskEvents: Record<string, ForgeEvent[]>;
   lastSeq: number;
 };
+
+export const TASK_EVENT_CAP = 500;
 
 export const EMPTY_STATE: ForgeState = {
   run: null,
@@ -88,5 +92,6 @@ export const EMPTY_STATE: ForgeState = {
   tasks: {},
   taskOrder: [],
   agentOrder: [],
+  taskEvents: {},
   lastSeq: 0,
 };

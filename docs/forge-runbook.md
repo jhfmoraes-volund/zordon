@@ -339,8 +339,8 @@ Cada FASE roda este loop. **Não há atalho.**
 | 4 | Migração de rota `/dev/forge` → `/forge` | `[LOCKED]` |
 | 5 | Schema Supabase forge_v1 | `[LOCKED]` |
 | 6 | Hub `/forge` (lista de projetos vivos) | `[LOCKED]` |
-| 7 | Observatório `/forge/[projectId]` | `[IN PROGRESS]` |
-| 8 | TaskSheet (Mind/Tools/Metrics) | `[OPEN]` |
+| 7 | Observatório `/forge/[projectId]` | `[LOCKED]` |
+| 8 | TaskSheet (Mind/Tools/Metrics) | `[LOCKED]` |
 | 9 | forge_task type=human + filtros | `[OPEN]` |
 | 10 | Geração DS → ForgeTask | `[OPEN]` |
 | 11 | Realtime source | `[OPEN]` |

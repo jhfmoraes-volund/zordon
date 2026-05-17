@@ -5,6 +5,29 @@ import type {
   ForgeTask,
   AgentStatus,
 } from "./types";
+import { TASK_EVENT_CAP } from "./types";
+
+const RETAINED_KINDS = new Set<ForgeEvent["kind"]>([
+  "thought",
+  "token",
+  "tool_call",
+  "tool_result",
+  "metric",
+  "error",
+  "status",
+]);
+
+function appendTaskEvent(state: ForgeState, e: ForgeEvent): ForgeState {
+  if (!e.task_id || !RETAINED_KINDS.has(e.kind)) return state;
+  const prev = state.taskEvents[e.task_id] ?? [];
+  const next = prev.length >= TASK_EVENT_CAP
+    ? [...prev.slice(prev.length - TASK_EVENT_CAP + 1), e]
+    : [...prev, e];
+  return {
+    ...state,
+    taskEvents: { ...state.taskEvents, [e.task_id]: next },
+  };
+}
 
 function num(payload: Record<string, unknown>, key: string, fallback = 0): number {
   const v = payload[key];
@@ -53,6 +76,11 @@ function bumpRunProgress(state: ForgeState): ForgeState {
 
 export function applyEvent(state: ForgeState, e: ForgeEvent): ForgeState {
   if (e.seq <= state.lastSeq) return state;
+  const reduced = reduceCore(state, e);
+  return appendTaskEvent(reduced, e);
+}
+
+function reduceCore(state: ForgeState, e: ForgeEvent): ForgeState {
   let next = { ...state, lastSeq: e.seq };
 
   switch (e.kind) {

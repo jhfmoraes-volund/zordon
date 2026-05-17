@@ -5,6 +5,7 @@ import { ForgeHud } from "./forge-hud";
 import { ForgeStage } from "./forge-stage";
 import { ForgeControls } from "./forge-controls";
 import { ForgeLogo } from "./forge-logo";
+import { TaskSheet } from "./task-sheet";
 
 export function ForgeShell() {
   return (
@@ -19,6 +20,7 @@ export function ForgeShell() {
 
         <ForgeStage />
       </div>
+      <TaskSheet />
     </ForgeProvider>
   );
 }

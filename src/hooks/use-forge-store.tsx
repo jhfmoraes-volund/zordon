@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from "react";
 import { createForgeStore, type ForgeStore } from "@/lib/forge/store";
@@ -21,6 +22,13 @@ type Ctx = {
 
 const ForgeContext = createContext<Ctx | null>(null);
 
+type SelectionCtx = {
+  selectedTaskId: string | null;
+  setSelectedTaskId: (id: string | null) => void;
+};
+
+const SelectionContext = createContext<SelectionCtx | null>(null);
+
 export function ForgeProvider({ children }: { children: React.ReactNode }) {
   const ctx = useMemo<Ctx>(() => {
     const store = createForgeStore();
@@ -29,6 +37,12 @@ export function ForgeProvider({ children }: { children: React.ReactNode }) {
     return { store, source };
   }, []);
 
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const selection = useMemo<SelectionCtx>(
+    () => ({ selectedTaskId, setSelectedTaskId }),
+    [selectedTaskId],
+  );
+
   useEffect(() => {
     return () => {
       ctx.source.reset();
@@ -36,7 +50,20 @@ export function ForgeProvider({ children }: { children: React.ReactNode }) {
     };
   }, [ctx]);
 
-  return <ForgeContext.Provider value={ctx}>{children}</ForgeContext.Provider>;
+  return (
+    <ForgeContext.Provider value={ctx}>
+      <SelectionContext.Provider value={selection}>
+        {children}
+      </SelectionContext.Provider>
+    </ForgeContext.Provider>
+  );
+}
+
+export function useTaskSelection(): SelectionCtx {
+  const ctx = useContext(SelectionContext);
+  if (!ctx)
+    throw new Error("useTaskSelection must be used inside <ForgeProvider>");
+  return ctx;
 }
 
 export function useForge(): Ctx {

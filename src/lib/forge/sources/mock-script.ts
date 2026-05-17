@@ -41,51 +41,108 @@ const metricsFor = (taskId: string, agentId: string, points: number[]) =>
     payload: { cost_usd_delta: 0.0008 },
   }));
 
+const thoughtsFor = (
+  taskId: string,
+  agentId: string,
+  items: { at: number; text: string }[],
+): ScriptStep[] =>
+  items.map(({ at, text }) => ({
+    at,
+    kind: "thought" as const,
+    task_id: taskId,
+    agent_id: agentId,
+    payload: { text },
+  }));
+
 export const MOCK_SCRIPT: ScriptStep[] = [
   // 0–60 · root spawns + first task
   { at: 0,  kind: "spawn", agent_id: ARCH, payload: { name: "ARCHITECT", role: "root", run_title: "Forge demo · design session V2" } },
   { at: 8,  kind: "task_spawn", task_id: T1, agent_id: ARCH, payload: { ord: 1, title: "Planejando módulo de design sessions" } },
-  { at: 12, kind: "thought", task_id: T1, agent_id: ARCH, payload: { text: "Analisando estrutura do módulo..." } },
+  ...thoughtsFor(T1, ARCH, [
+    { at: 12, text: "Analisando estrutura do módulo de design sessions..." },
+    { at: 28, text: "Identifiquei 3 entidades: DesignSession, UserStory, ForgeTask. Vou mapear as relações." },
+    { at: 50, text: "DS aprovada cascateia status pra todas as stories filhas. Preciso modelar isso no reducer." },
+    { at: 72, text: "Plano: separar geração automática (DS→Tasks) do disparo manual de run. Builder mantém agência." },
+  ]),
   ...tokensFor(T1, ARCH, 20, 16, 4),
   ...metricsFor(T1, ARCH, [40, 80]),
 
   // 60–160 · SCOUT joins, reads files
   { at: 60, kind: "spawn", agent_id: SCOUT, payload: { name: "SCOUT", role: "subagent", parent_id: ARCH } },
   { at: 64, kind: "task_spawn", task_id: T2, agent_id: SCOUT, payload: { ord: 2, title: "Mapeando estrutura existente" } },
-  { at: 68, kind: "tool_call", task_id: T2, agent_id: SCOUT, payload: { tool: "read_file" } },
-  { at: 84, kind: "tool_result", task_id: T2, agent_id: SCOUT, payload: { tool: "read_file" } },
+  ...thoughtsFor(T2, SCOUT, [
+    { at: 66, text: "Vou começar lendo o schema atual pra entender o que já existe..." },
+  ]),
+  { at: 68, kind: "tool_call", task_id: T2, agent_id: SCOUT, payload: { tool: "read_file", description: "supabase/migrations/20260513_design_session_normalization.sql" } },
+  { at: 84, kind: "tool_result", task_id: T2, agent_id: SCOUT, payload: { tool: "read_file", lines: 412 } },
+  ...thoughtsFor(T2, SCOUT, [
+    { at: 86, text: "Schema antigo guardava tudo em DesignSessionData.data jsonb. Migração 20260513 normaliza pra tabelas filhas." },
+    { at: 110, text: "Vou rodar um grep pra ver quem ainda referencia o jsonb legado." },
+  ]),
   ...tokensFor(T2, SCOUT, 16, 90, 5),
-  { at: 175, kind: "tool_call", task_id: T2, agent_id: SCOUT, payload: { tool: "grep" } },
-  { at: 185, kind: "tool_result", task_id: T2, agent_id: SCOUT, payload: { tool: "grep" } },
+  { at: 175, kind: "tool_call", task_id: T2, agent_id: SCOUT, payload: { tool: "grep", description: "DesignSessionData.data->" } },
+  { at: 185, kind: "tool_result", task_id: T2, agent_id: SCOUT, payload: { tool: "grep", matches: 7 } },
+  ...thoughtsFor(T2, SCOUT, [
+    { at: 195, text: "7 chamadas residuais ao jsonb antigo, todas em hooks de leitura. Migração ficou pendurada." },
+    { at: 215, text: "Risco: se a DS mudar enquanto esses hooks rodam, leitura inconsistente. Sinalizar pro ARCHITECT." },
+  ]),
   ...tokensFor(T2, SCOUT, 10, 190, 4),
   ...metricsFor(T2, SCOUT, [100, 180, 220]),
 
   // 140–260 · WRITER drafts schema
   { at: 140, kind: "spawn", agent_id: WRITER, payload: { name: "WRITER", role: "subagent", parent_id: ARCH } },
   { at: 148, kind: "task_spawn", task_id: T3, agent_id: WRITER, payload: { ord: 3, title: "Redigindo proposta de schema" } },
+  ...thoughtsFor(T3, WRITER, [
+    { at: 152, text: "Vou propor 3 colunas novas em UserStory: forgeStatus, forgeRunCount, lastForgeTaskAt." },
+    { at: 180, text: "forgeStatus tem 4 valores: queued / running / done / blocked. Default = queued ao criar via DS." },
+    { at: 220, text: "Migração precisa ser idempotente — usar IF NOT EXISTS em todos os ALTER TABLE." },
+    { at: 260, text: "Pronto, esboço final pronto. Passo pra ARCHITECT revisar." },
+  ]),
   ...tokensFor(T3, WRITER, 30, 156, 4),
   ...metricsFor(T3, WRITER, [180, 240, 280]),
 
   // 200–320 · TESTER validates
   { at: 200, kind: "spawn", agent_id: TESTER, payload: { name: "TESTER", role: "subagent", parent_id: ARCH } },
   { at: 208, kind: "task_spawn", task_id: T4, agent_id: TESTER, payload: { ord: 4, title: "Validando RLS via select probes" } },
-  { at: 214, kind: "tool_call", task_id: T4, agent_id: TESTER, payload: { tool: "sql_query" } },
-  { at: 240, kind: "tool_result", task_id: T4, agent_id: TESTER, payload: { tool: "sql_query" } },
+  ...thoughtsFor(T4, TESTER, [
+    { at: 211, text: "Vou simular um usuário guest tentando ver um ForgeRun de projeto sem ProjectAccess." },
+  ]),
+  { at: 214, kind: "tool_call", task_id: T4, agent_id: TESTER, payload: { tool: "sql_query", description: 'SELECT * FROM "ForgeRun" LIMIT 1 (as guest)' } },
+  { at: 240, kind: "tool_result", task_id: T4, agent_id: TESTER, payload: { tool: "sql_query", rows: 0 } },
+  ...thoughtsFor(T4, TESTER, [
+    { at: 245, text: "Bloqueio OK: 0 linhas retornadas. RLS funciona pra select de guest." },
+    { at: 280, text: "Agora vou testar Builder com acesso role=viewer — deve ver mas não conseguir mutar." },
+  ]),
   ...tokensFor(T4, TESTER, 14, 244, 5),
-  { at: 320, kind: "tool_call", task_id: T4, agent_id: TESTER, payload: { tool: "sql_query" } },
-  { at: 335, kind: "tool_result", task_id: T4, agent_id: TESTER, payload: { tool: "sql_query" } },
+  { at: 320, kind: "tool_call", task_id: T4, agent_id: TESTER, payload: { tool: "sql_query", description: 'INSERT INTO "ForgeRun" (as viewer)' } },
+  { at: 335, kind: "tool_result", task_id: T4, agent_id: TESTER, payload: { tool: "sql_query", error: "new row violates row-level security policy" } },
+  ...thoughtsFor(T4, TESTER, [
+    { at: 345, text: "Mutação bloqueada corretamente. RLS de mutação via can_edit_tasks tá funcionando." },
+  ]),
   ...tokensFor(T4, TESTER, 8, 340, 4),
   ...metricsFor(T4, TESTER, [260, 320, 360]),
 
   // 280–360 · SCOUT second task
   { at: 280, kind: "task_spawn", task_id: T5, agent_id: SCOUT, payload: { ord: 5, title: "Conferindo migrations vizinhas" } },
-  { at: 288, kind: "tool_call", task_id: T5, agent_id: SCOUT, payload: { tool: "read_file" } },
-  { at: 305, kind: "tool_result", task_id: T5, agent_id: SCOUT, payload: { tool: "read_file" } },
+  ...thoughtsFor(T5, SCOUT, [
+    { at: 285, text: "Antes do WRITER finalizar, deixa eu conferir se as migrations vizinhas não conflitam." },
+  ]),
+  { at: 288, kind: "tool_call", task_id: T5, agent_id: SCOUT, payload: { tool: "read_file", description: "supabase/migrations/20260515_design_session_briefing_columns.sql" } },
+  { at: 305, kind: "tool_result", task_id: T5, agent_id: SCOUT, payload: { tool: "read_file", lines: 78 } },
+  ...thoughtsFor(T5, SCOUT, [
+    { at: 312, text: "Briefing columns adiciona campos na DesignSession sem mexer em UserStory. Não conflita." },
+    { at: 340, text: "Tudo limpo. Sinalizando handoff pro WRITER." },
+  ]),
   ...tokensFor(T5, SCOUT, 12, 310, 4),
   ...metricsFor(T5, SCOUT, [320, 360]),
 
   // 360–460 · ARCHITECT consolidates, all done
   { at: 365, kind: "task_spawn", task_id: T6, agent_id: ARCH, payload: { ord: 6, title: "Consolidando handoff pra Vitor" } },
+  ...thoughtsFor(T6, ARCH, [
+    { at: 370, text: "Recebido: SCOUT mapeou, WRITER propôs schema, TESTER validou RLS." },
+    { at: 400, text: "Vou montar o briefing pro Vitor com: schema final, RLS atestado, e a lista dos 7 callsites legados pra atualizar." },
+    { at: 440, text: "Briefing pronto. Run completo." },
+  ]),
   ...tokensFor(T6, ARCH, 22, 372, 4),
   ...metricsFor(T6, ARCH, [400, 440]),
 
