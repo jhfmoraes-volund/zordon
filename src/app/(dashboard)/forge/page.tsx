@@ -1,4 +1,4 @@
-import { ForgeHub } from "./_components/forge-hub";
+import { ForgeHub } from "@/components/forge/forge-hub";
 
 export const metadata = {
   title: "FORGE · Hub",

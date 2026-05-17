@@ -185,7 +185,7 @@ function HubRow({ project }: { project: HubProject }) {
 
   return (
     <Link
-      href={`/forge/${project.id}`}
+      href={`/projects/${project.id}?tab=forge`}
       className="grid items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-muted/40"
       style={{ gridTemplateColumns: GRID_COLS }}
     >

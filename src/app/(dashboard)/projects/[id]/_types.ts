@@ -1,6 +1,12 @@
 import type { TaskTag } from "@/components/story-hierarchy";
 
-export type TabKey = "stories" | "sprints" | "sessions" | "wiki" | "settings";
+export type TabKey =
+  | "forge"
+  | "stories"
+  | "sprints"
+  | "sessions"
+  | "wiki"
+  | "settings";
 
 export type ProjectMeta = {
   id: string;

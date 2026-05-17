@@ -1,44 +1,17 @@
-import { notFound, redirect } from "next/navigation";
-import { canViewProject } from "@/lib/dal";
-import { createClient } from "@/lib/supabase/server";
-import { ProjectForgeShell } from "../_components/project-forge-shell";
+import { redirect } from "next/navigation";
 
-type ProjectMeta = {
-  id: string;
-  name: string;
-  status: string;
-  client: { name: string } | null;
-};
-
-export const metadata = {
-  title: "FORGE · Observatório",
-};
-
-export default async function ProjectForgePage({
+/**
+ * Caminho legado. Forja agora vive como aba dentro do projeto.
+ *
+ * Mantemos esta rota só pra preservar deep-links existentes — ela redireciona
+ * pra `/projects/[id]?tab=forge`, que renderiza o mesmo painel da Forja com o
+ * contexto completo de gestão do projeto (Stories, Sprints, Sessions, etc).
+ */
+export default async function ProjectForgeRedirect({
   params,
 }: {
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-
-  const ok = await canViewProject(projectId);
-  if (!ok) redirect("/forge");
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("Project")
-    .select("id, name, status, client:Client(name)")
-    .eq("id", projectId)
-    .single();
-
-  if (error || !data) notFound();
-
-  const project: ProjectMeta = {
-    id: data.id,
-    name: data.name,
-    status: data.status,
-    client: (data.client as { name: string } | null) ?? null,
-  };
-
-  return <ProjectForgeShell project={project} />;
+  redirect(`/projects/${projectId}?tab=forge`);
 }

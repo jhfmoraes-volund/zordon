@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   BookOpen,
   FileText,
+  Flame,
   Lightbulb,
   Pencil,
   Settings as SettingsIcon,
@@ -82,8 +83,10 @@ import { useTasksAndSprints } from "./_hooks/use-tasks-and-sprints";
 import { useProjectMembers } from "./_hooks/use-project-members";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
+import { ProjectForgePanel } from "@/components/forge/project-forge-panel";
 
 const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
+  { key: "forge", label: "Forge", icon: Flame },
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
@@ -1627,7 +1630,9 @@ export default function ProjectDetailPage({
       </div>
 
       {/* Tab content */}
-      {activeTab === "stories" ? (
+      {activeTab === "forge" ? (
+        <ProjectForgePanel />
+      ) : activeTab === "stories" ? (
         <StoriesList
           stories={stories}
           tasks={tasks}
