@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Sparkles, Tag } from "lucide-react";
+import { BookOpen, Flame, Sparkles, Tag } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -120,6 +120,30 @@ export default async function DevSandboxPage() {
               render={<Link href="/dev/tags" />}
             >
               <Tag />
+              Abrir sandbox
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Flame className="size-4 text-primary" />
+              Forge (HUD de agentes)
+            </CardTitle>
+            <CardDescription>
+              Storyline mockada ARCHITECT/SCOUT/WRITER/TESTER pra explorar a UI
+              da forja. Não toca o banco; substitui o mock por realtime quando
+              chegar a Fase 11.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              size="lg"
+              variant="outline"
+              render={<Link href="/dev/forge-sandbox" />}
+            >
+              <Flame />
               Abrir sandbox
             </Button>
           </CardContent>

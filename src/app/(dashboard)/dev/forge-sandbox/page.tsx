@@ -1,4 +1,4 @@
-import { ForgeShell } from "../_components/forge-shell";
+import { ForgeShell } from "@/components/forge/forge-shell";
 
 export const metadata = {
   title: "FORGE · Sandbox",

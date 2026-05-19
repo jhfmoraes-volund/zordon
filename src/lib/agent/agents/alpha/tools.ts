@@ -3,7 +3,12 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { suggestFunctionPoints, OPEN_STATUSES } from "@/lib/function-points";
 import { TASK_STATUSES, TASK_TYPES, SCOPES, COMPLEXITIES } from "@/lib/task-constants";
-import { RoamClient, cuesToText } from "@/lib/roam";
+import {
+  listMeetings,
+  getMeetingDetail,
+  askMeeting,
+  type MeetingSource,
+} from "@/lib/meetings";
 import { loadAgentHeuristic, loadFpMatrix } from "../../config";
 import {
   listModulesForOpsTool,
@@ -53,6 +58,7 @@ export function assembleAlphaTools(
   const supabase = db();
   const tools: ToolSet = {};
   const roamToken = capabilities.roamToken;
+  const granolaToken = capabilities.granolaToken;
   const activeMeetingId = opts.activeMeetingId;
   const routeProjectId = opts.routeProjectId;
   const routeSprintId = opts.routeSprintId;
@@ -60,6 +66,8 @@ export function assembleAlphaTools(
   const alphaHierarchyEnabled = opts.alphaHierarchyEnabled ?? true;
   const NO_ROAM_TOKEN =
     "Roam nao conectado. Peca ao PM para conectar em Configuracoes > Integracoes.";
+  const meetingsResolver = { roamToken, granolaToken };
+  const SOURCE_VALUES = ["roam", "granola"] as const satisfies readonly MeetingSource[];
 
   // ─── Read tools ──────────────────────────────────────────
 
@@ -1062,13 +1070,14 @@ export function assembleAlphaTools(
 
   tools.get_recent_meetings = tool({
     description:
-      "Lista reuniões candidatas — combina dados internos (Meeting, type=pm_review|general) e transcrições do Roam. Use SEMPRE como primeira fase pra apresentar candidatas ao usuário; só busque transcrição completa depois que o usuário confirmar QUAL reunião quer.",
+      "Lista reuniões candidatas — combina dados internos (Meeting, type=pm_review|general) com transcrições de provedores externos (Roam e Granola). Use SEMPRE como primeira fase pra apresentar candidatas ao usuário; só busque transcrição completa depois que o usuário confirmar QUAL reunião quer.",
     inputSchema: z.object({
       days: z.number().int().min(1).max(90).default(14).describe("Janela em dias contados pra trás a partir de hoje (ignorado se 'date' for passado)"),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Filtra por uma data específica YYYY-MM-DD (sobrepõe 'days')"),
-      participant: z.string().optional().describe("Filtra Roam por nome parcial de participante (case-insensitive)"),
+      participant: z.string().optional().describe("Filtra por nome parcial de participante (case-insensitive)"),
+      sources: z.array(z.enum(SOURCE_VALUES)).optional().describe("Quais provedores consultar. Default: ambos (roam + granola)."),
     }),
-    execute: async ({ days, date, participant }) => {
+    execute: async ({ days, date, participant, sources }) => {
       let since: Date;
       let until: Date | null = null;
       if (date) {
@@ -1107,104 +1116,80 @@ export function assembleAlphaTools(
         })
       );
 
-      // Roam transcripts (paginated DESC; stops when items fall below `since`)
-      let roamTranscripts: Array<{
-        id: string;
-        date: string;
-        title: string;
-        participants: string[];
-      }> = [];
-      let roamError: string | null = null;
-      if (roamToken) {
-        try {
-          const roam = new RoamClient(roamToken);
-          const needle = participant?.toLowerCase();
-          const transcripts = await roam.listTranscriptsInRange({
-            since: since.toISOString(),
-            until: until ? until.toISOString() : undefined,
-            max: 50,
-            participantFilter: needle
-              ? (names) => names.some((n) => n.toLowerCase().includes(needle))
-              : undefined,
-          });
-          roamTranscripts = transcripts.map((t) => ({
-            id: t.id,
-            date: t.start,
-            title: t.eventName || "Sem título",
-            participants: t.participants.map((p) => p.name),
-          }));
-        } catch (err) {
-          roamError = (err as Error).message;
-        }
-      }
+      const { meetings: external, errors, availability } = await listMeetings(meetingsResolver, {
+        since: since.toISOString(),
+        until: until ? until.toISOString() : undefined,
+        max: 50,
+        participant,
+        sources,
+      });
 
       return {
         filter: {
           date: date ?? null,
           days: date ? null : days,
           participant: participant ?? null,
+          sources: sources ?? ["roam", "granola"],
         },
         internalMeetings: enriched,
-        roamTranscripts,
+        externalMeetings: external.map((m) => ({
+          source: m.source,
+          id: m.id,
+          date: m.start,
+          title: m.title,
+          participants: m.participants.map((p) => p.name),
+        })),
         totalInternal: enriched.length,
-        totalRoam: roamTranscripts.length,
-        ...(roamError ? { roamError } : {}),
-        ...(roamToken ? {} : { roamNotConnected: true }),
+        totalExternal: external.length,
+        availability,
+        ...(Object.keys(errors).length ? { errors } : {}),
       };
     },
   });
 
   tools.get_meeting_transcript = tool({
     description:
-      "Busca a transcricao completa de uma reuniao do Roam. Retorna o texto formatado com timestamps e speakers, alem do resumo e acoes extraidas pelo Roam. Use para analisar o que foi discutido.",
+      "Busca a transcrição completa de uma reunião (Roam ou Granola). Retorna texto formatado com speakers, resumo e action items quando disponíveis. Use para analisar o que foi discutido.",
     inputSchema: z.object({
-      transcriptId: z.string().describe("ID da transcricao do Roam"),
+      source: z.enum(SOURCE_VALUES).describe("Provedor da reunião (mesmo source retornado por get_recent_meetings)"),
+      meetingId: z.string().describe("ID da reunião no provedor (era transcriptId no Roam)"),
     }),
-    execute: async ({ transcriptId }) => {
-      if (!roamToken) return { error: NO_ROAM_TOKEN };
+    execute: async ({ source, meetingId }) => {
+      if (source === "roam" && !roamToken) return { error: NO_ROAM_TOKEN };
       try {
-        const roam = new RoamClient(roamToken);
-        const transcript = await roam.getTranscript(transcriptId);
-
-        const text = cuesToText(transcript.cues);
-        const durationMin = Math.round(
-          (new Date(transcript.end).getTime() - new Date(transcript.start).getTime()) / 60000
-        );
-
+        const detail = await getMeetingDetail(meetingsResolver, source, meetingId);
         return {
-          id: transcript.id,
-          title: transcript.eventName || "Sem titulo",
-          date: transcript.start,
-          durationMinutes: durationMin,
-          participants: transcript.participants.map((p) => ({
-            name: p.name,
-            type: p.type,
-          })),
-          summary: transcript.summary,
-          actionItems: transcript.actionItems,
-          transcript: text,
+          source: detail.source,
+          id: detail.id,
+          title: detail.title,
+          date: detail.start,
+          durationMinutes: detail.durationMinutes,
+          participants: detail.participants,
+          summary: detail.summary,
+          actionItems: detail.actionItems,
+          transcript: detail.transcriptText,
         };
       } catch (err) {
-        return { error: `Erro ao buscar transcricao: ${(err as Error).message}` };
+        return { error: `Erro ao buscar transcrição: ${(err as Error).message}` };
       }
     },
   });
 
   tools.ask_meeting = tool({
     description:
-      "Faz uma pergunta sobre uma reuniao especifica ao Roam AI. Use para extrair informacoes pontuais sem ler a transcricao inteira (ex: 'o que o Joao disse sobre o projeto X?', 'quais decisoes foram tomadas?').",
+      "Faz uma pergunta sobre uma reunião específica usando o AI nativo do provedor. Atualmente suportado apenas em Roam (Granola ainda não expõe esse endpoint). Para reuniões Granola, busque a transcrição com get_meeting_transcript e raciocine sobre ela.",
     inputSchema: z.object({
-      transcriptId: z.string().describe("ID da transcricao do Roam"),
-      question: z.string().describe("Pergunta sobre a reuniao"),
+      source: z.enum(SOURCE_VALUES).describe("Provedor da reunião (mesmo source retornado por get_recent_meetings)"),
+      meetingId: z.string().describe("ID da reunião no provedor"),
+      question: z.string().describe("Pergunta sobre a reunião"),
     }),
-    execute: async ({ transcriptId, question }) => {
-      if (!roamToken) return { error: NO_ROAM_TOKEN };
+    execute: async ({ source, meetingId, question }) => {
+      if (source === "roam" && !roamToken) return { error: NO_ROAM_TOKEN };
       try {
-        const roam = new RoamClient(roamToken);
-        const { answer } = await roam.promptTranscript(transcriptId, question);
+        const { answer } = await askMeeting(meetingsResolver, source, meetingId, question);
         return { answer };
       } catch (err) {
-        return { error: `Erro ao perguntar ao Roam: ${(err as Error).message}` };
+        return { error: `Erro ao perguntar ao provedor: ${(err as Error).message}` };
       }
     },
   });
@@ -1315,9 +1300,9 @@ export function assembleAlphaTools(
   if (capabilities.writeTools) {
     tools.create_meeting = tool({
       description:
-        "Cria uma reunião nova (Meeting) com a estrutura adequada ao tipo: pm_review (com reviews por PM), daily, super_planning (vincula sprint ativa), general. Resolve nomes de projetos/PMs/participantes em IDs. Carrega automaticamente Todos pendentes da última reunião. NÃO use durante uma reunião ativa — só em conversa solta ou via instrução clara do PM.",
+        "Cria uma reunião nova (Meeting) com a estrutura adequada ao tipo: pm_review (com reviews por PM), daily, super_planning (vincula sprint ativa), general, private (só owner). Resolve nomes de projetos/PMs/participantes em IDs. Carrega automaticamente Todos pendentes da última reunião. NÃO use durante uma reunião ativa — só em conversa solta ou via instrução clara do PM. **Private:** prefira pelo MeetingSheet/UI (com import do Granola). Use aqui só se o user pediu explicitamente \"cria uma privada pra mim\".",
       inputSchema: z.object({
-        type: z.enum(["pm_review", "general", "daily", "super_planning"]).describe("Tipo da reunião"),
+        type: z.enum(["pm_review", "general", "daily", "super_planning", "private"]).describe("Tipo da reunião"),
         date: z.string().describe("Data e hora em ISO (YYYY-MM-DD ou YYYY-MM-DDTHH:mm). Use a data corrente do bloco '## Hoje' como referência pra interpretar 'hoje', 'amanhã', 'essa quinta'."),
         title: z.string().optional().describe("Título opcional"),
         projectNames: z.array(z.string()).optional().describe("Nomes parciais dos projetos vinculados. daily exige ≥1; super_planning exige exatamente 1; pm_review opcional (filtra PMs); general opcional"),
@@ -1743,7 +1728,7 @@ export function assembleAlphaTools(
         try {
           const result = await extractActions({
             transcript,
-            meetingType: meeting.type as "pm_review" | "general" | "daily" | "super_planning",
+            meetingType: meeting.type as "pm_review" | "general" | "daily" | "super_planning" | "private",
             projects: projects.map((p) => ({ id: p.id, name: p.name })),
             members,
             userStories,
@@ -1774,7 +1759,7 @@ export function assembleAlphaTools(
 
     tools.propose_task_action = tool({
       description:
-        "Propõe uma mudança em Task no contexto de uma reunião — NÃO executa, só registra como proposta pendente em MeetingTaskAction. O PM aprova/edita/rejeita pela UI da reunião e o sistema aplica em batch. Use SEMPRE em vez de create_task/update_task/bulk_update_tasks quando houver reunião ativa do tipo daily, super_planning ou pm_review.",
+        "Propõe uma mudança em Task no contexto de uma reunião — NÃO executa, só registra como proposta pendente em MeetingTaskAction. O PM aprova/edita/rejeita pela UI da reunião e o sistema aplica em batch. Use SEMPRE em vez de create_task/update_task/bulk_update_tasks quando houver reunião ativa do tipo daily, super_planning, pm_review ou private. **Em private:** permitido SOMENTE quando há projetos vinculados, e SOMENTE nesses projetos; sem projetos vinculados, não chame esta tool (use create_todo).",
       inputSchema: z.object({
         meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
         type: z.enum(["create", "update", "delete", "move", "review"]).describe(

@@ -23,7 +23,7 @@ type Meeting = {
   id: string;
   date: string;
   notes: string | null;
-  type: "pm_review" | "general" | "daily" | "super_planning";
+  type: "pm_review" | "general" | "daily" | "super_planning" | "private";
   title: string | null;
   projectReviews: {
     id: string;
@@ -133,7 +133,7 @@ export default function MeetingsPage() {
   const meetings = meetingsCollection.items;
   const setMeetings = meetingsCollection.setCommitted;
   const meetingMutate = meetingsCollection.mutate;
-  const [typeFilter, setTypeFilter] = useState<"all" | "pm_review" | "general" | "daily" | "super_planning">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "pm_review" | "general" | "daily" | "super_planning" | "private">("all");
   const [pmFilter, setPmFilter] = useState<string>("all");
 
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -261,6 +261,7 @@ export default function MeetingsPage() {
               <SelectItem value="general">Reunião geral</SelectItem>
               <SelectItem value="daily">Daily</SelectItem>
               <SelectItem value="super_planning">Super Planning</SelectItem>
+              <SelectItem value="private">Privada</SelectItem>
             </SelectContent>
           </Select>
         </div>

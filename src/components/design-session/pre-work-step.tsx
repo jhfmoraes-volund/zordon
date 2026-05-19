@@ -13,9 +13,9 @@ import {
 import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  RoamTranscriptModal,
+  TranscriptModal,
   type ImportedTranscript,
-} from "./roam-transcript-modal";
+} from "./transcript-modal";
 import {
   useSessionFiles,
   type SessionFileRow,
@@ -119,7 +119,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/design-sessions/${sessionId}/roam-transcripts`)
+    fetch(`/api/design-sessions/${sessionId}/transcripts`)
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
         if (cancelled || !json) return;
@@ -136,7 +136,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
       const prev = transcripts;
       setTranscripts((cur) => cur.filter((t) => t.id !== transcriptId));
       const res = await fetch(
-        `/api/design-sessions/${sessionId}/roam-transcripts/${transcriptId}`,
+        `/api/design-sessions/${sessionId}/transcripts/${transcriptId}`,
         { method: "DELETE" },
       );
       if (!res.ok) setTranscripts(prev);
@@ -345,7 +345,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
           onOpenChange={setMobileOpen}
           onClose={() => setMobileOpen(false)}
         />
-        <RoamTranscriptModal
+        <TranscriptModal
           sessionId={sessionId}
           open={roamModalOpen}
           onOpenChange={setRoamModalOpen}
@@ -387,7 +387,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
         <ConversationPanel {...sharedPanelProps} variant="desktop" />
       </div>
 
-      <RoamTranscriptModal
+      <TranscriptModal
         sessionId={sessionId}
         open={roamModalOpen}
         onOpenChange={setRoamModalOpen}

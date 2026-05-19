@@ -26,7 +26,7 @@ export type ExtractorTask = {
 
 export type ExtractActionsInput = {
   transcript: string;
-  meetingType: "pm_review" | "general" | "daily" | "super_planning";
+  meetingType: "pm_review" | "general" | "daily" | "super_planning" | "private";
   projects: ExtractorProject[];
   members: ExtractorMember[];
   userStories: ExtractorUserStory[];

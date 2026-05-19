@@ -14,42 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _backup_task_dependencies_20260505: {
-        Row: {
-          dependencies: Json | null
-          id: string | null
-          updatedAt: string | null
-        }
-        Insert: {
-          dependencies?: Json | null
-          id?: string | null
-          updatedAt?: string | null
-        }
-        Update: {
-          dependencies?: Json | null
-          id?: string | null
-          updatedAt?: string | null
-        }
-        Relationships: []
-      }
-      _backup_zordon_refs_20260505: {
-        Row: {
-          createdAt: string | null
-          id: string | null
-          reference: string | null
-        }
-        Insert: {
-          createdAt?: string | null
-          id?: string | null
-          reference?: string | null
-        }
-        Update: {
-          createdAt?: string | null
-          id?: string | null
-          reference?: string | null
-        }
-        Relationships: []
-      }
       AcceptanceCriterion: {
         Row: {
           checkedAt: string | null
@@ -1867,8 +1831,9 @@ export type Database = {
           meetingTitle: string
           participants: Json
           projectId: string
-          roamTranscriptId: string
           sessionId: string
+          source: string
+          sourceId: string
           summary: string | null
         }
         Insert: {
@@ -1882,8 +1847,9 @@ export type Database = {
           meetingTitle: string
           participants?: Json
           projectId: string
-          roamTranscriptId: string
           sessionId: string
+          source: string
+          sourceId: string
           summary?: string | null
         }
         Update: {
@@ -1897,8 +1863,9 @@ export type Database = {
           meetingTitle?: string
           participants?: Json
           projectId?: string
-          roamTranscriptId?: string
           sessionId?: string
+          source?: string
+          sourceId?: string
           summary?: string | null
         }
         Relationships: [
@@ -2288,6 +2255,9 @@ export type Database = {
           notes: string | null
           sprintId: string | null
           title: string | null
+          transcript: string | null
+          transcriptSource: string | null
+          transcriptSourceId: string | null
           type: string
           updatedAt: string
         }
@@ -2299,6 +2269,9 @@ export type Database = {
           notes?: string | null
           sprintId?: string | null
           title?: string | null
+          transcript?: string | null
+          transcriptSource?: string | null
+          transcriptSourceId?: string | null
           type?: string
           updatedAt: string
         }
@@ -2310,6 +2283,9 @@ export type Database = {
           notes?: string | null
           sprintId?: string | null
           title?: string | null
+          transcript?: string | null
+          transcriptSource?: string | null
+          transcriptSourceId?: string | null
           type?: string
           updatedAt?: string
         }

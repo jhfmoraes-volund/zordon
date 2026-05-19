@@ -1,11 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Link as LinkIcon, Eye, EyeOff, CheckCircle2, Circle, Loader2 } from "lucide-react";
+import {
+  Link as LinkIcon,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  Circle,
+  Loader2,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+/**
+ * Integration cards (Roam, Granola, …).
+ *
+ * Each card lets the signed-in member paste their personal API key for a
+ * third-party transcript provider. The token is validated server-side
+ * before being stored encrypted in Supabase Vault (RPCs in member-integrations).
+ *
+ * Both providers expose the exact same CRUD surface (GET/PUT/DELETE on
+ * `/api/me/integrations/[provider]`) so this file defines one generic card
+ * and two thin wrappers that lock in the copy/help text.
+ */
+
+// ─── Types ────────────────────────────────────────────────
+
+type Provider = "roam" | "granola";
 
 type Status = {
   connected: boolean;
@@ -15,7 +38,42 @@ type Status = {
 
 type Feedback = { type: "success" | "error"; text: string } | null;
 
-export function RoamIntegrationCard() {
+interface ProviderCopy {
+  /** Human-readable name shown in the title. */
+  label: string;
+  /** Where the user can find/create the token (rendered as the help text). */
+  howToFind: string;
+  /** Placeholder shown inside the empty token input. */
+  tokenPlaceholder: string;
+  /** Single-line message shown right after a successful save. */
+  successMessage: string;
+  /** Single-line message shown right after a successful delete. */
+  disconnectMessage: string;
+}
+
+const COPY: Record<Provider, ProviderCopy> = {
+  roam: {
+    label: "Roam",
+    howToFind:
+      "O token do Roam é pessoal. Gere o seu em Roam > Settings > API e cole abaixo. Ele é validado antes de ser salvo e fica criptografado no Supabase Vault.",
+    tokenPlaceholder: "Cole o token do Roam",
+    successMessage: "Roam conectado com sucesso.",
+    disconnectMessage: "Roam desconectado.",
+  },
+  granola: {
+    label: "Granola",
+    howToFind:
+      "A chave do Granola é pessoal (Personal API key). Gere a sua em Granola > Settings > Connectors > API keys > Create new key. Plano Business ou superior. Ela é validada antes de ser salva e fica criptografada no Supabase Vault.",
+    tokenPlaceholder: "Cole a Personal API key do Granola (grn_…)",
+    successMessage: "Granola conectado com sucesso.",
+    disconnectMessage: "Granola desconectado.",
+  },
+};
+
+// ─── Generic card ─────────────────────────────────────────
+
+function IntegrationCard({ provider }: { provider: Provider }) {
+  const copy = COPY[provider];
   const [status, setStatus] = useState<Status | null>(null);
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
@@ -25,10 +83,11 @@ export function RoamIntegrationCard() {
 
   useEffect(() => {
     void loadStatus();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider]);
 
   async function loadStatus() {
-    const res = await fetch("/api/me/integrations/roam");
+    const res = await fetch(`/api/me/integrations/${provider}`);
     if (!res.ok) return;
     setStatus(await res.json());
   }
@@ -41,7 +100,7 @@ export function RoamIntegrationCard() {
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/me/integrations/roam", {
+      const res = await fetch(`/api/me/integrations/${provider}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
@@ -54,7 +113,7 @@ export function RoamIntegrationCard() {
       setStatus(data);
       setToken("");
       setShowToken(false);
-      setFeedback({ type: "success", text: "Roam conectado com sucesso." });
+      setFeedback({ type: "success", text: copy.successMessage });
     } finally {
       setSaving(false);
     }
@@ -64,24 +123,28 @@ export function RoamIntegrationCard() {
     setFeedback(null);
     setDeleting(true);
     try {
-      const res = await fetch("/api/me/integrations/roam", { method: "DELETE" });
+      const res = await fetch(`/api/me/integrations/${provider}`, {
+        method: "DELETE",
+      });
       if (!res.ok) {
         setFeedback({ type: "error", text: "Erro ao desconectar." });
         return;
       }
       setStatus(await res.json());
-      setFeedback({ type: "success", text: "Roam desconectado." });
+      setFeedback({ type: "success", text: copy.disconnectMessage });
     } finally {
       setDeleting(false);
     }
   }
+
+  const tokenInputId = `${provider}-api-token`;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <LinkIcon className="h-4 w-4" />
-          Integracao Roam
+          Integração {copy.label}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -102,7 +165,7 @@ export function RoamIntegrationCard() {
               ) : (
                 <>
                   <Circle className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Nao conectado</span>
+                  <span className="text-muted-foreground">Não conectado</span>
                 </>
               )}
             </div>
@@ -110,7 +173,11 @@ export function RoamIntegrationCard() {
             {status.connected ? (
               <>
                 {feedback && (
-                  <p className={`text-sm ${feedback.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                  <p
+                    className={`text-sm ${
+                      feedback.type === "success" ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
                     {feedback.text}
                   </p>
                 )}
@@ -125,18 +192,14 @@ export function RoamIntegrationCard() {
               </>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground">
-                  O token do Roam e pessoal. Gere o seu em Roam &gt; Settings &gt; API,
-                  cole abaixo. Ele e validado antes de ser salvo e fica criptografado
-                  no Supabase Vault.
-                </p>
+                <p className="text-sm text-muted-foreground">{copy.howToFind}</p>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="roam-api-token">Token</Label>
+                  <Label htmlFor={tokenInputId}>Token</Label>
                   <div className="relative">
                     <Input
-                      id="roam-api-token"
-                      name="roam-api-token"
+                      id={tokenInputId}
+                      name={tokenInputId}
                       type={showToken ? "text" : "password"}
                       autoComplete="off"
                       autoCorrect="off"
@@ -148,7 +211,7 @@ export function RoamIntegrationCard() {
                       data-form-type="other"
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
-                      placeholder="Cole o token do Roam"
+                      placeholder={copy.tokenPlaceholder}
                       onKeyDown={(e) => e.key === "Enter" && handleSave()}
                     />
                     <button
@@ -157,13 +220,21 @@ export function RoamIntegrationCard() {
                       onClick={() => setShowToken(!showToken)}
                       tabIndex={-1}
                     >
-                      {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showToken ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>
 
                 {feedback && (
-                  <p className={`text-sm ${feedback.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                  <p
+                    className={`text-sm ${
+                      feedback.type === "success" ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
                     {feedback.text}
                   </p>
                 )}
@@ -178,4 +249,14 @@ export function RoamIntegrationCard() {
       </CardContent>
     </Card>
   );
+}
+
+// ─── Provider-specific wrappers ───────────────────────────
+
+export function RoamIntegrationCard() {
+  return <IntegrationCard provider="roam" />;
+}
+
+export function GranolaIntegrationCard() {
+  return <IntegrationCard provider="granola" />;
 }

@@ -13,8 +13,8 @@ import { usePathname } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useAuth } from "@/contexts/auth-context";
-import { hasMinLevel, MANAGER } from "@/lib/roles";
-import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
+import { hasMinAccessLevel } from "@/lib/roles";
+import { buildIngestSeed, buildSuggestTodosSeed } from "@/lib/agent/alpha-ingest-seed";
 
 /**
  * Idle threshold: if the bubble is reopened more than this after the last
@@ -34,14 +34,27 @@ type AlphaChatValue = {
   status: "idle" | "submitted" | "streaming" | "error" | "ready";
   sendMessage: (text: string) => void;
   /**
-   * Abre o sheet e dispara uma ingestão de transcrição Roam em thread nova,
-   * com `meetingId` no body (Alpha recebe no `loadContext.params.meetingId`).
-   * Usado pelos botões "Importar reunião" — não é fluxo de chat livre.
+   * Abre o sheet e dispara a ingestão de uma transcrição externa (Roam ou
+   * Granola) em thread nova, com `meetingId` no body (Alpha recebe no
+   * `loadContext.params.meetingId`). Usado pelos botões "Importar reunião".
    */
   kickoffIngest: (args: {
     meetingId: string;
-    roamTranscriptId: string;
+    source: "roam" | "granola";
+    sourceId: string;
     overwrite: boolean;
+    meetingType?: string;
+  }) => void;
+  /**
+   * Abre o sheet e dispara uma rodada de "Sugerir To-dos com IA" — Alpha
+   * lê a transcrição inteira (Roam/Granola) e cria APENAS To-dos (sem
+   * mexer em notes/reviews/tasks). Disparado pelo botão "Sugerir com IA"
+   * no header da seção To-dos da página da reunião.
+   */
+  kickoffSuggestTodos: (args: {
+    meetingId: string;
+    source: "roam" | "granola";
+    sourceId: string;
   }) => void;
   /** Current thread ID. null = fresh conversation (next send creates a new one). */
   threadId: string | null;
@@ -64,6 +77,7 @@ const STUB: AlphaChatValue = {
   status: "idle",
   sendMessage: () => {},
   kickoffIngest: () => {},
+  kickoffSuggestTodos: () => {},
   threadId: null,
   loadThread: async () => {},
   newConversation: () => {},
@@ -99,8 +113,8 @@ export function useAlphaChat(): AlphaChatValue {
 }
 
 export function AlphaChatProvider({ children }: { children: ReactNode }) {
-  const { effectiveRole } = useAuth();
-  const enabled = hasMinLevel(effectiveRole, MANAGER);
+  const { effectiveAccessLevel } = useAuth();
+  const enabled = hasMinAccessLevel(effectiveAccessLevel, "manager");
   if (!enabled) return <>{children}</>;
   return <AlphaChatProviderInner>{children}</AlphaChatProviderInner>;
 }
@@ -200,12 +214,16 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
   const kickoffIngest = useCallback(
     ({
       meetingId,
-      roamTranscriptId,
+      source,
+      sourceId,
       overwrite,
+      meetingType,
     }: {
       meetingId: string;
-      roamTranscriptId: string;
+      source: "roam" | "granola";
+      sourceId: string;
       overwrite: boolean;
+      meetingType?: string;
     }) => {
       if (isLoading) return;
       // Abre o sheet, zera estado, dispara thread nova com meetingId no body.
@@ -215,7 +233,38 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
       lastOpenedAtRef.current = Date.now();
       setThreadId(null);
       chat.setMessages([]);
-      const seed = buildIngestSeed(meetingId, roamTranscriptId, overwrite);
+      const seed = buildIngestSeed(meetingId, source, sourceId, overwrite, meetingType);
+      chat.sendMessage(
+        { text: seed },
+        {
+          body: {
+            currentPath: pathname,
+            threadId: null,
+            newThread: true,
+            meetingId,
+          },
+        },
+      );
+    },
+    [chat, isLoading, pathname],
+  );
+
+  const kickoffSuggestTodos = useCallback(
+    ({
+      meetingId,
+      source,
+      sourceId,
+    }: {
+      meetingId: string;
+      source: "roam" | "granola";
+      sourceId: string;
+    }) => {
+      if (isLoading) return;
+      setIsOpen(true);
+      lastOpenedAtRef.current = Date.now();
+      setThreadId(null);
+      chat.setMessages([]);
+      const seed = buildSuggestTodosSeed(meetingId, source, sourceId);
       chat.sendMessage(
         { text: seed },
         {
@@ -241,6 +290,7 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     status: chat.status,
     sendMessage,
     kickoffIngest,
+    kickoffSuggestTodos,
     threadId,
     loadThread,
     newConversation,

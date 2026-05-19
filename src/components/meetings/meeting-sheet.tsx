@@ -9,16 +9,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast, fetchOrThrow } from "@/lib/optimistic/toast";
-import { Plus, X, Download } from "lucide-react";
-import { ImportRoamMeetingModal } from "./import-roam-meeting-modal";
+import { Plus, X, Download, Lock } from "lucide-react";
+import { ImportMeetingModal } from "./import-meeting-modal";
 import { ProjectPicker } from "@/components/projects/project-picker";
+import { useAuth } from "@/contexts/auth-context";
 
 type Member = { id: string; name: string; role: string };
 type Project = { id: string; name: string; status: string };
 type Sprint = { id: string; name: string; status: string; projectId: string };
 type ExternalAttendee = { name: string; email: string; role: string };
 
-export type MeetingType = "pm_review" | "general" | "daily" | "super_planning";
+export type MeetingType =
+  | "pm_review"
+  | "general"
+  | "daily"
+  | "super_planning"
+  | "private";
 
 const TYPE_DESCRIPTIONS: Record<MeetingType, string> = {
   pm_review:
@@ -29,6 +35,8 @@ const TYPE_DESCRIPTIONS: Record<MeetingType, string> = {
     "Daily de um projeto. Discuta progresso, blockers e plano de ação sobre as tasks da sprint atual. Para pautas que cruzam projetos, use Reunião geral.",
   super_planning:
     "Planejamento da sprint atual de um projeto (segundas-feiras). Sugestões de IA + aprovação manual de criação/edição/movimentação de tasks.",
+  private:
+    "Reunião privada — só você vê. Importe a transcrição do Granola; Alpha gera notes e To-dos pra você. Vincular projetos (opcional) permite que Alpha proponha Tasks naqueles projetos pra você aprovar depois.",
 };
 
 const TYPE_LABELS: Record<MeetingType, string> = {
@@ -36,6 +44,7 @@ const TYPE_LABELS: Record<MeetingType, string> = {
   general: "Reunião geral",
   daily: "Daily",
   super_planning: "Super Planning",
+  private: "Privada",
 };
 
 export type MeetingEditInitial = {
@@ -83,6 +92,7 @@ export function MeetingSheet({
   onSaved,
 }: Props) {
   const isMobile = useIsMobile();
+  const { member: currentMember } = useAuth();
   const [saving, setSaving] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
@@ -307,7 +317,10 @@ export function MeetingSheet({
   }, [type, pmIds, projectIds, members, projects]);
 
   const showProjectPicker =
-    type === "daily" || type === "super_planning" || type === "general";
+    type === "daily" ||
+    type === "super_planning" ||
+    type === "general" ||
+    type === "private";
   const showMemberPicker =
     type === "general" || type === "daily" || type === "super_planning";
   const showExternalsPicker = type === "general";
@@ -330,12 +343,20 @@ export function MeetingSheet({
       const pid = Array.from(projectIds)[0];
       return sprints.some((s) => s.projectId === pid);
     }
+    if (type === "private") {
+      // Só precisa do owner (Member do user logado) — sem PMs, sem squad.
+      return !!currentMember?.id;
+    }
     return memberIds.size > 0 || externals.length > 0;
   };
 
   function buildAttendees() {
     if (type === "pm_review") {
       return Array.from(pmIds).map((id) => ({ memberId: id, role: "pm" }));
+    }
+    if (type === "private") {
+      if (!currentMember?.id) return [];
+      return [{ memberId: currentMember.id, role: "owner" }];
     }
     if (type === "daily" || type === "super_planning") {
       return Array.from(memberIds).map((id) => ({
@@ -371,7 +392,7 @@ export function MeetingSheet({
           notes: notes.trim() || null,
           pmMemberIds: type === "pm_review" ? Array.from(pmIds) : [],
           attendees,
-          projectIds: ["general", "daily", "super_planning"].includes(type)
+          projectIds: ["general", "daily", "super_planning", "private"].includes(type)
             ? Array.from(projectIds)
             : [],
         };
@@ -444,20 +465,27 @@ export function MeetingSheet({
           <div className="grid gap-2">
             <Label>Tipo {mode === "edit" && <span className="text-xs text-muted-foreground">(não pode ser alterado)</span>}</Label>
             <div className="flex flex-wrap gap-2">
-              {(["pm_review", "general", "daily", "super_planning"] as MeetingType[]).map(
-                (t) => (
-                  <Button
-                    key={t}
-                    type="button"
-                    variant={type === t ? "default" : "outline"}
-                    size="sm"
-                    disabled={mode === "edit" && type !== t}
-                    onClick={() => switchType(t)}
-                  >
-                    {TYPE_LABELS[t]}
-                  </Button>
-                ),
-              )}
+              {(
+                [
+                  "pm_review",
+                  "general",
+                  "daily",
+                  "super_planning",
+                  "private",
+                ] as MeetingType[]
+              ).map((t) => (
+                <Button
+                  key={t}
+                  type="button"
+                  variant={type === t ? "default" : "outline"}
+                  size="sm"
+                  disabled={mode === "edit" && type !== t}
+                  onClick={() => switchType(t)}
+                >
+                  {t === "private" && <Lock className="h-3 w-3 mr-1" />}
+                  {TYPE_LABELS[t]}
+                </Button>
+              ))}
             </div>
             <p className="text-xs text-muted-foreground">{TYPE_DESCRIPTIONS[type]}</p>
           </div>
@@ -531,11 +559,19 @@ export function MeetingSheet({
               <Label>
                 {type === "super_planning" || type === "daily"
                   ? "Projeto"
-                  : "Projetos vinculados (opcional)"}
+                  : type === "private"
+                    ? "Projetos pra propor Tasks (opcional)"
+                    : "Projetos vinculados (opcional)"}
                 {projectsLocked && (
                   <span className="ml-2 text-xs text-muted-foreground">(travado)</span>
                 )}
               </Label>
+              {type === "private" && (
+                <p className="text-xs text-muted-foreground -mt-1">
+                  Se selecionar, Alpha pode propor Tasks nesses projetos a partir da
+                  transcrição. Você aprova depois.
+                </p>
+              )}
               <ProjectPicker
                 mode={
                   type === "super_planning" || type === "daily"
@@ -666,10 +702,14 @@ export function MeetingSheet({
               variant="outline"
               onClick={() => setImportOpen(true)}
               disabled={saving || !canSubmit()}
-              title="Cria a reunião e deixa o Alpha popular a partir de uma transcrição do Roam"
+              title={
+                type === "private"
+                  ? "Cria a reunião privada a partir da transcrição do Granola"
+                  : "Cria a reunião e deixa o Alpha popular a partir de uma transcrição do Roam"
+              }
             >
               <Download className="h-4 w-4 mr-1" />
-              Importar reunião
+              {type === "private" ? "Importar do Granola" : "Importar reunião"}
             </Button>
           )}
           <Button onClick={save} disabled={!canSubmit() || saving}>
@@ -683,7 +723,7 @@ export function MeetingSheet({
           </Button>
         </div>
         {mode === "create" && (
-          <ImportRoamMeetingModal
+          <ImportMeetingModal
             open={importOpen}
             onOpenChange={setImportOpen}
             mode="create"
@@ -691,7 +731,7 @@ export function MeetingSheet({
             pmMemberIds={Array.from(pmIds)}
             attendees={buildAttendees()}
             projectIds={
-              ["general", "daily", "super_planning"].includes(type)
+              ["general", "daily", "super_planning", "private"].includes(type)
                 ? Array.from(projectIds)
                 : []
             }

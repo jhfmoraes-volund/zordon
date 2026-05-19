@@ -108,10 +108,13 @@ export default function ProjectDetailPage({
   const searchParams = useSearchParams();
   const rawTabParam = searchParams.get("tab");
   // Legacy: `?tab=tasks` agora aponta pra Sprints → Todas. Mantém deep-links antigos vivos.
+  // Legacy: `?tab=forge` foi removido (Forge virou sandbox em /dev/forge-sandbox).
   const tabParam: TabKey | null =
     rawTabParam === "tasks"
       ? "sprints"
-      : (rawTabParam as TabKey | null);
+      : rawTabParam === "forge"
+        ? "stories"
+        : (rawTabParam as TabKey | null);
   const sprintParam = searchParams.get("sprint");
   const viewParam = searchParams.get("view");
   const taskParam = searchParams.get("task");

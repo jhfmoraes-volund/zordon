@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser, getRealRole } from "@/lib/dal";
-import { hasMinLevel, MANAGER } from "@/lib/roles";
+import { getAccessLevel, getUser } from "@/lib/dal";
+import { hasMinAccessLevel } from "@/lib/roles";
 import type { Database } from "@/lib/supabase/database.types";
 
 type SprintUpdate = Database["public"]["Tables"]["Sprint"]["Update"];
@@ -88,8 +88,8 @@ export async function DELETE(
   const user = await getUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
-  const realRole = await getRealRole();
-  if (!hasMinLevel(realRole, MANAGER)) {
+  const accessLevel = await getAccessLevel();
+  if (!hasMinAccessLevel(accessLevel, "manager")) {
     return NextResponse.json({ error: "Apenas PMs e admins podem excluir sprints." }, { status: 403 });
   }
 

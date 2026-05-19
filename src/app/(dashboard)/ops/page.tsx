@@ -103,21 +103,35 @@ export default function OpsPage() {
   useEffect(() => {
     refreshThreads();
 
-    // Kickoff de ingestão de reunião do Roam (chega via /ops?kickoff=ingest&...).
+    // Kickoff de ingestão de reunião (chega via /ops?kickoff=ingest&...).
     // Forçamos thread nova + seed prompt e o Alpha trabalha sozinho. Limpa a
     // URL pra não disparar de novo em refresh/back. Guard ref garante uma vez.
+    //
+    // Aceita o formato novo (`source` + `sourceId`) e o legado
+    // (`roamTranscriptId`) pra não quebrar bookmarks/links existentes.
     const kickoff = searchParams.get("kickoff");
     const meetingId = searchParams.get("meetingId");
-    const roamTranscriptId = searchParams.get("roamTranscriptId");
     const overwrite = searchParams.get("overwrite") === "1";
+    const sourceParam = searchParams.get("source");
+    const sourceIdParam = searchParams.get("sourceId");
+    const legacyRoamId = searchParams.get("roamTranscriptId");
+    const source: "roam" | "granola" | null =
+      sourceParam === "roam" || sourceParam === "granola"
+        ? sourceParam
+        : legacyRoamId
+          ? "roam"
+          : null;
+    const sourceId = sourceIdParam ?? legacyRoamId;
+
     if (
       kickoff === "ingest" &&
       meetingId &&
-      roamTranscriptId &&
+      source &&
+      sourceId &&
       !kickoffFiredRef.current
     ) {
       kickoffFiredRef.current = true;
-      const seed = buildIngestSeed(meetingId, roamTranscriptId, overwrite);
+      const seed = buildIngestSeed(meetingId, source, sourceId, overwrite);
       setThreadId(null);
       setForceNewThread(true);
       chat.setMessages([]);

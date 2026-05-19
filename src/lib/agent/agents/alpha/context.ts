@@ -780,6 +780,7 @@ const MEETING_TYPE_LABELS: Record<string, string> = {
   general: "Reunião geral",
   daily: "Daily",
   super_planning: "Super Planning",
+  private: "Reunião privada",
 };
 
 type MeetingRow = {
@@ -856,6 +857,8 @@ async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
       return await renderSuperPlanningMeeting(m, pendingBlock);
     case "general":
       return renderGeneralMeeting(m, pendingBlock);
+    case "private":
+      return renderPrivateMeeting(m, pendingBlock);
     case "pm_review":
     default:
       return await renderPmReviewMeeting(m, pendingBlock);
@@ -1225,6 +1228,28 @@ function renderGeneralMeeting(m: MeetingRow, pendingBlock: string): string {
     renderProjectLinks(m),
     "",
     "**Fluxo da reunião geral:** registro livre. Use `create_todo` pra ações operacionais. **Tasks NÃO são tratadas neste tipo de reunião** — não chame tools de Task (nem execução direta nem `propose_task_action`).",
+    "",
+    renderNotes(m),
+    "",
+    pendingBlock,
+  ].join("\n");
+}
+
+function renderPrivateMeeting(m: MeetingRow, pendingBlock: string): string {
+  const hasProjects = (m.projectLinks?.length ?? 0) > 0;
+  return [
+    renderMeetingHeader(m),
+    "",
+    renderProjectLinks(m),
+    "",
+    "**Fluxo da reunião privada (escopo restrito):**",
+    "- Visibilidade: SÓ o owner desta reunião (criador). NÃO compartilhe conteúdo sensível dela em outros contextos.",
+    "- `notes`: escreva um resumo/conclusões da transcrição no campo notes da Meeting (`update_meeting`/equivalente).",
+    "- `create_todo`: crie To-dos atribuídos AO OWNER (createdById da reunião). Não atribua a outros members.",
+    hasProjects
+      ? "- `propose_task_action`: PERMITIDO **somente** nos projetos vinculados acima. Cada proposta vira pendente pra owner aprovar depois. Use o sub-agente `extract_meeting_actions` se a transcrição for longa."
+      : "- `propose_task_action`: **NÃO permitido** (sem projetos vinculados). Foque em notes + To-dos do owner.",
+    "- **NÃO** chame: `update_meeting_review` (não há reviews), `create_meeting` (estamos dentro de uma), nada que mexa em sprints/tasks fora dos projetos vinculados.",
     "",
     renderNotes(m),
     "",

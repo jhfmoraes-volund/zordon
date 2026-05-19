@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RoamIntegrationCard } from "./integrations-card";
+import { RoamIntegrationCard, GranolaIntegrationCard } from "./integrations-card";
 import { TelegramCard } from "@/components/settings/telegram-card";
 
 export default function SettingsPage() {
@@ -98,6 +98,7 @@ export default function SettingsPage() {
 
       <div className="space-y-4">
         <RoamIntegrationCard />
+        <GranolaIntegrationCard />
         <TelegramCard />
         <Card>
         <CardHeader>

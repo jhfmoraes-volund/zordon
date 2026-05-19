@@ -45,6 +45,7 @@ export const MEETING_TYPE = defineRegistry({
   pm_review:      { label: "PMs",            tone: "purple" },
   general:        { label: "Geral",          tone: "slate" },
   super_planning: { label: "Super Planning", tone: "amber" },
+  private:        { label: "Privada",        tone: "pink" },
 });
 
 // ─── Project ─────────────────────────────────────────────

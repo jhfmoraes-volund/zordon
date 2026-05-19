@@ -30,6 +30,10 @@
 
 set -euo pipefail
 
+# Auto-troca de conta gh por remote (suporta múltiplas contas / repos).
+# shellcheck source=lib/gh-account-switch.sh
+source "$(dirname "$0")/lib/gh-account-switch.sh"
+
 BRANCH="${JOAO_DEV_BRANCH:-joao-dev}"
 DEFAULT_REMOTE="${JOAO_DEV_REMOTE:-origin}"
 DRY_RUN=0
@@ -138,6 +142,12 @@ if ! git remote get-url "$TARGET" >/dev/null 2>&1; then
   exit 1
 fi
 dim "▸ target: $TARGET"
+
+# Guarda a conta gh ativa pra restaurar no fim e troca pra que tem acesso ao
+# target (será usada no fetch + push).
+gh_account_save_active
+trap gh_account_restore EXIT
+gh_ensure_account_for_remote "$TARGET"
 
 # ── 5. fetch + rebase em cima do remote (se existir) ─────
 yellow "▸ fetch $TARGET/$BRANCH"

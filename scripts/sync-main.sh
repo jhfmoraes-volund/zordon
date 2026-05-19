@@ -34,6 +34,10 @@
 
 set -euo pipefail
 
+# Auto-troca de conta gh por remote (suporta múltiplas contas / repos).
+# shellcheck source=lib/gh-account-switch.sh
+source "$(dirname "$0")/lib/gh-account-switch.sh"
+
 MAIN_BRANCH="${MAIN_BRANCH:-main}"
 DRY_RUN=0
 COMMIT_MSG=""
@@ -170,6 +174,12 @@ fi
 dim "▸ targets: ${TARGETS[*]}"
 PRIMARY="${TARGETS[0]}"
 
+# Guarda a conta gh ativa pra restaurar no fim e troca pra que tem acesso ao
+# remote primário (será usada no fetch + rebase).
+gh_account_save_active
+trap gh_account_restore EXIT
+gh_ensure_account_for_remote "$PRIMARY"
+
 # ── 5. fetch + rebase em cima do primário ────────────────
 yellow "▸ fetch $PRIMARY/$MAIN_BRANCH"
 [[ $DRY_RUN -eq 0 ]] && git fetch "$PRIMARY" "$MAIN_BRANCH"
@@ -207,6 +217,7 @@ fi
 # ── 6. push pra cada target ──────────────────────────────
 declare -a FAILED
 for t in "${TARGETS[@]}"; do
+  gh_ensure_account_for_remote "$t"
   yellow "▸ push $t $MAIN_BRANCH"
   if [[ $DRY_RUN -eq 0 ]]; then
     if ! git push "$t" "$MAIN_BRANCH"; then

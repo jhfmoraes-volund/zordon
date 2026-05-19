@@ -3,11 +3,12 @@ import { getCurrentMember, getUser } from "@/lib/dal";
 import {
   getMemberIntegrationStatus,
   setMemberRoamIntegration,
+  setMemberGranolaIntegration,
   deleteMemberIntegration,
   type IntegrationProvider,
 } from "@/lib/member-integrations";
 
-const SUPPORTED: IntegrationProvider[] = ["roam"];
+const SUPPORTED: IntegrationProvider[] = ["roam", "granola"];
 
 function parseProvider(raw: string): IntegrationProvider | null {
   return (SUPPORTED as string[]).includes(raw) ? (raw as IntegrationProvider) : null;
@@ -54,6 +55,8 @@ export async function PUT(
   try {
     if (provider === "roam") {
       await setMemberRoamIntegration(member.id, token);
+    } else if (provider === "granola") {
+      await setMemberGranolaIntegration(member.id, token);
     }
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 });
