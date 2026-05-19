@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
 import { setImpersonation } from "@/app/(dashboard)/_actions/impersonation";
-import { hasMinLevel, MANAGER, ADMIN, BUILDER, roleLabel } from "@/lib/roles";
+import { hasMinLevel, ADMIN, roleLabel, hasMinAccessLevel } from "@/lib/roles";
 import { NavItemPending } from "@/components/nav-item-pending";
 import { InstallAppButton } from "@/components/install-app-button";
 
@@ -89,7 +89,8 @@ export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
   const {
     realRole,
-    effectiveRole,
+    realAccessLevel,
+    effectiveAccessLevel,
     member,
     members,
     isImpersonating,
@@ -101,13 +102,14 @@ export function AppSidebar() {
   };
 
   // Real admin: can impersonate (dropdown).
-  // Manager (incl. admins and PMs; via effective role): can see the Gestão menu
-  // e tunar agentes.
-  const canImpersonate = hasMinLevel(realRole, ADMIN);
-  const canTuneAgents = hasMinLevel(effectiveRole, MANAGER);
-  const canSeeManagement = hasMinLevel(effectiveRole, MANAGER);
+  // Manager (incl. admins and PMs; via effective access level): can see the
+  // Gestão menu e tunar agentes.
+  const canImpersonate =
+    hasMinAccessLevel(realAccessLevel, "admin") || hasMinLevel(realRole, ADMIN);
+  const canTuneAgents = hasMinAccessLevel(effectiveAccessLevel, "manager");
+  const canSeeManagement = hasMinAccessLevel(effectiveAccessLevel, "manager");
   // Guests only see project navigation. Hide personal/settings/management.
-  const isGuest = !hasMinLevel(effectiveRole, BUILDER);
+  const isGuest = !hasMinAccessLevel(effectiveAccessLevel, "builder");
 
   const handleImpersonationChange = (memberId: string | null) => {
     if (!memberId) return;

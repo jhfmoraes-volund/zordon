@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useAuth } from "@/contexts/auth-context";
-import { hasMinLevel, MANAGER } from "@/lib/roles";
+import { hasMinAccessLevel } from "@/lib/roles";
 import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
 
 /**
@@ -99,8 +99,8 @@ export function useAlphaChat(): AlphaChatValue {
 }
 
 export function AlphaChatProvider({ children }: { children: ReactNode }) {
-  const { effectiveRole } = useAuth();
-  const enabled = hasMinLevel(effectiveRole, MANAGER);
+  const { effectiveAccessLevel } = useAuth();
+  const enabled = hasMinAccessLevel(effectiveAccessLevel, "manager");
   if (!enabled) return <>{children}</>;
   return <AlphaChatProviderInner>{children}</AlphaChatProviderInner>;
 }

@@ -9,10 +9,23 @@ import {
   hasMinLevel,
   ADMIN,
   MANAGER,
+  BUILDER,
+  GUEST,
   resolveAccessLevel,
   hasMinAccessLevel,
   type AccessLevel,
 } from "./roles";
+
+const NUMERIC_TO_ACCESS_LEVEL: Record<number, AccessLevel> = {
+  [GUEST]: "guest",
+  [BUILDER]: "builder",
+  [MANAGER]: "manager",
+  [ADMIN]: "admin",
+};
+
+function numericToAccessLevel(level: number): AccessLevel {
+  return NUMERIC_TO_ACCESS_LEVEL[level] ?? "guest";
+}
 import type { Member } from "./supabase/types";
 
 const IMPERSONATION_COOKIE = "volund_impersonate";
@@ -216,8 +229,8 @@ export async function requireMinLevel(
   level: number,
   opts?: { redirectTo?: string },
 ): Promise<void> {
-  const effective = await getEffectiveRole();
-  if (!hasMinLevel(effective, level)) {
+  const effective = await getEffectiveAccessLevel();
+  if (!hasMinAccessLevel(effective, numericToAccessLevel(level))) {
     redirect(opts?.redirectTo ?? "/profile");
   }
 }
@@ -351,8 +364,8 @@ export const getAccessibleProjectIds = cache(async (): Promise<string[]> => {
  * exactly like the impersonated member.
  */
 export async function canViewProject(projectId: string): Promise<boolean> {
-  const role = await getEffectiveRole();
-  if (hasMinLevel(role, MANAGER)) return true;
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "manager")) return true;
   const ids = await getAccessibleProjectIds();
   return ids.includes(projectId);
 }
@@ -363,8 +376,8 @@ export async function canViewProject(projectId: string): Promise<boolean> {
  *   - Builder/guest: needs ProjectAccess.role IN (contributor, lead)
  */
 export async function canEditTasks(projectId: string): Promise<boolean> {
-  const role = await getEffectiveRole();
-  if (hasMinLevel(role, MANAGER)) return true;
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "manager")) return true;
   const list = await getProjectAccessList();
   const row = list.find((r) => r.projectId === projectId);
   return row?.role === "contributor" || row?.role === "lead";
@@ -376,8 +389,8 @@ export async function canEditTasks(projectId: string): Promise<boolean> {
  *   - Builder/guest: needs ProjectAccess.role IN (session_participant, contributor, lead)
  */
 export async function canEditSessions(projectId: string): Promise<boolean> {
-  const role = await getEffectiveRole();
-  if (hasMinLevel(role, MANAGER)) return true;
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "manager")) return true;
   const list = await getProjectAccessList();
   const row = list.find((r) => r.projectId === projectId);
   return (
@@ -406,8 +419,8 @@ export async function requireMinLevelApi(
 ): Promise<Response | null> {
   const user = await getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
-  const realRole = await getRealRole();
-  if (!hasMinLevel(realRole, level)) {
+  const accessLevel = await getAccessLevel();
+  if (!hasMinAccessLevel(accessLevel, numericToAccessLevel(level))) {
     return new Response("Forbidden", { status: 403 });
   }
   return null;
@@ -499,8 +512,8 @@ type MeetingVisibilityCtx = {
 export async function canViewMeeting(
   ctx: MeetingVisibilityCtx,
 ): Promise<boolean> {
-  const role = await getEffectiveRole();
-  if (hasMinLevel(role, ADMIN)) return true;
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "admin")) return true;
   const memberId = await getActorMemberId();
   if (!memberId) return false;
   if (ctx.type === "pm_review" || ctx.type === "general") {
@@ -518,8 +531,8 @@ export async function canViewMeeting(
 export async function canEditMeeting(
   createdById: string | null,
 ): Promise<boolean> {
-  const role = await getEffectiveRole();
-  if (hasMinLevel(role, ADMIN)) return true;
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "admin")) return true;
   if (!createdById) return false;
   const memberId = await getActorMemberId();
   return !!memberId && memberId === createdById;
@@ -547,8 +560,8 @@ export async function requireSessionAccessApi(
   const user = await getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const role = await getEffectiveRole();
-  if (hasMinLevel(role, MANAGER)) return null;
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "manager")) return null;
 
   const projectId = await lookupSessionProject(sessionId);
   if (!projectId) return new Response("Session not found", { status: 404 });
@@ -567,8 +580,8 @@ export async function requireSessionEditApi(
   const user = await getUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const role = await getEffectiveRole();
-  if (hasMinLevel(role, MANAGER)) return null;
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "manager")) return null;
 
   const projectId = await lookupSessionProject(sessionId);
   if (!projectId) return new Response("Session not found", { status: 404 });

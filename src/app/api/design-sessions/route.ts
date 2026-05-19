@@ -2,18 +2,20 @@ import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import {
   getAccessibleProjectIds,
-  getRealRole,
+  getAccessLevel,
+  getUser,
   requireProjectEditSessionsApi,
 } from "@/lib/dal";
-import { hasMinLevel, MANAGER } from "@/lib/roles";
+import { hasMinAccessLevel } from "@/lib/roles";
 import { validateSuperSteps } from "@/lib/design-session-steps";
 
 export async function GET() {
-  const role = await getRealRole();
-  if (!role) return new NextResponse("Unauthorized", { status: 401 });
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const supabase = db();
-  const isManager = hasMinLevel(role, MANAGER);
+  const accessLevel = await getAccessLevel();
+  const isManager = hasMinAccessLevel(accessLevel, "manager");
 
   // Builder sees only sessions from projects they're allocated to.
   // db() runs as service_role (bypasses RLS), so we filter here.
