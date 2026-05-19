@@ -26,9 +26,11 @@ export type MeetingProjectLink = Tables["MeetingProjectLink"]["Row"];
 export type ProjectSquad = Tables["ProjectSquad"]["Row"];
 export type ProjectMember = Tables["ProjectMember"]["Row"];
 export type SquadMember = Tables["SquadMember"]["Row"];
+export type CsatResponse = Tables["CsatResponse"]["Row"];
 // ─── Insert types ───
 
 export type ClientInsert = Tables["Client"]["Insert"];
+export type CsatResponseInsert = Tables["CsatResponse"]["Insert"];
 export type ProjectInsert = Tables["Project"]["Insert"];
 export type MemberInsert = Tables["Member"]["Insert"];
 export type TaskInsert = Tables["Task"]["Insert"];
@@ -39,6 +41,7 @@ export type MeetingInsert = Tables["Meeting"]["Insert"];
 // ─── Update types ───
 
 export type ClientUpdate = Tables["Client"]["Update"];
+export type CsatResponseUpdate = Tables["CsatResponse"]["Update"];
 export type ProjectUpdate = Tables["Project"]["Update"];
 export type MemberUpdate = Tables["Member"]["Update"];
 export type TaskUpdate = Tables["Task"]["Update"];

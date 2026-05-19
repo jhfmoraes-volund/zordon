@@ -610,6 +610,97 @@ export type Database = {
         }
         Relationships: []
       }
+      CsatResponse: {
+        Row: {
+          clientId: string
+          contactName: string | null
+          createdAt: string
+          csatScore: number
+          id: string
+          interviewedAt: string
+          interviewedBy: string | null
+          methodologyScore: number
+          npsScore: number
+          teamScore: number
+          updatedAt: string
+          whatsGood: string | null
+          whatsToImprove: string | null
+        }
+        Insert: {
+          clientId: string
+          contactName?: string | null
+          createdAt?: string
+          csatScore: number
+          id?: string
+          interviewedAt?: string
+          interviewedBy?: string | null
+          methodologyScore: number
+          npsScore: number
+          teamScore: number
+          updatedAt?: string
+          whatsGood?: string | null
+          whatsToImprove?: string | null
+        }
+        Update: {
+          clientId?: string
+          contactName?: string | null
+          createdAt?: string
+          csatScore?: number
+          id?: string
+          interviewedAt?: string
+          interviewedBy?: string | null
+          methodologyScore?: number
+          npsScore?: number
+          teamScore?: number
+          updatedAt?: string
+          whatsGood?: string | null
+          whatsToImprove?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "CsatResponse_clientId_fkey"
+            columns: ["clientId"]
+            isOneToOne: false
+            referencedRelation: "Client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "CsatResponse_clientId_fkey"
+            columns: ["clientId"]
+            isOneToOne: false
+            referencedRelation: "client_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "CsatResponse_interviewedBy_fkey"
+            columns: ["interviewedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "CsatResponse_interviewedBy_fkey"
+            columns: ["interviewedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "CsatResponse_interviewedBy_fkey"
+            columns: ["interviewedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "CsatResponse_interviewedBy_fkey"
+            columns: ["interviewedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignDecision: {
         Row: {
           confidence: string
@@ -2246,6 +2337,78 @@ export type Database = {
           },
         ]
       }
+      InsightJob: {
+        Row: {
+          createdAt: string
+          error: string | null
+          finishedAt: string | null
+          id: string
+          projectId: string
+          source: string
+          startedAt: string | null
+          status: string
+          triggeredByMemberId: string | null
+        }
+        Insert: {
+          createdAt?: string
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          projectId: string
+          source: string
+          startedAt?: string | null
+          status?: string
+          triggeredByMemberId?: string | null
+        }
+        Update: {
+          createdAt?: string
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          projectId?: string
+          source?: string
+          startedAt?: string | null
+          status?: string
+          triggeredByMemberId?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "InsightJob_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "InsightJob_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "InsightJob_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "InsightJob_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "InsightJob_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       Meeting: {
         Row: {
           createdAt: string
@@ -3434,6 +3597,124 @@ export type Database = {
             columns: ["projectId"]
             isOneToOne: true
             referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProjectInsight: {
+        Row: {
+          costUsdCents: number
+          createdAt: string
+          errorRelational: string | null
+          errorTechnical: string | null
+          generatedAt: string
+          generatedBy: string
+          id: string
+          inputMeetingsCount: number
+          inputSprintId: string | null
+          modelRelational: string | null
+          modelTechnical: string | null
+          projectId: string
+          relationalHealth: string | null
+          relationalSignals: Json
+          relationalSummary: string | null
+          relationalWatch: Json
+          technicalHealth: string | null
+          technicalRisks: Json
+          technicalSummary: string | null
+          technicalWatch: Json
+          triggeredByMemberId: string | null
+          updatedAt: string
+        }
+        Insert: {
+          costUsdCents?: number
+          createdAt?: string
+          errorRelational?: string | null
+          errorTechnical?: string | null
+          generatedAt?: string
+          generatedBy: string
+          id?: string
+          inputMeetingsCount?: number
+          inputSprintId?: string | null
+          modelRelational?: string | null
+          modelTechnical?: string | null
+          projectId: string
+          relationalHealth?: string | null
+          relationalSignals?: Json
+          relationalSummary?: string | null
+          relationalWatch?: Json
+          technicalHealth?: string | null
+          technicalRisks?: Json
+          technicalSummary?: string | null
+          technicalWatch?: Json
+          triggeredByMemberId?: string | null
+          updatedAt?: string
+        }
+        Update: {
+          costUsdCents?: number
+          createdAt?: string
+          errorRelational?: string | null
+          errorTechnical?: string | null
+          generatedAt?: string
+          generatedBy?: string
+          id?: string
+          inputMeetingsCount?: number
+          inputSprintId?: string | null
+          modelRelational?: string | null
+          modelTechnical?: string | null
+          projectId?: string
+          relationalHealth?: string | null
+          relationalSignals?: Json
+          relationalSummary?: string | null
+          relationalWatch?: Json
+          technicalHealth?: string | null
+          technicalRisks?: Json
+          technicalSummary?: string | null
+          technicalWatch?: Json
+          triggeredByMemberId?: string | null
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectInsight_inputSprintId_fkey"
+            columns: ["inputSprintId"]
+            isOneToOne: false
+            referencedRelation: "Sprint"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectInsight_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: true
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectInsight_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectInsight_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectInsight_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectInsight_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
         ]
@@ -5095,6 +5376,7 @@ export type Database = {
         Returns: undefined
       }
       enqueue_daily_todo_reminders: { Args: never; Returns: undefined }
+      enqueue_project_insight_jobs: { Args: never; Returns: number }
       ensure_wiki_sections: {
         Args: { p_project_id: string; p_sections: Json }
         Returns: {
@@ -5126,6 +5408,7 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_allocated_to: { Args: { p_project_id: string }; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
+      kick_project_insight_drain: { Args: never; Returns: undefined }
       next_task_reference: { Args: { p_project_id: string }; Returns: string }
       next_user_story_reference: {
         Args: { p_project_id: string }
@@ -5165,6 +5448,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      run_project_insight_batch: { Args: never; Returns: number }
       scope_item_delete: {
         Args: { p_bucket: string; p_item_id: string; p_session_id: string }
         Returns: boolean
