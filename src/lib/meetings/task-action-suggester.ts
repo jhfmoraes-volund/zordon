@@ -39,7 +39,7 @@ Valores válidos:
 - type: "feature" | "bugfix" | "refactor" | "setup" | "component" | "seed" | "management"
 - scope: "micro" | "small" | "medium" | "large"
 - complexity: "trivial" | "low" | "medium" | "high"
-- status: "draft" | "backlog" | "todo" | "in_progress" | "review" | "done"
+- status: "draft" | "backlog" | "todo" | "in_progress" | "blocked" | "review" | "done"
 - priority: 0-10 (int)
 - reviewReasons: subset de ["scope","acceptance_criteria","dependencies","estimate","assignee","other"]
 

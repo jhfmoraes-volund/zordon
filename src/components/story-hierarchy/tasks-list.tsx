@@ -101,6 +101,7 @@ const STATUS_OPTIONS: { value: TaskStatus | "__all"; label: string }[] = [
   { value: "__all",       label: "Todos status" },
   { value: "todo",        label: "To do"       },
   { value: "in_progress", label: "In progress" },
+  { value: "blocked",     label: "Blocked"     },
   { value: "review",      label: "Review"      },
   { value: "done",        label: "Done"        },
   { value: "backlog",     label: "Backlog"     },
