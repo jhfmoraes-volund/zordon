@@ -20,15 +20,16 @@ export type SortKey =
 export type SortDir = "asc" | "desc";
 
 // Display order — used as the rank for status sort. Matches the status pipeline
-// (draft → backlog → todo → in_progress → review → done), which is more useful
+// (draft → backlog → todo → in_progress → blocked → review → done), which is more useful
 // than alphabetical when sorting "by status".
 export const STATUS_RANK: Record<TaskStatus, number> = {
   draft: 0,
   backlog: 1,
   todo: 2,
   in_progress: 3,
-  review: 4,
-  done: 5,
+  blocked: 4,
+  review: 5,
+  done: 6,
 };
 
 export type SortContext = {
