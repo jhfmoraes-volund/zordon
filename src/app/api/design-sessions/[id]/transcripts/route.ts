@@ -7,7 +7,7 @@ import {
 } from "@/lib/dal";
 import { getMemberIntegrationToken } from "@/lib/member-integrations";
 import { getMeetingDetail, type MeetingSource } from "@/lib/meetings";
-import { getGranolaClient } from "@/lib/granola";
+import { buildGranolaClient } from "@/lib/granola";
 import type { Database } from "@/lib/supabase/database.types";
 
 type TranscriptRow =
@@ -62,8 +62,9 @@ export async function GET(
     return NextResponse.json({ error: "Member not found" }, { status: 403 });
   }
 
-  const [roamToken, importedRes] = await Promise.all([
+  const [roamToken, granolaToken, importedRes] = await Promise.all([
     getMemberIntegrationToken(member.id, "roam"),
+    getMemberIntegrationToken(member.id, "granola"),
     db()
       .from("DesignSessionTranscript")
       .select(
@@ -93,7 +94,7 @@ export async function GET(
 
   const [roamSlice, granolaSlice] = await Promise.all([
     loadRoamSlice(roamToken, importedSet),
-    loadGranolaSlice(importedSet),
+    loadGranolaSlice(granolaToken, importedSet),
   ]);
 
   return NextResponse.json({
@@ -142,8 +143,11 @@ async function loadRoamSlice(
   }
 }
 
-async function loadGranolaSlice(importedSet: Set<string>): Promise<SourceSlice> {
-  const client = getGranolaClient();
+async function loadGranolaSlice(
+  token: string | null,
+  importedSet: Set<string>,
+): Promise<SourceSlice> {
+  const client = buildGranolaClient(token);
   if (!client) return { needsAuth: true, available: [] };
 
   try {
@@ -214,22 +218,24 @@ export async function POST(
   }
 
   const roamToken = source === "roam" ? await getMemberIntegrationToken(member.id, "roam") : null;
+  const granolaToken =
+    source === "granola" ? await getMemberIntegrationToken(member.id, "granola") : null;
   if (source === "roam" && !roamToken) {
     return NextResponse.json(
       { error: "Conecte sua conta Roam em /settings/integrations primeiro." },
       { status: 400 },
     );
   }
-  if (source === "granola" && !getGranolaClient()) {
+  if (source === "granola" && !granolaToken) {
     return NextResponse.json(
-      { error: "Granola não está configurado neste workspace." },
+      { error: "Conecte sua conta Granola em /settings/integrations primeiro." },
       { status: 400 },
     );
   }
 
   let detail;
   try {
-    detail = await getMeetingDetail({ roamToken }, source, sourceId);
+    detail = await getMeetingDetail({ roamToken, granolaToken }, source, sourceId);
   } catch (err) {
     const msg = (err as Error).message || "";
     if (msg.includes("404")) {

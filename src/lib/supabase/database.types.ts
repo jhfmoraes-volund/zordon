@@ -2255,6 +2255,9 @@ export type Database = {
           notes: string | null
           sprintId: string | null
           title: string | null
+          transcript: string | null
+          transcriptSource: string | null
+          transcriptSourceId: string | null
           type: string
           updatedAt: string
         }
@@ -2266,6 +2269,9 @@ export type Database = {
           notes?: string | null
           sprintId?: string | null
           title?: string | null
+          transcript?: string | null
+          transcriptSource?: string | null
+          transcriptSourceId?: string | null
           type?: string
           updatedAt: string
         }
@@ -2277,6 +2283,9 @@ export type Database = {
           notes?: string | null
           sprintId?: string | null
           title?: string | null
+          transcript?: string | null
+          transcriptSource?: string | null
+          transcriptSourceId?: string | null
           type?: string
           updatedAt?: string
         }

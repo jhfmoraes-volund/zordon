@@ -494,6 +494,7 @@ type MeetingVisibilityCtx = {
   type: string;
   attendeeMemberIds: string[];
   linkedProjectPmIds: string[];
+  createdById?: string | null;
 };
 
 /**
@@ -501,7 +502,8 @@ type MeetingVisibilityCtx = {
  * its attendee memberIds, and the pmIds of any linked projects, decide
  * if the *acting* caller can see it.
  *
- *   - Admin (head-ops / ceo / cro): always.
+ *   - private: SÓ o creator. Admin NÃO vê (privada é privada).
+ *   - Admin (head-ops / ceo / cro): vê tudo exceto private.
  *   - Otherwise:
  *     - pm_review / general: acting memberId in attendeeMemberIds.
  *     - daily / super_planning: acting memberId in linkedProjectPmIds.
@@ -512,9 +514,15 @@ type MeetingVisibilityCtx = {
 export async function canViewMeeting(
   ctx: MeetingVisibilityCtx,
 ): Promise<boolean> {
+  const memberId = await getActorMemberId();
+
+  if (ctx.type === "private") {
+    // Sem admin bypass — só quem criou vê.
+    return !!memberId && !!ctx.createdById && ctx.createdById === memberId;
+  }
+
   const level = await getEffectiveAccessLevel();
   if (hasMinAccessLevel(level, "admin")) return true;
-  const memberId = await getActorMemberId();
   if (!memberId) return false;
   if (ctx.type === "pm_review" || ctx.type === "general") {
     return ctx.attendeeMemberIds.includes(memberId);

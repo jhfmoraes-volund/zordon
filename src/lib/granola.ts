@@ -175,12 +175,22 @@ export function transcriptToText(lines: GranolaTranscriptLine[]): string {
 }
 
 /**
- * Singleton accessor. Reads GRANOLA_KEY from env; returns null when the
- * workspace has not configured an API key — callers should treat that
- * the same way they treat a missing Roam token (i.e. degrade gracefully).
+ * Build a GranolaClient from an explicit token. Use this when the token
+ * is per-member (loaded from MemberIntegration via the Supabase Vault RPC).
+ */
+export function buildGranolaClient(token: string | null | undefined): GranolaClient | null {
+  const trimmed = token?.trim();
+  if (!trimmed) return null;
+  return new GranolaClient(trimmed);
+}
+
+/**
+ * Env-fallback accessor. Reads GRANOLA_KEY from env; returns null when
+ * the workspace hasn't set it. Kept for migration purposes — production
+ * callers should prefer the per-member token via `getMemberGranolaClient`.
+ *
+ * @deprecated prefer getMemberGranolaClient(memberId) for user-scoped access.
  */
 export function getGranolaClient(): GranolaClient | null {
-  const key = process.env.GRANOLA_KEY?.trim();
-  if (!key) return null;
-  return new GranolaClient(key);
+  return buildGranolaClient(process.env.GRANOLA_KEY);
 }

@@ -54,6 +54,8 @@ type Props = {
       /** Reusa uma Meeting existente; só dispara a ingestão pelo Alpha. */
       mode: "existing";
       meetingId: string;
+      /** Tipo da meeting existente — usado pra forçar Granola se 'private'. */
+      type?: MeetingType;
     }
 );
 
@@ -103,10 +105,16 @@ export function ImportMeetingModal(props: Props) {
   const router = useRouter();
   const { kickoffIngest } = useAlphaChat();
 
+  // Privada usa exclusivamente Granola — sem aba Roam.
+  const isPrivate =
+    (props.mode === "create" && props.type === "private") ||
+    (props.mode === "existing" && props.type === "private");
+
   const [data, setData] = useState<MeetingsImportResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeSource, setActiveSource] = useState<SourceKey>(() => {
+    if (isPrivate) return "granola";
     if (typeof window === "undefined") return "roam";
     const cached = window.localStorage.getItem(LAST_SOURCE_KEY);
     return cached === "granola" ? "granola" : "roam";
@@ -126,6 +134,11 @@ export function ImportMeetingModal(props: Props) {
       }
       const body = (await res.json()) as MeetingsImportResponse;
       setData(body);
+      // Privada: força Granola, ignora cache.
+      if (isPrivate) {
+        setActiveSource("granola");
+        return;
+      }
       // Auto-select the tab that actually has results, respecting the last
       // user pick — but only on first load (later loads keep the user's tab).
       const cached = window.localStorage.getItem(LAST_SOURCE_KEY) as SourceKey | null;
@@ -195,9 +208,11 @@ export function ImportMeetingModal(props: Props) {
           notes: null,
           pmMemberIds: props.type === "pm_review" ? props.pmMemberIds : [],
           attendees: props.attendees,
-          projectIds: ["general", "daily", "super_planning"].includes(props.type)
+          projectIds: ["general", "daily", "super_planning", "private"].includes(props.type)
             ? props.projectIds
             : [],
+          transcriptSource: selected.source,
+          transcriptSourceId: selected.id,
         };
         const res = await fetchOrThrow("/api/meetings", {
           method: "POST",
@@ -209,6 +224,17 @@ export function ImportMeetingModal(props: Props) {
         needsNavigate = true;
       } else {
         meetingId = props.meetingId;
+        // Modo existing: estampa o link no Meeting antes da ingestão — assim
+        // o botão "Sugerir com IA" na seção de To-dos pode reusar a transcrição
+        // sem perguntar de novo qual fonte.
+        await fetchOrThrow(`/api/meetings/${meetingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcriptSource: selected.source,
+            transcriptSourceId: selected.id,
+          }),
+        });
       }
 
       kickoffIngest({
@@ -216,6 +242,7 @@ export function ImportMeetingModal(props: Props) {
         source: selected.source,
         sourceId: selected.id,
         overwrite: props.mode === "existing",
+        meetingType: props.mode === "create" ? props.type : props.type,
       });
       onOpenChange(false);
       if (needsNavigate) router.push(`/meetings/${meetingId}`);
@@ -246,17 +273,22 @@ export function ImportMeetingModal(props: Props) {
         <div className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
           <SheetTitle className="flex items-center gap-2">
             <Mic className="h-4 w-4" />
-            Importar reunião
+            {isPrivate ? "Importar do Granola" : "Importar reunião"}
           </SheetTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Escolha a fonte e a reunião. Alpha cria/preenche o conteúdo automaticamente.
+            {isPrivate
+              ? "Reunião privada — só você verá. Alpha gera notes + To-dos a partir da transcrição."
+              : "Escolha a fonte e a reunião. Alpha cria/preenche o conteúdo automaticamente."}
           </p>
 
-          {/* Tabs */}
+          {/* Tabs (escondido pra private — só Granola) */}
           <div
             role="tablist"
             aria-label="Fontes de transcrição"
-            className="mt-4 inline-flex items-center gap-1 rounded-lg border bg-muted/40 p-1"
+            className={cn(
+              "mt-4 inline-flex items-center gap-1 rounded-lg border bg-muted/40 p-1",
+              isPrivate && "hidden",
+            )}
           >
             {(["roam", "granola"] as const).map((s) => {
               const slice = data?.sources[s];

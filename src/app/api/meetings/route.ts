@@ -69,6 +69,7 @@ export async function GET() {
       type: (m as { type: string }).type,
       attendeeMemberIds,
       linkedProjectPmIds,
+      createdById: (m as { createdById?: string | null }).createdById ?? null,
     });
     if (ok) visible.push(m);
   }
@@ -91,18 +92,41 @@ export async function POST(req: NextRequest) {
       attendees = [],
       projectIds = [],
       sprintId = null,
+      transcriptSource = null,
+      transcriptSourceId = null,
+      transcript = null,
     }: {
       date: string;
       notes?: string;
-      type?: "pm_review" | "general" | "daily" | "super_planning";
+      type?: "pm_review" | "general" | "daily" | "super_planning" | "private";
       title?: string | null;
       pmMemberIds?: string[];
       attendees?: AttendeeInput[];
       projectIds?: string[];
       sprintId?: string | null;
+      transcriptSource?: "roam" | "granola" | null;
+      transcriptSourceId?: string | null;
+      transcript?: string | null;
     } = body;
 
+    if ((transcriptSource && !transcriptSourceId) || (!transcriptSource && transcriptSourceId)) {
+      return NextResponse.json(
+        { error: "transcriptSource e transcriptSourceId devem vir juntos." },
+        { status: 400 }
+      );
+    }
+
     const supabase = db();
+
+    // Private: sem PMs, sem squad auto. Attendee = owner (resolvido abaixo).
+    // Projetos vinculados são opcionais e servem só pra escopar Tasks que o
+    // Alpha pode propor (via MeetingTaskAction).
+    if (type === "private" && pmMemberIds.length > 0) {
+      return NextResponse.json(
+        { error: "Reunião privada não aceita PMs." },
+        { status: 400 }
+      );
+    }
 
     if (type === "daily" && projectIds.length !== 1) {
       return NextResponse.json(
@@ -161,6 +185,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Private: attendee = owner (caller). UI normalmente já manda explícito,
+    // mas garantimos aqui também — uma Privada sempre tem 1 attendee, o owner.
+    if (type === "private" && resolvedAttendees.length === 0) {
+      const ownerMemberId = await getMemberId();
+      if (!ownerMemberId) {
+        return NextResponse.json(
+          { error: "Usuário sem Member vinculado — não é possível criar reunião privada." },
+          { status: 400 }
+        );
+      }
+      resolvedAttendees = [{ memberId: ownerMemberId, role: "owner" }];
+    }
+
     // Daily/super_planning: if caller didn't pass attendees, default to the
     // ProjectMember squad of the linked project(s). Defense against quick clicks
     // that skip the picker — UI normally sends the explicit list.
@@ -202,11 +239,27 @@ export async function POST(req: NextRequest) {
     // Stamp createdById so RLS pode permitir UPDATE/DELETE futuro pelo PM autor.
     // RPC roda como service_role e não tem contexto do caller; fazemos o
     // update aqui com o member do request.
+    // Junto, persiste o link Roam/Granola quando a meeting foi criada
+    // a partir do import modal — habilita re-leituras da transcrição.
     const memberId = await getMemberId();
-    if (memberId) {
+    const stamp: {
+      createdById?: string;
+      transcriptSource?: "roam" | "granola";
+      transcriptSourceId?: string;
+      transcript?: string;
+    } = {};
+    if (memberId) stamp.createdById = memberId;
+    if (transcriptSource && transcriptSourceId) {
+      stamp.transcriptSource = transcriptSource;
+      stamp.transcriptSourceId = transcriptSourceId;
+    }
+    if (transcript) {
+      stamp.transcript = transcript;
+    }
+    if (Object.keys(stamp).length > 0) {
       await supabase
         .from("Meeting")
-        .update({ createdById: memberId })
+        .update(stamp)
         .eq("id", meetingId as unknown as string);
     }
 

@@ -58,6 +58,7 @@ export function assembleAlphaTools(
   const supabase = db();
   const tools: ToolSet = {};
   const roamToken = capabilities.roamToken;
+  const granolaToken = capabilities.granolaToken;
   const activeMeetingId = opts.activeMeetingId;
   const routeProjectId = opts.routeProjectId;
   const routeSprintId = opts.routeSprintId;
@@ -65,7 +66,7 @@ export function assembleAlphaTools(
   const alphaHierarchyEnabled = opts.alphaHierarchyEnabled ?? true;
   const NO_ROAM_TOKEN =
     "Roam nao conectado. Peca ao PM para conectar em Configuracoes > Integracoes.";
-  const meetingsResolver = { roamToken };
+  const meetingsResolver = { roamToken, granolaToken };
   const SOURCE_VALUES = ["roam", "granola"] as const satisfies readonly MeetingSource[];
 
   // ─── Read tools ──────────────────────────────────────────
@@ -1299,9 +1300,9 @@ export function assembleAlphaTools(
   if (capabilities.writeTools) {
     tools.create_meeting = tool({
       description:
-        "Cria uma reunião nova (Meeting) com a estrutura adequada ao tipo: pm_review (com reviews por PM), daily, super_planning (vincula sprint ativa), general. Resolve nomes de projetos/PMs/participantes em IDs. Carrega automaticamente Todos pendentes da última reunião. NÃO use durante uma reunião ativa — só em conversa solta ou via instrução clara do PM.",
+        "Cria uma reunião nova (Meeting) com a estrutura adequada ao tipo: pm_review (com reviews por PM), daily, super_planning (vincula sprint ativa), general, private (só owner). Resolve nomes de projetos/PMs/participantes em IDs. Carrega automaticamente Todos pendentes da última reunião. NÃO use durante uma reunião ativa — só em conversa solta ou via instrução clara do PM. **Private:** prefira pelo MeetingSheet/UI (com import do Granola). Use aqui só se o user pediu explicitamente \"cria uma privada pra mim\".",
       inputSchema: z.object({
-        type: z.enum(["pm_review", "general", "daily", "super_planning"]).describe("Tipo da reunião"),
+        type: z.enum(["pm_review", "general", "daily", "super_planning", "private"]).describe("Tipo da reunião"),
         date: z.string().describe("Data e hora em ISO (YYYY-MM-DD ou YYYY-MM-DDTHH:mm). Use a data corrente do bloco '## Hoje' como referência pra interpretar 'hoje', 'amanhã', 'essa quinta'."),
         title: z.string().optional().describe("Título opcional"),
         projectNames: z.array(z.string()).optional().describe("Nomes parciais dos projetos vinculados. daily exige ≥1; super_planning exige exatamente 1; pm_review opcional (filtra PMs); general opcional"),
@@ -1727,7 +1728,7 @@ export function assembleAlphaTools(
         try {
           const result = await extractActions({
             transcript,
-            meetingType: meeting.type as "pm_review" | "general" | "daily" | "super_planning",
+            meetingType: meeting.type as "pm_review" | "general" | "daily" | "super_planning" | "private",
             projects: projects.map((p) => ({ id: p.id, name: p.name })),
             members,
             userStories,
@@ -1758,7 +1759,7 @@ export function assembleAlphaTools(
 
     tools.propose_task_action = tool({
       description:
-        "Propõe uma mudança em Task no contexto de uma reunião — NÃO executa, só registra como proposta pendente em MeetingTaskAction. O PM aprova/edita/rejeita pela UI da reunião e o sistema aplica em batch. Use SEMPRE em vez de create_task/update_task/bulk_update_tasks quando houver reunião ativa do tipo daily, super_planning ou pm_review.",
+        "Propõe uma mudança em Task no contexto de uma reunião — NÃO executa, só registra como proposta pendente em MeetingTaskAction. O PM aprova/edita/rejeita pela UI da reunião e o sistema aplica em batch. Use SEMPRE em vez de create_task/update_task/bulk_update_tasks quando houver reunião ativa do tipo daily, super_planning, pm_review ou private. **Em private:** permitido SOMENTE quando há projetos vinculados, e SOMENTE nesses projetos; sem projetos vinculados, não chame esta tool (use create_todo).",
       inputSchema: z.object({
         meetingId: z.string().uuid().optional().describe("UUID da reunião (opcional — default: reunião do contexto)"),
         type: z.enum(["create", "update", "delete", "move", "review"]).describe(

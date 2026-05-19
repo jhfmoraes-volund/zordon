@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { TaskActionWidget } from "@/components/meetings/task-action-widget";
 import { ImportMeetingModal } from "@/components/meetings/import-meeting-modal";
+import { useAlphaChat } from "@/components/alpha-chat";
+import { Sparkles } from "lucide-react";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
@@ -76,9 +78,12 @@ type Meeting = {
   id: string;
   date: string;
   notes: string | null;
-  type: "pm_review" | "general" | "daily" | "super_planning";
+  type: "pm_review" | "general" | "daily" | "super_planning" | "private";
   title: string | null;
   sprintId: string | null;
+  transcript: string | null;
+  transcriptSource: "roam" | "granola" | null;
+  transcriptSourceId: string | null;
   projectReviews: ProjectReview[];
   actionItems: ActionItem[];
   attendees: Attendee[];
@@ -93,6 +98,7 @@ const typeLongLabels: Record<string, string> = {
   general: "Reunião geral",
   daily: "Daily",
   super_planning: "Super Planning",
+  private: "Reunião privada",
 };
 
 const actionIcons: Record<string, typeof Circle> = {
@@ -121,6 +127,7 @@ export default function MeetingDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { kickoffSuggestTodos, isLoading: alphaBusy } = useAlphaChat();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loadError, setLoadError] = useState<"forbidden" | "notfound" | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -341,7 +348,9 @@ export default function MeetingDetailPage({
         ? "Daily"
         : meeting.type === "super_planning"
           ? "Super Planning"
-          : "Reunião geral";
+          : meeting.type === "private"
+            ? "Reunião privada"
+            : "Reunião geral";
   const headerTitle = meeting.title || derivedHeaderTitle;
 
   // "Conteúdo" = qualquer dado que o Alpha possa sobrescrever ao ingerir.
@@ -395,7 +404,7 @@ export default function MeetingDetailPage({
               dot
             />
           </div>
-          {meeting.type === "general" && (
+          {(meeting.type === "general" || meeting.type === "private") && (
             <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
           )}
         </div>
@@ -404,10 +413,14 @@ export default function MeetingDetailPage({
           size="sm"
           onClick={handleImportClick}
           className="shrink-0"
-          title="Ingerir uma transcrição do Roam nesta reunião"
+          title={
+            meeting.type === "private"
+              ? "Ingerir transcrição do Granola nesta reunião privada"
+              : "Ingerir uma transcrição do Roam ou Granola nesta reunião"
+          }
         >
           <Download className="h-4 w-4 mr-1" />
-          Importar reunião
+          {meeting.type === "private" ? "Importar do Granola" : "Importar reunião"}
         </Button>
       </div>
 
@@ -456,6 +469,29 @@ export default function MeetingDetailPage({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Private: só projetos vinculados (escopo do Plano de Tasks). Sem
+          participantes — owner é implícito. */}
+      {meeting.type === "private" && meeting.projectLinks.length > 0 && (
+        <div className="surface p-4">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            Projetos vinculados
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {meeting.projectLinks.map((l) =>
+              l.project ? (
+                <Link
+                  key={l.projectId}
+                  href={`/projects/${l.project.id}`}
+                  className="px-2 py-0.5 rounded-md bg-muted hover:bg-accent text-xs"
+                >
+                  {l.project.name}
+                </Link>
+              ) : null,
+            )}
+          </div>
         </div>
       )}
 
@@ -519,11 +555,19 @@ export default function MeetingDetailPage({
         </div>
       )}
 
-      {/* Task Action widgets — 1 por projeto vinculado em daily/super_planning */}
-      {(meeting.type === "daily" || meeting.type === "super_planning") &&
+      {/* Task Action widgets — 1 por projeto vinculado em daily/super_planning/private */}
+      {(meeting.type === "daily" ||
+        meeting.type === "super_planning" ||
+        meeting.type === "private") &&
         meeting.projectLinks.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">Plano de Tasks</h2>
+            {meeting.type === "private" && (
+              <p className="text-xs text-muted-foreground -mt-2">
+                Alpha propõe Tasks aqui a partir da transcrição. Aprove ou rejeite
+                cada uma — só você vê esse plano.
+              </p>
+            )}
             {meeting.projectLinks.map((l) =>
               l.project ? (
                 <TaskActionWidget
@@ -538,12 +582,32 @@ export default function MeetingDetailPage({
 
       {/* Action Items */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">To-dos</h2>
-          <Button size="sm" variant="outline" onClick={openCreateTodo}>
-            <Plus className="mr-1 h-4 w-4" />
-            Nova To-do
-          </Button>
+          <div className="flex items-center gap-2">
+            {meeting.transcriptSource && meeting.transcriptSourceId && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={alphaBusy}
+                onClick={() =>
+                  kickoffSuggestTodos({
+                    meetingId: meeting.id,
+                    source: meeting.transcriptSource!,
+                    sourceId: meeting.transcriptSourceId!,
+                  })
+                }
+                title={`Alpha lê a transcrição ${meeting.transcriptSource === "roam" ? "Roam" : "Granola"} desta reunião e sugere To-dos`}
+              >
+                <Sparkles className="mr-1 h-4 w-4" />
+                Sugerir com IA
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={openCreateTodo}>
+              <Plus className="mr-1 h-4 w-4" />
+              Nova To-do
+            </Button>
+          </div>
         </div>
 
         <div className="surface divide-y">
@@ -647,6 +711,23 @@ export default function MeetingDetailPage({
         />
       </div>
 
+      {/* Transcript bruto (read-only, collapsible) — exibido quando existe. */}
+      {meeting.transcript && (
+        <details className="space-y-2">
+          <summary className="cursor-pointer text-sm font-semibold text-muted-foreground hover:text-foreground select-none">
+            Transcript bruto
+            {meeting.transcriptSource && (
+              <span className="ml-2 text-xs font-normal">
+                ({meeting.transcriptSource === "granola" ? "Granola" : "Roam"})
+              </span>
+            )}
+          </summary>
+          <div className="surface p-4 mt-2 whitespace-pre-wrap text-xs text-muted-foreground max-h-96 overflow-y-auto">
+            {meeting.transcript}
+          </div>
+        </details>
+      )}
+
       <TodoSheet
         todo={editingTodo}
         open={todoSheetOpen}
@@ -677,6 +758,7 @@ export default function MeetingDetailPage({
         onOpenChange={setImportOpen}
         mode="existing"
         meetingId={meeting.id}
+        type={meeting.type}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />

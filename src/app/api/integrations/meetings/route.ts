@@ -8,7 +8,7 @@ import {
 } from "@/lib/roam";
 import {
   GranolaClient,
-  getGranolaClient,
+  buildGranolaClient,
   type GranolaNoteListItem,
   type GranolaNoteDetail,
 } from "@/lib/granola";
@@ -60,14 +60,14 @@ export async function GET() {
     return NextResponse.json({ error: "Member not found" }, { status: 403 });
   }
 
-  const [roamToken, granolaClient] = await Promise.all([
+  const [roamToken, granolaToken] = await Promise.all([
     getMemberIntegrationToken(member.id, "roam"),
-    Promise.resolve(getGranolaClient()),
+    getMemberIntegrationToken(member.id, "granola"),
   ]);
 
   const [roam, granola] = await Promise.all([
     loadRoam(roamToken),
-    loadGranola(granolaClient),
+    loadGranola(buildGranolaClient(granolaToken)),
   ]);
 
   return NextResponse.json({ sources: { roam, granola } } satisfies MeetingsImportResponse);

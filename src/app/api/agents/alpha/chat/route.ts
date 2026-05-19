@@ -173,13 +173,18 @@ export async function POST(req: NextRequest) {
   }
   await db().from("ChatThread").update(updates).eq("id", threadId);
 
-  // Build capabilities — load per-PM Roam token (null if not connected).
-  const roamToken = member
-    ? await getMemberIntegrationToken(member.id, "roam")
-    : null;
+  // Build capabilities — load per-PM transcript-provider tokens.
+  // Each token is null when the member hasn't connected that provider.
+  const [roamToken, granolaToken] = member
+    ? await Promise.all([
+        getMemberIntegrationToken(member.id, "roam"),
+        getMemberIntegrationToken(member.id, "granola"),
+      ])
+    : [null, null];
   const capabilities: Capabilities = {
     ...ALPHA_CAPABILITIES,
     ...(roamToken ? { roamToken } : {}),
+    ...(granolaToken ? { granolaToken } : {}),
   };
   // TODO: load user's Composio connected accounts and add to capabilities.composio
 

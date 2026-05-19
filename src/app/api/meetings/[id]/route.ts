@@ -102,6 +102,7 @@ export async function GET(
   // db() bypasses RLS — apply meeting visibility rule here.
   const m = meeting as {
     type: string;
+    createdById?: string | null;
     attendees?: { memberId: string | null }[];
     projectLinks?: { projectId: string }[];
   };
@@ -123,6 +124,7 @@ export async function GET(
     type: m.type,
     attendeeMemberIds,
     linkedProjectPmIds,
+    createdById: m.createdById ?? null,
   });
   if (!visible) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -169,9 +171,12 @@ type PutBody = {
   date?: string;
   title?: string | null;
   notes?: string | null;
+  transcript?: string | null;
   pmMemberIds?: string[];
   attendees?: AttendeeInput[];
   projectIds?: string[];
+  transcriptSource?: "roam" | "granola" | null;
+  transcriptSourceId?: string | null;
 };
 
 export async function PUT(
@@ -192,13 +197,34 @@ export async function PUT(
     .eq("id", id)
     .maybeSingle();
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const type = existing.type as "pm_review" | "general" | "daily" | "super_planning";
+  const type = existing.type as "pm_review" | "general" | "daily" | "super_planning" | "private";
 
   // 1. Patch nos campos simples do Meeting
-  const patch: { notes?: string | null; title?: string | null; date?: string } = {};
+  const patch: {
+    notes?: string | null;
+    title?: string | null;
+    date?: string;
+    transcript?: string | null;
+    transcriptSource?: "roam" | "granola" | null;
+    transcriptSourceId?: string | null;
+  } = {};
   if (body.notes !== undefined) patch.notes = body.notes;
   if (body.title !== undefined) patch.title = body.title;
+  if (body.transcript !== undefined) patch.transcript = body.transcript;
   if (body.date !== undefined) patch.date = new Date(body.date).toISOString();
+
+  if (body.transcriptSource !== undefined || body.transcriptSourceId !== undefined) {
+    const src = body.transcriptSource ?? null;
+    const sid = body.transcriptSourceId ?? null;
+    if ((src && !sid) || (!src && sid)) {
+      return NextResponse.json(
+        { error: "transcriptSource e transcriptSourceId devem vir juntos." },
+        { status: 400 },
+      );
+    }
+    patch.transcriptSource = src;
+    patch.transcriptSourceId = sid;
+  }
 
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from("Meeting").update(patch).eq("id", id);
@@ -315,8 +341,9 @@ export async function PUT(
     }
   }
 
-  // 3. Attendees (reset) — general/daily/super_planning
-  if (body.attendees !== undefined && type !== "pm_review") {
+  // 3. Attendees (reset) — general/daily/super_planning.
+  // Private: attendee = owner sempre. Ignoramos qualquer attendees vindos no body.
+  if (body.attendees !== undefined && type !== "pm_review" && type !== "private") {
     await supabase.from("MeetingAttendee").delete().eq("meetingId", id);
     if (body.attendees.length > 0) {
       await supabase.from("MeetingAttendee").insert(

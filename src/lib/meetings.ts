@@ -8,7 +8,7 @@ import {
 } from "./roam";
 import {
   GranolaClient,
-  getGranolaClient,
+  buildGranolaClient,
   transcriptToText,
   type GranolaNoteListItem,
   type GranolaNoteDetail,
@@ -90,6 +90,8 @@ export interface SourceAvailability {
 export interface MeetingsResolver {
   /** Roam token for the current member (null when not connected). */
   roamToken?: string | null;
+  /** Granola token for the current member (null when not connected). */
+  granolaToken?: string | null;
 }
 
 /**
@@ -103,7 +105,7 @@ function clientFor(
   if (source === "roam") {
     return resolver.roamToken ? new RoamClient(resolver.roamToken) : null;
   }
-  return getGranolaClient();
+  return buildGranolaClient(resolver.granolaToken);
 }
 
 export function getSourceAvailability(resolver: MeetingsResolver): SourceAvailability {
@@ -111,7 +113,7 @@ export function getSourceAvailability(resolver: MeetingsResolver): SourceAvailab
     roam: resolver.roamToken
       ? { available: true }
       : { available: false, reason: "no_token" },
-    granola: process.env.GRANOLA_KEY?.trim()
+    granola: resolver.granolaToken
       ? { available: true }
       : { available: false, reason: "no_env_key" },
   };
