@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireSessionEditApi } from "@/lib/dal";
 
 /**
- * DELETE /api/design-sessions/[id]/roam-transcripts/[transcriptId]
+ * DELETE /api/design-sessions/[id]/transcripts/[transcriptId]
  *
  * Removes an imported transcript from the session. Defense-in-depth:
  * the WHERE clause pins both the row id AND the sessionId so a stale

@@ -10,7 +10,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast, fetchOrThrow } from "@/lib/optimistic/toast";
 import { Plus, X, Download } from "lucide-react";
-import { ImportRoamMeetingModal } from "./import-roam-meeting-modal";
+import { ImportMeetingModal } from "./import-meeting-modal";
 import { ProjectPicker } from "@/components/projects/project-picker";
 
 type Member = { id: string; name: string; role: string };
@@ -683,7 +683,7 @@ export function MeetingSheet({
           </Button>
         </div>
         {mode === "create" && (
-          <ImportRoamMeetingModal
+          <ImportMeetingModal
             open={importOpen}
             onOpenChange={setImportOpen}
             mode="create"

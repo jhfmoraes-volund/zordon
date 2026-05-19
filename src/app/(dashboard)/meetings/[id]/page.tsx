@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink, Download,
 } from "lucide-react";
 import { TaskActionWidget } from "@/components/meetings/task-action-widget";
-import { ImportRoamMeetingModal } from "@/components/meetings/import-roam-meeting-modal";
+import { ImportMeetingModal } from "@/components/meetings/import-meeting-modal";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
@@ -672,7 +672,7 @@ export default function MeetingDetailPage({
         }
       />
 
-      <ImportRoamMeetingModal
+      <ImportMeetingModal
         open={importOpen}
         onOpenChange={setImportOpen}
         mode="existing"
