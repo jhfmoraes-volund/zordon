@@ -13,6 +13,7 @@ import { PixelBar, PixelDot, PixelHud, pixelTone } from "@/components/ui/pixel-b
 import { roleLabel } from "@/lib/roles";
 import { bucketSprintsByWeek } from "@/lib/weekBuckets";
 import type { Seniority } from "@/lib/capacity";
+import { useAuth } from "@/contexts/auth-context";
 
 type Member = {
   id: string;
@@ -50,9 +51,15 @@ type PayloadShape = {
 
 export default function MemberCapacityPage() {
   const { id } = useParams<{ id: string }>();
+  const { realAccessLevel, member: currentMember } = useAuth();
   const [data, setData] = useState<PayloadShape | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingProject, setSavingProject] = useState<string | null>(null);
+
+  // Capacity só edita: admin (Head of Ops/CEO) OU o próprio dono do Member.
+  // Bate com a policy do PUT /api/members/[id]. Manager+ vê tudo mas é read-only.
+  const canEditCapacity =
+    realAccessLevel === "admin" || (currentMember?.id != null && currentMember.id === id);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -257,6 +264,7 @@ export default function MemberCapacityPage() {
           initialCapacity={member.fpCapacity}
           initialSeniority={member.seniority}
           initialDedication={member.dedicationPercent ?? 100}
+          canEdit={canEditCapacity}
           onSaved={load}
         />
       </div>

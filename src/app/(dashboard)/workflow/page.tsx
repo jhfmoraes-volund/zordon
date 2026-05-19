@@ -1,107 +1,96 @@
-"use client";
+import Link from "next/link";
+import { ChevronRight, Presentation, BookOpen } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
+import { decks } from "@/content/decks/registry";
 
-import { useState, useEffect } from "react";
-import {
-  ArrowRight, Lightbulb, Sparkles, FileText, Zap, Gauge,
-  Users, Bot, AlertTriangle, BookOpen, Calculator,
-} from "lucide-react";
-import { workflowSections } from "@/lib/workflow-content";
-import { ContentBlockRenderer } from "@/components/workflow/content-block";
+const KIND_ICON = {
+  deck: Presentation,
+  guide: BookOpen,
+} as const;
 
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  ArrowRight, Lightbulb, Sparkles, FileText, Zap, Gauge,
-  Users, Bot, AlertTriangle, BookOpen, Calculator,
-};
+const KIND_LABEL = {
+  deck: "Deck",
+  guide: "Guia",
+} as const;
 
-export default function WorkflowPage() {
-  const [activeSection, setActiveSection] = useState(workflowSections[0]?.id || "");
+const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
 
-  // Scroll spy
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id);
-          }
-        }
-      },
-      { rootMargin: "-20% 0px -70% 0px" }
-    );
-
-    for (const section of workflowSections) {
-      const el = document.getElementById(section.id);
-      if (el) observer.observe(el);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+export default function WorkflowLibraryPage() {
+  const sorted = [...decks].sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt),
+  );
 
   return (
-    <div className="flex gap-8">
-      {/* Sidebar nav */}
-      <nav className="hidden lg:block w-52 shrink-0 sticky top-6 self-start">
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-[0.15em] mb-3">
-          Workflow
+    <div className="space-y-6">
+      <PageHeader
+        title="Workflow"
+        description="Biblioteca de conteúdos Volund — playbooks, decks e guias do nosso jeito de operar."
+      />
+
+      {sorted.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Nenhum conteúdo publicado ainda.
         </p>
-        <div className="space-y-0.5">
-          {workflowSections.map((section) => {
-            const isActive = activeSection === section.id;
-            return (
-              <button
-                key={section.id}
-                onClick={() => scrollTo(section.id)}
-                className={`flex items-center gap-2 w-full rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors ${
-                  isActive
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                }`}
-              >
-                {(() => {
-                  const Icon = iconMap[section.icon];
-                  return Icon ? <Icon className="h-3.5 w-3.5 shrink-0" /> : null;
-                })()}
-                <span className="truncate">{section.title}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      )}
 
-      {/* Content */}
-      <div className="flex-1 min-w-0 space-y-12 pb-24">
-        {/* Page header */}
-        <div>
-          <h1 className="text-2xl font-bold">Workflow Volund</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Guia operacional da esteira de desenvolvimento agentico.
-          </p>
-        </div>
-
-        {/* Sections */}
-        {workflowSections.map((section) => {
-          const Icon = iconMap[section.icon];
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {sorted.map((deck) => {
+          const KindIcon = KIND_ICON[deck.kind];
           return (
-            <section key={section.id} id={section.id} className="scroll-mt-6">
-              {/* Section header */}
-              <div className="flex items-center gap-2.5 mb-1">
-                {Icon && <Icon className="h-5 w-5 text-primary" />}
-                <h2 className="text-lg font-semibold">{section.title}</h2>
-              </div>
-              <p className="text-sm text-muted-foreground mb-5">{section.summary}</p>
+            <Link
+              key={deck.slug}
+              href={`/workflow/${deck.slug}`}
+              className="group block"
+            >
+              <Card className="h-full transition-colors group-hover:border-primary/50">
+                <CardContent className="p-4 space-y-3 h-full flex flex-col">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1.5 min-w-0">
+                      <div className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                        <span className="h-1 w-1 rounded-full bg-primary" />
+                        {deck.eyebrow}
+                      </div>
+                      <h3 className="text-lg font-semibold tracking-tight">
+                        {deck.title}
+                      </h3>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                  </div>
 
-              {/* Content blocks */}
-              <div className="space-y-4">
-                {section.content.map((block, i) => (
-                  <ContentBlockRenderer key={i} block={block} />
-                ))}
-              </div>
-            </section>
+                  <p className="text-sm text-muted-foreground line-clamp-3 flex-1">
+                    {deck.description}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {deck.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-md bg-muted/40 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-border/60 pt-2 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <KindIcon className="h-3.5 w-3.5" />
+                      <span className="font-mono uppercase tracking-[0.18em]">
+                        {KIND_LABEL[deck.kind]} · {deck.slideCount} slides
+                      </span>
+                    </span>
+                    <span className="font-mono">
+                      {dateFormatter.format(new Date(deck.updatedAt))}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           );
         })}
       </div>

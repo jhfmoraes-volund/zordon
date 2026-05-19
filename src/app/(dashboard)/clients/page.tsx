@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -126,7 +127,14 @@ export default function ClientsPage() {
           <TableBody>
             {clients.map((c) => (
               <TableRow key={c.id}>
-                <TableCell className="font-medium">{c.name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    href={`/clients/${c.id}`}
+                    className="hover:underline"
+                  >
+                    {c.name}
+                  </Link>
+                </TableCell>
                 <TableCell>{c.email || "—"}</TableCell>
                 <TableCell>{c.phone || "—"}</TableCell>
                 <TableCell>{c.Project?.[0]?.count ?? 0}</TableCell>

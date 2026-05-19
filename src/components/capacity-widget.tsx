@@ -21,12 +21,18 @@ type Props = {
   initialCapacity: number;
   initialSeniority: Seniority | null;
   initialDedication: number;
+  /**
+   * Quando false, o widget vira read-only: inputs disabled, botões escondidos
+   * e banner avisando que só Head of Ops pode editar. Default true para preservar
+   * comportamento legacy quando a página ainda não passou a prop.
+   */
+  canEdit?: boolean;
   onSaved: (next: {
     fpCapacity: number;
     seniority: Seniority | null;
     dedicationPercent: number;
   }) => void;
-};
+}
 
 export function CapacityWidget({
   memberId,
@@ -35,6 +41,7 @@ export function CapacityWidget({
   initialCapacity,
   initialSeniority,
   initialDedication,
+  canEdit = true,
   onSaved,
 }: Props) {
   const [seniority, setSeniority] = useState<Seniority | null>(initialSeniority);
@@ -85,6 +92,9 @@ export function CapacityWidget({
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
+        if (res.status === 403) {
+          throw new Error("Sem permissão para editar capacity. Peça ao Head of Ops para alterar.");
+        }
         throw new Error(d.error ?? `Erro ${res.status}`);
       }
       onSaved({ fpCapacity: capacity, seniority, dedicationPercent: dedication });
@@ -128,6 +138,12 @@ export function CapacityWidget({
         </p>
       )}
 
+      {!canEdit && (
+        <p className="text-xs text-muted-foreground border border-dashed border-foreground/10 rounded-md px-3 py-2">
+          Você pode visualizar a capacity deste membro, mas não editá-la. Peça ao <strong>Head of Ops</strong> para alterar.
+        </p>
+      )}
+
       {/* Senioridade */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -144,7 +160,8 @@ export function CapacityWidget({
                 key={s}
                 type="button"
                 onClick={() => setSeniority(s)}
-                className={`h-8 rounded-md text-xs font-medium transition-colors ${
+                disabled={!canEdit}
+                className={`h-8 rounded-md text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   active
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -172,6 +189,7 @@ export function CapacityWidget({
           min={0}
           max={100}
           step={5}
+          disabled={!canEdit}
         />
         <div className="flex justify-between text-[10px] text-muted-foreground/70 font-mono tabular-nums">
           <span>0%</span>
@@ -219,6 +237,7 @@ export function CapacityWidget({
             max={2000}
             value={capacity}
             onChange={(e) => setCapacity(Math.max(0, Number(e.target.value) || 0))}
+            disabled={!canEdit}
             className="font-mono tabular-nums w-24"
           />
           <span className="text-xs text-muted-foreground">FP/sprint</span>
@@ -227,7 +246,7 @@ export function CapacityWidget({
             variant="outline"
             size="sm"
             onClick={applySuggestion}
-            disabled={matchesSuggestion}
+            disabled={matchesSuggestion || !canEdit}
             className="ml-auto"
           >
             <Wand2 className="h-3.5 w-3.5 mr-1.5" />
@@ -241,29 +260,31 @@ export function CapacityWidget({
       )}
 
       {/* Footer */}
-      <div className="flex justify-end gap-2 pt-1">
-        {dirty && (
+      {canEdit && (
+        <div className="flex justify-end gap-2 pt-1">
+          {dirty && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={reset}
+              disabled={saving}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Reverter
+            </Button>
+          )}
           <Button
             type="button"
-            variant="ghost"
             size="sm"
-            onClick={reset}
-            disabled={saving}
+            onClick={save}
+            disabled={!dirty || saving}
           >
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-            Reverter
+            <Save className="h-3.5 w-3.5 mr-1.5" />
+            {saving ? "Salvando…" : "Salvar"}
           </Button>
-        )}
-        <Button
-          type="button"
-          size="sm"
-          onClick={save}
-          disabled={!dirty || saving}
-        >
-          <Save className="h-3.5 w-3.5 mr-1.5" />
-          {saving ? "Salvando…" : "Salvar"}
-        </Button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
