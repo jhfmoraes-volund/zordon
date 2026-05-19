@@ -37,6 +37,7 @@ export const TASK_STATUS_MAP: Record<
   backlog:     { label: "Backlog",     tone: "muted"  },
   todo:        { label: "To do",       tone: "blue"   },
   in_progress: { label: "In progress", tone: "amber"  },
+  blocked:     { label: "Blocked",     tone: "red"    },
   review:      { label: "Review",      tone: "purple" },
   done:        { label: "Done",        tone: "green"  },
 };
