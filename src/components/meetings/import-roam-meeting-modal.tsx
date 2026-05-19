@@ -136,7 +136,8 @@ export function ImportRoamMeetingModal(props: Props) {
 
       kickoffIngest({
         meetingId,
-        roamTranscriptId: transcript.id,
+        source: "roam",
+        sourceId: transcript.id,
         overwrite: props.mode === "existing",
       });
       onOpenChange(false);

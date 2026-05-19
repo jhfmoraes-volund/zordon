@@ -34,13 +34,14 @@ type AlphaChatValue = {
   status: "idle" | "submitted" | "streaming" | "error" | "ready";
   sendMessage: (text: string) => void;
   /**
-   * Abre o sheet e dispara uma ingestão de transcrição Roam em thread nova,
-   * com `meetingId` no body (Alpha recebe no `loadContext.params.meetingId`).
-   * Usado pelos botões "Importar reunião" — não é fluxo de chat livre.
+   * Abre o sheet e dispara a ingestão de uma transcrição externa (Roam ou
+   * Granola) em thread nova, com `meetingId` no body (Alpha recebe no
+   * `loadContext.params.meetingId`). Usado pelos botões "Importar reunião".
    */
   kickoffIngest: (args: {
     meetingId: string;
-    roamTranscriptId: string;
+    source: "roam" | "granola";
+    sourceId: string;
     overwrite: boolean;
   }) => void;
   /** Current thread ID. null = fresh conversation (next send creates a new one). */
@@ -200,11 +201,13 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
   const kickoffIngest = useCallback(
     ({
       meetingId,
-      roamTranscriptId,
+      source,
+      sourceId,
       overwrite,
     }: {
       meetingId: string;
-      roamTranscriptId: string;
+      source: "roam" | "granola";
+      sourceId: string;
       overwrite: boolean;
     }) => {
       if (isLoading) return;
@@ -215,7 +218,7 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
       lastOpenedAtRef.current = Date.now();
       setThreadId(null);
       chat.setMessages([]);
-      const seed = buildIngestSeed(meetingId, roamTranscriptId, overwrite);
+      const seed = buildIngestSeed(meetingId, source, sourceId, overwrite);
       chat.sendMessage(
         { text: seed },
         {

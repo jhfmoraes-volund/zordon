@@ -124,6 +124,30 @@ export default async function DevSandboxPage() {
             </Button>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Flame className="size-4 text-primary" />
+              Forge (HUD de agentes)
+            </CardTitle>
+            <CardDescription>
+              Storyline mockada ARCHITECT/SCOUT/WRITER/TESTER pra explorar a UI
+              da forja. Não toca o banco; substitui o mock por realtime quando
+              chegar a Fase 11.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              size="lg"
+              variant="outline"
+              render={<Link href="/dev/forge-sandbox" />}
+            >
+              <Flame />
+              Abrir sandbox
+            </Button>
+          </CardContent>
+        </Card>
       </section>
 
     </div>
