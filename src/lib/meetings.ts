@@ -135,9 +135,9 @@ function normalizeGranolaItem(n: GranolaNoteListItem): Meeting {
     source: "granola",
     id: n.id,
     title: n.title || "Sem título",
-    start: n.createdAt,
-    participants: (n.participants ?? []).map((p) => ({ name: p.name, email: p.email })),
-    summary: n.summary,
+    start: n.created_at,
+    // The list endpoint does not return participants. Fetch the detail to populate.
+    participants: [],
   };
 }
 
@@ -167,18 +167,37 @@ function normalizeRoamDetail(d: RoamTranscriptDetail): MeetingDetail {
 
 function normalizeGranolaDetail(d: GranolaNoteDetail): MeetingDetail {
   const lines = d.transcript ?? [];
+  const start = d.calendar_event?.scheduled_start_time ?? d.created_at;
+  const end = d.calendar_event?.scheduled_end_time;
+  const durationMinutes = end
+    ? Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
+    : undefined;
+  const recordingStart = lines[0]?.start_time ? new Date(lines[0].start_time).getTime() : null;
+
+  // Attendees is the richest source (name + email); fall back to invitees (email-only).
+  const participants: MeetingParticipant[] =
+    d.attendees?.map((a) => ({ name: a.name ?? a.email ?? "", email: a.email })) ??
+    d.calendar_event?.invitees?.map((i) => ({ name: i.name ?? i.email, email: i.email })) ??
+    [];
+
   return {
     source: "granola",
     id: d.id,
-    title: d.title || "Sem título",
-    start: d.createdAt,
-    participants: (d.participants ?? []).map((p) => ({ name: p.name, email: p.email })),
-    summary: d.summary,
+    title: d.title || d.calendar_event?.event_title || "Sem título",
+    start,
+    end,
+    participants,
+    summary: d.summary_text,
+    durationMinutes,
     transcript: lines.map((l) => ({
       speaker:
         l.speaker?.name ??
         (l.speaker?.source === "microphone" ? "Host" : "Guest"),
       text: l.text,
+      startOffset:
+        l.start_time && recordingStart != null
+          ? Math.max(0, (new Date(l.start_time).getTime() - recordingStart) / 1000)
+          : undefined,
     })),
     transcriptText: transcriptToText(lines),
     actionItems: [],
@@ -227,11 +246,12 @@ export async function listMeetings(
           });
           return items.map(normalizeRoamItem);
         }
+        // Granola's list endpoint omits participants, so participantFilter
+        // is intentionally not forwarded — applying it would drop everything.
         const items = await (client as GranolaClient).listNotesInRange({
           since: opts.since,
           until: opts.until,
           max: opts.max,
-          participantFilter,
         });
         return items.map(normalizeGranolaItem);
       } catch (err) {

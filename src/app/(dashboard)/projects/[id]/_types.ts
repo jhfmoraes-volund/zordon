@@ -1,7 +1,6 @@
 import type { TaskTag } from "@/components/story-hierarchy";
 
 export type TabKey =
-  | "forge"
   | "stories"
   | "sprints"
   | "sessions"

@@ -45,13 +45,18 @@ export async function GET(
     db()
       .from("DesignSessionTranscript")
       .select(
-        "id, roamTranscriptId, meetingTitle, meetingStart, meetingEnd, participants, summary, actionItems, importedAt, importedByMemberId",
+        "id, source, sourceId, meetingTitle, meetingStart, meetingEnd, participants, summary, actionItems, importedAt, importedByMemberId",
       )
       .eq("sessionId", sessionId)
+      .eq("source", "roam")
       .order("meetingStart", { ascending: false }),
   ]);
 
-  const imported = importedRes.data ?? [];
+  // Reshape to the legacy {roamTranscriptId} contract so the old modal keeps working.
+  const imported = (importedRes.data ?? []).map((r) => ({
+    ...r,
+    roamTranscriptId: r.sourceId,
+  }));
 
   if (!client) {
     return NextResponse.json({
@@ -63,7 +68,7 @@ export async function GET(
 
   try {
     const available = await client.listTranscriptsInRange({ max: 30 });
-    const importedRoamIds = new Set(imported.map((t) => t.roamTranscriptId));
+    const importedRoamIds = new Set(imported.map((t) => t.sourceId));
     return NextResponse.json({
       needsAuth: false,
       available: available.map((t) => ({
@@ -161,7 +166,8 @@ export async function POST(
   const insertRow: TranscriptInsert = {
     sessionId,
     projectId: session.projectId,
-    roamTranscriptId,
+    source: "roam",
+    sourceId: roamTranscriptId,
     meetingTitle,
     meetingStart: detail.start,
     meetingEnd: detail.end,

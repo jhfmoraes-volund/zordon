@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Sparkles, Tag } from "lucide-react";
+import { BookOpen, Flame, Sparkles, Tag } from "lucide-react";
 import {
   Card,
   CardContent,

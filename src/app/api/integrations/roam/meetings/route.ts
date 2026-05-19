@@ -4,11 +4,10 @@ import { MANAGER } from "@/lib/roles";
 import { getMemberRoamClient } from "@/lib/member-integrations";
 
 /**
- * GET /api/integrations/roam/meetings
+ * GET /api/integrations/roam/meetings — LEGACY
  *
- * Lists the caller's last 30 Roam transcripts — workspace-wide (não escopado
- * a DesignSession). Usado pelo "Importar reunião" no MeetingSheet pra deixar
- * o user escolher uma transcrição que o Alpha vai ingerir numa Meeting nova.
+ * Kept until the import sheet rolls out everywhere; the new code path is
+ * `/api/integrations/meetings`. Once cached bundles drain, delete this file.
  */
 export async function GET() {
   const denied = await requireMinLevelApi(MANAGER);

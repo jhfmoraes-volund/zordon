@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   BookOpen,
   FileText,
-  Flame,
   Lightbulb,
   Pencil,
   Settings as SettingsIcon,
@@ -83,10 +82,8 @@ import { useTasksAndSprints } from "./_hooks/use-tasks-and-sprints";
 import { useProjectMembers } from "./_hooks/use-project-members";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
-import { ProjectForgePanel } from "@/components/forge/project-forge-panel";
 
 const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
-  { key: "forge", label: "Forge", icon: Flame },
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
@@ -111,10 +108,13 @@ export default function ProjectDetailPage({
   const searchParams = useSearchParams();
   const rawTabParam = searchParams.get("tab");
   // Legacy: `?tab=tasks` agora aponta pra Sprints → Todas. Mantém deep-links antigos vivos.
+  // Legacy: `?tab=forge` foi removido (Forge virou sandbox em /dev/forge-sandbox).
   const tabParam: TabKey | null =
     rawTabParam === "tasks"
       ? "sprints"
-      : (rawTabParam as TabKey | null);
+      : rawTabParam === "forge"
+        ? "stories"
+        : (rawTabParam as TabKey | null);
   const sprintParam = searchParams.get("sprint");
   const viewParam = searchParams.get("view");
   const taskParam = searchParams.get("task");
@@ -1630,9 +1630,7 @@ export default function ProjectDetailPage({
       </div>
 
       {/* Tab content */}
-      {activeTab === "forge" ? (
-        <ProjectForgePanel />
-      ) : activeTab === "stories" ? (
+      {activeTab === "stories" ? (
         <StoriesList
           stories={stories}
           tasks={tasks}
