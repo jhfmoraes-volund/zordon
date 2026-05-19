@@ -64,6 +64,7 @@ export const TASK_STATUS = defineRegistry({
   backlog:     { label: "Backlog",     tone: "muted"  },
   todo:        { label: "To Do",       tone: "blue"   },
   in_progress: { label: "In Progress", tone: "amber"  },
+  blocked:     { label: "Blocked",     tone: "red"    },
   review:      { label: "Review",      tone: "purple" },
   done:        { label: "Done",        tone: "green"  },
 });

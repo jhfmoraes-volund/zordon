@@ -1,7 +1,7 @@
 // ─── Statuses ─────────────────────────────────────────────
 
 export const TASK_STATUSES = [
-  "backlog", "todo", "in_progress", "review",
+  "backlog", "todo", "in_progress", "blocked", "review",
   "done",
 ] as const;
 
@@ -12,6 +12,7 @@ export const STATUS_LABELS: Record<string, string> = {
   backlog: "Backlog",
   todo: "To Do",
   in_progress: "In Progress",
+  blocked: "Blocked",
   review: "Review",
   done: "Done",
 };

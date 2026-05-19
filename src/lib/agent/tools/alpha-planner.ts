@@ -9,6 +9,7 @@ const TASK_STATUSES = [
   "backlog",
   "todo",
   "in_progress",
+  "blocked",
   "review",
   "done",
 ] as const;

@@ -39,6 +39,7 @@ export function isFpMatrix(value: unknown): value is FpMatrix {
 export const OPEN_STATUSES = [
   "todo",
   "in_progress",
+  "blocked",
   "review",
   "changes_requested",
 ] as const;
