@@ -74,6 +74,7 @@ import { tempId as makeTempId } from "@/lib/optimistic/reconcile";
 import { suggestFunctionPoints } from "@/lib/function-points";
 import { useAuth } from "@/contexts/auth-context";
 import { hasMinAccessLevel } from "@/lib/roles";
+import { AlphaInsightsCard } from "@/components/insights/alpha-insights-card";
 
 import type { RawTask, TabKey } from "./_types";
 import { useProjectMeta } from "./_hooks/use-project-meta";
@@ -1581,6 +1582,9 @@ export default function ProjectDetailPage({
           </span>
         ) : null}
       </div>
+
+      {/* Alpha Insights — leitura curada (manager-only por enquanto; PRD §5) */}
+      {canManageSprint ? <AlphaInsightsCard projectId={id} /> : null}
 
       {/* Sprint Ribbon — sticky, vale pra todas as tabs */}
       {focused ? (
