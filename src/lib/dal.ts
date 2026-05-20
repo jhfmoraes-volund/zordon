@@ -504,9 +504,12 @@ type MeetingVisibilityCtx = {
  *
  *   - private: SÓ o creator. Admin NÃO vê (privada é privada).
  *   - Admin (head-ops / ceo / cro): vê tudo exceto private.
- *   - Otherwise:
- *     - pm_review / general: acting memberId in attendeeMemberIds.
- *     - daily / super_planning: acting memberId in linkedProjectPmIds.
+ *   - Otherwise (pm_review / general / daily / super_planning):
+ *       acting memberId ∈ attendeeMemberIds.
+ *
+ * Builder visibility is intentional: a builder added as an attendee on
+ * any non-private meeting gets read-only access to it. Daily/super_planning
+ * thus require the PM to add the builder as an attendee on creation/edit.
  *
  * Honors impersonation: admin impersonating PM Pedro will be filtered
  * exactly like Pedro.
@@ -524,13 +527,7 @@ export async function canViewMeeting(
   const level = await getEffectiveAccessLevel();
   if (hasMinAccessLevel(level, "admin")) return true;
   if (!memberId) return false;
-  if (ctx.type === "pm_review" || ctx.type === "general") {
-    return ctx.attendeeMemberIds.includes(memberId);
-  }
-  if (ctx.type === "daily" || ctx.type === "super_planning") {
-    return ctx.linkedProjectPmIds.includes(memberId);
-  }
-  return false;
+  return ctx.attendeeMemberIds.includes(memberId);
 }
 
 /**

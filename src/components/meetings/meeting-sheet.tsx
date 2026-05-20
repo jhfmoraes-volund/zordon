@@ -13,6 +13,7 @@ import { Plus, X, Download, Lock } from "lucide-react";
 import { ImportMeetingModal } from "./import-meeting-modal";
 import { ProjectPicker } from "@/components/projects/project-picker";
 import { useAuth } from "@/contexts/auth-context";
+import { mondayOf, sundayOf, toDateStr } from "@/lib/sprint-dates";
 
 type Member = { id: string; name: string; role: string };
 type Project = { id: string; name: string; status: string };
@@ -92,15 +93,20 @@ export function MeetingSheet({
   onSaved,
 }: Props) {
   const isMobile = useIsMobile();
-  const { member: currentMember } = useAuth();
+  const { member: currentMember, effectiveAccessLevel } = useAuth();
+  // Builders só podem criar reuniões privadas, sem vincular projetos.
+  const isBuilder = effectiveAccessLevel === "builder";
   const [saving, setSaving] = useState(false);
+  const [creatingSprint, setCreatingSprint] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
   const [members, setMembers] = useState<Member[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
 
-  const [type, setType] = useState<MeetingType>(defaultType ?? "pm_review");
+  const [type, setType] = useState<MeetingType>(
+    isBuilder ? "private" : (defaultType ?? "pm_review"),
+  );
   const [date, setDate] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
@@ -188,7 +194,7 @@ export function MeetingSheet({
       );
     } else {
       // create — reset
-      setType(defaultType ?? "pm_review");
+      setType(isBuilder ? "private" : (defaultType ?? "pm_review"));
       setDate(new Date().toISOString().slice(0, 10));
       setTitle("");
       setNotes("");
@@ -317,10 +323,11 @@ export function MeetingSheet({
   }, [type, pmIds, projectIds, members, projects]);
 
   const showProjectPicker =
-    type === "daily" ||
-    type === "super_planning" ||
-    type === "general" ||
-    type === "private";
+    !isBuilder &&
+    (type === "daily" ||
+      type === "super_planning" ||
+      type === "general" ||
+      type === "private");
   const showMemberPicker =
     type === "general" || type === "daily" || type === "super_planning";
   const showExternalsPicker = type === "general";
@@ -333,6 +340,46 @@ export function MeetingSheet({
     : true;
 
   const projectsLocked = mode === "edit" && type === "super_planning";
+
+  async function handleCreateDefaultSprint() {
+    if (!selectedProjectId || creatingSprint) return;
+    const monday = mondayOf(new Date());
+    const startDate = toDateStr(monday);
+    const endDate = toDateStr(sundayOf(monday));
+    setCreatingSprint(true);
+    try {
+      const res = await fetchOrThrow("/api/sprints", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: selectedProjectId,
+          name: "Sprint 1",
+          startDate,
+          endDate,
+          status: "active",
+        }),
+      });
+      const created = (await res.json()) as {
+        id: string;
+        name: string;
+        status: string;
+        projectId: string;
+      };
+      setSprints((prev) => [
+        ...prev,
+        {
+          id: created.id,
+          name: created.name,
+          status: created.status,
+          projectId: created.projectId,
+        },
+      ]);
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao criar sprint" });
+    } finally {
+      setCreatingSprint(false);
+    }
+  }
 
   const canSubmit = () => {
     if (!date) return false;
@@ -461,34 +508,47 @@ export function MeetingSheet({
           </h2>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {/* Type toggle */}
-          <div className="grid gap-2">
-            <Label>Tipo {mode === "edit" && <span className="text-xs text-muted-foreground">(não pode ser alterado)</span>}</Label>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  "pm_review",
-                  "general",
-                  "daily",
-                  "super_planning",
-                  "private",
-                ] as MeetingType[]
-              ).map((t) => (
-                <Button
-                  key={t}
-                  type="button"
-                  variant={type === t ? "default" : "outline"}
-                  size="sm"
-                  disabled={mode === "edit" && type !== t}
-                  onClick={() => switchType(t)}
-                >
-                  {t === "private" && <Lock className="h-3 w-3 mr-1" />}
-                  {TYPE_LABELS[t]}
-                </Button>
-              ))}
+          {/* Type toggle (or fixed badge when builder) */}
+          {isBuilder ? (
+            <div className="grid gap-2">
+              <Label>Tipo</Label>
+              <div className="inline-flex w-fit items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1.5 text-sm">
+                <Lock className="h-3 w-3" />
+                <span>Privada</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {TYPE_DESCRIPTIONS.private}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">{TYPE_DESCRIPTIONS[type]}</p>
-          </div>
+          ) : (
+            <div className="grid gap-2">
+              <Label>Tipo {mode === "edit" && <span className="text-xs text-muted-foreground">(não pode ser alterado)</span>}</Label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    "pm_review",
+                    "general",
+                    "daily",
+                    "super_planning",
+                    "private",
+                  ] as MeetingType[]
+                ).map((t) => (
+                  <Button
+                    key={t}
+                    type="button"
+                    variant={type === t ? "default" : "outline"}
+                    size="sm"
+                    disabled={mode === "edit" && type !== t}
+                    onClick={() => switchType(t)}
+                  >
+                    {t === "private" && <Lock className="h-3 w-3 mr-1" />}
+                    {TYPE_LABELS[t]}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">{TYPE_DESCRIPTIONS[type]}</p>
+            </div>
+          )}
 
           {/* Data */}
           <div className="grid gap-2 max-w-xs">
@@ -597,9 +657,22 @@ export function MeetingSheet({
               {type === "super_planning" &&
                 selectedProjectId &&
                 !selectedProjectHasSprint && (
-                  <p className="text-xs text-destructive">
-                    Esse projeto não tem sprint ativa. Crie ou ative uma sprint antes.
-                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-destructive">
+                      Esse projeto não tem sprint ativa.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={creatingSprint}
+                      onClick={handleCreateDefaultSprint}
+                    >
+                      {creatingSprint
+                        ? "Criando..."
+                        : "Criar sprint da semana atual"}
+                    </Button>
+                  </div>
                 )}
             </div>
           )}

@@ -18,6 +18,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
 import { MeetingSheet, type MeetingEditInitial } from "@/components/meetings/meeting-sheet";
+import { useAuth } from "@/contexts/auth-context";
 
 type Meeting = {
   id: string;
@@ -25,6 +26,7 @@ type Meeting = {
   notes: string | null;
   type: "pm_review" | "general" | "daily" | "super_planning" | "private";
   title: string | null;
+  createdById: string | null;
   projectReviews: {
     id: string;
     sprintHealth: string;
@@ -52,10 +54,12 @@ function MeetingCardMobile({
   meeting,
   onEdit,
   onDelete,
+  canEdit,
 }: {
   meeting: Meeting;
   onEdit: () => void;
   onDelete: () => void;
+  canEdit: boolean;
 }) {
   const pendingActions = meeting.actionItems.filter((a) => a.status !== "done").length;
   const projectCount =
@@ -116,19 +120,32 @@ function MeetingCardMobile({
           )}
         </div>
       </Link>
-      <div className="mt-3 pt-3 border-t flex items-center justify-end gap-1">
-        <Button variant="ghost" size="icon" onClick={onEdit} aria-label="Editar reunião">
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={onDelete} aria-label="Remover reunião">
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
+      {canEdit && (
+        <div className="mt-3 pt-3 border-t flex items-center justify-end gap-1">
+          <Button variant="ghost" size="icon" onClick={onEdit} aria-label="Editar reunião">
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onDelete} aria-label="Remover reunião">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function MeetingsPage() {
+  const { member: currentMember, effectiveAccessLevel } = useAuth();
+  const isBuilder = effectiveAccessLevel === "builder";
+  // Edit/Delete are visible when:
+  //  - manager+ created the meeting (or admin always), OR
+  //  - builder created their own private meeting.
+  // The server enforces this anyway; the UI just stays clean.
+  const canEditMeetingRow = (m: Meeting): boolean => {
+    if (!isBuilder) return true;
+    return m.type === "private" && !!currentMember && m.createdById === currentMember.id;
+  };
+
   const meetingsCollection = useOptimisticCollection<Meeting>([]);
   const meetings = meetingsCollection.items;
   const setMeetings = meetingsCollection.setCommitted;
@@ -297,6 +314,7 @@ export default function MeetingsPage() {
             meeting={m}
             onEdit={() => openEdit(m)}
             onDelete={() => remove(m.id)}
+            canEdit={canEditMeetingRow(m)}
           />
         ))}
       </div>
@@ -375,30 +393,34 @@ export default function MeetingsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Editar reunião"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEdit(m);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Remover reunião"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          remove(m.id);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {canEditMeetingRow(m) ? (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Editar reunião"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(m);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Remover reunião"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            remove(m.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                 </TableRow>
               );

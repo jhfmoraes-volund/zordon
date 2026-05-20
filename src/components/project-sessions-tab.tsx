@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Download,
   Lightbulb,
@@ -56,7 +55,6 @@ export function ProjectSessionsTab({
   projectName,
   canManage = false,
 }: Props) {
-  const router = useRouter();
   const sessionsCollection = useOptimisticCollection<DesignSession>([]);
   const sessions = sessionsCollection.items;
   const setSessions = sessionsCollection.setCommitted;
@@ -88,24 +86,6 @@ export function ProjectSessionsTab({
   useEffect(() => {
     load();
   }, [load]);
-
-  async function createSession(type: string) {
-    const title =
-      type === "inception"
-        ? `Inception ${projectName}`
-        : `Melhoria ${projectName} — ${new Date().toLocaleDateString("pt-BR")}`;
-    try {
-      const res = await fetchOrThrow("/api/design-sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, type, title }),
-      });
-      const session = await res.json();
-      router.push(`/design-sessions/${session.id}/steps/0`);
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao criar session" });
-    }
-  }
 
   async function remove(id: string) {
     if (!confirm("Remover esta session?")) return;
@@ -172,23 +152,7 @@ export function ProjectSessionsTab({
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">
-        <Button size="sm" onClick={() => createSession("inception")}>
-          <Plus className="h-4 w-4 mr-1" />
-          Inception
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => createSession("continuous_improvement")}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          Melhoria Continua
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setSuperOpen(true)}
-        >
+        <Button size="sm" onClick={() => setSuperOpen(true)}>
           <Plus className="h-4 w-4 mr-1" />
           Super Session
         </Button>

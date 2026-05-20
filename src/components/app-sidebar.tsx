@@ -55,6 +55,9 @@ const projectNav: NavItem[] = [
 const sharedNav: NavItem[] = [
   { title: "Squads", href: "/squads", icon: Shield },
   { title: "Membros", href: "/members", icon: UserCog },
+  // Builders entram com acesso read-only às meetings em que são attendees e
+  // gerenciam suas próprias reuniões privadas + Notas Privadas.
+  { title: "Reuniões", href: "/meetings", icon: CalendarCheck },
 ];
 
 // Manager+ only (PM, head-ops, CEO).
@@ -63,7 +66,6 @@ const sharedNav: NavItem[] = [
 // botão "Histórico" dentro do panel do Alpha).
 const managerOnlyNav: NavItem[] = [
   { title: "Overview", href: "/", icon: LayoutDashboard },
-  { title: "Reuniões", href: "/meetings", icon: CalendarCheck },
 ];
 
 // Manager+ (PM, head-ops, CEO) — tuning de agentes.

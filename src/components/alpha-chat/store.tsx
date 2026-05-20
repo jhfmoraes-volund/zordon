@@ -14,7 +14,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useAuth } from "@/contexts/auth-context";
 import { hasMinAccessLevel } from "@/lib/roles";
-import { buildIngestSeed, buildSuggestTodosSeed } from "@/lib/agent/alpha-ingest-seed";
+import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
 
 /**
  * Idle threshold: if the bubble is reopened more than this after the last
@@ -45,17 +45,6 @@ type AlphaChatValue = {
     overwrite: boolean;
     meetingType?: string;
   }) => void;
-  /**
-   * Abre o sheet e dispara uma rodada de "Sugerir To-dos com IA" — Alpha
-   * lê a transcrição inteira (Roam/Granola) e cria APENAS To-dos (sem
-   * mexer em notes/reviews/tasks). Disparado pelo botão "Sugerir com IA"
-   * no header da seção To-dos da página da reunião.
-   */
-  kickoffSuggestTodos: (args: {
-    meetingId: string;
-    source: "roam" | "granola";
-    sourceId: string;
-  }) => void;
   /** Current thread ID. null = fresh conversation (next send creates a new one). */
   threadId: string | null;
   /** Load an existing thread's messages into the current chat. */
@@ -77,7 +66,6 @@ const STUB: AlphaChatValue = {
   status: "idle",
   sendMessage: () => {},
   kickoffIngest: () => {},
-  kickoffSuggestTodos: () => {},
   threadId: null,
   loadThread: async () => {},
   newConversation: () => {},
@@ -249,37 +237,6 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     [chat, isLoading, pathname],
   );
 
-  const kickoffSuggestTodos = useCallback(
-    ({
-      meetingId,
-      source,
-      sourceId,
-    }: {
-      meetingId: string;
-      source: "roam" | "granola";
-      sourceId: string;
-    }) => {
-      if (isLoading) return;
-      setIsOpen(true);
-      lastOpenedAtRef.current = Date.now();
-      setThreadId(null);
-      chat.setMessages([]);
-      const seed = buildSuggestTodosSeed(meetingId, source, sourceId);
-      chat.sendMessage(
-        { text: seed },
-        {
-          body: {
-            currentPath: pathname,
-            threadId: null,
-            newThread: true,
-            meetingId,
-          },
-        },
-      );
-    },
-    [chat, isLoading, pathname],
-  );
-
   const value: AlphaChatValue = {
     enabled: true,
     isOpen,
@@ -290,7 +247,6 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     status: chat.status,
     sendMessage,
     kickoffIngest,
-    kickoffSuggestTodos,
     threadId,
     loadThread,
     newConversation,

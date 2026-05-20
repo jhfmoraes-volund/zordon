@@ -65,30 +65,3 @@ export function buildIngestSeed(
   return lines.join("\n");
 }
 
-/**
- * Variante focada em "Sugerir To-dos com IA" disparada do header da seção
- * To-dos. Diferente do `buildIngestSeed`, aqui o objetivo é estreito:
- * extrair APENAS To-dos da transcrição (não mexe em notes, reviews, tasks).
- *
- * O Meeting já existe (vem da página da reunião) e tem o link
- * transcriptSource/transcriptSourceId salvo do import anterior.
- */
-export function buildSuggestTodosSeed(
-  meetingId: string,
-  source: MeetingSource,
-  sourceId: string,
-): string {
-  const provider = source === "roam" ? "Roam" : "Granola";
-
-  return [
-    `Quero gerar To-dos para a reunião ${meetingId} a partir da transcrição ${provider} ${sourceId}.`,
-    "",
-    "Faça em piloto automático, sem pedir confirmação:",
-    `1) Chame \`get_meeting_transcript\` com source="${source}" e meetingId="${sourceId}" pra carregar a transcrição completa.`,
-    "2) Chame `extract_meeting_actions` passando a transcrição inteira — você vai usar APENAS o array `todos` do resultado (ignore `tasks` e `skipped` nesta operação).",
-    "3) Pra cada item em `todos`, execute `create_todo` em paralelo. Resolva assigneeName→memberId via lista de members do contexto.",
-    "4) NÃO crie/atualize tasks, reviews ou notes — escopo aqui é só To-dos.",
-    "5) NÃO duplique To-dos que já existem na reunião (compare por descrição similar).",
-    "6) Ao final, mostre um resumo curto com a lista dos To-dos criados.",
-  ].join("\n");
-}
