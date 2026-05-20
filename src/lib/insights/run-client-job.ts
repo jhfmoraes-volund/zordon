@@ -2,13 +2,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
-import { loadInsightContext } from "./load-context";
+import { loadClientInsightContext } from "./load-client-context";
 import {
-  relationalSystemPrompt,
-  relationalUserPayload,
-  technicalSystemPrompt,
-  technicalUserPayload,
-} from "./prompts";
+  clientRelationalSystemPrompt,
+  clientRelationalUserPayload,
+  clientTechnicalSystemPrompt,
+  clientTechnicalUserPayload,
+} from "./client-prompts";
 import {
   relationalAnalysisSchema,
   technicalAnalysisSchema,
@@ -16,6 +16,7 @@ import {
   type TechnicalAnalysis,
 } from "./schemas";
 import { callOpenRouterJson } from "./llm";
+import type { ClaimedJob } from "./run-job";
 
 type Client = SupabaseClient<Database>;
 
@@ -28,59 +29,14 @@ function modelTechnical() {
   return process.env.INSIGHTS_MODEL_TECHNICAL ?? DEFAULT_MODEL;
 }
 
-export type RunJobResult = {
+export type RunClientJobResult = {
   jobId: string;
-  projectId: string;
+  clientId: string;
   ok: boolean;
   durationMs: number;
   errorRelational?: string;
   errorTechnical?: string;
 };
-
-export type ClaimedJob = {
-  id: string;
-  kind: "project" | "client";
-  projectId: string | null;
-  clientId: string | null;
-  triggeredByMemberId: string | null;
-  source: "cron" | "manual";
-};
-
-const CLAIM_COLS = "id, kind, projectId, clientId, triggeredByMemberId, source";
-
-/** Atomically claim a single pending job (any kind). Returns null if none. */
-export async function claimNextJob(admin: Client, jobId?: string): Promise<ClaimedJob | null> {
-  if (jobId) {
-    const { data } = await admin
-      .from("InsightJob")
-      .update({ status: "running", startedAt: new Date().toISOString() })
-      .eq("id", jobId)
-      .eq("status", "pending")
-      .select(CLAIM_COLS)
-      .single();
-    return (data as ClaimedJob | null) ?? null;
-  }
-
-  const { data: candidate } = await admin
-    .from("InsightJob")
-    .select(CLAIM_COLS)
-    .eq("status", "pending")
-    .order("createdAt", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (!candidate) return null;
-
-  const { data: claimed } = await admin
-    .from("InsightJob")
-    .update({ status: "running", startedAt: new Date().toISOString() })
-    .eq("id", candidate.id)
-    .eq("status", "pending")
-    .select(CLAIM_COLS)
-    .single();
-
-  return (claimed as ClaimedJob | null) ?? null;
-}
 
 async function finishJob(
   admin: Client,
@@ -99,37 +55,31 @@ async function finishJob(
 }
 
 /**
- * Process one claimed *project-kind* job end-to-end:
- *   load context → 2 LLM calls in parallel → upsert ProjectInsight → mark done.
- *
- * One LLM call can fail without failing the whole job — the failed half's
- * error is stashed on the row and the other half still lands. The job is only
- * marked `failed` if the *infrastructure* failed (couldn't load context, or
- * couldn't upsert the row).
- *
- * For client-kind jobs see runClientInsightJob in run-client-job.ts.
+ * Process one claimed *client-kind* job end-to-end:
+ *   aggregate context across all client projects → 2 LLM calls in parallel
+ *   → upsert ClientInsight → mark done.
  */
-export async function runInsightJob(
+export async function runClientInsightJob(
   admin: Client,
   job: ClaimedJob,
-): Promise<RunJobResult> {
-  if (job.kind !== "project" || !job.projectId) {
+): Promise<RunClientJobResult> {
+  if (job.kind !== "client" || !job.clientId) {
     throw new Error(
-      `runInsightJob called with non-project job ${job.id} (kind=${job.kind})`,
+      `runClientInsightJob called with non-client job ${job.id} (kind=${job.kind})`,
     );
   }
-  const projectId = job.projectId;
+  const clientId = job.clientId;
   const t0 = Date.now();
-  const result: RunJobResult = {
+  const result: RunClientJobResult = {
     jobId: job.id,
-    projectId,
+    clientId,
     ok: false,
     durationMs: 0,
   };
 
   let ctx;
   try {
-    ctx = await loadInsightContext(admin, projectId);
+    ctx = await loadClientInsightContext(admin, clientId);
   } catch (e) {
     const msg = (e as Error).message;
     await finishJob(admin, job.id, "failed", `load_context: ${msg}`);
@@ -139,25 +89,24 @@ export async function runInsightJob(
 
   const relationalCall = callOpenRouterJson({
     model: modelRelational(),
-    systemPrompt: relationalSystemPrompt(ctx.project.name),
-    userPrompt: relationalUserPayload({
-      projectName: ctx.project.name,
-      clientName: ctx.project.client?.name ?? null,
-      status: ctx.project.status,
-      daysElapsed: ctx.project.daysElapsed,
-      meetings: ctx.meetingsForRelational,
+    systemPrompt: clientRelationalSystemPrompt(ctx.client.name),
+    userPrompt: clientRelationalUserPayload({
+      clientName: ctx.client.name,
+      projects: ctx.projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        status: p.status,
+      })),
+      meetings: ctx.meetings,
     }),
   });
 
   const technicalCall = callOpenRouterJson({
     model: modelTechnical(),
-    systemPrompt: technicalSystemPrompt(ctx.project.name),
-    userPrompt: technicalUserPayload({
-      project: ctx.project,
-      activeSprint: ctx.activeSprint,
-      recentSprints: ctx.recentSprints,
-      members: ctx.members,
-      sprintAlerts: ctx.sprintAlerts,
+    systemPrompt: clientTechnicalSystemPrompt(ctx.client.name),
+    userPrompt: clientTechnicalUserPayload({
+      clientName: ctx.client.name,
+      projects: ctx.projects,
     }),
   });
 
@@ -199,11 +148,10 @@ export async function runInsightJob(
       : String(techRes.reason);
   }
 
-  // OpenRouter returns USD as decimal (e.g. 0.0123). Persist in integer cents.
   const costUsdCents = Math.round((relCost + techCost) * 100);
 
   const upsertPayload = {
-    projectId,
+    clientId,
     generatedAt: new Date().toISOString(),
     generatedBy: job.source,
     triggeredByMemberId: job.triggeredByMemberId,
@@ -222,14 +170,14 @@ export async function runInsightJob(
 
     modelRelational: modelRel,
     modelTechnical: modelTech,
-    inputMeetingsCount: ctx.meetingsForRelational.length,
-    inputSprintId: ctx.activeSprint?.id ?? null,
+    inputProjectsCount: ctx.projects.length,
+    inputMeetingsCount: ctx.meetings.length,
     costUsdCents,
   };
 
   const { error: upsertErr } = await admin
-    .from("ProjectInsight")
-    .upsert(upsertPayload, { onConflict: "projectId" });
+    .from("ClientInsight")
+    .upsert(upsertPayload, { onConflict: "clientId" });
 
   if (upsertErr) {
     await finishJob(admin, job.id, "failed", `upsert: ${upsertErr.message}`);

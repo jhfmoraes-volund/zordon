@@ -12,7 +12,34 @@
 
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { claimNextJob, runInsightJob, type RunJobResult } from "@/lib/insights/run-job";
+import {
+  claimNextJob,
+  runInsightJob,
+  type ClaimedJob,
+  type RunJobResult,
+} from "@/lib/insights/run-job";
+import {
+  runClientInsightJob,
+  type RunClientJobResult,
+} from "@/lib/insights/run-client-job";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
+
+type AnyResult =
+  | (RunJobResult & { kind: "project" })
+  | (RunClientJobResult & { kind: "client" });
+
+async function dispatchJob(
+  admin: SupabaseClient<Database>,
+  job: ClaimedJob,
+): Promise<AnyResult> {
+  if (job.kind === "client") {
+    const r = await runClientInsightJob(admin, job);
+    return { ...r, kind: "client" };
+  }
+  const r = await runInsightJob(admin, job);
+  return { ...r, kind: "project" };
+}
 
 // Keep alpha/chat's precedent: structured-output LLM calls take ~15s each;
 // drain mode of up to 10 jobs would otherwise hit Next.js's 10s default.
@@ -36,7 +63,7 @@ export async function POST(req: Request) {
   const jobId = typeof body?.jobId === "string" ? body.jobId : undefined;
 
   const admin = createAdminClient();
-  const results: RunJobResult[] = [];
+  const results: AnyResult[] = [];
 
   if (jobId) {
     const job = await claimNextJob(admin, jobId);
@@ -46,12 +73,12 @@ export async function POST(req: Request) {
         { status: 404 },
       );
     }
-    results.push(await runInsightJob(admin, job));
+    results.push(await dispatchJob(admin, job));
   } else {
     for (let i = 0; i < MAX_JOBS_PER_INVOCATION; i++) {
       const job = await claimNextJob(admin);
       if (!job) break;
-      results.push(await runInsightJob(admin, job));
+      results.push(await dispatchJob(admin, job));
     }
   }
 

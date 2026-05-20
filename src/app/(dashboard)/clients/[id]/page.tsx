@@ -41,11 +41,14 @@ import {
 import {
   ClientProjectCard,
   type ClientProject,
+  type ProjectInsightSummary,
 } from "@/components/clients/client-project-card";
+import { ClientInsightsCard } from "@/components/insights/client-insights-card";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast } from "@/lib/optimistic/toast";
+import { hasMinAccessLevel } from "@/lib/roles";
 import type { Client } from "@/lib/supabase/types";
 
 type EditForm = {
@@ -76,11 +79,15 @@ export default function ClientDetailPage({
   const { id } = use(params);
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const { member } = useAuth();
+  const { member, effectiveAccessLevel } = useAuth();
   const currentMemberId = member?.id ?? null;
+  const canSeeInsights = hasMinAccessLevel(effectiveAccessLevel, "manager");
 
   const [client, setClient] = useState<Client | null>(null);
   const [projects, setProjects] = useState<ClientProject[]>([]);
+  const [projectInsights, setProjectInsights] = useState<
+    Record<string, ProjectInsightSummary>
+  >({});
   const [members, setMembers] = useState<CsatMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -124,29 +131,55 @@ export default function ClientDetailPage({
       return;
     }
     setClient(clientRes.data as Client);
-    setProjects(
-      ((projectsRes.data ?? []) as Array<{
-        id: string;
-        name: string;
-        status: string;
-        startDate: string | null;
-        endDate: string | null;
-        projectMembers: Array<{ memberId: string }>;
-        taskCount: Array<{ count: number }>;
-      }>).map((p) => ({
-        id: p.id,
-        name: p.name,
-        status: p.status,
-        startDate: p.startDate,
-        endDate: p.endDate,
-        memberCount: p.projectMembers?.length ?? 0,
-        taskCount: p.taskCount?.[0]?.count ?? 0,
-      })),
-    );
+    const mappedProjects = ((projectsRes.data ?? []) as Array<{
+      id: string;
+      name: string;
+      status: string;
+      startDate: string | null;
+      endDate: string | null;
+      projectMembers: Array<{ memberId: string }>;
+      taskCount: Array<{ count: number }>;
+    }>).map((p) => ({
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      memberCount: p.projectMembers?.length ?? 0,
+      taskCount: p.taskCount?.[0]?.count ?? 0,
+    }));
+    setProjects(mappedProjects);
     csatCollection.setCommitted(
       (csatRes.data ?? []) as CsatResponseWithInterviewer[],
     );
     setMembers((membersRes.data ?? []) as CsatMember[]);
+
+    // Per-project insight summaries for the drill-down chips on each card.
+    // Manager+ only (RLS would block others anyway, but we skip the query).
+    if (canSeeInsights && mappedProjects.length > 0) {
+      const { data: insightsRes } = await supabase
+        .from("ProjectInsight")
+        .select(
+          "projectId, generatedAt, relationalHealth, technicalHealth",
+        )
+        .in(
+          "projectId",
+          mappedProjects.map((p) => p.id),
+        );
+      const map: Record<string, ProjectInsightSummary> = {};
+      for (const row of insightsRes ?? []) {
+        if (!row.projectId) continue;
+        map[row.projectId] = {
+          generatedAt: row.generatedAt,
+          relationalHealth: row.relationalHealth,
+          technicalHealth: row.technicalHealth,
+        };
+      }
+      setProjectInsights(map);
+    } else {
+      setProjectInsights({});
+    }
+
     setLoading(false);
   }
 
@@ -434,6 +467,10 @@ export default function ClientDetailPage({
         </div>
       ) : null}
 
+      {canSeeInsights && client ? (
+        <ClientInsightsCard clientId={client.id} />
+      ) : null}
+
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-semibold">
@@ -456,7 +493,11 @@ export default function ClientDetailPage({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {projects.map((p) => (
-              <ClientProjectCard key={p.id} project={p} />
+              <ClientProjectCard
+                key={p.id}
+                project={p}
+                insight={projectInsights[p.id] ?? null}
+              />
             ))}
           </div>
         )}
