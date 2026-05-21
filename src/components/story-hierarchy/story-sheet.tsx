@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useFieldDebounce } from "@/hooks/use-field-debounce";
-import { Plus, Sparkles, X } from "lucide-react";
+import { Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import {
   ResponsiveSheet,
   ResponsiveSheetBody,
@@ -71,6 +72,9 @@ type StorySheetProps = {
   onAcUpdateText?: (storyRef: string, acId: string, text: string) => void | Promise<void>;
   onAcToggle?: (storyRef: string, acId: string, checked: boolean) => void | Promise<void>;
   onAcDelete?: (storyRef: string, acId: string) => void | Promise<void>;
+  /** Soft delete (dismiss) — only shown when the story was created by Alpha.
+   *  Hides the row from the briefing tree but preserves AC, tasks and history. */
+  onDelete?: () => void | Promise<void>;
 };
 
 export function StorySheet(props: StorySheetProps) {
@@ -108,7 +112,9 @@ function StorySheetInner({
   onAcUpdateText,
   onAcToggle,
   onAcDelete,
+  onDelete,
 }: StorySheetProps & { story: Story }) {
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   // Local drafts for free-text fields; persist on blur.
   // The outer wrapper keys this component on `story.reference`, so each new
   // story remounts with fresh drafts — no useEffect reconciliation needed.
@@ -206,32 +212,72 @@ function StorySheetInner({
               placeholder="Título da story"
             />
           </div>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={onClose}
-            aria-label="Fechar"
-          >
-            <X />
-          </Button>
+          <div className="flex items-center gap-1">
+            {onDelete && story.createdByAgent ? (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Descartar story"
+                title="Descartar story (gerada por Alpha)"
+                onClick={() =>
+                  setConfirm({
+                    title: "Descartar story?",
+                    description:
+                      "Esta indicação do Vitor some do briefing. Tasks e AC vinculados também ficam arquivados.",
+                    confirmLabel: "Descartar",
+                    destructive: true,
+                    onConfirm: () => onDelete(),
+                  })
+                }
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 />
+              </Button>
+            ) : null}
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              onClick={onClose}
+              aria-label="Fechar"
+            >
+              <X />
+            </Button>
+          </div>
         </div>
       </ResponsiveSheetHeader>
 
       <ResponsiveSheetBody className="space-y-5">
         {/* Proposed module banner ──────────────────────────────────── */}
         {story.proposedModuleName && onApproveProposedModule ? (
-          <div className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
+          <div className="flex items-center justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
             <span className="text-amber-700 dark:text-amber-400">
               Alpha sugeriu o módulo{" "}
               <span className="font-mono">{story.proposedModuleName}</span>.
             </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onApproveProposedModule(story)}
-            >
-              Aprovar e criar módulo
-            </Button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  // Story.proposedModuleName é `string | undefined` no tipo da
+                  // UI; o adapter normaliza `null` do DB → `undefined`. Já o
+                  // backend aceita explicitamente `null` pra limpar — daí o
+                  // cast via unknown.
+                  onPatch({
+                    proposedModuleName: null,
+                  } as unknown as Partial<Story>)
+                }
+              >
+                Descartar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onApproveProposedModule(story)}
+              >
+                Aprovar e criar módulo
+              </Button>
+            </div>
           </div>
         ) : null}
 
@@ -563,6 +609,7 @@ function StorySheetInner({
           </section>
         </FormBody>
       </ResponsiveSheetBody>
+      <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </>
   );
 }

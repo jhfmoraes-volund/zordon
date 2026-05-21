@@ -253,7 +253,41 @@ export const TOOL_REGISTRY: Record<string, ToolMeta> = {
     label: () => "Sincronizando personas no projeto",
     icon: UserCircle,
   },
+
+  // Design session — write tools (batched). Mostra ação + contagem do batch.
+  write_brainstorm: { label: (a) => batchLabel("brainstorm", a), icon: Lightbulb },
+  write_priority: { label: (a) => batchLabel("priorização", a), icon: Target },
+  write_risk: { label: (a) => batchLabel("risco", a, "riscos"), icon: AlertTriangle },
+  write_gap: { label: (a) => batchLabel("lacuna", a, "lacunas"), icon: HelpCircle },
+  write_hypothesis: {
+    label: (a) => batchLabel("hipótese", a, "hipóteses"),
+    icon: Sparkles,
+  },
 };
+
+function batchLabel(
+  singular: string,
+  args: Record<string, unknown>,
+  plural?: string,
+): string {
+  const action = typeof args.action === "string" ? args.action : "";
+  const items = Array.isArray(args.items) ? args.items : [];
+  const n = items.length;
+  const noun = n === 1 ? singular : plural ?? `${singular}s`;
+  const verb =
+    action === "create"
+      ? "Criando"
+      : action === "update"
+        ? "Atualizando"
+        : action === "delete"
+          ? "Removendo"
+          : action === "move"
+            ? "Movendo"
+            : action === "archive"
+              ? "Arquivando"
+              : "Gravando";
+  return n > 0 ? `${verb} ${n} ${noun}` : `${verb} ${noun}`;
+}
 
 export function resolveToolMeta(
   toolName: string,

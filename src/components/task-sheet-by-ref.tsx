@@ -110,7 +110,12 @@ function TaskSheetByRefInner({
   const load = useCallback(
     async (key: { id?: string; ref?: string }): Promise<Ctx | null> => {
       // Step 1 — find the task's id + project id (by id or by reference).
-      const probe = supabase.from("Task").select("id, projectId");
+      // Filter out soft-deleted (dismissed) tasks: trying to open them via URL
+      // should 404 cleanly.
+      const probe = supabase
+        .from("Task")
+        .select("id, projectId")
+        .is("dismissedAt", null);
       const { data: taskRow, error: taskErr } = await (key.id
         ? probe.eq("id", key.id)
         : probe.eq("reference", key.ref!)
@@ -147,7 +152,8 @@ function TaskSheetByRefInner({
         .select(
           "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description), persona:ProjectPersona(id, name, description)",
         )
-        .eq("projectId", projectId),
+        .eq("projectId", projectId)
+        .is("dismissedAt", null),
       supabase
         .from("AcceptanceCriterion")
         .select("*")
@@ -596,6 +602,24 @@ function TaskSheetByRefInner({
     [ctx, onAfterChange],
   );
 
+  // Soft delete (dismiss) — server flags `dismissedAt`. Close the sheet and
+  // let the parent re-render so the dismissed task drops out of the tree.
+  const handleDeleteTask = useCallback(async () => {
+    if (!ctx) return;
+    const dbId = ctx.task.__id;
+    try {
+      const res = await fetch(`/api/tasks/${dbId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Falha ao excluir task");
+      }
+      onClose();
+      onAfterChange?.();
+    } catch (e) {
+      showErrorToast(e, { label: "Excluir task" });
+    }
+  }, [ctx, onClose, onAfterChange]);
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const isOpen = taskId !== null || taskRef !== null;
@@ -628,6 +652,7 @@ function TaskSheetByRefInner({
             onAcUpdateText={handleAcUpdateText}
             onAcToggle={handleAcToggle}
             onAcDelete={handleAcDelete}
+            onDelete={handleDeleteTask}
           />
         )}
       </ResponsiveSheetContent>

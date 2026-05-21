@@ -1,9 +1,21 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ArrowRight, Trash2 } from "lucide-react";
+import {
+  ArrowRight,
+  Layers,
+  MoreHorizontal,
+  Rocket,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
+import { BoardColumn, BoardLayout, Chip, StickyCard, type Accent } from "./board";
 
 export type PriorityBucket = "mvp" | "next" | "out";
 
@@ -25,94 +37,152 @@ type PriorityBoardProps = {
   onDelete: (itemId: string) => void;
 };
 
-const bucketConfig: Record<PriorityBucket, { title: string; description: string; color: string; badgeColor: string }> = {
+type BucketConfig = {
+  title: string;
+  description: string;
+  accent: Accent;
+  icon: typeof Rocket;
+  chipTone: "emerald" | "sky" | "neutral";
+};
+
+const BUCKETS: Record<PriorityBucket, BucketConfig> = {
   mvp: {
     title: "MVP",
     description: "Entra agora. Essencial pro primeiro release.",
-    color: "bg-green-500/10 border-green-500/20",
-    badgeColor: "bg-green-500/20 text-green-400",
+    accent: "emerald",
+    icon: Rocket,
+    chipTone: "emerald",
   },
   next: {
     title: "Next",
     description: "Proximo ciclo. Importante, mas nao pra agora.",
-    color: "bg-blue-500/10 border-blue-500/20",
-    badgeColor: "bg-blue-500/20 text-blue-400",
+    accent: "sky",
+    icon: Sparkles,
+    chipTone: "sky",
   },
   out: {
     title: "Out",
     description: "Fora do escopo. Documentado pra futuro.",
-    color: "bg-muted/40 border-muted",
-    badgeColor: "bg-muted text-muted-foreground",
+    accent: "neutral",
+    icon: XCircle,
+    chipTone: "neutral",
   },
 };
 
-const bucketOrder: PriorityBucket[] = ["mvp", "next", "out"];
+const BUCKET_ORDER: PriorityBucket[] = ["mvp", "next", "out"];
 
-export function PriorityBoard({ items, onMove, onDelete }: PriorityBoardProps) {
+export function PriorityBoard({
+  items,
+  onMove,
+  onDelete,
+}: PriorityBoardProps) {
   return (
-    <div className="grid md:grid-cols-3 gap-4">
-      {bucketOrder.map((bucket) => {
-        const config = bucketConfig[bucket];
+    <BoardLayout cols="triple" gap={4}>
+      {BUCKET_ORDER.map((bucket) => {
+        const cfg = BUCKETS[bucket];
+        const Icon = cfg.icon;
         const bucketItems = items.filter((i) => i.bucket === bucket);
-        const otherBuckets = bucketOrder.filter((b) => b !== bucket);
+        const otherBuckets = BUCKET_ORDER.filter((b) => b !== bucket);
 
         return (
-          <Card key={bucket} className={config.color}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm">
-                    <Badge className={config.badgeColor}>{config.title}</Badge>
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {bucketItems.length} {bucketItems.length === 1 ? "item" : "items"}
-                    </span>
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">{config.description}</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {bucketItems.map((item) => (
-                <div key={item.id} className="rounded-lg bg-card ring-1 ring-foreground/5 p-3 space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{item.title}</p>
-                      {item.targetPersona && (
-                        <p className="text-xs text-muted-foreground">Persona: {item.targetPersona}</p>
-                      )}
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => onDelete(item.id)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  {item.howItSolves && (
-                    <p className="text-xs text-muted-foreground">{item.howItSolves}</p>
-                  )}
-                  <div className="flex gap-1">
-                    {otherBuckets.map((target) => (
-                      <Button
-                        key={target}
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-xs"
-                        onClick={() => onMove(item.id, target)}
-                      >
-                        <ArrowRight className="h-3 w-3 mr-1" />
-                        {bucketConfig[target].title}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {bucketItems.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Arraste solucoes aqui ou use os botoes para mover.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <BoardColumn
+            key={bucket}
+            accent={cfg.accent}
+            icon={<Icon className="size-4" />}
+            title={cfg.title}
+            subtitle={cfg.description}
+            count={bucketItems.length}
+            countLabel="item"
+            emptyIcon={Layers}
+            emptyTitle={`Nada ainda em ${cfg.title}`}
+            emptyHint="Mova items das outras colunas pra ca."
+          >
+            {bucketItems.map((item) => (
+              <PriorityItemCard
+                key={item.id}
+                accent={cfg.accent}
+                item={item}
+                otherBuckets={otherBuckets}
+                onMove={(to) => onMove(item.id, to)}
+                onDelete={() => onDelete(item.id)}
+              />
+            ))}
+          </BoardColumn>
         );
       })}
-    </div>
+    </BoardLayout>
+  );
+}
+
+function PriorityItemCard({
+  accent,
+  item,
+  otherBuckets,
+  onMove,
+  onDelete,
+}: {
+  accent: Accent;
+  item: PrioritizedItem;
+  otherBuckets: PriorityBucket[];
+  onMove: (to: PriorityBucket) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <StickyCard
+      accent={accent}
+      onDelete={onDelete}
+      chips={
+        item.targetPersona ? (
+          <Chip mono truncate>
+            {item.targetPersona}
+          </Chip>
+        ) : null
+      }
+      actions={
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-foreground"
+                aria-label="Mover"
+              >
+                <MoreHorizontal className="size-3.5" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="text-xs">
+            {otherBuckets.map((target) => {
+              const cfg = BUCKETS[target];
+              return (
+                <DropdownMenuItem
+                  key={target}
+                  onClick={() => onMove(target)}
+                  className="gap-2 text-xs"
+                >
+                  <ArrowRight className="size-3" />
+                  Mover pra {cfg.title}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      }
+      collapsed={
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium leading-snug text-foreground/90">
+            {item.title || (
+              <span className="italic text-muted-foreground">(sem titulo)</span>
+            )}
+          </p>
+          {item.howItSolves ? (
+            <p className="line-clamp-2 text-xs text-muted-foreground">
+              {item.howItSolves}
+            </p>
+          ) : null}
+        </div>
+      }
+    />
   );
 }

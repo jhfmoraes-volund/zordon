@@ -917,7 +917,7 @@ Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario 
   - painPointRef: qual dor da jornada AS-IS esta funcionalidade resolve
   - technicalNotes: APIs, integracoes ou migracoes necessarias
   Pense como product designer + tech lead: referencie as jornadas das personas. Antes de criar os cards, consulte personas com \`read_persona({ includeJourney:true })\` para obter os nomes exatos das personas e suas dores — use esses nomes no targetPersona
-- **risks_gaps**: depois do brainstorm, levante (1) gaps — ambiguidades de regra de negocio que precisam de decisao explicita; (2) risks — o que pode dar errado no MVP, com category (business|technical), severity (high|medium|low) e mitigation quando severity=high. Use \`write_gap({ action:'create', text, ... })\` e \`write_risk({ action:'create', text, ... })\`.
+- **risks_gaps**: depois do brainstorm, levante (1) gaps — ambiguidades de regra de negocio que precisam de decisao explicita; (2) risks — o que pode dar errado no MVP, com category (business|technical), severity (high|medium|low) e mitigation quando severity=high. Use \`write_gap({ action:'create', items:[{ text, ... }, ...] })\` e \`write_risk({ action:'create', items:[{ text, category, severity, ... }, ...] })\` — sempre em batch (todos os items do turno numa unica chamada).
 - **hypotheses**: crie hipoteses de validacao com indicador, meta e evidencia
 - **technical_specs**: stack, integrations, rules, performance (se houver info tecnica)
 
@@ -1097,7 +1097,23 @@ So apos confirmacao do usuario, comece a criar os cards. Os cards de **Oxigenio*
 - Se uma funcionalidade serve 2 personas, escolha a que tem a dor mais critica como principal.
 
 ### Ao preencher:
-Use \`write_brainstorm({ action:'create', title, howItSolves, targetPersona, painPointRef, keyScreens, userFlows, technicalNotes? })\`. Pra ajustar depois: \`write_brainstorm({ action:'update', id, ... })\`.
+### Como gravar (BATCH OBRIGATORIO):
+
+\`write_brainstorm\` aceita batch homogeneo por action. Forma:
+\`\`\`
+write_brainstorm({
+  action: 'create',
+  items: [
+    { title, howItSolves, targetPersona, painPointRef, keyScreens, userFlows, technicalNotes? },
+    { title, howItSolves, ... },
+    ...
+  ]
+})
+\`\`\`
+
+REGRA: ao criar funcionalidades do brainstorm, gere TODOS os cards num unico \`write_brainstorm({ action:'create', items:[...] })\`. NAO faca uma chamada por card — isso multiplica o custo por N e o usuario nota.
+
+Pra ajustar: \`write_brainstorm({ action:'update', items:[{ id, ...patch }, ...] })\`. Pra remover: \`action:'delete', items:[{ id }, ...]\`. Pra arquivar: \`action:'archive', items:[{ id, archived }, ...]\`.
 `
       : "";
 
@@ -1178,7 +1194,15 @@ Severity calibre por impacto no MVP:
 Cada risk com severity=high DEVE ter um campo mitigation preenchido — se nao, questione: "se for alto e nao tiver plano B, isso e um veto, nao um risco. Quer reformular?"
 
 ### Ao preencher:
-Use \`write_gap({ action:'create', text, ... })\` ou \`write_risk({ action:'create', text, category, severity, ... })\`. Para vincular a uma feature, leia o id do brainstorm com \`read_brainstorm({})\` e passe em \`relatedFeature\`.
+### Como gravar (BATCH OBRIGATORIO):
+Agrupe TODOS os gaps/risks do turno em UMA chamada por tool. Para vincular a uma feature, leia o id do brainstorm com \`read_brainstorm({})\` e passe em \`relatedFeature\`.
+
+\`\`\`
+write_gap({ action:'create', items:[{ text, category?, severity?, relatedFeature?, mitigation? }, ...] })
+write_risk({ action:'create', items:[{ text, category, severity, relatedFeature?, mitigation? }, ...] })
+\`\`\`
+
+NAO faca uma chamada por item.
 `
       : "";
 
@@ -1199,10 +1223,10 @@ Se o brainstorm ja foi classificado em camadas Oxigenio/Conforto/Futuro, espelhe
 1. Use \`read_brainstorm({})\` e \`read_persona({ includeJourney:true })\`
 2. Para cada funcionalidade, avalie: qual dor resolve? quao critica e essa dor? o produto sobrevive sem isso?
 3. Ao classificar, JUSTIFIQUE brevemente: "MVP porque resolve a dor principal de Camila (espera de 3 dias) e e viavel com push notification"
-4. Use \`write_priority({ action:'move', id, bucket })\` (atalho) ou \`write_priority({ action:'update', id, bucket, ... })\` para classificar
+4. Classifique em BATCH: \`write_priority({ action:'move', items:[{ id, bucket }, ...] })\` (atalho) ou \`write_priority({ action:'update', items:[{ id, bucket, ... }, ...] })\`. Agrupe todos os items do turno numa unica chamada.
 
 ### Regras:
-- **OBRIGATORIO antes de marcar MVP:** chame \`mvp_check({ featureId })\` ANTES de \`write_priority({ action:'move', id, bucket:'mvp' })\`. Se mvp_check retornar pass=false, NAO marque como MVP — explique os blockers ao usuario e proponha Next/Out, ou abra add_open_question pra gap de evidencia.
+- **OBRIGATORIO antes de marcar MVP:** chame \`mvp_check({ featureId })\` ANTES de incluir um item com \`bucket:'mvp'\` em \`write_priority({ action:'move', items:[...] })\`. Se mvp_check retornar pass=false, NAO marque como MVP — explique os blockers ao usuario e proponha Next/Out, ou abra add_open_question pra gap de evidencia. Se for mover varios pra MVP, rode mvp_check pra cada um antes de montar o batch.
 - Se TUDO virar MVP, desafie: "Todas as 12 funcionalidades estao como MVP. Isso sugere que o escopo esta grande demais. Quais 5 sao absolutamente essenciais para o lancamento?"
 - Se uma funcionalidade nao tem painPointRef claro, questione se deveria ser MVP
 - Ordene os MVPs por dependencia — o que precisa ser feito primeiro?
@@ -1227,7 +1251,7 @@ Voce esta ajudando a criar hipoteses que podem ser testadas e validadas.
 - "Os usuarios vao gostar" → Pergunte: "Como vamos medir se gostaram? NPS? Retencao? Taxa de uso?"
 
 ### Ao preencher:
-Use \`write_hypothesis({ action:'create', hypothesis, indicator, target, expectedResult, evidence? })\`. Todos os campos sao obrigatorios exceto evidence.
+Use \`write_hypothesis({ action:'create', items:[{ hypothesis, indicator, target, expectedResult, evidence? }, ...] })\`. Agrupe todas as hipoteses do turno num unico batch. Todos os campos sao obrigatorios exceto evidence.
 `
       : "";
 
@@ -1431,18 +1455,20 @@ Cada entidade tem 1 write tool com discriminated union sobre \`action\`. Write a
 - \`write_product_vision({ problem?, whoSuffers?, consequences?, successVision?, impactMetrics? })\` — upsert 1:1, passa so os campos a mudar.
 - \`write_scope_item({ action:'create'|'update'|'delete', bucket:'inScope'|'outOfScope'|'does'|'doesNot', id?, text? })\`
 - \`write_persona({ action:'create'|'update'|'delete'|'add_journey_step'|'update_journey_step'|'delete_journey_step', ... })\` — kind='asIs'|'toBe' pros journey actions.
-- \`write_brainstorm({ action:'create'|'update'|'archive'|'delete', ... })\`
-- \`write_priority({ action:'create'|'update'|'move'|'delete', ... })\` — \`action:'move'\` e atalho pra trocar bucket. Antes de mover pra bucket='mvp', SEMPRE chame \`mvp_check({ featureId })\`.
-- \`write_risk({ action:'create'|'update'|'delete', ... })\` — category=business|technical, severity=high|medium|low.
-- \`write_gap({ action:'create'|'update'|'delete', ... })\`
+- \`write_brainstorm({ action:'create'|'update'|'archive'|'delete', items:[...] })\` — BATCH.
+- \`write_priority({ action:'create'|'update'|'move'|'delete', items:[...] })\` — BATCH. \`action:'move'\` e atalho pra trocar bucket. Antes de incluir um item com \`bucket:'mvp'\`, SEMPRE chame \`mvp_check({ featureId })\` pra cada um.
+- \`write_risk({ action:'create'|'update'|'delete', items:[...] })\` — BATCH. category=business|technical, severity=high|medium|low.
+- \`write_gap({ action:'create'|'update'|'delete', items:[...] })\` — BATCH.
 - \`write_tech_specs({ action:'update'|'add_integration'|'update_integration'|'delete_integration'|'add_rule'|'update_rule'|'delete_rule', ... })\`
-- \`write_hypothesis({ action:'create'|'update'|'delete', ... })\`
+- \`write_hypothesis({ action:'create'|'update'|'delete', items:[...] })\` — BATCH.
 
 ### Regras de escrita
+- **BATCH OBRIGATORIO em tools com \`items:[...]\`**: quando precisar criar/atualizar/deletar N entidades do mesmo tipo, faca UMA chamada com items=[...] em vez de N chamadas singulares. Cada call e um round-trip caro — agrupar reduz custo drasticamente.
 - Use SEMPRE a tool da entidade. NAO existe mais set_field/add_item/update_item/delete_item — foram removidas.
-- IDs sao gerados automaticamente em creates (nao mande id em create).
-- Em updates, mande SO os campos a mudar — os outros ficam intactos.
-- Em deletes, so o id. Tool retorna \`{ ok, removed }\`.
+- IDs sao gerados automaticamente em creates (nao mande id em items de create).
+- Em updates, mande SO os campos a mudar por item — os outros ficam intactos.
+- Em deletes, so o id por item. Tool retorna \`{ ok, action, results:[...], summary }\`.
+- Erros sao per-item: results[i].ok=false significa que o item i falhou; os demais podem ter sucesso. Verifique \`summary.failed\`.
 No step de briefing, use create_user_story (com proposedModuleName ou moduleId), create_task (com userStoryId obrigatorio) e set_story_refinement. Aprovacao do briefing e atomica e e responsabilidade exclusiva do PM via "Concluir sessao" — voce nao aprova modulos. Veja o "Modo Briefing — Sub-fase ..." pra a sequencia exata por sub-fase.
 
 ## Regras

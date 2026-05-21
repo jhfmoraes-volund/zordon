@@ -112,6 +112,47 @@
   --paper-amber-text: oklch(0.36 0.09 60);
   --paper-shadow: 0 1px 2px oklch(0.2 0.02 60 / 12%), 0 4px 10px oklch(0.2 0.02 60 / 8%);
   --paper-shadow-hover: 0 2px 4px oklch(0.2 0.02 60 / 16%), 0 8px 18px oklch(0.2 0.02 60 / 14%);
+
+  /* Accent tint tokens — board/column accents (low-chroma, status-grade).
+     Chroma fica abaixo do brand (0.237) pra status red não competir com CTA.
+     Trio por accent: tint (bg @ 7%), tint-hover (@ 11%), ring (@ 35%), chip (text).
+     L=0.78 chip no light dá contraste sólido em fundo claro. */
+  --accent-red-tint: oklch(0.637 0.18 22 / 7%);
+  --accent-red-tint-hover: oklch(0.637 0.18 22 / 11%);
+  --accent-red-ring: oklch(0.637 0.18 22 / 35%);
+  --accent-red-chip: oklch(0.5 0.14 22);
+  --accent-emerald-tint: oklch(0.65 0.12 155 / 7%);
+  --accent-emerald-tint-hover: oklch(0.65 0.12 155 / 11%);
+  --accent-emerald-ring: oklch(0.65 0.12 155 / 35%);
+  --accent-emerald-chip: oklch(0.5 0.13 155);
+  --accent-sky-tint: oklch(0.65 0.12 230 / 7%);
+  --accent-sky-tint-hover: oklch(0.65 0.12 230 / 11%);
+  --accent-sky-ring: oklch(0.65 0.12 230 / 35%);
+  --accent-sky-chip: oklch(0.5 0.13 230);
+  --accent-amber-tint: oklch(0.7 0.12 75 / 7%);
+  --accent-amber-tint-hover: oklch(0.7 0.12 75 / 11%);
+  --accent-amber-ring: oklch(0.7 0.12 75 / 35%);
+  --accent-amber-chip: oklch(0.52 0.13 75);
+  --accent-rose-tint: oklch(0.65 0.13 5 / 7%);
+  --accent-rose-tint-hover: oklch(0.65 0.13 5 / 11%);
+  --accent-rose-ring: oklch(0.65 0.13 5 / 35%);
+  --accent-rose-chip: oklch(0.5 0.14 5);
+  --accent-violet-tint: oklch(0.6 0.13 295 / 7%);
+  --accent-violet-tint-hover: oklch(0.6 0.13 295 / 11%);
+  --accent-violet-ring: oklch(0.6 0.13 295 / 35%);
+  --accent-violet-chip: oklch(0.5 0.14 295);
+  --accent-indigo-tint: oklch(0.6 0.13 265 / 7%);
+  --accent-indigo-tint-hover: oklch(0.6 0.13 265 / 11%);
+  --accent-indigo-ring: oklch(0.6 0.13 265 / 35%);
+  --accent-indigo-chip: oklch(0.5 0.14 265);
+  --accent-neutral-tint: oklch(0 0 0 / 4%);
+  --accent-neutral-tint-hover: oklch(0 0 0 / 7%);
+  --accent-neutral-ring: oklch(0 0 0 / 18%);
+  --accent-neutral-chip: oklch(0.45 0 0);
+
+  /* Surface rings — diffuse white inset, used pelos boards e cards. */
+  --accent-surface-ring: oklch(0 0 0 / 8%);
+  --accent-surface-ring-soft: oklch(0 0 0 / 6%);
 }
 
 [data-density="compact"] {
@@ -169,6 +210,22 @@
   --paper-amber-text: oklch(0.88 0.1 80);
   --paper-shadow: 0 1px 2px oklch(0 0 0 / 40%), 0 4px 12px oklch(0 0 0 / 30%);
   --paper-shadow-hover: 0 2px 4px oklch(0 0 0 / 50%), 0 8px 20px oklch(0 0 0 / 40%);
+
+  /* Accent tint — dark mode: chip L=0.78 pra contraste em card escuro;
+     surface ring vira branco difuso (oklch(1 0 0 / X)) em vez de preto. */
+  --accent-red-chip: oklch(0.78 0.13 22);
+  --accent-emerald-chip: oklch(0.78 0.13 155);
+  --accent-sky-chip: oklch(0.78 0.13 230);
+  --accent-amber-chip: oklch(0.82 0.13 75);
+  --accent-rose-chip: oklch(0.78 0.14 5);
+  --accent-violet-chip: oklch(0.78 0.13 295);
+  --accent-indigo-chip: oklch(0.78 0.13 265);
+  --accent-neutral-tint: oklch(1 0 0 / 4%);
+  --accent-neutral-tint-hover: oklch(1 0 0 / 7%);
+  --accent-neutral-ring: oklch(1 0 0 / 18%);
+  --accent-neutral-chip: oklch(0.7 0 0);
+  --accent-surface-ring: oklch(1 0 0 / 8%);
+  --accent-surface-ring-soft: oklch(1 0 0 / 6%);
 }
 
 @layer base {

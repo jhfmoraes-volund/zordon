@@ -9,6 +9,7 @@ import { HypothesisBoard } from "@/components/design-session/hypothesis-board";
 import { PriorityBoard } from "@/components/design-session/priority-board";
 import { PostItBoard, PostItSection } from "@/components/design-session/post-it-board";
 import { RiskGapBoard } from "@/components/design-session/risk-gap-board";
+import { BoardLayout, BoardSection, StepHeader } from "@/components/design-session/board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
 import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
 import {
@@ -18,12 +19,20 @@ import {
 import { BriefingRibbon } from "@/components/design-session/briefing-ribbon";
 import { StorySheetByRef } from "@/components/story-sheet-by-ref";
 import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Target,
+  Sparkles,
+  Cpu,
+  PlugZap,
+  ShieldAlert,
+  Gauge,
+} from "lucide-react";
 import { getStepsForSession, StepDef } from "@/lib/design-session-steps";
 import { DesignSessionProvider } from "@/contexts/design-session-context";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
@@ -181,78 +190,82 @@ function ProductVisionStep({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">O Problema</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Por que este produto precisa existir? Qual problema resolve?
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>Qual o problema central?</Label>
-              <Textarea
-                placeholder="Descreva o problema que este produto resolve..."
-                value={value.problem}
-                onChange={(e) => updateField("problem", e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Quem sofre com esse problema?</Label>
-              <Textarea
-                placeholder="Ex: Gestores de vendas em empresas B2B de medio porte"
-                value={value.whoSuffers}
-                onChange={(e) => updateField("whoSuffers", e.target.value)}
-                rows={2}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>O que acontece se nao resolver?</Label>
-              <Textarea
-                placeholder="Consequencias de manter o status quo..."
-                value={value.consequences}
-                onChange={(e) => updateField("consequences", e.target.value)}
-                rows={2}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-4">
+      <StepHeader cols="single" description="Antes de tudo, alinhe o problema, quem sofre com ele e o que muda quando o produto existe. Frases curtas, decisões compartilhadas." />
+      <BoardLayout cols="single" stack gap={4}>
+      <BoardSection
+        accent="rose"
+        icon={<Target className="size-4" />}
+        title="O Problema"
+        subtitle="Por que este produto precisa existir? Qual problema resolve?"
+        bodyClassName="space-y-4"
+      >
+        <div className="grid gap-2">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Qual o problema central?
+          </Label>
+          <Textarea
+            placeholder="Descreva o problema que este produto resolve..."
+            value={value.problem}
+            onChange={(e) => updateField("problem", e.target.value)}
+            rows={3}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Quem sofre com esse problema?
+          </Label>
+          <Textarea
+            placeholder="Ex: Gestores de vendas em empresas B2B de medio porte"
+            value={value.whoSuffers}
+            onChange={(e) => updateField("whoSuffers", e.target.value)}
+            rows={2}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            O que acontece se nao resolver?
+          </Label>
+          <Textarea
+            placeholder="Consequencias de manter o status quo..."
+            value={value.consequences}
+            onChange={(e) => updateField("consequences", e.target.value)}
+            rows={2}
+          />
+        </div>
+      </BoardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Visao de Sucesso</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Como o mundo fica depois? Qual o cenario ideal?
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>Como e o sucesso?</Label>
-              <Textarea
-                placeholder="Descreva o cenario ideal quando o produto estiver funcionando..."
-                value={value.successVision}
-                onChange={(e) => updateField("successVision", e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Metricas de impacto</Label>
-              <Textarea
-                placeholder="Como vamos medir que deu certo? Ex: reducao de 50% no tempo de resposta a leads"
-                value={value.impactMetrics}
-                onChange={(e) => updateField("impactMetrics", e.target.value)}
-                rows={2}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+      <BoardSection
+        accent="emerald"
+        icon={<Sparkles className="size-4" />}
+        title="Visao de Sucesso"
+        subtitle="Como o mundo fica depois? Qual o cenario ideal?"
+        bodyClassName="space-y-4"
+      >
+        <div className="grid gap-2">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Como e o sucesso?
+          </Label>
+          <Textarea
+            placeholder="Descreva o cenario ideal quando o produto estiver funcionando..."
+            value={value.successVision}
+            onChange={(e) => updateField("successVision", e.target.value)}
+            rows={3}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Metricas de impacto
+          </Label>
+          <Textarea
+            placeholder="Como vamos medir que deu certo? Ex: reducao de 50% no tempo de resposta a leads"
+            value={value.impactMetrics}
+            onChange={(e) => updateField("impactMetrics", e.target.value)}
+            rows={2}
+          />
+        </div>
+      </BoardSection>
+      </BoardLayout>
     </div>
   );
 }
@@ -282,17 +295,16 @@ function ScopeDefinitionStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="text-sm text-muted-foreground space-y-2">
-        <p>
-          Alinhe identidade e fronteiras do produto antes de explorar personas. Items curtos e afirmativos.
-        </p>
-        <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs">
-          <li><strong className="text-emerald-500">É</strong> — o que o produto é em essência (categoria, posicionamento)</li>
-          <li><strong className="text-rose-500">NÃO É</strong> — mal-entendidos a evitar (com o que costumam confundir)</li>
-          <li><strong className="text-sky-500">FAZ</strong> — capacidades concretas que vai entregar</li>
-          <li><strong className="text-amber-500">NÃO FAZ</strong> — fronteiras explícitas, protege contra scope creep</li>
-        </ul>
-      </div>
+      <StepHeader
+        cols="double"
+        description="Alinhe identidade e fronteiras do produto antes de explorar personas. Items curtos e afirmativos."
+        legend={[
+          { label: "É", accent: "emerald", hint: "o que o produto é em essência (categoria, posicionamento)" },
+          { label: "NÃO É", accent: "rose", hint: "mal-entendidos a evitar (com o que costumam confundir)" },
+          { label: "FAZ", accent: "sky", hint: "capacidades concretas que vai entregar" },
+          { label: "NÃO FAZ", accent: "amber", hint: "fronteiras explícitas, protege contra scope creep" },
+        ]}
+      />
       <PostItBoard
         sections={sections}
         columns={2}
@@ -332,9 +344,7 @@ function PersonasJourneysStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Defina as personas que sofrem com o problema. Para cada uma, mapeie a jornada atual (AS-IS) e a jornada futura (TO-BE).
-      </p>
+      <StepHeader cols="double" description="Defina as personas que sofrem com o problema. Para cada uma, mapeie a jornada atual (AS-IS) e a jornada futura (TO-BE)." />
       <PersonaJourneyBoard
         personas={boardPersonas}
         onAdd={(persona) =>
@@ -405,9 +415,7 @@ function BrainstormStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Hora de gerar ideias sem filtro. Cada solution card descreve uma ideia, como ela resolve o problema e pra qual persona.
-      </p>
+      <StepHeader cols="triple" description="Hora de gerar ideias sem filtro. Cada solution card descreve uma ideia, como ela resolve o problema e pra qual persona." />
       <SolutionCardBoard
         solutions={features.map((f) => ({
           id: f.id,
@@ -493,10 +501,7 @@ function RisksGapsStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Antes de cortar escopo, mapeie o que ainda esta nebuloso e o que pode dar errado.
-        Use isso como criterio na priorizacao.
-      </p>
+      <StepHeader cols="double" description="Antes de cortar escopo, mapeie o que ainda esta nebuloso e o que pode dar errado. Use isso como criterio na priorizacao." />
       <RiskGapBoard
         gaps={gaps.map((g) => ({
           id: g.id,
@@ -577,10 +582,15 @@ function PrioritizationStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Distribua as solucoes entre MVP (entra agora), Next (proximo ciclo) e Out (fora do escopo).
-        Todas comecam no MVP — mova o que nao e essencial.
-      </p>
+      <StepHeader
+        cols="triple"
+        description="Distribua as solucoes entre MVP (entra agora), Next (proximo ciclo) e Out (fora do escopo). Todas comecam no MVP — mova o que nao e essencial."
+        legend={[
+          { label: "MVP", accent: "emerald", hint: "entra agora" },
+          { label: "NEXT", accent: "amber", hint: "proximo ciclo" },
+          { label: "OUT", accent: "neutral", hint: "fora do escopo" },
+        ]}
+      />
       <PriorityBoard
         items={items.map((i) => ({
           id: i.id,
@@ -610,9 +620,7 @@ function HypothesesStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Defina as hipoteses que precisam ser validadas com o MVP. Para cada uma, estabeleca o indicador, a meta e a evidencia necessaria.
-      </p>
+      <StepHeader cols="single" description="Defina as hipoteses que precisam ser validadas com o MVP. Para cada uma, estabeleca o indicador, a meta e a evidencia necessaria." />
       {!loaded ? (
         <div className="text-sm text-muted-foreground">Carregando hipóteses...</div>
       ) : (
@@ -663,76 +671,69 @@ function TechnicalSpecsStep({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Stack & Infraestrutura</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Linguagens, frameworks, hospedagem, banco de dados — o que ja esta definido ou preferido?
-          </p>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="Ex: Next.js + TypeScript, PostgreSQL, deploy na Vercel, monorepo..."
-            value={value.stack}
-            onChange={(e) => updateField("stack", e.target.value)}
-            rows={3}
-          />
-        </CardContent>
-      </Card>
+    <div className="space-y-4">
+      <StepHeader cols="single" description="Registre o que ja esta decidido tecnicamente. Stack, integracoes, restricoes e SLAs alimentam o briefing e a geracao de tasks." />
+      <BoardLayout cols="single" stack gap={4}>
+      <BoardSection
+        accent="indigo"
+        icon={<Cpu className="size-4" />}
+        eyebrow="Infraestrutura"
+        title="Stack"
+        subtitle="Linguagens, frameworks, hospedagem, banco — o que ja esta definido?"
+      >
+        <Textarea
+          placeholder="Ex: Next.js + TypeScript, PostgreSQL, deploy na Vercel, monorepo..."
+          value={value.stack}
+          onChange={(e) => updateField("stack", e.target.value)}
+        />
+      </BoardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Integracoes</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            APIs externas, sistemas legados, webhooks, servicos de terceiros.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <ItemList
-            items={value.integrations}
-            placeholder="Ex: API do Stripe para pagamentos"
-            onAdd={(text) => addItem("integrations", { id: genId(), text: text.trim() })}
-            onUpdate={(id, text) => updateItem("integrations", id, text)}
-            onDelete={(id) => deleteItem("integrations", id)}
-          />
-        </CardContent>
-      </Card>
+      <BoardSection
+        accent="sky"
+        icon={<PlugZap className="size-4" />}
+        eyebrow="Integracoes"
+        title="APIs & terceiros"
+        subtitle="APIs externas, sistemas legados, webhooks, terceiros."
+      >
+        <ItemList
+          items={value.integrations}
+          placeholder="Ex: API do Stripe para pagamentos"
+          onAdd={(text) => addItem("integrations", { id: genId(), text: text.trim() })}
+          onUpdate={(id, text) => updateItem("integrations", id, text)}
+          onDelete={(id) => deleteItem("integrations", id)}
+        />
+      </BoardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Regras Tecnicas & Restricoes</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Requisitos nao-funcionais, padroes obrigatorios, restricoes de seguranca, compliance.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <ItemList
-            items={value.rules}
-            placeholder="Ex: LGPD — dados pessoais devem ser criptografados em repouso"
-            onAdd={(text) => addItem("rules", { id: genId(), text: text.trim() })}
-            onUpdate={(id, text) => updateItem("rules", id, text)}
-            onDelete={(id) => deleteItem("rules", id)}
-          />
-        </CardContent>
-      </Card>
+      <BoardSection
+        accent="amber"
+        icon={<ShieldAlert className="size-4" />}
+        eyebrow="Restricoes"
+        title="Regras tecnicas"
+        subtitle="Requisitos nao-funcionais, padroes, seguranca, compliance."
+      >
+        <ItemList
+          items={value.rules}
+          placeholder="Ex: LGPD — dados pessoais devem ser criptografados em repouso"
+          onAdd={(text) => addItem("rules", { id: genId(), text: text.trim() })}
+          onUpdate={(id, text) => updateItem("rules", id, text)}
+          onDelete={(id) => deleteItem("rules", id)}
+        />
+      </BoardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Performance & Escalabilidade</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            SLAs, carga esperada, requisitos de latencia, picos de uso.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="Ex: Suportar 500 usuarios simultaneos, tempo de resposta < 200ms, pico no fim do mes..."
-            value={value.performance}
-            onChange={(e) => updateField("performance", e.target.value)}
-            rows={3}
-          />
-        </CardContent>
-      </Card>
+      <BoardSection
+        accent="emerald"
+        icon={<Gauge className="size-4" />}
+        eyebrow="Performance"
+        title="SLAs & escalabilidade"
+        subtitle="SLAs, carga esperada, latencia, picos de uso."
+      >
+        <Textarea
+          placeholder="Ex: Suportar 500 usuarios simultaneos, tempo de resposta < 200ms, pico no fim do mes..."
+          value={value.performance}
+          onChange={(e) => updateField("performance", e.target.value)}
+        />
+      </BoardSection>
+      </BoardLayout>
     </div>
   );
 }
@@ -761,26 +762,44 @@ function ItemList({
   return (
     <div className="space-y-2">
       {items.map((item) => (
-        <div key={item.id} className="flex gap-2 items-center">
-          <Input
+        <div key={item.id} className="flex gap-2 items-start">
+          <Textarea
             value={item.text}
             onChange={(e) => onUpdate(item.id, e.target.value)}
-            className="text-sm"
+            rows={1}
+            className="min-h-0 resize-none py-1.5 text-sm leading-snug"
           />
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onDelete(item.id)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => onDelete(item.id)}
+          >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       ))}
-      <div className="flex gap-2">
-        <Input
+      <div className="flex gap-2 items-start">
+        <Textarea
           placeholder={placeholder}
           value={newText}
           onChange={(e) => setNewText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-          className="text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleAdd();
+            }
+          }}
+          rows={1}
+          className="min-h-0 resize-none py-1.5 text-sm leading-snug"
         />
-        <Button variant="outline" size="sm" onClick={handleAdd} disabled={!newText.trim()}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleAdd}
+          disabled={!newText.trim()}
+          className="h-8 shrink-0"
+        >
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>

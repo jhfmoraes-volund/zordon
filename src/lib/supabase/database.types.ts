@@ -4485,6 +4485,7 @@ export type Database = {
           createdById: string | null
           description: string | null
           designSessionId: string | null
+          dismissedAt: string | null
           doneAt: string | null
           dueDate: string | null
           functionPoints: number | null
@@ -4518,6 +4519,7 @@ export type Database = {
           createdById?: string | null
           description?: string | null
           designSessionId?: string | null
+          dismissedAt?: string | null
           doneAt?: string | null
           dueDate?: string | null
           functionPoints?: number | null
@@ -4551,6 +4553,7 @@ export type Database = {
           createdById?: string | null
           description?: string | null
           designSessionId?: string | null
+          dismissedAt?: string | null
           doneAt?: string | null
           dueDate?: string | null
           functionPoints?: number | null
@@ -5179,6 +5182,7 @@ export type Database = {
           createdById: string | null
           designSessionId: string | null
           designSessionItemId: string | null
+          dismissedAt: string | null
           id: string
           moduleId: string | null
           personaId: string | null
@@ -5199,6 +5203,7 @@ export type Database = {
           createdById?: string | null
           designSessionId?: string | null
           designSessionItemId?: string | null
+          dismissedAt?: string | null
           id?: string
           moduleId?: string | null
           personaId?: string | null
@@ -5219,6 +5224,7 @@ export type Database = {
           createdById?: string | null
           designSessionId?: string | null
           designSessionItemId?: string | null
+          dismissedAt?: string | null
           id?: string
           moduleId?: string | null
           personaId?: string | null

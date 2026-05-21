@@ -322,6 +322,23 @@ export async function deleteStory(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Soft delete (dismiss) — flags `dismissedAt = now()` instead of removing the
+ * row. Listings in the Inception briefing tree filter `dismissedAt IS NULL`,
+ * so the story disappears from that surface while underlying data (AC, tasks,
+ * activity) is preserved.
+ */
+export async function dismissStory(id: string): Promise<void> {
+  const { error } = await db()
+    .from("UserStory")
+    .update({
+      dismissedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function setStoryRefinement(
   id: string,
   status: "draft" | "refined" | "committed",

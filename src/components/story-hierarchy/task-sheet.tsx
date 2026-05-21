@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useFieldDebounce } from "@/hooks/use-field-debounce";
-import { ChevronDown, ChevronRight, Sparkles, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Sparkles, Trash2, X } from "lucide-react";
+import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import {
   ResponsiveSheet,
   ResponsiveSheetBody,
@@ -104,6 +105,9 @@ type TaskSheetProps = {
   ) => Promise<void>;
   /** Remove an AC. */
   onAcDelete?: (taskRef: string, acId: string) => Promise<void>;
+  /** Soft delete (dismiss) — only shown when the task was created by Alpha.
+   *  Hides the row from the briefing tree but preserves history. */
+  onDelete?: () => void | Promise<void>;
 };
 
 function tagsToOptions(tags: TaskTag[]): TagPickerOption[] {
@@ -206,7 +210,9 @@ export function TaskSheetInner({
   onAcUpdateText,
   onAcToggle,
   onAcDelete,
+  onDelete,
 }: TaskSheetProps & { task: Task }) {
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   // Local drafts for text/number fields (saved on blur).
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -317,14 +323,37 @@ export function TaskSheetInner({
               </div>
             ) : null}
           </div>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={onClose}
-            aria-label="Fechar"
-          >
-            <X />
-          </Button>
+          <div className="flex items-center gap-1">
+            {onDelete && task.createdByAgent ? (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Descartar task"
+                title="Descartar task (gerada por Alpha)"
+                onClick={() =>
+                  setConfirm({
+                    title: "Descartar task?",
+                    description:
+                      "Esta indicação do Vitor some do briefing. AC e histórico ficam arquivados.",
+                    confirmLabel: "Descartar",
+                    destructive: true,
+                    onConfirm: () => onDelete(),
+                  })
+                }
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 />
+              </Button>
+            ) : null}
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              onClick={onClose}
+              aria-label="Fechar"
+            >
+              <X />
+            </Button>
+          </div>
         </div>
       </ResponsiveSheetHeader>
 
@@ -743,6 +772,7 @@ export function TaskSheetInner({
           })()}
         </FormBody>
       </ResponsiveSheetBody>
+      <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </>
   );
 }
