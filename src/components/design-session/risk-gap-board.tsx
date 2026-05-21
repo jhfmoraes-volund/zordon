@@ -1,12 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -14,18 +10,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, AlertTriangle, HelpCircle, ChevronDown, ChevronUp } from "lucide-react";
-import type { Gap, Risk, RiskCategory, RiskSeverity } from "@/lib/agent/schemas";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { genId } from "@/lib/utils";
+import type {
+  Gap,
+  Risk,
+  RiskCategory,
+  RiskSeverity,
+} from "@/lib/agent/schemas";
+
+import {
+  BoardColumn,
+  BoardLayout,
+  Chip,
+  SeverityChip,
+  StickyCard,
+  SEVERITY_TONE_CHIP,
+} from "./board";
 
 export type { Gap, Risk };
-
-import { genId } from "@/lib/utils";
-
-const SEVERITY_TONE: Record<RiskSeverity, string> = {
-  high: "bg-red-500/15 text-red-600 border-red-500/30",
-  medium: "bg-amber-500/15 text-amber-600 border-amber-500/30",
-  low: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-};
 
 const SEVERITY_LABEL: Record<RiskSeverity, string> = {
   high: "Alta",
@@ -64,394 +73,259 @@ export function RiskGapBoard({
   onDeleteRisk,
 }: RiskGapBoardProps) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <GapColumn
-        gaps={gaps}
-        features={features}
-        onAdd={onAddGap}
-        onUpdate={onUpdateGap}
-        onDelete={onDeleteGap}
-      />
-      <RiskColumn
-        risks={risks}
-        features={features}
-        onAdd={onAddRisk}
-        onUpdate={onUpdateRisk}
-        onDelete={onDeleteRisk}
-      />
-    </div>
-  );
-}
-
-// ─── Lacunas ──────────────────────────────────────────────
-
-function GapColumn({
-  gaps,
-  features,
-  onAdd,
-  onUpdate,
-  onDelete,
-}: {
-  gaps: Gap[];
-  features: FeatureRef[];
-  onAdd: (gap: Gap) => void;
-  onUpdate: (id: string, updates: Partial<Gap>) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [text, setText] = useState("");
-  const [expandedMitigations, setExpandedMitigations] = useState<Set<string>>(new Set());
-
-  const toggleMitigation = (id: string, expand: boolean) => {
-    setExpandedMitigations((prev) => {
-      const next = new Set(prev);
-      if (expand) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  };
-
-  const handleAdd = () => {
-    const t = text.trim();
-    if (!t) return;
-    onAdd({ id: genId(), text: t, category: "business", severity: "medium" });
-    setText("");
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <HelpCircle className="h-4 w-4 text-sky-600" />
-        <h3 className="text-sm font-semibold">Lacunas de regra de negocio</h3>
-        <Badge variant="secondary" className="text-xs">
-          {gaps.length}
-        </Badge>
-      </div>
-      <div className="space-y-2">
-        {gaps.map((gap) => (
-          <Card key={gap.id}>
-            <CardContent className="pt-3 pb-3 space-y-2">
-              <div className="flex items-start gap-2">
-                <Textarea
-                  value={gap.text}
-                  onChange={(e) => onUpdate(gap.id, { text: e.target.value })}
-                  rows={2}
-                  className="text-sm flex-1"
-                  placeholder="Ex: feature X menciona 'aprovacao' — quem aprova? sincrono ou async?"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={() => onDelete(gap.id)}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">Categoria</Label>
-                  <Select
-                    value={gap.category ?? "business"}
-                    onValueChange={(v) =>
-                      onUpdate(gap.id, { category: v as RiskCategory })
-                    }
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="business">Negocio</SelectItem>
-                      <SelectItem value="technical">Tecnico</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">Severidade</Label>
-                  <Select
-                    value={gap.severity ?? "medium"}
-                    onValueChange={(v) =>
-                      onUpdate(gap.id, { severity: v as RiskSeverity })
-                    }
-                  >
-                    <SelectTrigger className={`h-8 text-xs ${SEVERITY_TONE[gap.severity ?? "medium"]}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">Alta</SelectItem>
-                      <SelectItem value="medium">Media</SelectItem>
-                      <SelectItem value="low">Baixa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <FeatureSelect
-                value={gap.relatedFeature}
-                features={features}
-                onChange={(value) => onUpdate(gap.id, { relatedFeature: value })}
-              />
-
-              {(() => {
-                const hasContent = !!gap.mitigation?.trim();
-                const isExpanded = expandedMitigations.has(gap.id);
-                return (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => toggleMitigation(gap.id, !isExpanded)}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                    >
-                      {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      {hasContent ? "Mitigacao" : "Adicionar mitigacao"}
-                      {hasContent && !isExpanded && (
-                        <span className="ml-1 h-1.5 w-1.5 rounded-full bg-yellow-500 inline-block" />
-                      )}
-                    </button>
-                    {isExpanded && (
-                      <Textarea
-                        value={gap.mitigation ?? ""}
-                        onChange={(e) => onUpdate(gap.id, { mitigation: e.target.value })}
-                        rows={2}
-                        className="text-xs"
-                        placeholder="Como destravar enquanto a decisao formal nao sai? (default temporario, stakeholder, prototipo)"
-                        autoFocus={!hasContent}
-                      />
-                    )}
-                  </>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="border-dashed">
-        <CardContent className="pt-3 pb-3">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Nova lacuna..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            />
-            <Button onClick={handleAdd} disabled={!text.trim()}>
-              <Plus className="h-4 w-4 mr-1" /> Adicionar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// ─── Riscos ───────────────────────────────────────────────
-
-function RiskColumn({
-  risks,
-  features,
-  onAdd,
-  onUpdate,
-  onDelete,
-}: {
-  risks: Risk[];
-  features: FeatureRef[];
-  onAdd: (risk: Risk) => void;
-  onUpdate: (id: string, updates: Partial<Risk>) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [text, setText] = useState("");
-  const [expandedMitigations, setExpandedMitigations] = useState<Set<string>>(new Set());
-
-  const toggleMitigation = (id: string, expand: boolean) => {
-    setExpandedMitigations((prev) => {
-      const next = new Set(prev);
-      if (expand) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  };
-
-  const handleAdd = () => {
-    const t = text.trim();
-    if (!t) return;
-    onAdd({
-      id: genId(),
-      text: t,
-      category: "business",
-      severity: "medium",
-    });
-    setText("");
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="h-4 w-4 text-red-600" />
-        <h3 className="text-sm font-semibold">Riscos do MVP</h3>
-        <Badge variant="secondary" className="text-xs">
-          {risks.length}
-        </Badge>
-      </div>
-      <div className="space-y-2">
-        {risks.map((risk) => (
-          <Card key={risk.id}>
-            <CardContent className="pt-3 pb-3 space-y-2">
-              <div className="flex items-start gap-2">
-                <Textarea
-                  value={risk.text}
-                  onChange={(e) => onUpdate(risk.id, { text: e.target.value })}
-                  rows={2}
-                  className="text-sm flex-1"
-                  placeholder="Ex: integracao com gateway de pagamento pode atrasar 2 semanas"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={() => onDelete(risk.id)}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">Categoria</Label>
-                  <Select
-                    value={risk.category}
-                    onValueChange={(v) =>
-                      onUpdate(risk.id, { category: v as RiskCategory })
-                    }
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="business">Negocio</SelectItem>
-                      <SelectItem value="technical">Tecnico</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">Severidade</Label>
-                  <Select
-                    value={risk.severity}
-                    onValueChange={(v) =>
-                      onUpdate(risk.id, { severity: v as RiskSeverity })
-                    }
-                  >
-                    <SelectTrigger className={`h-8 text-xs ${SEVERITY_TONE[risk.severity]}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">Alta</SelectItem>
-                      <SelectItem value="medium">Media</SelectItem>
-                      <SelectItem value="low">Baixa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <FeatureSelect
-                value={risk.relatedFeature}
-                features={features}
-                onChange={(value) => onUpdate(risk.id, { relatedFeature: value })}
-              />
-
-              {(() => {
-                const hasContent = !!risk.mitigation?.trim();
-                const isExpanded = expandedMitigations.has(risk.id);
-                return (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => toggleMitigation(risk.id, !isExpanded)}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                    >
-                      {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      {hasContent ? "Mitigacao" : "Adicionar mitigacao"}
-                      {hasContent && !isExpanded && (
-                        <span className="ml-1 h-1.5 w-1.5 rounded-full bg-yellow-500 inline-block" />
-                      )}
-                    </button>
-                    {isExpanded && (
-                      <Textarea
-                        value={risk.mitigation ?? ""}
-                        onChange={(e) => onUpdate(risk.id, { mitigation: e.target.value })}
-                        rows={2}
-                        className="text-xs"
-                        placeholder="Como vamos reduzir esse risco? Plano B?"
-                        autoFocus={!hasContent}
-                      />
-                    )}
-                  </>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="border-dashed">
-        <CardContent className="pt-3 pb-3">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Novo risco..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            />
-            <Button onClick={handleAdd} disabled={!text.trim()}>
-              <Plus className="h-4 w-4 mr-1" /> Adicionar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// ─── Feature select ───────────────────────────────────────
-
-function FeatureSelect({
-  value,
-  features,
-  onChange,
-}: {
-  value: string | undefined;
-  features: FeatureRef[];
-  onChange: (value: string | undefined) => void;
-}) {
-  if (features.length === 0) return null;
-
-  return (
-    <div className="grid gap-1">
-      <Label className="text-xs text-muted-foreground">
-        Funcionalidade relacionada (opcional)
-      </Label>
-      <Select
-        value={value || "__none__"}
-        onValueChange={(v) =>
-          onChange(typeof v === "string" && v !== "__none__" ? v : undefined)
+    <BoardLayout cols="double">
+      <BoardColumn
+        accent="sky"
+        icon={<HelpCircle className="size-4" />}
+        title="Lacunas de regra de negocio"
+        subtitle="Antes da priorizacao"
+        count={gaps.length}
+        countLabel="mapeada"
+        emptyIcon={HelpCircle}
+        emptyTitle="Nenhuma lacuna mapeada ainda"
+        emptyHint="Decisoes que precisam de stakeholder ou regras que ainda nao cabem numa frase."
+        onAdd={(text) =>
+          onAddGap({
+            id: genId(),
+            text,
+            category: "business",
+            severity: "medium",
+          })
         }
+        addPlaceholder="Nova lacuna..."
       >
-        <SelectTrigger className="h-8 text-xs">
-          <SelectValue placeholder="Selecione..." />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none__">— Nenhuma —</SelectItem>
-          {features.map((f) => (
-            <SelectItem key={f.id} value={f.id}>
-              {f.title || "Sem titulo"}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+        {gaps.map((g) => (
+          <ItemCard
+            key={g.id}
+            accent="sky"
+            item={g}
+            features={features}
+            placeholder="Ex: quem aprova reembolso > R$500?"
+            mitigationPlaceholder="Como destravar enquanto a decisao formal nao sai? (default temporario, stakeholder, prototipo)"
+            onUpdate={(patch) => onUpdateGap(g.id, patch)}
+            onDelete={() => onDeleteGap(g.id)}
+          />
+        ))}
+      </BoardColumn>
+
+      <BoardColumn
+        accent="red"
+        icon={<AlertTriangle className="size-4" />}
+        title="Riscos do MVP"
+        subtitle="O que pode dar errado"
+        count={risks.length}
+        countLabel="mapeado"
+        emptyIcon={AlertTriangle}
+        emptyTitle="Nenhum risco mapeado ainda"
+        emptyHint="Coisas que podem atrasar, custar mais ou matar uma feature antes de virar real."
+        onAdd={(text) =>
+          onAddRisk({
+            id: genId(),
+            text,
+            category: "business",
+            severity: "medium",
+          })
+        }
+        addPlaceholder="Novo risco..."
+      >
+        {risks.map((r) => (
+          <ItemCard
+            key={r.id}
+            accent="red"
+            item={r}
+            features={features}
+            placeholder="Ex: integracao com gateway pode atrasar 2 semanas"
+            mitigationPlaceholder="Como vamos reduzir esse risco? Plano B?"
+            onUpdate={(patch) => onUpdateRisk(r.id, patch)}
+            onDelete={() => onDeleteRisk(r.id)}
+          />
+        ))}
+      </BoardColumn>
+    </BoardLayout>
   );
 }
 
-export { CATEGORY_LABEL, SEVERITY_LABEL, SEVERITY_TONE };
+// ─── ItemCard — wires Gap/Risk into the generic StickyCard ───────────
+
+type ItemCardItem = Gap | Risk;
+
+function ItemCard({
+  accent,
+  item,
+  features,
+  placeholder,
+  mitigationPlaceholder,
+  onUpdate,
+  onDelete,
+}: {
+  accent: "sky" | "red";
+  item: ItemCardItem;
+  features: FeatureRef[];
+  placeholder: string;
+  mitigationPlaceholder: string;
+  onUpdate: (patch: Partial<ItemCardItem>) => void;
+  onDelete: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [mitExpanded, setMitExpanded] = useState(false);
+
+  const severity = (item.severity ?? "medium") as RiskSeverity;
+  const category = (item.category ?? "business") as RiskCategory;
+  const linkedFeature =
+    item.relatedFeature && item.relatedFeature !== "__none__"
+      ? features.find((f) => f.id === item.relatedFeature)?.title
+      : null;
+  const hasMitigation = !!item.mitigation?.trim();
+
+  return (
+    <StickyCard
+      accent={accent}
+      expanded={expanded}
+      onExpandChange={setExpanded}
+      onDelete={onDelete}
+      chips={
+        <>
+          <SeverityChip severity={severity} />
+          <Chip>{CATEGORY_LABEL[category]}</Chip>
+          {linkedFeature ? (
+            <Chip mono truncate>
+              {linkedFeature}
+            </Chip>
+          ) : null}
+        </>
+      }
+      collapsed={
+        <p className="line-clamp-3 cursor-text text-sm leading-snug text-foreground/90">
+          {item.text || (
+            <span className="italic text-muted-foreground">
+              (sem descricao — clique pra editar)
+            </span>
+          )}
+        </p>
+      }
+      collapsedFooter={
+        hasMitigation ? (
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <span className="inline-block size-1.5 rounded-full bg-amber-500" />
+            mitigacao registrada
+          </span>
+        ) : null
+      }
+      expandedBody={
+        <div className="space-y-3">
+          <Textarea
+            value={item.text}
+            onChange={(e) => onUpdate({ text: e.target.value })}
+            rows={2}
+            className="resize-none text-sm"
+            placeholder={placeholder}
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-1">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Categoria
+              </Label>
+              <Select
+                value={category}
+                onValueChange={(v) =>
+                  onUpdate({ category: v as RiskCategory })
+                }
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="business">Negocio</SelectItem>
+                  <SelectItem value="technical">Tecnico</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Severidade
+              </Label>
+              <Select
+                value={severity}
+                onValueChange={(v) =>
+                  onUpdate({ severity: v as RiskSeverity })
+                }
+              >
+                <SelectTrigger
+                  className={cn("h-8 text-xs", SEVERITY_TONE_CHIP[severity])}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="high">Alta</SelectItem>
+                  <SelectItem value="medium">Media</SelectItem>
+                  <SelectItem value="low">Baixa</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {features.length > 0 ? (
+            <div className="grid gap-1">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Funcionalidade relacionada (opcional)
+              </Label>
+              <Select
+                value={item.relatedFeature || "__none__"}
+                onValueChange={(v) =>
+                  onUpdate({
+                    relatedFeature:
+                      typeof v === "string" && v !== "__none__" ? v : undefined,
+                  })
+                }
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                  {features.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.title || "Sem titulo"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setMitExpanded((v) => !v)}
+              className="flex w-full items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {mitExpanded ? (
+                <ChevronUp className="size-3" />
+              ) : (
+                <ChevronDown className="size-3" />
+              )}
+              {hasMitigation ? "Mitigacao" : "Adicionar mitigacao"}
+              {hasMitigation && !mitExpanded ? (
+                <span className="ml-1 inline-block size-1.5 rounded-full bg-amber-500" />
+              ) : null}
+            </button>
+            {mitExpanded ? (
+              <Textarea
+                value={item.mitigation ?? ""}
+                onChange={(e) => onUpdate({ mitigation: e.target.value })}
+                rows={2}
+                className="mt-1.5 text-xs"
+                placeholder={mitigationPlaceholder}
+                autoFocus={!hasMitigation}
+              />
+            ) : null}
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
+export { CATEGORY_LABEL, SEVERITY_LABEL };

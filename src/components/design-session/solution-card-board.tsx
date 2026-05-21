@@ -1,16 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
-  Plus,
-  Trash2,
-  Lightbulb,
   ChevronDown,
   ChevronUp,
   ChevronsDownUp,
@@ -19,8 +14,13 @@ import {
   LayoutGrid,
   Archive,
   ArchiveRestore,
+  Lightbulb,
+  Trash2,
 } from "lucide-react";
 import type { SolutionCard } from "@/lib/agent/schemas";
+import { genId } from "@/lib/utils";
+
+import { BoardColumn, BoardLayout, Chip, StickyCard } from "./board";
 
 export type { SolutionCard };
 
@@ -34,10 +34,13 @@ type SolutionCardBoardProps = {
 
 type Layout = "single" | "triple";
 
-import { genId } from "@/lib/utils";
-
 function hasDetails(sol: SolutionCard) {
-  return !!(sol.keyScreens || sol.userFlows || sol.painPointRef || sol.technicalNotes);
+  return !!(
+    sol.keyScreens ||
+    sol.userFlows ||
+    sol.painPointRef ||
+    sol.technicalNotes
+  );
 }
 
 export function SolutionCardBoard({
@@ -47,7 +50,6 @@ export function SolutionCardBoard({
   onDelete,
   personaNames,
 }: SolutionCardBoardProps) {
-  const [newTitle, setNewTitle] = useState("");
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const [openDetails, setOpenDetails] = useState<Record<string, boolean>>({});
   const [layout, setLayout] = useState<Layout>("triple");
@@ -78,210 +80,323 @@ export function SolutionCardBoard({
       return next;
     });
 
-  const handleAdd = () => {
-    if (!newTitle.trim()) return;
-    const id = genId();
-    onAdd({
-      id,
-      title: newTitle.trim(),
-      howItSolves: "",
-      targetPersona: "",
-    });
-    setOpenCards((prev) => ({ ...prev, [id]: true }));
-    setNewTitle("");
-  };
-
-  const handleArchive = (id: string) => {
-    onUpdate(id, { archived: true });
-    setOpenCards((prev) => ({ ...prev, [id]: false }));
-  };
-
-  const handleRestore = (id: string) => {
-    onUpdate(id, { archived: false });
-  };
-
   const gridCls =
     layout === "single"
       ? "grid gap-3"
       : "grid gap-3 md:grid-cols-2 lg:grid-cols-3";
 
-  const renderCard = (sol: SolutionCard, isArchived: boolean) => {
-    const isOpen = openCards[sol.id] || false;
-    const isDetailsOpen = openDetails[sol.id] || false;
-    const filled = hasDetails(sol);
-
-    const cardBg = isArchived
-      ? "bg-muted/40 opacity-75 hover:opacity-95"
-      : "bg-yellow-500/10";
-
-    if (!isOpen) {
-      return (
-        <Card
-          key={sol.id}
-          role="button"
-          tabIndex={0}
-          onClick={() => toggleCard(sol.id)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              toggleCard(sol.id);
-            }
-          }}
-          className={`${cardBg} cursor-pointer ${
-            isArchived ? "" : "hover:bg-yellow-500/20"
-          } transition-colors`}
+  const headerAside = active.length > 0 ? (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={allActiveOpen ? collapseAllActive : expandAllActive}
+        className="h-7 text-[10px] uppercase tracking-wider"
+      >
+        {allActiveOpen ? (
+          <>
+            <ChevronsDownUp className="size-3 mr-1" /> Recolher
+          </>
+        ) : (
+          <>
+            <ChevronsUpDown className="size-3 mr-1" /> Expandir
+          </>
+        )}
+      </Button>
+      <div className="inline-flex rounded-md border bg-background">
+        <Button
+          type="button"
+          variant={layout === "single" ? "secondary" : "ghost"}
+          size="icon"
+          className="size-7 rounded-r-none"
+          onClick={() => setLayout("single")}
+          aria-label="Uma coluna"
         >
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-start gap-2">
-              <Lightbulb
-                className={`h-4 w-4 mt-0.5 shrink-0 ${
-                  isArchived ? "text-muted-foreground" : "text-yellow-600"
-                }`}
-              />
-              <div className="flex-1 min-w-0 space-y-1">
-                <p
-                  className={`text-sm font-semibold leading-tight ${
-                    isArchived ? "text-muted-foreground" : ""
-                  }`}
-                >
-                  {sol.title || (
-                    <span className="text-muted-foreground italic font-normal">
-                      Sem título
-                    </span>
-                  )}
-                </p>
-                {sol.howItSolves && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {sol.howItSolves}
-                  </p>
-                )}
-                {(sol.targetPersona || filled) && (
-                  <div className="flex items-center gap-1.5 pt-0.5">
-                    {sol.targetPersona && (
-                      <Badge variant="outline" className="text-xs font-normal">
-                        {sol.targetPersona}
-                      </Badge>
-                    )}
-                    {filled && (
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full inline-block ${
-                          isArchived ? "bg-muted-foreground" : "bg-yellow-500"
-                        }`}
-                        title="Tem detalhes preenchidos"
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-              {isArchived ? (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRestore(sol.id);
-                  }}
-                  title="Restaurar"
-                >
-                  <ArchiveRestore className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-1" />
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
+          <List className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant={layout === "triple" ? "secondary" : "ghost"}
+          size="icon"
+          className="size-7 rounded-l-none"
+          onClick={() => setLayout("triple")}
+          aria-label="Grid"
+        >
+          <LayoutGrid className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  ) : undefined;
 
-    return (
-      <Card key={sol.id} className={cardBg}>
-        <CardContent className="pt-4 space-y-3">
-          <div className="flex items-start justify-between gap-2">
-            <Lightbulb
-              className={`h-4 w-4 mt-2.5 shrink-0 ${
-                isArchived ? "text-muted-foreground" : "text-yellow-600"
-              }`}
+  // Brainstorm board expands its container based on the user-selected layout:
+  // - single mode → max-w 720px (one stack of cards)
+  // - triple mode → max-w 1280px (3-col grid breathes properly on widescreen)
+  const layoutCols = layout === "single" ? "single" : "triple";
+
+  return (
+    <BoardLayout cols={layoutCols} stack>
+      <BoardColumn
+        accent="amber"
+        icon={<Lightbulb className="size-4" />}
+        title="Brainstorm de funcionalidades"
+        subtitle="Ideias sem filtro — depois a gente prioriza."
+        count={active.length}
+        countLabel="ideia"
+        headerAside={headerAside}
+        emptyIcon={Lightbulb}
+        emptyTitle="Sem ideias ainda"
+        emptyHint="Vale tudo. O filtro acontece na priorizacao."
+        onAdd={(text) => {
+          const id = genId();
+          onAdd({
+            id,
+            title: text,
+            howItSolves: "",
+            targetPersona: "",
+          });
+          setOpenCards((prev) => ({ ...prev, [id]: true }));
+        }}
+        addPlaceholder="Nova funcionalidade..."
+      >
+        <div className={gridCls}>
+          {active.map((sol) => (
+            <SolutionCardItem
+              key={sol.id}
+              sol={sol}
+              isArchived={false}
+              isOpen={!!openCards[sol.id]}
+              isDetailsOpen={!!openDetails[sol.id]}
+              personaNames={personaNames}
+              onToggle={() => toggleCard(sol.id)}
+              onToggleDetails={() => toggleDetails(sol.id)}
+              onUpdate={(patch) => onUpdate(sol.id, patch)}
+              onDelete={() => onDelete(sol.id)}
+              onArchive={() => {
+                onUpdate(sol.id, { archived: true });
+                setOpenCards((prev) => ({ ...prev, [sol.id]: false }));
+              }}
+              onRestore={() => onUpdate(sol.id, { archived: false })}
             />
+          ))}
+        </div>
+      </BoardColumn>
+
+      {archived.length > 0 ? (
+        <div className="mx-auto max-w-none">
+          <button
+            type="button"
+            onClick={() => setArchivedSectionOpen((v) => !v)}
+            className="flex items-center gap-2 border-t pt-4 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {archivedSectionOpen ? (
+              <ChevronUp className="size-4" />
+            ) : (
+              <ChevronDown className="size-4" />
+            )}
+            <Archive className="size-3.5" />
+            Arquivadas
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-mono tabular-nums">
+              {archived.length}
+            </span>
+          </button>
+
+          {archivedSectionOpen ? (
+            <div className={`mt-3 ${gridCls}`}>
+              {archived.map((sol) => (
+                <SolutionCardItem
+                  key={sol.id}
+                  sol={sol}
+                  isArchived
+                  isOpen={!!openCards[sol.id]}
+                  isDetailsOpen={!!openDetails[sol.id]}
+                  personaNames={personaNames}
+                  onToggle={() => toggleCard(sol.id)}
+                  onToggleDetails={() => toggleDetails(sol.id)}
+                  onUpdate={(patch) => onUpdate(sol.id, patch)}
+                  onDelete={() => onDelete(sol.id)}
+                  onArchive={() => {
+                    onUpdate(sol.id, { archived: true });
+                    setOpenCards((prev) => ({ ...prev, [sol.id]: false }));
+                  }}
+                  onRestore={() => onUpdate(sol.id, { archived: false })}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </BoardLayout>
+  );
+}
+
+function SolutionCardItem({
+  sol,
+  isArchived,
+  isOpen,
+  isDetailsOpen,
+  personaNames,
+  onToggle,
+  onToggleDetails,
+  onUpdate,
+  onDelete,
+  onArchive,
+  onRestore,
+}: {
+  sol: SolutionCard;
+  isArchived: boolean;
+  isOpen: boolean;
+  isDetailsOpen: boolean;
+  personaNames: string[];
+  onToggle: () => void;
+  onToggleDetails: () => void;
+  onUpdate: (patch: Partial<SolutionCard>) => void;
+  onDelete: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+}) {
+  const filled = hasDetails(sol);
+
+  return (
+    <StickyCard
+      accent={isArchived ? "neutral" : "amber"}
+      expanded={isOpen}
+      onExpandChange={onToggle}
+      chips={
+        <>
+          {sol.targetPersona ? (
+            <Chip mono truncate>
+              {sol.targetPersona}
+            </Chip>
+          ) : null}
+          {filled ? (
+            <span
+              className="inline-block size-1.5 rounded-full bg-amber-500"
+              title="Tem detalhes preenchidos"
+            />
+          ) : null}
+        </>
+      }
+      actions={
+        <>
+          {isArchived ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              onClick={onRestore}
+              aria-label="Restaurar"
+            >
+              <ArchiveRestore className="size-3.5" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              onClick={onArchive}
+              aria-label="Arquivar"
+            >
+              <Archive className="size-3.5" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground hover:text-foreground"
+            onClick={onToggle}
+            aria-label={isOpen ? "Recolher" : "Expandir"}
+          >
+            {isOpen ? (
+              <ChevronUp className="size-3.5" />
+            ) : (
+              <ChevronDown className="size-3.5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+            aria-label="Excluir"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </>
+      }
+      collapsed={
+        <div className="space-y-1">
+          <p
+            className={`line-clamp-2 text-sm font-medium leading-snug ${
+              isArchived ? "text-muted-foreground" : "text-foreground/90"
+            }`}
+          >
+            {sol.title || (
+              <span className="italic text-muted-foreground">Sem titulo</span>
+            )}
+          </p>
+          {sol.howItSolves ? (
+            <p className="line-clamp-2 text-xs text-muted-foreground">
+              {sol.howItSolves}
+            </p>
+          ) : null}
+        </div>
+      }
+      expandedBody={
+        <div className="space-y-3">
+          <div className="grid gap-1">
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Titulo
+            </Label>
             <Textarea
               value={sol.title}
-              onChange={(e) => onUpdate(sol.id, { title: e.target.value })}
-              className="text-sm font-semibold flex-1 border-none! shadow-none! bg-transparent! px-2 py-1 focus-visible:ring-0 resize-none"
+              onChange={(e) => onUpdate({ title: e.target.value })}
               placeholder="Nome da funcionalidade"
               rows={1}
+              className="text-sm font-semibold"
             />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0"
-              onClick={() => toggleCard(sol.id)}
-              title="Recolher"
-            >
-              <ChevronUp className="h-3 w-3" />
-            </Button>
-            {isArchived ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={() => handleRestore(sol.id)}
-                title="Restaurar"
-              >
-                <ArchiveRestore className="h-3.5 w-3.5" />
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={() => handleArchive(sol.id)}
-                title="Arquivar"
-              >
-                <Archive className="h-3.5 w-3.5" />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0"
-              onClick={() => onDelete(sol.id)}
-              title="Excluir"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
           </div>
 
-          <div className="grid gap-2">
-            <Label className="text-xs text-muted-foreground">Detalhes da funcionalidade</Label>
+          <div className="grid gap-1">
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Detalhes
+            </Label>
             <Textarea
               value={sol.howItSolves}
-              onChange={(e) => onUpdate(sol.id, { howItSolves: e.target.value })}
+              onChange={(e) => onUpdate({ howItSolves: e.target.value })}
               placeholder="Descreva os detalhes dessa funcionalidade..."
               rows={2}
               className="text-sm"
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label className="text-xs text-muted-foreground">Pra qual persona?</Label>
+          <div className="grid gap-1">
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Pra qual persona?
+            </Label>
             {personaNames.length > 0 ? (
               <div className="flex flex-wrap gap-1">
-                {personaNames.map((name) => (
-                  <Badge
-                    key={name}
-                    variant={sol.targetPersona === name ? "default" : "outline"}
-                    className="cursor-pointer text-xs"
-                    onClick={() => onUpdate(sol.id, { targetPersona: name })}
-                  >
-                    {name}
-                  </Badge>
-                ))}
+                {personaNames.map((name) => {
+                  const active = sol.targetPersona === name;
+                  return (
+                    <button
+                      type="button"
+                      key={name}
+                      onClick={() => onUpdate({ targetPersona: name })}
+                      className={`inline-flex h-6 items-center rounded-full border px-2 text-[11px] transition-colors ${
+                        active
+                          ? "bg-amber-500/20 border-amber-500/40 text-amber-700 dark:text-amber-300"
+                          : "border-border/60 bg-background/60 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <Input
                 value={sol.targetPersona}
-                onChange={(e) => onUpdate(sol.id, { targetPersona: e.target.value })}
+                onChange={(e) => onUpdate({ targetPersona: e.target.value })}
                 placeholder="Nome da persona"
                 className="h-8 text-sm"
               />
@@ -290,159 +405,74 @@ export function SolutionCardBoard({
 
           <button
             type="button"
-            onClick={() => toggleDetails(sol.id)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+            onClick={onToggleDetails}
+            className="flex w-full items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
           >
-            {isDetailsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {isDetailsOpen ? "Menos detalhes" : "Mais detalhes"}
-            {filled && !isDetailsOpen && (
-              <span className="ml-1 h-1.5 w-1.5 rounded-full bg-yellow-500 inline-block" />
+            {isDetailsOpen ? (
+              <ChevronUp className="size-3" />
+            ) : (
+              <ChevronDown className="size-3" />
             )}
+            {isDetailsOpen ? "Menos detalhes" : "Mais detalhes"}
+            {filled && !isDetailsOpen ? (
+              <span className="ml-1 inline-block size-1.5 rounded-full bg-amber-500" />
+            ) : null}
           </button>
 
-          {isDetailsOpen && (
-            <div className="space-y-3 border-t pt-3">
-              <div className="grid gap-1.5">
-                <Label className="text-xs text-muted-foreground">Telas / Views envolvidas</Label>
+          {isDetailsOpen ? (
+            <div className="space-y-3 border-t border-border/40 pt-3">
+              <div className="grid gap-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Telas / Views
+                </Label>
                 <Textarea
                   value={sol.keyScreens || ""}
-                  onChange={(e) => onUpdate(sol.id, { keyScreens: e.target.value })}
+                  onChange={(e) => onUpdate({ keyScreens: e.target.value })}
                   placeholder="Ex: listagem + detalhe + filtros + empty state"
                   rows={2}
-                  className="text-sm"
+                  className="text-xs"
                 />
               </div>
-
-              <div className="grid gap-1.5">
-                <Label className="text-xs text-muted-foreground">Fluxos do usuario</Label>
+              <div className="grid gap-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Fluxos do usuario
+                </Label>
                 <Textarea
                   value={sol.userFlows || ""}
-                  onChange={(e) => onUpdate(sol.id, { userFlows: e.target.value })}
-                  placeholder="Ex: usuario busca servico -> seleciona prestador -> agenda -> confirma"
+                  onChange={(e) => onUpdate({ userFlows: e.target.value })}
+                  placeholder="Ex: usuario busca -> seleciona -> agenda -> confirma"
                   rows={2}
-                  className="text-sm"
+                  className="text-xs"
                 />
               </div>
-
-              <div className="grid gap-1.5">
-                <Label className="text-xs text-muted-foreground">Dor que resolve (jornada AS-IS)</Label>
+              <div className="grid gap-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Dor que resolve (jornada AS-IS)
+                </Label>
                 <Textarea
                   value={sol.painPointRef || ""}
-                  onChange={(e) => onUpdate(sol.id, { painPointRef: e.target.value })}
+                  onChange={(e) => onUpdate({ painPointRef: e.target.value })}
                   placeholder="Qual dor da jornada atual essa funcionalidade resolve?"
                   rows={2}
-                  className="text-sm"
+                  className="text-xs"
                 />
               </div>
-
-              <div className="grid gap-1.5">
-                <Label className="text-xs text-muted-foreground">Consideracoes tecnicas</Label>
+              <div className="grid gap-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Consideracoes tecnicas
+                </Label>
                 <Textarea
                   value={sol.technicalNotes || ""}
-                  onChange={(e) => onUpdate(sol.id, { technicalNotes: e.target.value })}
+                  onChange={(e) => onUpdate({ technicalNotes: e.target.value })}
                   placeholder="APIs, integracoes, migracoes necessarias..."
                   rows={2}
-                  className="text-sm"
+                  className="text-xs"
                 />
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
-
-  return (
-    <div className="space-y-4">
-      {active.length > 0 && (
-        <div className="flex items-center justify-between gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={allActiveOpen ? collapseAllActive : expandAllActive}
-            className="h-8 text-xs"
-          >
-            {allActiveOpen ? (
-              <>
-                <ChevronsDownUp className="h-3.5 w-3.5 mr-1" /> Recolher todos
-              </>
-            ) : (
-              <>
-                <ChevronsUpDown className="h-3.5 w-3.5 mr-1" /> Expandir todos
-              </>
-            )}
-          </Button>
-          <div className="inline-flex rounded-md border bg-background">
-            <Button
-              type="button"
-              variant={layout === "single" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8 rounded-r-none"
-              onClick={() => setLayout("single")}
-              title="Uma coluna"
-            >
-              <List className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant={layout === "triple" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8 rounded-l-none"
-              onClick={() => setLayout("triple")}
-              title="Grid"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+          ) : null}
         </div>
-      )}
-
-      <div className={gridCls}>{active.map((sol) => renderCard(sol, false))}</div>
-
-      <Card className="border-dashed">
-        <CardContent className="pt-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Nova funcionalidade..."
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            />
-            <Button onClick={handleAdd} disabled={!newTitle.trim()}>
-              <Plus className="h-4 w-4 mr-1" /> Adicionar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {archived.length > 0 && (
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center gap-2 border-t pt-4">
-            <button
-              type="button"
-              onClick={() => setArchivedSectionOpen((v) => !v)}
-              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {archivedSectionOpen ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-              <Archive className="h-3.5 w-3.5" />
-              Arquivadas
-              <Badge variant="secondary" className="text-xs font-normal">
-                {archived.length}
-              </Badge>
-            </button>
-          </div>
-
-          {archivedSectionOpen && (
-            <div className={gridCls}>
-              {archived.map((sol) => renderCard(sol, true))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      }
+    />
   );
 }

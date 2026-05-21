@@ -95,13 +95,15 @@ export async function GET(
   const projectId = session.projectId;
 
   const [storiesRes, modulesRes, personasRes, tasksRes, acRes] = await Promise.all([
-    // Stories created in THIS session (briefing scope).
+    // Stories created in THIS session (briefing scope). Dismissed stories are
+    // hidden from the briefing tree — the user explicitly descarted them.
     supabase
       .from("UserStory")
       .select(
         "id, reference, title, want, soThat, refinementStatus, moduleId, proposedModuleName, personaId",
       )
       .eq("designSessionId", sessionId)
+      .is("dismissedAt", null)
       .order("createdAt", { ascending: true }),
     // All project modules — both approved and (rare) draft. Stories link via moduleId.
     supabase
@@ -112,13 +114,14 @@ export async function GET(
       .from("ProjectPersona")
       .select("id, name")
       .eq("projectId", projectId),
-    // Tasks created in THIS session.
+    // Tasks created in THIS session. Dismissed tasks are hidden from the tree.
     supabase
       .from("Task")
       .select(
         "id, reference, title, status, functionPoints, complexity, scope, userStoryId",
       )
       .eq("designSessionId", sessionId)
+      .is("dismissedAt", null)
       .order("createdAt", { ascending: true }),
     // AC counts (we'll bucket below).
     supabase

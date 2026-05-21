@@ -170,7 +170,15 @@ export async function DELETE(
   const denied = await requireProjectMemberApi(current.projectId);
   if (denied) return denied;
 
-  const { error } = await supabase.from("Task").delete().eq("id", id);
+  // Soft delete — flag `dismissedAt`. The task drops out of the Inception
+  // briefing tree but its history is preserved.
+  const { error } = await supabase
+    .from("Task")
+    .update({
+      dismissedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    .eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, id });
 }

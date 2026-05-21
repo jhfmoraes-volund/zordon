@@ -6,7 +6,7 @@ import {
 } from "@/lib/dal";
 import { db } from "@/lib/db";
 import {
-  deleteStory,
+  dismissStory,
   getStoryByReference,
   updateStory,
 } from "@/lib/dal/story-hierarchy";
@@ -99,14 +99,14 @@ export async function DELETE(
   const story = await resolveStory(ref);
   if (!story) return new NextResponse("Not found", { status: 404 });
 
-  // Delete is manager-only (mirror RLS).
-  const { requireMinLevelApi } = await import("@/lib/dal");
-  const { MANAGER } = await import("@/lib/roles");
-  const denied = await requireMinLevelApi(MANAGER);
+  // Soft delete (sets `dismissedAt`). Allowed for anyone who can edit tasks
+  // in the project — builders need to descartar indicações do Vitor dentro do
+  // briefing. Underlying data is preserved.
+  const denied = await requireProjectEditTasksApi(story.projectId);
   if (denied) return denied;
 
   try {
-    await deleteStory(story.id);
+    await dismissStory(story.id);
     return NextResponse.json({ ok: true, id: story.id, reference: ref });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "delete failed";

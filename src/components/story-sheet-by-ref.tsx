@@ -82,7 +82,8 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
           "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description), persona:ProjectPersona(id, name, description)",
         )
         .eq("reference", ref)
-        .single();
+        .is("dismissedAt", null)
+        .maybeSingle();
       if (storyErr || !storyRow) return null;
       const projectId = (storyRow as { projectId: string }).projectId;
 
@@ -114,13 +115,15 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
           .select(
             "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description), persona:ProjectPersona(id, name, description)",
           )
-          .eq("projectId", projectId),
+          .eq("projectId", projectId)
+          .is("dismissedAt", null),
         supabase
           .from("Task")
           .select(
             "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
           )
-          .eq("projectId", projectId),
+          .eq("projectId", projectId)
+          .is("dismissedAt", null),
         supabase
           .from("AcceptanceCriterion")
           .select("*")
@@ -185,7 +188,8 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
         "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description), persona:ProjectPersona(id, name, description)",
       )
       .eq("reference", storyRef)
-      .single();
+      .is("dismissedAt", null)
+      .maybeSingle();
     if (!storyRow) return;
     const story = adaptStory(storyRow as unknown as StoryWithRelations);
     setCtx((cur) => (cur ? { ...cur, story } : cur));
@@ -199,7 +203,8 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
       .select(
         "*, assignments:TaskAssignment(memberId, member:Member(id, name)), tags:TaskTagAssignment(TaskTag(id, projectId, name, tone))",
       )
-      .eq("projectId", ctx.projectId);
+      .eq("projectId", ctx.projectId)
+      .is("dismissedAt", null);
     const { data: taskAcRes } = await supabase
       .from("AcceptanceCriterion")
       .select("*")
@@ -290,72 +295,167 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
     [refreshStory],
   );
 
-  // ─── AC handlers (granular, server is source of truth — refetch story) ───
+  // ─── AC handlers (optimistic apply via setCtx + rollback on failure) ─────
+  // Mirrors the pattern in task-sheet-by-ref.tsx. No refetch on success —
+  // we trust the server and reconcile in-place. `onAfterChange?.()` lets the
+  // outer briefing tree re-render its AC counts.
+  function patchAcInCtx(
+    updater: (acs: AdaptedStory["acceptanceCriteria"]) => AdaptedStory["acceptanceCriteria"],
+  ) {
+    setCtx((cur) =>
+      cur
+        ? {
+            ...cur,
+            story: {
+              ...cur.story,
+              acceptanceCriteria: updater(cur.story.acceptanceCriteria),
+            },
+          }
+        : cur,
+    );
+  }
+
   const handleAcCreate = useCallback(
     async (ref: string, text: string, order: number) => {
+      const tempId = `ac-tmp-${Date.now()}`;
+      const draftAc: AdaptedStory["acceptanceCriteria"][number] = {
+        id: tempId,
+        text,
+        checked: false,
+      };
+      patchAcInCtx((acs) => [...acs, draftAc]);
       try {
         const res = await fetch(`/api/stories/${ref}/acceptance`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, order }),
         });
-        if (!res.ok) throw new Error("Falha ao criar critério");
-        await refreshStory();
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao criar critério");
+        }
+        const data = (await res.json()) as {
+          acceptance: { id: string; text: string; checkedAt: string | null };
+        };
+        // Reconcile: drop the temp row and append the persisted one. Using
+        // filter+append (not map) avoids ordering bugs when other updates land
+        // mid-request — see memory `feedback_optimistic_reconcile_create`.
+        patchAcInCtx((acs) => [
+          ...acs.filter((a) => a.id !== tempId),
+          {
+            id: data.acceptance.id,
+            text: data.acceptance.text,
+            checked: data.acceptance.checkedAt !== null,
+          },
+        ]);
+        onAfterChange?.();
       } catch (e) {
+        patchAcInCtx((acs) => acs.filter((a) => a.id !== tempId));
         showErrorToast(e, { label: "Criar critério" });
       }
     },
-    [refreshStory],
+    [onAfterChange],
   );
 
   const handleAcUpdateText = useCallback(
     async (ref: string, acId: string, text: string) => {
+      if (!ctx) return;
+      const prev = ctx.story.acceptanceCriteria.find((a) => a.id === acId);
+      if (!prev) return;
+      patchAcInCtx((acs) =>
+        acs.map((a) => (a.id === acId ? { ...a, text } : a)),
+      );
       try {
         const res = await fetch(`/api/stories/${ref}/acceptance/${acId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
         });
-        if (!res.ok) throw new Error("Falha ao salvar critério");
-        await refreshStory();
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao salvar critério");
+        }
+        onAfterChange?.();
       } catch (e) {
+        patchAcInCtx((acs) =>
+          acs.map((a) => (a.id === acId ? { ...a, text: prev.text } : a)),
+        );
         showErrorToast(e, { label: "Salvar critério" });
       }
     },
-    [refreshStory],
+    [ctx, onAfterChange],
   );
 
   const handleAcToggle = useCallback(
     async (ref: string, acId: string, checked: boolean) => {
+      if (!ctx) return;
+      const prev = ctx.story.acceptanceCriteria.find((a) => a.id === acId);
+      if (!prev) return;
+      patchAcInCtx((acs) =>
+        acs.map((a) => (a.id === acId ? { ...a, checked } : a)),
+      );
       try {
         const res = await fetch(`/api/stories/${ref}/acceptance/${acId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ checked }),
         });
-        if (!res.ok) throw new Error("Falha ao marcar critério");
-        await refreshStory();
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao marcar critério");
+        }
+        onAfterChange?.();
       } catch (e) {
+        patchAcInCtx((acs) =>
+          acs.map((a) => (a.id === acId ? { ...a, checked: prev.checked } : a)),
+        );
         showErrorToast(e, { label: "Marcar critério" });
       }
     },
-    [refreshStory],
+    [ctx, onAfterChange],
   );
 
   const handleAcDelete = useCallback(
     async (ref: string, acId: string) => {
+      if (!ctx) return;
+      const prev = ctx.story.acceptanceCriteria.find((a) => a.id === acId);
+      if (!prev) return;
+      patchAcInCtx((acs) => acs.filter((a) => a.id !== acId));
       try {
         const res = await fetch(`/api/stories/${ref}/acceptance/${acId}`, {
           method: "DELETE",
         });
-        if (!res.ok) throw new Error("Falha ao remover critério");
-        await refreshStory();
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Falha ao remover critério");
+        }
+        onAfterChange?.();
       } catch (e) {
+        patchAcInCtx((acs) => [...acs, prev]);
         showErrorToast(e, { label: "Remover critério" });
       }
     },
-    [refreshStory],
+    [ctx, onAfterChange],
   );
+
+  // Soft delete (dismiss) — server flags `dismissedAt`. UI removes the row
+  // from the briefing tree via `onAfterChange`. No optimistic local state to
+  // mutate: we just close the sheet and let the parent re-render.
+  const handleDeleteStory = useCallback(async () => {
+    if (!ctx) return;
+    const ref = ctx.story.reference;
+    try {
+      const res = await fetch(`/api/stories/${ref}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Falha ao excluir story");
+      }
+      onClose();
+      onAfterChange?.();
+    } catch (e) {
+      showErrorToast(e, { label: "Excluir story" });
+    }
+  }, [ctx, onClose, onAfterChange]);
 
   const handleCreateTaskForStory = useCallback(
     async () => {
@@ -437,6 +537,7 @@ function StorySheetByRefInner({ storyRef, onClose, onAfterChange, onOpenTask }: 
       onAcUpdateText={handleAcUpdateText}
       onAcToggle={handleAcToggle}
       onAcDelete={handleAcDelete}
+      onDelete={handleDeleteStory}
     />
   );
 }
