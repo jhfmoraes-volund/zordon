@@ -21,6 +21,7 @@ const KIND_VERB: Record<string, string> = {
   sprint_started: "iniciou",
   sprint_ended: "encerrou",
   agent_task_change: "atualizou",
+  granola_auto_import: "importou do Granola",
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -30,11 +31,12 @@ const KIND_LABEL: Record<string, string> = {
   sprint_started: "Sprint iniciada",
   sprint_ended: "Sprint encerrada",
   agent_task_change: "Alpha",
+  granola_auto_import: "Granola",
 };
 
 function entityHref(
   entityType: string,
-  _entityId: string,
+  entityId: string,
   payload: Payload,
 ): string {
   // No deep-link to task sheets exists today; route to the owning project so
@@ -45,6 +47,12 @@ function entityHref(
     case "comment":
     case "sprint":
       return payload.projectId ? `/projects/${payload.projectId}` : "/";
+    case "meeting":
+      // Auto-import lands on the (first) created meeting. When count > 1 the
+      // user sees the chip "×N" and can navigate to the others via /meetings
+      // afterwards — sending them to a list view on a multi-row click would
+      // lose the freshly-ingested notes/todos they'd want to skim first.
+      return `/meetings/${entityId}`;
     default:
       return "/";
   }

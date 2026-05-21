@@ -14,6 +14,7 @@ import { runAgent } from "@/lib/agent/engine";
 import { alphaAgent } from "@/lib/agent/agents/alpha";
 import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
 import type { Capabilities } from "@/lib/agent/types";
+import { notifyMember } from "@/lib/dal/notifications";
 
 /**
  * Granola auto-import: scans a member's Granola notes since their last cursor,
@@ -175,11 +176,13 @@ export async function runGranolaImportJob(
     //    success) so the cursor advances past noisy items the user couldn't
     //    fix anyway.
     let newestSeen: string | null = null;
+    const createdMeetings: { id: string; title: string }[] = [];
     for (const note of newNotes) {
       if (!newestSeen || note.created_at > newestSeen) newestSeen = note.created_at;
       try {
-        await importGranolaNote(admin, granola, job.memberId, note);
+        const created = await importGranolaNote(admin, granola, job.memberId, note);
         result.meetingsCreated += 1;
+        createdMeetings.push(created);
       } catch (err) {
         result.noteErrors.push({
           noteId: note.id,
@@ -217,6 +220,18 @@ export async function runGranolaImportJob(
       .eq("id", job.id);
 
     await advanceMemberCursor(admin, job.memberId, result.cursorTo);
+
+    // Notify in-app feed only when we actually created something. A tick
+    // that found nothing stays silent — 23h/day of "0 new" would be noise.
+    if (createdMeetings.length > 0) {
+      await notifyAutoImport(job.memberId, createdMeetings).catch((e) => {
+        console.warn(
+          "[granola-auto-import] notify failed:",
+          (e as Error).message,
+        );
+      });
+    }
+
     result.ok = true;
     return result;
   } catch (err) {
@@ -297,7 +312,7 @@ async function importGranolaNote(
   granola: GranolaClient,
   memberId: string,
   note: GranolaNoteListItem,
-): Promise<void> {
+): Promise<{ id: string; title: string }> {
   // Hydrate enough metadata to set a sensible date/title without pulling the
   // full transcript (Alpha will do that itself via get_meeting_transcript).
   const detail = await granola.getNote(note.id, { includeTranscript: false }).catch(() => null);
@@ -347,6 +362,8 @@ async function importGranolaNote(
     meetingId: newMeetingId,
     sourceId: note.id,
   });
+
+  return { id: newMeetingId, title };
 }
 
 // ─── Headless Alpha ───────────────────────────────────────
@@ -454,4 +471,49 @@ export async function enqueueManualGranolaImport(
     .single();
   if (error) throw new Error(`Failed to enqueue manual job: ${error.message}`);
   return { enqueued: true, jobId: created!.id as string };
+}
+
+// ─── Notification ─────────────────────────────────────────
+
+/**
+ * In-app feed entry for the bell badge. Aggregated per tick: one row with
+ * count + first few titles, regardless of how many notes landed. Best-effort —
+ * notification failure must never roll back the import (caller catches).
+ *
+ * Convention:
+ *   - kind       = 'granola_auto_import' (added in 20260521 migration)
+ *   - entityType = 'meeting'
+ *   - entityId   = the FIRST created meeting (anchor for the link)
+ *   - payload.entityIds = all created meeting ids (UI can iterate if needed)
+ *   - payload.count = total created
+ *   - payload.title = either the single title, or "N reuniões importadas"
+ *   - payload.snippet = comma-separated titles, capped to 3 + "+N"
+ */
+async function notifyAutoImport(
+  memberId: string,
+  created: { id: string; title: string }[],
+): Promise<void> {
+  if (created.length === 0) return;
+  const titles = created.map((m) => m.title);
+  const preview =
+    titles.length <= 3
+      ? titles.join(", ")
+      : `${titles.slice(0, 3).join(", ")} +${titles.length - 3}`;
+
+  await notifyMember({
+    recipientMemberId: memberId,
+    kind: "granola_auto_import",
+    entityType: "meeting",
+    entityId: created[0].id,
+    actorMemberId: null,
+    payload: {
+      title:
+        created.length === 1
+          ? titles[0]
+          : `${created.length} reuniões importadas`,
+      snippet: preview,
+      count: created.length,
+      entityIds: created.map((m) => m.id),
+    },
+  });
 }

@@ -40,7 +40,7 @@ type DesignSession = {
 const TYPE_LABELS: Record<string, string> = {
   inception: "Inception",
   continuous_improvement: "Melhoria Continua",
-  super: "Super Session",
+  super: "Inception",
 };
 
 type Props = {
@@ -154,7 +154,7 @@ export function ProjectSessionsTab({
       <div className="flex gap-2 flex-wrap">
         <Button size="sm" onClick={() => setSuperOpen(true)}>
           <Plus className="h-4 w-4 mr-1" />
-          Super Session
+          Inception
         </Button>
       </div>
 

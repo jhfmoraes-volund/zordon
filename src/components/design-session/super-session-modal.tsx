@@ -54,7 +54,7 @@ export function SuperSessionModal({
 }) {
   const router = useRouter();
   const isMobile = useIsMobile();
-  const [title, setTitle] = useState(`Super Session ${projectName}`);
+  const [title, setTitle] = useState(`Inception ${projectName}`);
   const [selected, setSelected] = useState<string[]>(PRESETS.completa.keys);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,9 +138,11 @@ export function SuperSessionModal({
         )}
 
         <div className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
-          <SheetTitle>Nova Super Session</SheetTitle>
+          <SheetTitle>Nova Inception</SheetTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Escolha quais steps a sessao vai ter e em que ordem. Vitor enxergara apenas estes.
+            Sessão de imersão para investigar e validar novos produtos ou
+            funcionalidades robustas. Escolha quais steps a sessão vai ter e
+            em que ordem — Vitor enxergará apenas estes.
           </p>
         </div>
 

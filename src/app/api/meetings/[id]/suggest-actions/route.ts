@@ -31,6 +31,20 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  try {
+    return await handle(params);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error("[suggest-actions] unhandled error", { msg, stack });
+    return NextResponse.json(
+      { error: `Erro inesperado: ${msg}` },
+      { status: 500 },
+    );
+  }
+}
+
+async function handle(params: Promise<{ id: string }>) {
   const denied = await requireMinLevelApi(MANAGER);
   if (denied) return denied;
 
@@ -58,8 +72,7 @@ export async function POST(
   const { data: meetingRaw, error: meetingErr } = await supabase
     .from("Meeting")
     .select(
-      `id, type, notes, transcript, transcriptSource, transcriptSourceId,
-       projectLinks:MeetingProjectLink(project:Project(id, name))`,
+      "id, type, notes, transcript, transcriptSource, transcriptSourceId, projectLinks:MeetingProjectLink(project:Project(id, name))",
     )
     .eq("id", meetingId)
     .maybeSingle();
@@ -328,6 +341,13 @@ export async function POST(
   const unresolvedTodos: Array<{ description: string; reason: string }> = [];
 
   for (const t of extraction.todos as ExtractedTodo[]) {
+    if (!t.assigneeName) {
+      unresolvedTodos.push({
+        description: t.description,
+        reason: "Todo sem assignee — sub-agente não identificou responsável",
+      });
+      continue;
+    }
     const assigneeId = memberByName.get(t.assigneeName.toLowerCase());
     if (!assigneeId) {
       unresolvedTodos.push({
