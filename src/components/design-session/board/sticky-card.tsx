@@ -114,7 +114,7 @@ export function StickyCard({
     return (
       <article
         className={cn(
-          "group rounded-md transition-[background-color,box-shadow] duration-150",
+          "group flex flex-col rounded-md transition-[background-color,box-shadow] duration-150",
           cls.cardBg,
           cls.cardRing,
           cls.cardRingHover,
@@ -162,7 +162,7 @@ export function StickyCard({
 
         <div
           className={cn(
-            "px-3 pb-3 pt-2",
+            "min-h-0 flex-1 overflow-hidden px-3 pb-3 pt-2",
             expandedBody && !expanded
               ? "cursor-text"
               : "",
