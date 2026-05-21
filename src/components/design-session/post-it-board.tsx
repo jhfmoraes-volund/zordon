@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 
 export type PostItItem = { id: string; text: string };
@@ -16,12 +14,34 @@ export type PostItSection = {
   items: PostItItem[];
 };
 
-const TONE_BADGE: Record<PostItTone, string> = {
-  emerald: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-  rose: "bg-rose-500/15 text-rose-600 border-rose-500/30",
-  sky: "bg-sky-500/15 text-sky-600 border-sky-500/30",
-  amber: "bg-amber-500/15 text-amber-600 border-amber-500/30",
-  neutral: "bg-muted text-muted-foreground border-border",
+// Cada tom resolve para 3 CSS vars (bg/border/text) definidas em globals.css.
+// Light: papel pastel; Dark: fundo desaturado + tinta clara tonal.
+const TONE_STYLE: Record<PostItTone, { bg: string; border: string; text: string }> = {
+  emerald: {
+    bg: "var(--paper-emerald-bg)",
+    border: "var(--paper-emerald-border)",
+    text: "var(--paper-emerald-text)",
+  },
+  rose: {
+    bg: "var(--paper-rose-bg)",
+    border: "var(--paper-rose-border)",
+    text: "var(--paper-rose-text)",
+  },
+  sky: {
+    bg: "var(--paper-sky-bg)",
+    border: "var(--paper-sky-border)",
+    text: "var(--paper-sky-text)",
+  },
+  amber: {
+    bg: "var(--paper-amber-bg)",
+    border: "var(--paper-amber-border)",
+    text: "var(--paper-amber-text)",
+  },
+  neutral: {
+    bg: "var(--muted)",
+    border: "var(--border)",
+    text: "var(--muted-foreground)",
+  },
 };
 
 export function PostItBoard({
@@ -37,76 +57,192 @@ export function PostItBoard({
   onDelete: (sectionKey: string, itemId: string) => void;
   columns?: 2 | 3 | 4;
 }) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-
-  const handleAdd = (key: string) => {
-    const text = drafts[key]?.trim();
-    if (!text) return;
-    onAdd(key, text);
-    setDrafts((d) => ({ ...d, [key]: "" }));
-  };
-
   const gridClass =
     columns === 2 ? "md:grid-cols-2" :
     columns === 3 ? "md:grid-cols-3" :
     "md:grid-cols-4";
 
   return (
-    <div className={`grid gap-4 ${gridClass}`}>
+    <div className={`grid gap-6 ${gridClass}`}>
       {sections.map((section) => (
-        <div
+        <PostItColumn
           key={section.key}
-          className="rounded-lg border bg-card p-4"
-        >
-          <div className="mb-3">
-            <span
-              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide ${TONE_BADGE[section.tone]}`}
-            >
-              {section.title}
-            </span>
-          </div>
-
-          <div className="space-y-2 mb-3">
-            {section.items.map((item) => (
-              <div
-                key={item.id}
-                className="group relative rounded-lg bg-card ring-1 ring-foreground/5 p-2.5"
-              >
-                <textarea
-                  className="w-full bg-transparent text-sm text-foreground resize-none outline-none min-h-[40px]"
-                  value={item.text}
-                  onChange={(e) => onUpdate(section.key, item.id, e.target.value)}
-                  rows={2}
-                />
-                <button
-                  className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-500/20"
-                  onClick={() => onDelete(section.key, item.id)}
-                >
-                  <X className="h-3.5 w-3.5 text-red-500" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex gap-2">
-            <Input
-              placeholder="Adicionar..."
-              className="h-8 text-sm"
-              value={drafts[section.key] || ""}
-              onChange={(e) => setDrafts((d) => ({ ...d, [section.key]: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd(section.key)}
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={() => handleAdd(section.key)}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+          section={section}
+          onAdd={(text) => onAdd(section.key, text)}
+          onUpdate={(itemId, text) => onUpdate(section.key, itemId, text)}
+          onDelete={(itemId) => onDelete(section.key, itemId)}
+        />
       ))}
     </div>
+  );
+}
+
+function PostItColumn({
+  section,
+  onAdd,
+  onUpdate,
+  onDelete,
+}: {
+  section: PostItSection;
+  onAdd: (text: string) => void;
+  onUpdate: (itemId: string, text: string) => void;
+  onDelete: (itemId: string) => void;
+}) {
+  const tone = TONE_STYLE[section.tone];
+
+  return (
+    <section className="space-y-3">
+      <header className="flex items-center gap-2">
+        <span
+          className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold tracking-wide"
+          style={{
+            backgroundColor: tone.bg,
+            borderColor: tone.border,
+            color: tone.text,
+          }}
+        >
+          {section.title}
+        </span>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {section.items.length}
+        </span>
+      </header>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {section.items.map((item) => (
+          <PostItCard
+            key={item.id}
+            item={item}
+            tone={tone}
+            onUpdate={(text) => onUpdate(item.id, text)}
+            onDelete={() => onDelete(item.id)}
+          />
+        ))}
+
+        <AddPostIt tone={tone} onAdd={onAdd} />
+      </div>
+    </section>
+  );
+}
+
+function PostItCard({
+  item,
+  tone,
+  onUpdate,
+  onDelete,
+}: {
+  item: PostItItem;
+  tone: { bg: string; border: string; text: string };
+  onUpdate: (text: string) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="group relative flex h-[110px] flex-col rounded-md p-3 transition-transform duration-150 hover:-translate-y-0.5"
+      style={{
+        backgroundColor: tone.bg,
+        borderLeft: `3px solid ${tone.border}`,
+        color: tone.text,
+        boxShadow: "var(--paper-shadow)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = "var(--paper-shadow-hover)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = "var(--paper-shadow)";
+      }}
+    >
+      <textarea
+        className="h-full w-full resize-none bg-transparent pr-5 text-sm leading-snug outline-none placeholder:opacity-50"
+        style={{ color: tone.text }}
+        value={item.text}
+        onChange={(e) => onUpdate(e.target.value)}
+      />
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label="Remover"
+        className="absolute top-1.5 right-1.5 rounded p-0.5 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 dark:hover:bg-white/10"
+        style={{ color: tone.text }}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function AddPostIt({
+  tone,
+  onAdd,
+}: {
+  tone: { bg: string; border: string; text: string };
+  onAdd: (text: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editing) textareaRef.current?.focus();
+  }, [editing]);
+
+  const commit = () => {
+    const text = draft.trim();
+    if (text) onAdd(text);
+    setDraft("");
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setDraft("");
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div
+        className="flex h-[110px] flex-col rounded-md p-3"
+        style={{
+          backgroundColor: tone.bg,
+          borderLeft: `3px solid ${tone.border}`,
+          color: tone.text,
+          boxShadow: "var(--paper-shadow)",
+        }}
+      >
+        <textarea
+          ref={textareaRef}
+          className="h-full w-full resize-none bg-transparent text-sm leading-snug outline-none placeholder:opacity-50"
+          style={{ color: tone.text }}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              cancel();
+            }
+          }}
+          placeholder="Escreva e Enter pra confirmar..."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="flex h-[110px] w-full items-center justify-center gap-1.5 rounded-md border border-dashed text-xs font-medium opacity-50 transition-opacity hover:opacity-100"
+      style={{
+        borderColor: tone.border,
+        color: tone.text,
+      }}
+    >
+      <Plus className="h-3.5 w-3.5" />
+      adicionar
+    </button>
   );
 }

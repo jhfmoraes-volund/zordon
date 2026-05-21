@@ -60,7 +60,7 @@ export function WizardLayout({
     sessionType === "inception"
       ? "Inception"
       : sessionType === "super"
-        ? "Super Session"
+        ? "Inception"
         : "Continuous Improvement";
 
   const chat = useDesignSessionChat();

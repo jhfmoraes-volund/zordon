@@ -11,9 +11,11 @@ export type NotificationKind =
   | "status_changed"
   | "sprint_started"
   | "sprint_ended"
-  | "agent_task_change";
+  | "agent_task_change"
+  | "daily_todos"
+  | "granola_auto_import";
 
-export type NotificationEntityType = "task" | "sprint" | "comment";
+export type NotificationEntityType = "task" | "sprint" | "comment" | "meeting";
 
 /**
  * Payload shape per kind. Stored as jsonb; UI reads `title` + `snippet` for

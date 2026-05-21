@@ -4,8 +4,10 @@ import {
   requireMinLevelApi,
   canViewMeeting,
   canEditMeeting,
+  getEffectiveAccessLevel,
+  getActorMemberId,
 } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { BUILDER, hasMinAccessLevel } from "@/lib/roles";
 
 const MEETING_SELECT = `
   *,
@@ -34,7 +36,7 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const denied = await requireMinLevelApi(BUILDER);
   if (denied) return denied;
 
   const { id } = await params;
@@ -145,18 +147,36 @@ export async function GET(
 }
 
 async function gateEdit(meetingId: string): Promise<Response | null> {
-  const denied = await requireMinLevelApi(MANAGER);
+  const denied = await requireMinLevelApi(BUILDER);
   if (denied) return denied;
   const { data: m } = await db()
     .from("Meeting")
-    .select("createdById")
+    .select("createdById, type")
     .eq("id", meetingId)
     .maybeSingle();
   if (!m) return new Response("Not found", { status: 404 });
-  if (await canEditMeeting(m.createdById)) return null;
-  return new Response("Forbidden — only the creator or an admin can modify", {
-    status: 403,
-  });
+
+  const level = await getEffectiveAccessLevel();
+  // Manager+ uses the existing creator-or-admin rule.
+  if (hasMinAccessLevel(level, "manager")) {
+    if (await canEditMeeting(m.createdById)) return null;
+    return new Response("Forbidden — only the creator or an admin can modify", {
+      status: 403,
+    });
+  }
+  // Builder: can only edit private meetings they created themselves.
+  if (m.type !== "private") {
+    return new Response("Forbidden — builders can only edit private meetings", {
+      status: 403,
+    });
+  }
+  const actorMemberId = await getActorMemberId();
+  if (!actorMemberId || actorMemberId !== m.createdById) {
+    return new Response("Forbidden — only the creator can modify", {
+      status: 403,
+    });
+  }
+  return null;
 }
 
 type AttendeeInput = {
@@ -362,6 +382,18 @@ export async function PUT(
 
   // 4. Project links (C — daily/general permitem, super_planning trava)
   if (body.projectIds !== undefined && type !== "pm_review") {
+    // Builder editing a private: cannot link projects. Manager+ continues
+    // to be able to link projects on private meetings (existing behavior).
+    const editorLevel = await getEffectiveAccessLevel();
+    if (
+      !hasMinAccessLevel(editorLevel, "manager") &&
+      body.projectIds.length > 0
+    ) {
+      return NextResponse.json(
+        { error: "Builders não podem vincular projetos a uma reunião privada." },
+        { status: 403 },
+      );
+    }
     if (type === "super_planning") {
       return NextResponse.json(
         { error: "Não é possível alterar o projeto de uma reunião Super Planning." },

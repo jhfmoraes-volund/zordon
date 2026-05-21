@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ListChecks, Users } from "lucide-react";
+import { Heart, ListChecks, Settings2, Users } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
+import type { ChipTone } from "@/lib/status-chips";
 
 export type ClientProject = {
   id: string;
@@ -15,6 +16,26 @@ export type ClientProject = {
   taskCount: number;
 };
 
+export type ProjectInsightSummary = {
+  relationalHealth: string | null;
+  technicalHealth: string | null;
+  generatedAt: string;
+};
+
+const HEALTH_TONE: Record<string, ChipTone> = {
+  healthy: "green",
+  watch: "amber",
+  at_risk: "amber",
+  critical: "red",
+};
+
+const HEALTH_LABEL: Record<string, string> = {
+  healthy: "saudável",
+  watch: "observar",
+  at_risk: "em risco",
+  critical: "crítico",
+};
+
 function fmtDate(d: string | null): string {
   return d
     ? new Date(d).toLocaleDateString("pt-BR", {
@@ -24,7 +45,20 @@ function fmtDate(d: string | null): string {
     : "–";
 }
 
-export function ClientProjectCard({ project }: { project: ClientProject }) {
+export function ClientProjectCard({
+  project,
+  insight,
+}: {
+  project: ClientProject;
+  insight?: ProjectInsightSummary | null;
+}) {
+  const relTone = insight?.relationalHealth
+    ? HEALTH_TONE[insight.relationalHealth]
+    : undefined;
+  const techTone = insight?.technicalHealth
+    ? HEALTH_TONE[insight.technicalHealth]
+    : undefined;
+
   return (
     <Link
       href={`/projects/${project.id}`}
@@ -42,6 +76,23 @@ export function ClientProjectCard({ project }: { project: ClientProject }) {
           {fmtDate(project.startDate)} → {fmtDate(project.endDate)}
         </span>
       </div>
+
+      {insight && (relTone || techTone) ? (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {relTone ? (
+            <StatusChip tone={relTone} dot>
+              <Heart className="h-3 w-3 mr-0.5" />
+              {HEALTH_LABEL[insight.relationalHealth!]}
+            </StatusChip>
+          ) : null}
+          {techTone ? (
+            <StatusChip tone={techTone} dot>
+              <Settings2 className="h-3 w-3 mr-0.5" />
+              {HEALTH_LABEL[insight.technicalHealth!]}
+            </StatusChip>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">

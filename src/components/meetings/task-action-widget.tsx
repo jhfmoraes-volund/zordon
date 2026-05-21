@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Sparkles,
   Plus,
   Loader2,
   ChevronDown,
@@ -73,7 +72,6 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
   const [tags, setTags] = useState<TaskTag[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [suggesting, setSuggesting] = useState(false);
   const [applying, setApplying] = useState(false);
   const [creatingType, setCreatingType] = useState<MeetingTaskAction["type"] | null>(null);
 
@@ -173,34 +171,6 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
   useEffect(() => {
     load();
   }, [load]);
-
-  const suggest = async () => {
-    setSuggesting(true);
-    try {
-      const res = await fetch(
-        `/api/meetings/${meetingId}/task-actions/suggest`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectId: project.id }),
-        },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "erro");
-      await load();
-      if (data.inserted === 0) {
-        showErrorToast(
-          new Error("IA não retornou sugestões com confiança suficiente."),
-          { label: "Sugestões" },
-        );
-      }
-    } catch (e) {
-      console.error("suggest failed:", e);
-      showErrorToast(e, { label: "Falha ao gerar sugestões" });
-    } finally {
-      setSuggesting(false);
-    }
-  };
 
   const apply = async () => {
     setConfirm({
@@ -405,14 +375,6 @@ export function TaskActionWidget({ meetingId, project }: TaskActionWidgetProps) 
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={suggest} disabled={suggesting}>
-            {suggesting ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="mr-1 h-3.5 w-3.5" />
-            )}
-            Sugerir com IA
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={

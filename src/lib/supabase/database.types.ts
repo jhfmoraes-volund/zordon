@@ -610,6 +610,124 @@ export type Database = {
         }
         Relationships: []
       }
+      ClientInsight: {
+        Row: {
+          clientId: string
+          costUsdCents: number
+          createdAt: string
+          errorRelational: string | null
+          errorTechnical: string | null
+          generatedAt: string
+          generatedBy: string
+          id: string
+          inputMeetingsCount: number
+          inputProjectsCount: number
+          modelRelational: string | null
+          modelTechnical: string | null
+          relationalHealth: string | null
+          relationalSignals: Json
+          relationalSummary: string | null
+          relationalWatch: Json
+          technicalHealth: string | null
+          technicalRisks: Json
+          technicalSummary: string | null
+          technicalWatch: Json
+          triggeredByMemberId: string | null
+          updatedAt: string
+        }
+        Insert: {
+          clientId: string
+          costUsdCents?: number
+          createdAt?: string
+          errorRelational?: string | null
+          errorTechnical?: string | null
+          generatedAt?: string
+          generatedBy: string
+          id?: string
+          inputMeetingsCount?: number
+          inputProjectsCount?: number
+          modelRelational?: string | null
+          modelTechnical?: string | null
+          relationalHealth?: string | null
+          relationalSignals?: Json
+          relationalSummary?: string | null
+          relationalWatch?: Json
+          technicalHealth?: string | null
+          technicalRisks?: Json
+          technicalSummary?: string | null
+          technicalWatch?: Json
+          triggeredByMemberId?: string | null
+          updatedAt?: string
+        }
+        Update: {
+          clientId?: string
+          costUsdCents?: number
+          createdAt?: string
+          errorRelational?: string | null
+          errorTechnical?: string | null
+          generatedAt?: string
+          generatedBy?: string
+          id?: string
+          inputMeetingsCount?: number
+          inputProjectsCount?: number
+          modelRelational?: string | null
+          modelTechnical?: string | null
+          relationalHealth?: string | null
+          relationalSignals?: Json
+          relationalSummary?: string | null
+          relationalWatch?: Json
+          technicalHealth?: string | null
+          technicalRisks?: Json
+          technicalSummary?: string | null
+          technicalWatch?: Json
+          triggeredByMemberId?: string | null
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ClientInsight_clientId_fkey"
+            columns: ["clientId"]
+            isOneToOne: true
+            referencedRelation: "Client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ClientInsight_clientId_fkey"
+            columns: ["clientId"]
+            isOneToOne: true
+            referencedRelation: "client_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ClientInsight_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ClientInsight_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ClientInsight_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ClientInsight_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       CsatResponse: {
         Row: {
           clientId: string
@@ -2337,41 +2455,138 @@ export type Database = {
           },
         ]
       }
+      GranolaImportJob: {
+        Row: {
+          createdAt: string
+          cursorFrom: string | null
+          cursorTo: string | null
+          error: string | null
+          finishedAt: string | null
+          id: string
+          meetingsCreated: number
+          meetingsSkipped: number
+          memberId: string
+          notesScanned: number
+          source: string
+          startedAt: string | null
+          status: string
+        }
+        Insert: {
+          createdAt?: string
+          cursorFrom?: string | null
+          cursorTo?: string | null
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          meetingsCreated?: number
+          meetingsSkipped?: number
+          memberId: string
+          notesScanned?: number
+          source: string
+          startedAt?: string | null
+          status?: string
+        }
+        Update: {
+          createdAt?: string
+          cursorFrom?: string | null
+          cursorTo?: string | null
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          meetingsCreated?: number
+          meetingsSkipped?: number
+          memberId?: string
+          notesScanned?: number
+          source?: string
+          startedAt?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "GranolaImportJob_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "GranolaImportJob_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "GranolaImportJob_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "GranolaImportJob_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       InsightJob: {
         Row: {
+          clientId: string | null
           createdAt: string
           error: string | null
           finishedAt: string | null
           id: string
-          projectId: string
+          kind: string
+          projectId: string | null
           source: string
           startedAt: string | null
           status: string
           triggeredByMemberId: string | null
         }
         Insert: {
+          clientId?: string | null
           createdAt?: string
           error?: string | null
           finishedAt?: string | null
           id?: string
-          projectId: string
+          kind?: string
+          projectId?: string | null
           source: string
           startedAt?: string | null
           status?: string
           triggeredByMemberId?: string | null
         }
         Update: {
+          clientId?: string | null
           createdAt?: string
           error?: string | null
           finishedAt?: string | null
           id?: string
-          projectId?: string
+          kind?: string
+          projectId?: string | null
           source?: string
           startedAt?: string | null
           status?: string
           triggeredByMemberId?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "InsightJob_clientId_fkey"
+            columns: ["clientId"]
+            isOneToOne: false
+            referencedRelation: "Client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "InsightJob_clientId_fkey"
+            columns: ["clientId"]
+            isOneToOne: false
+            referencedRelation: "client_summary"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "InsightJob_projectId_fkey"
             columns: ["projectId"]
@@ -2552,6 +2767,63 @@ export type Database = {
           },
           {
             foreignKeyName: "MeetingAttendee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      MeetingPersonalNote: {
+        Row: {
+          content: string
+          meetingId: string
+          memberId: string
+          updatedAt: string
+        }
+        Insert: {
+          content?: string
+          meetingId: string
+          memberId: string
+          updatedAt?: string
+        }
+        Update: {
+          content?: string
+          meetingId?: string
+          memberId?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MeetingPersonalNote_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingPersonalNote_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingPersonalNote_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingPersonalNote_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingPersonalNote_memberId_fkey"
             columns: ["memberId"]
             isOneToOne: false
             referencedRelation: "member_summary"
@@ -2954,6 +3226,9 @@ export type Database = {
       }
       MemberIntegration: {
         Row: {
+          autoImportCursor: string | null
+          autoImportEnabled: boolean
+          autoImportLastRunAt: string | null
           createdAt: string
           memberId: string
           provider: string
@@ -2962,6 +3237,9 @@ export type Database = {
           updatedAt: string
         }
         Insert: {
+          autoImportCursor?: string | null
+          autoImportEnabled?: boolean
+          autoImportLastRunAt?: string | null
           createdAt?: string
           memberId: string
           provider: string
@@ -2970,6 +3248,9 @@ export type Database = {
           updatedAt?: string
         }
         Update: {
+          autoImportCursor?: string | null
+          autoImportEnabled?: boolean
+          autoImportLastRunAt?: string | null
           createdAt?: string
           memberId?: string
           provider?: string
@@ -5375,7 +5656,9 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: undefined
       }
+      enqueue_client_insight_jobs: { Args: never; Returns: number }
       enqueue_daily_todo_reminders: { Args: never; Returns: undefined }
+      enqueue_granola_auto_imports: { Args: never; Returns: number }
       enqueue_project_insight_jobs: { Args: never; Returns: number }
       ensure_wiki_sections: {
         Args: { p_project_id: string; p_sections: Json }
@@ -5408,6 +5691,7 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_allocated_to: { Args: { p_project_id: string }; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
+      kick_granola_import_drain: { Args: never; Returns: undefined }
       kick_project_insight_drain: { Args: never; Returns: undefined }
       next_task_reference: { Args: { p_project_id: string }; Returns: string }
       next_user_story_reference: {
@@ -5448,6 +5732,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      run_granola_auto_import_batch: { Args: never; Returns: number }
       run_project_insight_batch: { Args: never; Returns: number }
       scope_item_delete: {
         Args: { p_bucket: string; p_item_id: string; p_session_id: string }

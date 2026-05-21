@@ -10,11 +10,13 @@ import { PageTitle } from "@/components/app-shell";
 import {
   ArrowLeft, Plus, CheckCircle2, Circle, Clock,
   ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink, Download,
+  Sparkles, Loader2,
 } from "lucide-react";
 import { TaskActionWidget } from "@/components/meetings/task-action-widget";
 import { ImportMeetingModal } from "@/components/meetings/import-meeting-modal";
-import { useAlphaChat } from "@/components/alpha-chat";
-import { Sparkles } from "lucide-react";
+import { PersonalNoteCard } from "@/components/meetings/personal-note-card";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
@@ -81,6 +83,7 @@ type Meeting = {
   type: "pm_review" | "general" | "daily" | "super_planning" | "private";
   title: string | null;
   sprintId: string | null;
+  createdById: string | null;
   transcript: string | null;
   transcriptSource: "roam" | "granola" | null;
   transcriptSourceId: string | null;
@@ -127,7 +130,9 @@ export default function MeetingDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { kickoffSuggestTodos, isLoading: alphaBusy } = useAlphaChat();
+  const { member: currentMember, effectiveAccessLevel } = useAuth();
+  const [suggesting, setSuggesting] = useState(false);
+  const isBuilder = effectiveAccessLevel === "builder";
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loadError, setLoadError] = useState<"forbidden" | "notfound" | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -337,6 +342,12 @@ export default function MeetingDetailPage({
     return new Date(d) < new Date();
   };
 
+  // Mode de edição: manager+ edita normalmente; builder só pode editar
+  // privadas que ele mesmo criou (server enforces — UI mantém clean).
+  const canEdit = !isBuilder
+    ? true
+    : meeting.type === "private" && !!currentMember && meeting.createdById === currentMember.id;
+
   // Título: prioriza título explícito; senão deriva por tipo.
   const derivedHeaderTitle =
     meeting.type === "pm_review"
@@ -382,6 +393,46 @@ export default function MeetingDetailPage({
     });
   };
 
+  const handleSuggest = async () => {
+    if (suggesting) return;
+    setSuggesting(true);
+    try {
+      const res = await fetchOrThrow(`/api/meetings/${id}/suggest-actions`, {
+        method: "POST",
+      });
+      const data = (await res.json()) as {
+        counts: {
+          tasksProposed: number;
+          todosCreated: number;
+          skipped: number;
+          unresolvedTasks: number;
+          unresolvedTodos: number;
+        };
+      };
+      const { counts } = data;
+      const summary: string[] = [];
+      summary.push(`${counts.tasksProposed} Task${counts.tasksProposed === 1 ? "" : "s"} proposta${counts.tasksProposed === 1 ? "" : "s"}`);
+      summary.push(`${counts.todosCreated} To-do${counts.todosCreated === 1 ? "" : "s"} criada${counts.todosCreated === 1 ? "" : "s"}`);
+      if (counts.skipped > 0) summary.push(`${counts.skipped} descartada${counts.skipped === 1 ? "" : "s"}`);
+      if (counts.unresolvedTasks + counts.unresolvedTodos > 0) {
+        summary.push(
+          `${counts.unresolvedTasks + counts.unresolvedTodos} sem resolver`,
+        );
+      }
+      toast.success(summary.join(" · "), { id: "suggest-actions" });
+      await load();
+    } catch (e) {
+      showErrorToast(e, { label: "Sugerir com IA" });
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  const canSuggest =
+    !!(meeting.transcript && meeting.transcript.trim()) ||
+    !!(meeting.transcriptSource && meeting.transcriptSourceId) ||
+    !!(meeting.notes && meeting.notes.trim());
+
   return (
     <div className="space-y-6">
       <PageTitle title={headerTitle} subtitle={fmtDate(meeting.date)} />
@@ -408,21 +459,53 @@ export default function MeetingDetailPage({
             <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
           )}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleImportClick}
-          className="shrink-0"
-          title={
-            meeting.type === "private"
-              ? "Ingerir transcrição do Granola nesta reunião privada"
-              : "Ingerir uma transcrição do Roam ou Granola nesta reunião"
-          }
-        >
-          <Download className="h-4 w-4 mr-1" />
-          {meeting.type === "private" ? "Importar do Granola" : "Importar reunião"}
-        </Button>
+        {canEdit && (
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleImportClick}
+              title={
+                meeting.type === "private"
+                  ? "Ingerir transcrição do Granola nesta reunião privada"
+                  : "Ingerir uma transcrição do Roam ou Granola nesta reunião"
+              }
+            >
+              <Download className="h-4 w-4 mr-1" />
+              {meeting.type === "private" ? "Importar do Granola" : "Importar reunião"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSuggest}
+              disabled={suggesting || !canSuggest}
+              title={
+                canSuggest
+                  ? "Analisa transcrição/notas e cria Tasks (Plano de Tasks) e To-dos automaticamente"
+                  : "Importe uma transcrição ou escreva notas antes de sugerir"
+              }
+            >
+              {suggesting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Analisando…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-1" />
+                  Sugerir com IA
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Minhas notas — private to the acting member, no admin bypass.
+          Skipped on private meetings because the whole meeting is already
+          the owner's private workspace, so a "private inside private" card
+          would be redundant. */}
+      {meeting.type !== "private" && <PersonalNoteCard meetingId={meeting.id} />}
 
       {/* Attendees + project links (general/daily/super_planning) */}
       {(meeting.type === "general" || meeting.type === "daily" || meeting.type === "super_planning") && (
@@ -538,7 +621,12 @@ export default function MeetingDetailPage({
                         review={review}
                         collapsed={!expandedProjects.has(review.id)}
                         onToggle={() => toggleProject(review.id)}
-                        onUpdate={(data) => updateReview(review.id, data)}
+                        onUpdate={
+                          canEdit
+                            ? (data) => updateReview(review.id, data)
+                            : () => Promise.resolve()
+                        }
+                        readOnly={!canEdit}
                       />
                     ))}
                   </div>
@@ -584,30 +672,12 @@ export default function MeetingDetailPage({
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">To-dos</h2>
-          <div className="flex items-center gap-2">
-            {meeting.transcriptSource && meeting.transcriptSourceId && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={alphaBusy}
-                onClick={() =>
-                  kickoffSuggestTodos({
-                    meetingId: meeting.id,
-                    source: meeting.transcriptSource!,
-                    sourceId: meeting.transcriptSourceId!,
-                  })
-                }
-                title={`Alpha lê a transcrição ${meeting.transcriptSource === "roam" ? "Roam" : "Granola"} desta reunião e sugere To-dos`}
-              >
-                <Sparkles className="mr-1 h-4 w-4" />
-                Sugerir com IA
-              </Button>
-            )}
+          {canEdit && (
             <Button size="sm" variant="outline" onClick={openCreateTodo}>
               <Plus className="mr-1 h-4 w-4" />
               Nova To-do
             </Button>
-          </div>
+          )}
         </div>
 
         <div className="surface divide-y">
@@ -624,26 +694,35 @@ export default function MeetingDetailPage({
             return (
               <div
                 key={action.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => openEditTodo(action)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openEditTodo(action);
-                  }
-                }}
-                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/40"
+                role={canEdit ? "button" : undefined}
+                tabIndex={canEdit ? 0 : undefined}
+                onClick={canEdit ? () => openEditTodo(action) : undefined}
+                onKeyDown={
+                  canEdit
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openEditTodo(action);
+                        }
+                      }
+                    : undefined
+                }
+                className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3 transition-colors ${
+                  canEdit ? "cursor-pointer hover:bg-muted/40" : ""
+                }`}
               >
                 {/* Linha 1 mobile / bloco principal desktop */}
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      cycleActionStatus(action);
+                      if (canEdit) cycleActionStatus(action);
                     }}
-                    className={`shrink-0 mt-0.5 ${iconColor} hover:opacity-70 transition-opacity`}
-                    title={`Clique para mudar: ${chip.label}`}
+                    disabled={!canEdit}
+                    className={`shrink-0 mt-0.5 ${iconColor} ${
+                      canEdit ? "hover:opacity-70 transition-opacity" : "cursor-default"
+                    }`}
+                    title={canEdit ? `Clique para mudar: ${chip.label}` : chip.label}
                   >
                     <Icon className="h-5 w-5" />
                   </button>
@@ -685,13 +764,17 @@ export default function MeetingDetailPage({
                       {fmtShortDate(action.dueDate)}
                     </span>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => cycleActionStatus(action)}
-                    className="cursor-pointer"
-                  >
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => cycleActionStatus(action)}
+                      className="cursor-pointer"
+                    >
+                      <StatusChip {...chip} />
+                    </button>
+                  ) : (
                     <StatusChip {...chip} />
-                  </button>
+                  )}
                 </div>
               </div>
             );
@@ -705,9 +788,16 @@ export default function MeetingDetailPage({
         <Textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          onBlur={saveNotes}
+          onBlur={canEdit ? saveNotes : undefined}
           rows={4}
-          placeholder="Anotações gerais da reunião..."
+          disabled={!canEdit}
+          placeholder={
+            canEdit
+              ? "Anotações gerais da reunião..."
+              : notes
+                ? ""
+                : "Sem notas gerais."
+          }
         />
       </div>
 
@@ -773,11 +863,13 @@ function ReviewCard({
   collapsed,
   onToggle,
   onUpdate,
+  readOnly = false,
 }: {
   review: ProjectReview;
   collapsed: boolean;
   onToggle: () => void;
   onUpdate: (data: Partial<ProjectReview>) => void;
+  readOnly?: boolean;
 }) {
   const [nextSteps, setNextSteps] = useState(review.nextSteps || "");
   const [sprintHealth, setSprintHealth] = useState(review.sprintHealth);
@@ -785,6 +877,7 @@ function ReviewCard({
   const [additionalNotes, setAdditionalNotes] = useState(review.additionalNotes || "");
 
   const save = (overrides?: Partial<ProjectReview>) => {
+    if (readOnly) return;
     onUpdate({
       nextSteps,
       sprintHealth,
@@ -819,14 +912,18 @@ function ReviewCard({
             {review.project.status}
           </Badge>
         </div>
-        <StatusChipSelect
-          value={sprintHealth}
-          options={HEALTH}
-          onValueChange={(v) => {
-            setSprintHealth(v);
-            save({ sprintHealth: v });
-          }}
-        />
+        {readOnly ? (
+          <StatusChip {...lookupChip(HEALTH, sprintHealth)} />
+        ) : (
+          <StatusChipSelect
+            value={sprintHealth}
+            options={HEALTH}
+            onValueChange={(v) => {
+              setSprintHealth(v);
+              save({ sprintHealth: v });
+            }}
+          />
+        )}
       </div>
 
       {!collapsed && (
@@ -838,7 +935,8 @@ function ReviewCard({
               onChange={(e) => setNextSteps(e.target.value)}
               onBlur={() => save()}
               rows={2}
-              placeholder="Quais são os próximos passos do projeto..."
+              disabled={readOnly}
+              placeholder={readOnly ? "" : "Quais são os próximos passos do projeto..."}
             />
           </div>
 
@@ -849,7 +947,8 @@ function ReviewCard({
               onChange={(e) => setAttentionPoints(e.target.value)}
               onBlur={() => save()}
               rows={2}
-              placeholder="Riscos, bloqueios, preocupações..."
+              disabled={readOnly}
+              placeholder={readOnly ? "" : "Riscos, bloqueios, preocupações..."}
             />
           </div>
 
@@ -860,7 +959,8 @@ function ReviewCard({
               onChange={(e) => setAdditionalNotes(e.target.value)}
               onBlur={() => save()}
               rows={2}
-              placeholder="Observações adicionais..."
+              disabled={readOnly}
+              placeholder={readOnly ? "" : "Observações adicionais..."}
             />
           </div>
         </div>

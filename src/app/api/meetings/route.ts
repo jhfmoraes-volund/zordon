@@ -1,7 +1,12 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi, getMemberId, canViewMeeting } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import {
+  requireMinLevelApi,
+  getMemberId,
+  canViewMeeting,
+  getEffectiveAccessLevel,
+} from "@/lib/dal";
+import { BUILDER, hasMinAccessLevel } from "@/lib/roles";
 
 const MEETING_SELECT = `
   *,
@@ -28,7 +33,7 @@ type AttendeeInput = {
 };
 
 export async function GET() {
-  const denied = await requireMinLevelApi(MANAGER);
+  const denied = await requireMinLevelApi(BUILDER);
   if (denied) return denied;
 
   const supabase = db();
@@ -38,37 +43,19 @@ export async function GET() {
     .order("date", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // db() bypasses RLS, so filter by visibility here. Admin sees all; PMs see
-  // only meetings they attended (pm_review/general) or where they're PM of
-  // a linked project (daily/super_planning).
-  const linkedProjectIds = Array.from(
-    new Set(
-      ((meetings ?? []) as { projectLinks?: { projectId: string }[] }[])
-        .flatMap((m) => m.projectLinks ?? [])
-        .map((l) => l.projectId),
-    ),
-  );
-  const projectPmMap = new Map<string, string | null>();
-  if (linkedProjectIds.length > 0) {
-    const { data: projects } = await supabase
-      .from("Project")
-      .select("id, pmId")
-      .in("id", linkedProjectIds);
-    for (const p of projects ?? []) projectPmMap.set(p.id, p.pmId ?? null);
-  }
-
+  // db() bypasses RLS, so filter by visibility here. Rule is unified
+  // (canViewMeeting): admin sees everything except `private`; everyone
+  // else (manager+ included) sees meetings where they're in MeetingAttendee.
+  // `private` is creator-only — admin doesn't see private notes either.
   const visible: typeof meetings = [];
   for (const m of meetings ?? []) {
     const attendeeMemberIds = ((m as { attendees?: { memberId: string | null }[] }).attendees ?? [])
       .map((a) => a.memberId)
       .filter((x): x is string => !!x);
-    const linkedProjectPmIds = ((m as { projectLinks?: { projectId: string }[] }).projectLinks ?? [])
-      .map((l) => projectPmMap.get(l.projectId) ?? null)
-      .filter((x): x is string => !!x);
     const ok = await canViewMeeting({
       type: (m as { type: string }).type,
       attendeeMemberIds,
-      linkedProjectPmIds,
+      linkedProjectPmIds: [],
       createdById: (m as { createdById?: string | null }).createdById ?? null,
     });
     if (ok) visible.push(m);
@@ -78,7 +65,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireMinLevelApi(MANAGER);
+  // Builders can create private meetings (with no linked projects).
+  // Anything else requires MANAGER+.
+  const denied = await requireMinLevelApi(BUILDER);
   if (denied) return denied;
 
   try {
@@ -114,6 +103,23 @@ export async function POST(req: NextRequest) {
         { error: "transcriptSource e transcriptSourceId devem vir juntos." },
         { status: 400 }
       );
+    }
+
+    // Builder gate: only private meetings, no linked projects.
+    const callerLevel = await getEffectiveAccessLevel();
+    if (!hasMinAccessLevel(callerLevel, "manager")) {
+      if (type !== "private") {
+        return NextResponse.json(
+          { error: "Builders só podem criar reuniões privadas." },
+          { status: 403 },
+        );
+      }
+      if (projectIds.length > 0) {
+        return NextResponse.json(
+          { error: "Builders não podem vincular projetos a uma reunião privada." },
+          { status: 403 },
+        );
+      }
     }
 
     const supabase = db();
