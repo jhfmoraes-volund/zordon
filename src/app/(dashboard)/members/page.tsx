@@ -23,6 +23,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,6 +75,7 @@ type Member = {
   specialty: string | null;
   githubUsername: string | null;
   isExternal: boolean;
+  isGuest: boolean;
   fpCapacity: number;
   /** Soma de FP planejados (≠ backlog) nas sprints que rodam na semana atual. */
   fpPlannedWeek: number;
@@ -85,6 +87,25 @@ type Member = {
   secondaryTower: TowerKey | null;
   /** Frontend ≥70 AND Backend ≥70. */
   fullstack: boolean;
+};
+
+// ─── Member category filter ──────────────────────────────
+// Três categorias mutuamente exclusivas derivadas de isGuest/isExternal:
+// guest (Member-stub, só comenta), externo (cedido por outra empresa),
+// membro (interno). "all" mostra todos.
+type MemberFilter = "all" | "internal" | "guest" | "external";
+
+function memberCategory(m: Member): Exclude<MemberFilter, "all"> {
+  if (m.isGuest) return "guest";
+  if (m.isExternal) return "external";
+  return "internal";
+}
+
+const MEMBER_FILTER_LABELS: Record<MemberFilter, string> = {
+  all: "Todos",
+  internal: "Membros",
+  guest: "Guests",
+  external: "Externos",
 };
 
 const roleDetails: Record<string, {
@@ -249,7 +270,12 @@ function MemberCardMobile({
               Fullstack
             </Badge>
           )}
-          {m.isExternal && (
+          {m.isGuest && (
+            <Badge variant="outline" className="text-[10px] border-sky-400 text-sky-500">
+              Guest
+            </Badge>
+          )}
+          {m.isExternal && !m.isGuest && (
             <Badge variant="outline" className="text-[10px] border-orange-400 text-orange-500">
               Externo
             </Badge>
@@ -322,6 +348,27 @@ export default function MembersPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [skillSheetMemberId, setSkillSheetMemberId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<MemberFilter>("all");
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+
+  // Contagem por categoria (sempre sobre o conjunto completo, independente do
+  // filtro ativo) pra rotular as opções do Select.
+  const counts = members.reduce(
+    (acc, m) => {
+      acc.all += 1;
+      acc[memberCategory(m)] += 1;
+      return acc;
+    },
+    { all: 0, internal: 0, guest: 0, external: 0 } as Record<MemberFilter, number>,
+  );
+
+  const visibleMembers =
+    filter === "all" ? members : members.filter((m) => memberCategory(m) === filter);
+
+  // Roles e Torres descrevem a composição do time (interno + externos), não
+  // guests — que são stubs sem position/skill. Sempre excluem guests,
+  // independente do filtro da tabela.
+  const teamMembers = members.filter((m) => !m.isGuest);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -391,6 +438,7 @@ export default function MembersPage() {
         specialty: (m.specialty as string) ?? null,
         githubUsername: (m.githubUsername as string) ?? null,
         isExternal: (m.isExternal as boolean) ?? false,
+        isGuest: (m.isGuest as boolean) ?? false,
         fpCapacity: (m.fpCapacity as number) ?? 0,
         fpPlannedWeek: weekLoadMap.get(id) ?? 0,
         skills,
@@ -486,22 +534,30 @@ export default function MembersPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Remover este membro?")) return;
-    await memberMutate(
-      { type: "delete", id },
-      async (signal) => {
-        const res = await fetchOrThrow(`/api/members/${id}`, {
-          method: "DELETE",
-          signal,
-        });
-        return (await res.json().catch(() => ({}))) as { ok?: true };
+  const remove = (id: string) => {
+    const name = members.find((m) => m.id === id)?.name;
+    setConfirmState({
+      title: name ? `Remover ${name}?` : "Remover este membro?",
+      description: "Esse membro será removido permanentemente.",
+      confirmLabel: "Remover",
+      destructive: true,
+      onConfirm: async () => {
+        await memberMutate(
+          { type: "delete", id },
+          async (signal) => {
+            const res = await fetchOrThrow(`/api/members/${id}`, {
+              method: "DELETE",
+              signal,
+            });
+            return (await res.json().catch(() => ({}))) as { ok?: true };
+          },
+          {
+            errorLabel: "Falha ao remover membro",
+            reconcile: (prev) => prev.filter((m) => m.id !== id),
+          },
+        );
       },
-      {
-        errorLabel: "Falha ao remover membro",
-        reconcile: (prev) => prev.filter((m) => m.id !== id),
-      },
-    );
+    });
   };
 
   return (
@@ -512,9 +568,30 @@ export default function MembersPage() {
         addLabel="Convidar membro"
       />
 
+      {/* Filtro por categoria (Membros / Guests / Externos) */}
+      <div className="flex justify-end">
+        <Select value={filter} onValueChange={(v) => v && setFilter(v as MemberFilter)}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue>
+              {(value: string | null) => {
+                const f = (value as MemberFilter) ?? "all";
+                return `${MEMBER_FILTER_LABELS[f]} (${counts[f]})`;
+              }}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {(["all", "internal", "guest", "external"] as MemberFilter[]).map((f) => (
+              <SelectItem key={f} value={f}>
+                {MEMBER_FILTER_LABELS[f]} ({counts[f]})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Mobile: cards */}
       <div className="md:hidden space-y-3">
-        {members.map((m) => (
+        {visibleMembers.map((m) => (
           <MemberCardMobile
             key={m.id}
             m={m}
@@ -525,9 +602,11 @@ export default function MembersPage() {
             onDelete={() => remove(m.id)}
           />
         ))}
-        {members.length === 0 && (
+        {visibleMembers.length === 0 && (
           <div className="surface p-8 text-center text-muted-foreground text-sm">
-            Nenhum membro cadastrado.
+            {filter === "all"
+              ? "Nenhum membro cadastrado."
+              : `Nenhum ${MEMBER_FILTER_LABELS[filter].toLowerCase()} nessa categoria.`}
           </div>
         )}
       </div>
@@ -545,13 +624,18 @@ export default function MembersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {members.map((m) => {
+            {visibleMembers.map((m) => {
               const usage = m.fpCapacity > 0 ? m.fpPlannedWeek / m.fpCapacity : 0;
               return (
                 <TableRow key={m.id}>
                   <TableCell className="font-medium">
                     {m.name}
-                    {m.isExternal && (
+                    {m.isGuest && (
+                      <Badge variant="outline" className="ml-2 text-[10px] border-sky-400 text-sky-500">
+                        Guest
+                      </Badge>
+                    )}
+                    {m.isExternal && !m.isGuest && (
                       <Badge variant="outline" className="ml-2 text-[10px] border-orange-400 text-orange-500">
                         Externo
                       </Badge>
@@ -632,10 +716,12 @@ export default function MembersPage() {
                 </TableRow>
               );
             })}
-            {members.length === 0 && (
+            {visibleMembers.length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                  Nenhum membro cadastrado.
+                  {filter === "all"
+                    ? "Nenhum membro cadastrado."
+                    : `Nenhum ${MEMBER_FILTER_LABELS[filter].toLowerCase()} nessa categoria.`}
                 </TableCell>
               </TableRow>
             )}
@@ -650,7 +736,7 @@ export default function MembersPage() {
         </h2>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {Object.entries(roleDetails).map(([key, role]) => {
-            const count = members.filter((m) => m.position === key).length;
+            const count = teamMembers.filter((m) => m.position === key).length;
             return (
               <DetailCard key={key} label={role.label} summary={role.summary} responsibilities={role.responsibilities} extra={role.suggestedCapacity} count={count} />
             );
@@ -673,7 +759,7 @@ export default function MembersPage() {
             <TowerCard
               key={tower.key}
               tower={tower}
-              members={members}
+              members={teamMembers}
               onOpenSkills={(id) => setSkillSheetMemberId(id)}
             />
           ))}
@@ -874,6 +960,8 @@ export default function MembersPage() {
           </ResponsiveDialogFooter>
         </ResponsiveDialogContent>
       </ResponsiveDialog>
+
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }

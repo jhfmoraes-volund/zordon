@@ -6,19 +6,19 @@ export type StepDef = {
 };
 
 export const STEP_CATALOG: Record<string, Omit<StepDef, "index">> = {
-  pre_work: { key: "pre_work", title: "Pre-Trabalho", description: "Upload de documentos e pre-preenchimento com IA" },
-  product_vision: { key: "product_vision", title: "Visao do Produto", description: "Por que existe? Qual problema resolve? Como e o sucesso?" },
-  scope_definition: { key: "scope_definition", title: "E / Nao E / Faz / Nao Faz", description: "Alinhar identidade e fronteiras do produto antes de explorar personas" },
-  personas_journeys: { key: "personas_journeys", title: "Personas & Jornadas", description: "Quem sofre com o problema? Como vive hoje? Como sera com a solucao?" },
-  brainstorm: { key: "brainstorm", title: "Brainstorm de Funcionalidades", description: "Ideias sem filtro — cards de funcionalidades com contexto" },
-  risks_gaps: { key: "risks_gaps", title: "Riscos & Lacunas", description: "O que pode dar errado e o que ainda nao esta claro nas regras de negocio" },
-  prioritization: { key: "prioritization", title: "Priorizacao & Escopo", description: "MVP / Next / Out — o que entra agora?" },
-  technical_specs: { key: "technical_specs", title: "Especificacoes Tecnicas", description: "Stack, integracoes, regras tecnicas e restricoes" },
-  hypotheses: { key: "hypotheses", title: "Hipoteses & Metricas", description: "O que precisamos validar? Indicadores, metas e evidencias" },
-  briefing: { key: "briefing", title: "Briefing", description: "Resumo consolidado + geracao de tasks" },
+  pre_work: { key: "pre_work", title: "Pré-Trabalho", description: "Upload de documentos e pré-preenchimento com IA" },
+  product_vision: { key: "product_vision", title: "Visão", description: "Por que existe? Qual problema resolve? Como é o sucesso?" },
+  scope_definition: { key: "scope_definition", title: "Escopo do Produto", description: "Alinhar identidade e fronteiras do produto (é / não é / faz / não faz) antes de explorar personas" },
+  personas_journeys: { key: "personas_journeys", title: "Personas", description: "Quem sofre com o problema? Como vive hoje? Como será com a solução?" },
+  brainstorm: { key: "brainstorm", title: "Brainstorm", description: "Ideias sem filtro — cards de funcionalidades com contexto" },
+  risks_gaps: { key: "risks_gaps", title: "Riscos", description: "O que pode dar errado e o que ainda não está claro nas regras de negócio" },
+  prioritization: { key: "prioritization", title: "Priorização", description: "MVP / Next / Out — o que entra agora?" },
+  technical_specs: { key: "technical_specs", title: "Especificações", description: "Stack, integrações, regras técnicas e restrições" },
+  hypotheses: { key: "hypotheses", title: "Métricas", description: "O que precisamos validar? Indicadores, metas e evidências" },
+  briefing: { key: "briefing", title: "Briefing", description: "Resumo consolidado + geração de tasks" },
   retrospective: { key: "retrospective", title: "Retrospectiva", description: "O que foi entregue + feedback" },
   new_demands: { key: "new_demands", title: "Novas Demandas", description: "Features, bugs, melhorias" },
-  refinement: { key: "refinement", title: "Refinamento Tecnico", description: "Duvidas e dependencias" },
+  refinement: { key: "refinement", title: "Refinamento Técnico", description: "Dúvidas e dependências" },
 };
 
 export const ALWAYS_FIRST = "pre_work";

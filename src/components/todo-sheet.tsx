@@ -16,6 +16,7 @@ import {
 import { Trash2, Calendar, FileText, Link2, User2, FolderKanban } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
+import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 
@@ -182,6 +183,7 @@ function TodoSheetBody({
     sourceReviewId: initial?.sourceReviewId ?? "",
   });
   const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   // CREATE: persist on first explicit "Criar" click. UPDATE: save on blur.
   const persistCreate = useCallback(async (): Promise<Todo | null> => {
@@ -292,20 +294,30 @@ function TodoSheetBody({
     await patch({ sourceReviewId: next || null });
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!todo) {
       onClose();
       return;
     }
-    if (!confirm("Remover esta To-do?")) return;
-    onClose();
-    onChange?.();
-    try {
-      await fetchOrThrow(endpoint.itemUrl(todo.id), { method: "DELETE" });
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao remover to-do" });
-      onChange?.();
-    }
+    const id = todo.id;
+    setConfirmState({
+      title: "Remover esta To-do?",
+      description: "Essa To-do será removida permanentemente.",
+      confirmLabel: "Remover",
+      destructive: true,
+      // O ConfirmDialog espera este onConfirm resolver antes de se fechar; só
+      // então fechamos a TodoSheet (fechá-la antes desmontaria o próprio dialog
+      // no meio do await). Erro vira toast e mantém a sheet aberta.
+      onConfirm: async () => {
+        try {
+          await fetchOrThrow(endpoint.itemUrl(id), { method: "DELETE" });
+          onChange?.();
+          onClose();
+        } catch (e) {
+          showErrorToast(e, { label: "Falha ao remover to-do" });
+        }
+      },
+    });
   };
 
   const sourceLabel = todo?.source ? SOURCE_LABELS[todo.source] ?? todo.source : "Manual";
@@ -367,7 +379,12 @@ function TodoSheetBody({
               onValueChange={handleAssignee}
             >
               <SelectTrigger className="h-8 text-sm">
-                <SelectValue placeholder="Selecione" />
+                <SelectValue placeholder="Selecione">
+                  {(v: string | null) => {
+                    if (!v) return <span className="text-muted-foreground">Selecione</span>;
+                    return members!.find((m) => m.id === v)?.name ?? v;
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {members!.map((m) => (
@@ -472,6 +489,11 @@ function TodoSheetBody({
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        state={confirmState}
+        onClose={() => setConfirmState(null)}
+      />
     </>
   );
 }
