@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   getActorMemberId,
-  requireProjectMemberApi,
+  requireProjectCommentApi,
 } from "@/lib/dal";
 import {
   decorateForViewer,
@@ -69,7 +69,7 @@ async function authorizeAuthor(cid: string): Promise<
       ),
     };
   }
-  const denied = await requireProjectMemberApi(projectId);
+  const denied = await requireProjectCommentApi(projectId);
   if (denied) return { ok: false, response: denied };
 
   const me = await getActorMemberId();

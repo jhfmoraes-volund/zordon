@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getActorMemberId, getUser, requireProjectMemberApi } from "@/lib/dal";
+import { isGuestActor, maskFPIfGuest } from "@/lib/guest-payload";
 import { setTagsForTask } from "@/lib/dal/task-tags";
 import {
   TASK_TAG_LIMIT,
@@ -53,7 +54,8 @@ export async function GET(
   if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
-  return NextResponse.json(task);
+  const guest = await isGuestActor();
+  return NextResponse.json(maskFPIfGuest(task, guest));
 }
 
 export async function PUT(
@@ -105,7 +107,8 @@ export async function PUT(
     );
   }
 
-  return NextResponse.json(task);
+  const guest = await isGuestActor();
+  return NextResponse.json(task ? maskFPIfGuest(task, guest) : task);
 }
 
 async function fanoutTaskNotifications(

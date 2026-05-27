@@ -151,9 +151,9 @@ export async function PUT(
           | { role?: string; access_level?: string; member_id?: string }
           | null) ?? {};
 
-      const nextRole = positionChanged
+      const nextRole: string = positionChanged
         ? newPosition!
-        : currentMeta.role ?? existing.position;
+        : currentMeta.role ?? existing.position ?? "guest";
       const nextAccessLevel: AccessLevel = accessLevelChanged
         ? (accessLevel as AccessLevel)
         : ((currentMeta.access_level as AccessLevel | undefined) ??

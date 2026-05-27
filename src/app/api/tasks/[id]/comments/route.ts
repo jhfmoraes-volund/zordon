@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   getActorMemberId,
-  requireProjectMemberApi,
+  requireProjectCommentApi,
   requireProjectViewApi,
 } from "@/lib/dal";
 import {
@@ -95,7 +95,7 @@ export async function POST(
   const projectId = await fetchTaskProjectId(id);
   if (!projectId) return new NextResponse("Not found", { status: 404 });
 
-  const denied = await requireProjectMemberApi(projectId);
+  const denied = await requireProjectCommentApi(projectId);
   if (denied) return denied;
 
   const json = await req.json().catch(() => null);

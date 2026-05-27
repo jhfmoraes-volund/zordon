@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getUser, getRealRole, requireMinLevelApi } from "@/lib/dal";
+import { getUser, requireMinLevelApi } from "@/lib/dal";
 import {
   MANAGER,
-  hasMinLevel,
   resolveAccessLevel,
   positionLabel,
   type AccessLevel,
   type Position,
 } from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { projectAccessInviteEmail, sendEmail } from "@/lib/email";
 
 const ALLOWED_ROLES = [
   "viewer",
@@ -154,7 +152,7 @@ export async function GET(
   // ProjectAccess rows whose user wasn't in the memberId-based fetch above.
   const { data: members } = await supabase
     .from("Member")
-    .select("id, name, email, userId")
+    .select("id, name, email, userId, isGuest")
     .in("userId", userIds);
 
   const memberByUser = new Map(
@@ -175,6 +173,11 @@ export async function GET(
     // other managers/admins still bypass via is_manager() but aren't part of
     // this project's roster.
     const isProjectPm = !!pmUserId && uid === pmUserId;
+    // "isMember" no payload da UI significa "faz parte do time interno", não
+    // só "tem linha em Member". Guests recém-convidados ganham um Member-stub
+    // (isGuest=true) só pra poder comentar — mas devem aparecer na lista de
+    // guests, não de members.
+    const memberInternal = !!member && member.isGuest !== true;
     return {
       userId: uid,
       email: member?.email ?? auth?.email ?? null,
@@ -182,9 +185,9 @@ export async function GET(
       // PM without ProjectAccess gets a synthetic 'lead' for display only;
       // UI hides the editable control for managers anyway.
       role: (access?.role as AccessRole | undefined) ?? "lead",
-      isMember: !!member,
+      isMember: memberInternal,
       memberId: member?.id ?? null,
-      fpAllocation: member ? pmFp.get(member.id) ?? null : null,
+      fpAllocation: memberInternal ? pmFp.get(member!.id) ?? null : null,
       grantedAt: access?.grantedAt ?? new Date(0).toISOString(),
       isManager: isProjectPm,
       managerPosition: isProjectPm ? auth?.position ?? null : null,
@@ -277,6 +280,40 @@ export async function POST(
     createdGuest = true;
   }
 
+  // Garantia: todo guest user precisa de Member-stub (isGuest=true, fpCapacity=0)
+  // pra poder comentar em tasks (TaskComment.authorMemberId → Member). Stub fica
+  // fora de squad/relatórios de capacidade.
+  {
+    const { data: existingMember } = await db()
+      .from("Member")
+      .select("id, isGuest")
+      .eq("userId", userId!)
+      .maybeSingle();
+    if (!existingMember) {
+      const stubName = name ?? email.split("@")[0];
+      // role='guest' bate com o CHECK quando isGuest=true. Trigger
+      // sync_member_role_position espelha em position='guest'. OK.
+      const { error: memberErr } = await db().from("Member").insert({
+        id: crypto.randomUUID(),
+        userId: userId!,
+        name: stubName,
+        email,
+        role: "guest",
+        fpCapacity: 0,
+        isGuest: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      if (memberErr) {
+        console.error(
+          "[access POST] failed to create guest Member stub:",
+          memberErr.message,
+        );
+        // Não bloqueia o convite — guest sem Member ainda enxerga, só não comenta.
+      }
+    }
+  }
+
   // Insert ProjectAccess (or update role if already present).
   const { error: paErr } = await db()
     .from("ProjectAccess")
@@ -293,40 +330,71 @@ export async function POST(
     return NextResponse.json({ error: paErr.message }, { status: 500 });
   }
 
-  // Magic link only on first access (new guest, or existing user being added
-  // for the first time). For role changes we don't re-spam.
-  let emailDispatched = false;
+  // Gera link manual pra entregar pro guest (sem email). O manager copia e
+  // envia pelo canal dele (WhatsApp/Telegram/etc).
+  //   - createdGuest=true (user novo): type=invite → set-password
+  //   - user existente sem senha:      type=recovery → set-password
+  //   - user existente com senha:      type=magiclink → 1-shot login
+  //   - se já tinha acesso ao projeto: null (sem link novo)
+  //
+  // Nota: "invite" só funciona pra criar user novo. Pra user existente, o
+  // Supabase devolve "user already registered" — daí usamos "recovery".
+  let inviteLink: string | null = null;
+  let inviteType: "set_password" | "magic_link" | null = null;
+
   if (createdGuest || !userExisted) {
-    const { data: linkData } = await admin.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/projects/${projectId}`,
-      },
-    });
-    const magicLink = linkData?.properties?.action_link;
-    if (magicLink) {
-      const { data: project } = await db()
-        .from("Project")
-        .select("name")
-        .eq("id", projectId)
-        .maybeSingle();
-      const inviterRole = await getRealRole();
-      const inviterName = hasMinLevel(inviterRole, MANAGER)
-        ? me.email ?? "Time"
-        : "Time";
-      const tpl = projectAccessInviteEmail({
-        projectName: project?.name ?? "projeto",
-        inviterName,
-        magicLink,
+    const hasPassword = !createdGuest && (await userHasPassword(admin, userId!));
+    const redirectTo = hasPassword
+      ? `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/projects/${projectId}`
+      : `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/set-password?next=${encodeURIComponent(`/projects/${projectId}`)}`;
+
+    let linkResp;
+    if (hasPassword) {
+      linkResp = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+        options: { redirectTo },
       });
-      const sent = await sendEmail({ to: email, ...tpl });
-      emailDispatched = sent.ok;
+    } else if (createdGuest) {
+      linkResp = await admin.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: { redirectTo },
+      });
+    } else {
+      linkResp = await admin.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: { redirectTo },
+      });
+    }
+
+    if (linkResp.error) {
+      console.error("[access POST] generateLink failed:", linkResp.error.message);
+    } else {
+      inviteLink = linkResp.data?.properties?.action_link ?? null;
+      inviteType = hasPassword ? "magic_link" : "set_password";
     }
   }
 
   return NextResponse.json(
-    { ok: true, userId, role, emailDispatched },
+    { ok: true, userId, role, inviteLink, inviteType },
     { status: 201 },
   );
+}
+
+/**
+ * True iff the user has a password set in auth.users.
+ * Uses the admin client to check `encrypted_password IS NOT NULL` indirectly —
+ * Supabase doesn't expose the column, but the `user_metadata.password_set`
+ * flag we set on first password definition is the canonical signal.
+ */
+async function userHasPassword(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<boolean> {
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data?.user) return false;
+  const meta = data.user.user_metadata as { password_set?: boolean } | null;
+  return Boolean(meta?.password_set);
 }

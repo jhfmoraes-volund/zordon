@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { useIsGuest } from "@/hooks/use-is-guest";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { TASK_STATUS } from "@/lib/status-chips";
 import { Separator } from "@/components/ui/separator";
@@ -213,6 +214,7 @@ export function TaskSheetInner({
   onDelete,
 }: TaskSheetProps & { task: Task }) {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const isGuest = useIsGuest();
   // Local drafts for text/number fields (saved on blur).
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -631,43 +633,45 @@ export function TaskSheetInner({
             </Field>
           </Field.Row>
 
-          <Field.Row cols={2}>
-            <Field name="task-fp">
-              <Field.Label>Function Points</Field.Label>
-              <Field.Control>
-                <Input
-                  type="number"
-                  min={1}
-                  value={fp}
-                  onChange={(e) => {
-                    setFpManual(true);
-                    setFp(Number(e.target.value) || 1);
-                  }}
-                  onBlur={() => persistIfChanged("functionPoints", fp)}
-                />
-              </Field.Control>
-              {fpManual ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newFp = suggestFunctionPoints(
-                      task.scope,
-                      task.complexity,
-                    );
-                    setFp(newFp);
-                    setFpManual(false);
-                    persist({ functionPoints: newFp });
-                  }}
-                  className="text-left text-[10px] text-muted-foreground hover:text-foreground hover:underline"
-                >
-                  Voltar pra matriz {task.scope} × {task.complexity}
-                </button>
-              ) : (
-                <Field.Hint>
-                  Sugerido pela matriz {task.scope} × {task.complexity}
-                </Field.Hint>
-              )}
-            </Field>
+          <Field.Row cols={isGuest ? undefined : 2}>
+            {!isGuest && (
+              <Field name="task-fp">
+                <Field.Label>Function Points</Field.Label>
+                <Field.Control>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={fp}
+                    onChange={(e) => {
+                      setFpManual(true);
+                      setFp(Number(e.target.value) || 1);
+                    }}
+                    onBlur={() => persistIfChanged("functionPoints", fp)}
+                  />
+                </Field.Control>
+                {fpManual ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newFp = suggestFunctionPoints(
+                        task.scope,
+                        task.complexity,
+                      );
+                      setFp(newFp);
+                      setFpManual(false);
+                      persist({ functionPoints: newFp });
+                    }}
+                    className="text-left text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    Voltar pra matriz {task.scope} × {task.complexity}
+                  </button>
+                ) : (
+                  <Field.Hint>
+                    Sugerido pela matriz {task.scope} × {task.complexity}
+                  </Field.Hint>
+                )}
+              </Field>
+            )}
 
             <Field name="task-type">
               <Field.Label>Tipo</Field.Label>

@@ -217,12 +217,20 @@ async function handle(params: Promise<{ id: string }>) {
   }
 
   // ─── 5. Idempotência: apaga propostas AI pending anteriores ──────────────
-  await supabase
-    .from("MeetingTaskAction")
-    .delete()
-    .eq("meetingId", meetingId)
-    .eq("source", "ai")
-    .eq("decision", "pending");
+  await Promise.all([
+    supabase
+      .from("MeetingTaskAction")
+      .delete()
+      .eq("meetingId", meetingId)
+      .eq("source", "ai")
+      .eq("decision", "pending"),
+    supabase
+      .from("Todo")
+      .delete()
+      .eq("meetingId", meetingId)
+      .eq("source", "ai")
+      .eq("decision", "pending"),
+  ]);
 
   // ─── 6. Resolve nomes → ids e monta inserts ──────────────────────────────
   const projectByName = new Map(
@@ -360,7 +368,8 @@ async function handle(params: Promise<{ id: string }>) {
     todoRows.push({
       id: crypto.randomUUID(),
       meetingId,
-      source: "meeting",
+      source: "ai",
+      decision: "pending",
       description: t.description.slice(0, 500),
       assigneeId,
       createdById: me.id,

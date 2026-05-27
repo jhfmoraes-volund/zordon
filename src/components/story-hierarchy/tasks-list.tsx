@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useIsGuest } from "@/hooks/use-is-guest";
 import {
   Select,
   SelectContent,
@@ -827,10 +828,11 @@ function StoryGroupBlock({
   editing: RowEditingProps;
 }) {
   const [open, setOpen] = useState(true);
-  const totalFP = rows.reduce((acc, t) => acc + t.functionPoints, 0);
+  const isGuest = useIsGuest();
+  const totalFP = rows.reduce((acc, t) => acc + (t.functionPoints ?? 0), 0);
   const doneFP = rows
     .filter((t) => t.status === "done")
-    .reduce((acc, t) => acc + t.functionPoints, 0);
+    .reduce((acc, t) => acc + (t.functionPoints ?? 0), 0);
 
   return (
     <section className="overflow-hidden rounded-xl border bg-card">
@@ -866,9 +868,11 @@ function StoryGroupBlock({
           <span className="font-mono tabular-nums">
             {rows.length} task{rows.length === 1 ? "" : "s"}
           </span>
-          <span className="font-mono tabular-nums">
-            {doneFP}/{totalFP} FP
-          </span>
+          {!isGuest && (
+            <span className="font-mono tabular-nums">
+              {doneFP}/{totalFP} FP
+            </span>
+          )}
         </span>
       </button>
       {open ? <TasksTable rows={rows} editing={editing} /> : null}
@@ -941,6 +945,7 @@ function TasksTable({
   // make it to the CSS bundle, and the layout silently degrades to a
   // single-column stack.
   const isMobile = useIsMobile();
+  const isGuest = useIsGuest();
   // Title floor is wider on mobile so the title actually breathes once the
   // Story column drops out (storyHint is undefined on mobile via FlatList).
   const titleMin = isMobile ? 480 : 220;
@@ -949,7 +954,10 @@ function TasksTable({
   layoutParts.push("56px", `minmax(${titleMin}px, 1fr)`);
   if (storyHint) layoutParts.push("200px");
   if (editing.showSprint) layoutParts.push("130px");
-  layoutParts.push("130px", "44px", "170px");
+  // FP column oculta pra guest.
+  layoutParts.push("130px");
+  if (!isGuest) layoutParts.push("44px");
+  layoutParts.push("170px");
   if (editing.showMenu) layoutParts.push("40px");
   const gridStyle = { gridTemplateColumns: layoutParts.join(" ") };
 
@@ -957,7 +965,7 @@ function TasksTable({
   const fixedSum =
     (editing.bulkEnabled ? 28 : 0) + 56 + titleMin
     + (storyHint ? 200 : 0) + (editing.showSprint ? 130 : 0)
-    + 130 + 44 + 170 + (editing.showMenu ? 40 : 0);
+    + 130 + (isGuest ? 0 : 44) + 170 + (editing.showMenu ? 40 : 0);
   const colCount = layoutParts.length;
   const minWidthPx = fixedSum + (colCount - 1) * 12;
 
@@ -1013,7 +1021,9 @@ function TasksTable({
             <SortHeader sortKey="sprint" label="Sprint" editing={editing} />
           ) : null}
           <SortHeader sortKey="status" label="Status" editing={editing} />
-          <SortHeader sortKey="fp" label="FP" editing={editing} align="right" />
+          {!isGuest && (
+            <SortHeader sortKey="fp" label="FP" editing={editing} align="right" />
+          )}
           <SortHeader sortKey="assignee" label="Assignee" editing={editing} align="right" />
           {editing.showMenu ? <span /> : null}
         </div>
@@ -1134,9 +1144,11 @@ function TasksTable({
                 )}
               </span>
 
-              <span className="text-right font-mono text-xs tabular-nums">
-                {task.functionPoints}
-              </span>
+              {!isGuest && (
+                <span className="text-right font-mono text-xs tabular-nums">
+                  {task.functionPoints ?? "—"}
+                </span>
+              )}
 
               {/* Assignee: borderless select for compact look */}
               {editing.onChangeAssignee ? (

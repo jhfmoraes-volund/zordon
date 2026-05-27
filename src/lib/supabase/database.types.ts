@@ -975,6 +975,7 @@ export type Database = {
           totalSteps: number
           type: string
           updatedAt: string
+          visibility: string
         }
         Insert: {
           actualDurationMin?: number | null
@@ -999,6 +1000,7 @@ export type Database = {
           totalSteps?: number
           type?: string
           updatedAt: string
+          visibility?: string
         }
         Update: {
           actualDurationMin?: number | null
@@ -1023,6 +1025,7 @@ export type Database = {
           totalSteps?: number
           type?: string
           updatedAt?: string
+          visibility?: string
         }
         Relationships: [
           {
@@ -3094,9 +3097,10 @@ export type Database = {
           githubUsername: string | null
           id: string
           isExternal: boolean
+          isGuest: boolean
           name: string
           onboardedAt: string | null
-          position: string
+          position: string | null
           role: string
           seniority: string | null
           specialty: string | null
@@ -3121,9 +3125,10 @@ export type Database = {
           githubUsername?: string | null
           id?: string
           isExternal?: boolean
+          isGuest?: boolean
           name: string
           onboardedAt?: string | null
-          position: string
+          position?: string | null
           role?: string
           seniority?: string | null
           specialty?: string | null
@@ -3148,9 +3153,10 @@ export type Database = {
           githubUsername?: string | null
           id?: string
           isExternal?: boolean
+          isGuest?: boolean
           name?: string
           onboardedAt?: string | null
-          position?: string
+          position?: string | null
           role?: string
           seniority?: string | null
           specialty?: string | null
@@ -5059,6 +5065,7 @@ export type Database = {
           assigneeId: string
           createdAt: string
           createdById: string
+          decision: string
           description: string
           dueDate: string | null
           id: string
@@ -5074,6 +5081,7 @@ export type Database = {
           assigneeId: string
           createdAt?: string
           createdById: string
+          decision?: string
           description: string
           dueDate?: string | null
           id?: string
@@ -5089,6 +5097,7 @@ export type Database = {
           assigneeId?: string
           createdAt?: string
           createdById?: string
+          decision?: string
           description?: string
           dueDate?: string | null
           id?: string
@@ -5403,6 +5412,7 @@ export type Database = {
           totalSteps: number | null
           type: string | null
           updatedAt: string | null
+          visibility: string | null
         }
         Relationships: [
           {
@@ -5634,10 +5644,18 @@ export type Database = {
         Returns: Json
       }
       can_access_session: { Args: { p_session_id: string }; Returns: boolean }
+      can_change_session_visibility: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
       can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_edit_session: { Args: { p_session_id: string }; Returns: boolean }
       can_edit_sessions: { Args: { p_project_id: string }; Returns: boolean }
       can_edit_tasks: { Args: { p_project_id: string }; Returns: boolean }
+      can_view_design_session: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
       can_view_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_view_project: { Args: { p_project_id: string }; Returns: boolean }
       create_meeting_with_reviews: {
@@ -5696,6 +5714,7 @@ export type Database = {
       get_my_role: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       is_allocated_to: { Args: { p_project_id: string }; Returns: boolean }
+      is_guest: { Args: never; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
       kick_granola_import_drain: { Args: never; Returns: undefined }
       kick_project_insight_drain: { Args: never; Returns: undefined }

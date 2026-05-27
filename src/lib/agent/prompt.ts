@@ -890,7 +890,6 @@ export function buildSystemPrompt({
     currentStepKey === "pre_work"
       ? `
 ## Modo Pre-Trabalho
-${buildTranscriptsBlock(transcripts ?? [])}
 Voce esta no step de Pre-Trabalho. Seu objetivo e entender o projeto do usuario e pre-preencher os proximos steps.
 
 ### Como agir:
@@ -1496,7 +1495,22 @@ Execute conforme a Regra 0 (Confirmacao proporcional ao risco):
 - Nivel 3 (delete, revert, compact): SEMPRE confirme.
 `;
 
-  const volatileSuffix = `${modeBlock}${projectMemorySection}${memorySection}
+  // Transcripts são dados da sessão e devem aparecer em qualquer step.
+  // Antes ficavam só no preWorkSection (pre_work) — agora vivem no
+  // volatileSuffix, então briefing/outras phases também enxergam o que
+  // foi importado. Fora do cache do prompt (já que muda quando o user
+  // adiciona/remove transcripts mid-session).
+  const transcriptsBlock = buildTranscriptsBlock(transcripts ?? []);
+
+  // Diagnostic log — remover depois de confirmar que transcripts aparecem.
+  console.log("[Vitor buildSystemPrompt]", {
+    currentStepKey,
+    transcriptsCount: transcripts?.length ?? 0,
+    transcriptsBlockLen: transcriptsBlock.length,
+    firstTitle: transcripts?.[0]?.meetingTitle ?? null,
+  });
+
+  const volatileSuffix = `${modeBlock}${projectMemorySection}${memorySection}${transcriptsBlock}
 
 ## Dados completos da sessao
 ${sessionContext || "Nenhum dado preenchido ainda."}`;

@@ -102,6 +102,11 @@ export default function ProjectDetailPage({
   const supabase = useMemo(() => createClient(), []);
   const { effectiveAccessLevel } = useAuth();
   const canManageSprint = hasMinAccessLevel(effectiveAccessLevel, "manager");
+  const isGuest = !hasMinAccessLevel(effectiveAccessLevel, "builder");
+  // Settings é gerencial. Guest não vê.
+  const visibleTabs = isGuest
+    ? TABS.filter((t) => t.key !== "settings")
+    : TABS;
 
   const router = useRouter();
   const pathname = usePathname();
@@ -1602,7 +1607,7 @@ export default function ProjectDetailPage({
 
       {/* Tabs */}
       <div className="flex gap-1 border-b overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
@@ -1685,6 +1690,7 @@ export default function ProjectDetailPage({
         <ProjectSessionsTab
           projectId={id}
           projectName={project.name}
+          canManage={canManageSprint}
         />
       ) : activeTab === "wiki" ? (
         <ProjectWiki projectId={id} />

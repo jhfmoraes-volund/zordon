@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { OPEN_STATUSES } from "@/lib/function-points";
 import { getCurrentMember, getUser } from "@/lib/dal";
+import { isGuestActor } from "@/lib/guest-payload";
 
 export async function GET() {
   const user = await getUser();
@@ -70,17 +71,25 @@ export async function GET() {
     }
   }
 
+  const guest = await isGuestActor();
+  const safeTasks = guest
+    ? tasks.map((t: any) => ({ ...t, functionPoints: null }))
+    : tasks;
+  const safeSprints = guest
+    ? Array.from(sprintMap.values()).map((s) => ({ ...s, fpTotal: null }))
+    : Array.from(sprintMap.values());
+
   return NextResponse.json({
     member: {
       id: member.id,
       name: member.name,
       role: member.role,
       position: member.position,
-      fpCapacity: member.fpCapacity,
+      fpCapacity: guest ? null : member.fpCapacity,
     },
-    fpOpen,
-    tasks,
-    sprints: Array.from(sprintMap.values()),
+    fpOpen: guest ? null : fpOpen,
+    tasks: safeTasks,
+    sprints: safeSprints,
     projects,
   });
 }
