@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionAccessApi } from "@/lib/dal";
 import { db } from "@/lib/db";
+import { isGuestActor } from "@/lib/guest-payload";
 
 /**
  * GET /api/design-sessions/[id]/tree
@@ -316,15 +317,26 @@ export async function GET(
     (g) => g.key.startsWith("module:") && g.approved,
   ).length;
 
+  const guest = await isGuestActor();
+  const safeTree = guest
+    ? tree.map((g) => ({
+        ...g,
+        stories: g.stories.map((s) => ({
+          ...s,
+          tasks: s.tasks.map((t) => ({ ...t, functionPoints: null })),
+        })),
+      }))
+    : tree;
+
   return NextResponse.json({
     sessionId,
     projectId,
-    tree,
+    tree: safeTree,
     stats: {
       totalStories,
       totalTasks,
       draftTasks,
-      totalFp,
+      totalFp: guest ? null : totalFp,
       proposedModulesCount,
       approvedModulesCount,
     },

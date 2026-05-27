@@ -384,20 +384,60 @@ export async function canEditTasks(projectId: string): Promise<boolean> {
 }
 
 /**
- * True iff the *acting* user can INTERACT with design sessions in the project:
+ * True iff the *acting* user can INTERACT with design sessions in the project.
  *   - Manager: yes
- *   - Builder/guest: any ProjectAccess row (viewer/session_participant/contributor/lead)
+ *   - Guest: NÃO (read-only em DS pública; nunca edita) — Fase guest hardening.
+ *   - Builder com ProjectAccess: yes (qualquer role)
  *
- * Design sessions são colaborativas — qualquer pessoa com acesso ao projeto
- * interage (cria, chata, adiciona notas, completa, reabre). A separação por
- * projeto via ProjectAccess já é o gate. Espelha can_edit_sessions() em SQL
- * (migration 20260519_design_session_open_to_viewer.sql).
+ * Espelha can_edit_session() em SQL pós migration 20260526_guest_access_hardening
+ * — guest é bloqueado mesmo com ProjectAccess.
  */
 export async function canEditSessions(projectId: string): Promise<boolean> {
   const level = await getEffectiveAccessLevel();
   if (hasMinAccessLevel(level, "manager")) return true;
+  if (isGuest(level)) return false;
   const ids = await getAccessibleProjectIds();
   return ids.includes(projectId);
+}
+
+/** True se o nível efetivo é guest. Helper p/ filtros de visibility e FP. */
+export function isGuest(level: AccessLevel | null | undefined): boolean {
+  return level === "guest";
+}
+
+/**
+ * True iff guest viewer pode VER esta DS específica.
+ *   - DS 'public' + ProjectAccess no projeto: yes
+ *   - DS 'internal': nunca
+ * Para não-guests, delega a `canViewProject`.
+ */
+export async function canViewDesignSession(
+  session: { projectId: string; visibility: "public" | "internal" } | null,
+): Promise<boolean> {
+  if (!session) return false;
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "manager")) return true;
+  if (!(await canViewProject(session.projectId))) return false;
+  if (isGuest(level) && session.visibility !== "public") return false;
+  return true;
+}
+
+/**
+ * True iff o usuário pode mudar a visibility (public/internal) de uma DS.
+ * Regra (espelho do SQL `can_change_session_visibility`):
+ *   - admin/manager global: yes
+ *   - ProjectAccess.role IN ('lead','contributor') no projeto: yes
+ *   - resto (incl. guest): no
+ */
+export async function canChangeSessionVisibility(
+  projectId: string,
+): Promise<boolean> {
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "manager")) return true;
+  if (isGuest(level)) return false;
+  const list = await getProjectAccessList();
+  const row = list.find((r) => r.projectId === projectId);
+  return row?.role === "lead" || row?.role === "contributor";
 }
 
 /** @deprecated Use {@link canViewProject}. Kept for in-flight callers. */
@@ -466,6 +506,20 @@ export async function requireProjectEditTasksApi(
   return new Response("Forbidden — cannot edit tasks in this project", {
     status: 403,
   });
+}
+
+/**
+ * Route Handler guard: caller can COMMENT on tasks in the project.
+ * Mais permissivo que `requireProjectEditTasksApi` — qualquer ProjectAccess
+ * (incl. viewer/guest) pode comentar. Espelha a regra "guest deixa comentário".
+ */
+export async function requireProjectCommentApi(
+  projectId: string,
+): Promise<Response | null> {
+  const user = await getUser();
+  if (!user) return new Response("Unauthorized", { status: 401 });
+  if (await canViewProject(projectId)) return null;
+  return new Response("Forbidden — no access to this project", { status: 403 });
 }
 
 /** Route Handler guard: caller can EDIT DESIGN SESSIONS in the project. 401/403 or null. */
@@ -543,21 +597,35 @@ export async function canEditMeeting(
   return !!memberId && memberId === createdById;
 }
 
+async function lookupSession(
+  sessionId: string,
+): Promise<{ projectId: string; visibility: "public" | "internal" } | null> {
+  const { data } = await db()
+    .from("DesignSession")
+    .select("projectId, visibility")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    projectId: data.projectId as string,
+    visibility: (data.visibility ?? "internal") as "public" | "internal",
+  };
+}
+
+/** @deprecated retorna só projectId. Prefira `lookupSession`. */
 async function lookupSessionProject(
   sessionId: string,
 ): Promise<string | null> {
-  const { data } = await db()
-    .from("DesignSession")
-    .select("projectId")
-    .eq("id", sessionId)
-    .maybeSingle();
-  return data?.projectId ?? null;
+  const s = await lookupSession(sessionId);
+  return s?.projectId ?? null;
 }
 
 /**
  * Route Handler guard for DesignSession-scoped routes. Looks up the session's
- * projectId and gates access by VIEW permission. Returns 401/403/404 or null.
- * Admin/PM pass without the lookup.
+ * projectId + visibility and gates access. Returns 401/403/404 or null.
+ *   - Admin/manager: pass.
+ *   - Guest: precisa de ProjectAccess no projeto E DS visibility='public'.
+ *   - Builder com ProjectAccess: pass.
  */
 export async function requireSessionAccessApi(
   sessionId: string,
@@ -568,11 +636,11 @@ export async function requireSessionAccessApi(
   const level = await getEffectiveAccessLevel();
   if (hasMinAccessLevel(level, "manager")) return null;
 
-  const projectId = await lookupSessionProject(sessionId);
-  if (!projectId) return new Response("Session not found", { status: 404 });
+  const session = await lookupSession(sessionId);
+  if (!session) return new Response("Session not found", { status: 404 });
 
-  if (await canViewProject(projectId)) return null;
-  return new Response("Forbidden — no access to this project", { status: 403 });
+  if (await canViewDesignSession(session)) return null;
+  return new Response("Forbidden — no access to this session", { status: 403 });
 }
 
 /**

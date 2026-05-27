@@ -46,7 +46,15 @@ export default async function DashboardLayout({
   // Membros recém-convidados (onboardedAt nulo) passam pelo flow inicial
   // antes de acessar qualquer rota do dashboard. Admins impersonando ficam
   // de fora do gate — caso contrário não dariam pra debugar contas novas.
-  if (member && !member.onboardedAt && !member._impersonatedBy) {
+  // Guests (Member-stub) também ficam de fora — não são do time interno,
+  // não precisam onboardar; entram direto no /projects que enxergam.
+  const isGuest = !hasMinAccessLevel(effectiveAccessLevel, "builder");
+  if (
+    member &&
+    !member.onboardedAt &&
+    !member._impersonatedBy &&
+    !isGuest
+  ) {
     redirect("/onboarding");
   }
 

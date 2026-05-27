@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentMember } from "@/lib/dal";
+import { isGuestActor } from "@/lib/guest-payload";
 
 /**
  * GET /api/profile/capacity
@@ -12,6 +13,9 @@ import { getCurrentMember } from "@/lib/dal";
 export async function GET() {
   const member = await getCurrentMember();
   if (!member) return new NextResponse("Unauthorized", { status: 401 });
+  if (await isGuestActor()) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
 
   const supabase = db();
 

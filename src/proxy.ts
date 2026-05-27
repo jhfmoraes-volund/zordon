@@ -74,12 +74,14 @@ export async function proxy(request: NextRequest) {
     : null;
 
   // Guests can only navigate inside the project surface and design sessions.
-  // Anywhere else (members, squads, ops, profile, etc.) redirects to /projects.
+  // Anywhere else (clients, workflow, members, squads, ops, profile, etc.)
+  // redirects to /projects.
   if (user && accessLevel === "guest" && !isApi) {
     const guestAllowed =
-      pathname === "/" ||
-      pathname.startsWith("/projects") ||
-      pathname.startsWith("/design-sessions") ||
+      pathname === "/projects" ||
+      pathname.startsWith("/projects/") ||
+      pathname.startsWith("/design-sessions/") ||
+      pathname === "/design-sessions" ||
       pathname.startsWith("/auth/");
     if (!guestAllowed) {
       const url = request.nextUrl.clone();
@@ -124,6 +126,6 @@ export const config = {
      * NOTE: /api is now included so the proxy injects x-user-* headers,
      * eliminating the duplicate getUser() HTTP call in every route handler.
      */
-    "/((?!_next|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2?|ttf|eot|ico|map)$).*)",
+    "/((?!_next|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2?|ttf|eot|ico|map|webmanifest)$).*)",
   ],
 };

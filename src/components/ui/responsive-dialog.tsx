@@ -72,7 +72,7 @@ function ResponsiveDialogContent({
         side="bottom"
         showCloseButton={showCloseButton}
         className={cn(
-          "max-h-[90vh] gap-0 rounded-t-xl p-0",
+          "max-h-[90vh] gap-0 overflow-y-auto overscroll-contain rounded-t-xl p-0",
           "flex flex-col",
           className
         )}
@@ -87,10 +87,18 @@ function ResponsiveDialogContent({
     )
   }
 
+  // Desktop: cap dialog at 85vh and let the popup itself scroll. Both Header
+  // and Footer are not sticky on desktop (just plain divs), so a single
+  // scrollable container is the simplest fit — no nested scroll regions,
+  // works the same whether the consumer uses ResponsiveDialogBody or just
+  // passes children directly.
   return (
     <DialogContent
       showCloseButton={showCloseButton}
-      className={className}
+      className={cn(
+        "max-h-[85vh] overflow-y-auto overscroll-contain",
+        className,
+      )}
       {...props}
     >
       {children}
@@ -165,11 +173,14 @@ function ResponsiveDialogBody({
 }: React.ComponentProps<"div">) {
   const { isMobile } = useResponsiveDialogContext()
 
+  // The scroll responsibility now lives on ResponsiveDialogContent itself
+  // (max-h + overflow-y-auto). Body becomes a layout slot for padding and
+  // gap control on mobile, no scroll of its own — avoids nested scroll.
   if (isMobile) {
     return (
       <div
         data-slot="responsive-dialog-body"
-        className={cn("flex-1 overflow-y-auto px-4 py-4", className)}
+        className={cn("px-4 py-4", className)}
         {...props}
       />
     )

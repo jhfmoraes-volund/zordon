@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { OPEN_STATUSES } from "@/lib/function-points";
 import { getUser } from "@/lib/dal";
+import { isGuestActor } from "@/lib/guest-payload";
 
 export async function GET(
   _req: NextRequest,
@@ -249,26 +250,58 @@ export async function GET(
   const h = await headers();
   const viewerRole = h.get("x-user-role");
 
+  const guest = await isGuestActor();
+
+  // Guest: oculta DS internas, zera FP em tasks/sprints/projectMembers/members,
+  // omite memberCapacity (relatório interno), e zera FP do health summary.
+  const safeDesignSessions = guest
+    ? designSessions.filter((s: any) => s.visibility === "public")
+    : designSessions;
+
+  const safeTasks = guest
+    ? tasks.map((t: any) => ({
+        ...t,
+        functionPoints: null,
+        assignments: (t.assignments ?? []).map((a: any) =>
+          a.member
+            ? { ...a, member: { ...a.member, fpCapacity: null } }
+            : a,
+        ),
+      }))
+    : tasks;
+
+  const safeSprints = guest
+    ? sprints.map((s: any) => ({ ...s, totalFp: null, fpDone: null }))
+    : sprints;
+
+  const safeProjectMembers = guest
+    ? projectMembers.map((pm: any) => ({
+        ...pm,
+        fpAllocation: null,
+        member: pm.member ? { ...pm.member, fpCapacity: null } : pm.member,
+      }))
+    : projectMembers;
+
   return NextResponse.json({
     ...project,
     projectSquads,
-    projectMembers,
-    sprints,
-    tasks,
-    designSessions,
+    projectMembers: safeProjectMembers,
+    sprints: safeSprints,
+    tasks: safeTasks,
+    designSessions: safeDesignSessions,
     taskSummary,
     health: {
       startDate,
       progressPercent,
       totalTasks,
       doneTasks,
-      totalFp,
-      doneFp,
+      totalFp: guest ? null : totalFp,
+      doneFp: guest ? null : doneFp,
       attentionLevel,
       attentionReasons,
       overdueCount: overdueTasks.length,
     },
-    memberCapacity: members,
+    memberCapacity: guest ? [] : members,
     viewerRole,
   });
 }

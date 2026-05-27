@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { VolundLogo } from "@/components/volund-logo";
 import { LiveTerminal } from "./live-terminal";
 import { login, type LoginState } from "./actions";
 import styles from "./login.module.css";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const [state, action, pending] = useActionState<LoginState, FormData>(
@@ -13,6 +14,47 @@ export default function LoginPage() {
   );
   const [focusActive, setFocusActive] = useState(false);
   const [remember, setRemember] = useState(true);
+  const [tokenProcessing, setTokenProcessing] = useState(false);
+
+  // Quando o Supabase rejeita o `redirect_to` (por falta de allowlist),
+  // ele cai em /login com o token no fragmento. Detectamos isso aqui,
+  // hidratamos a sessão e redirecionamos pra set-password.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash || !hash.includes("access_token=")) return;
+
+    setTokenProcessing(true);
+    const params = new URLSearchParams(hash.slice(1));
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    const type = params.get("type");
+
+    if (!access_token || !refresh_token) {
+      setTokenProcessing(false);
+      return;
+    }
+
+    (async () => {
+      const supabase = createClient();
+      const { error } = await supabase.auth.setSession({
+        access_token,
+        refresh_token,
+      });
+      if (error) {
+        console.error("[login] setSession from hash failed:", error.message);
+        setTokenProcessing(false);
+        return;
+      }
+      // Limpa o fragmento da URL antes de navegar.
+      window.history.replaceState(null, "", "/login");
+      const dest =
+        type === "recovery"
+          ? "/auth/set-password?next=/projects"
+          : "/projects";
+      window.location.replace(dest);
+    })();
+  }, []);
 
   return (
     <div className={styles.stage}>
@@ -29,8 +71,15 @@ export default function LoginPage() {
         <div className={styles.formWrap}>
           <div className={styles.formEyebrow}>
             <span className={styles.pip} />
-            <span>ZORDON · ACESSO</span>
+            <span>
+              {tokenProcessing ? "ZORDON · VALIDANDO LINK" : "ZORDON · ACESSO"}
+            </span>
           </div>
+          {tokenProcessing ? (
+            <div className={styles.formCard}>
+              <p>Validando link de acesso… aguarde.</p>
+            </div>
+          ) : (
           <form action={action} className={styles.formCard} autoComplete="off">
             <div className={styles.field}>
               <div className={styles.fieldLabel}>
@@ -92,6 +141,7 @@ export default function LoginPage() {
               {pending ? "Verificando…" : "Entrar"}
             </button>
           </form>
+          )}
         </div>
       </div>
     </div>

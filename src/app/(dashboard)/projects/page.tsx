@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Pencil, Trash2, Users, ChevronDown, ChevronRight, MoreVertical, ListChecks } from "lucide-react";
-import { roleLabel } from "@/lib/roles";
+import { hasMinAccessLevel, roleLabel } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
@@ -38,6 +38,8 @@ import { showErrorToast } from "@/lib/optimistic/toast";
 import { generateUniqueReferenceKey } from "@/lib/project-reference-key";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import { cn } from "@/lib/utils";
 
 type ProjectMemberAlloc = {
   id: string;
@@ -140,6 +142,12 @@ function ProjectCardMobile({
 }
 
 export default function ProjectsPage() {
+  const { member, effectiveAccessLevel } = useAuth();
+  const meId = member?.id ?? null;
+  // Guest enxerga só os projetos onde foi convidado (ProjectAccess via RLS
+  // já filtra a query). Sem toggle "Meus / Todos" — é tudo "dele" por
+  // definição. Também esconde botão "Novo Projeto".
+  const isGuest = !hasMinAccessLevel(effectiveAccessLevel, "builder");
   const projectsCollection = useOptimisticCollection<Project>([]);
   const projects = projectsCollection.items;
   const setProjects = projectsCollection.setCommitted;
@@ -150,6 +158,18 @@ export default function ProjectsPage() {
   const [editing, setEditing] = useState<Project | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [scope, setScope] = useState<"mine" | "all">("mine");
+
+  const isMine = (p: Project) =>
+    !!meId &&
+    (p.pmId === meId || p.projectMembers.some((pm) => pm.member.id === meId));
+
+  const visibleProjects = isGuest
+    ? projects
+    : scope === "mine" && meId
+      ? projects.filter(isMine)
+      : projects;
+  const mineCount = meId ? projects.filter(isMine).length : 0;
   const [form, setForm] = useState({
     name: "", repoUrl: "", startDate: "", endDate: "",    status: "active", clientId: "", pmId: "",
     githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
@@ -369,11 +389,52 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Projetos" onAdd={openNew} addLabel="Novo Projeto" />
+      <PageHeader
+        title="Projetos"
+        onAdd={isGuest ? undefined : openNew}
+        addLabel="Novo Projeto"
+      />
+
+      {!isGuest && (
+        <div
+          role="tablist"
+          aria-label="Filtrar projetos"
+          className="inline-flex rounded-md border bg-muted/40 p-0.5 text-sm"
+        >
+          {[
+            { id: "mine" as const, label: "Meus projetos", count: mineCount },
+            { id: "all" as const, label: "Todos", count: projects.length },
+          ].map((opt) => {
+            const active = scope === opt.id;
+            const disabled = opt.id === "mine" && !meId;
+            return (
+              <button
+                key={opt.id}
+                role="tab"
+                aria-selected={active}
+                disabled={disabled}
+                onClick={() => setScope(opt.id)}
+                className={cn(
+                  "rounded-sm px-3 py-1 transition-colors",
+                  active
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                  disabled && "cursor-not-allowed opacity-50 hover:text-muted-foreground",
+                )}
+              >
+                {opt.label}
+                <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+                  {opt.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Mobile: cards */}
       <div className="md:hidden space-y-3">
-        {projects.map((p) => (
+        {visibleProjects.map((p) => (
           <ProjectCardMobile
             key={p.id}
             p={p}
@@ -381,9 +442,13 @@ export default function ProjectsPage() {
             onDelete={() => remove(p.id)}
           />
         ))}
-        {projects.length === 0 && (
+        {visibleProjects.length === 0 && (
           <div className="surface p-8 text-center text-muted-foreground text-sm">
-            Nenhum projeto cadastrado.
+            {isGuest
+              ? "Você ainda não foi convidado a nenhum projeto."
+              : scope === "mine"
+                ? "Você não está alocado em nenhum projeto."
+                : "Nenhum projeto cadastrado."}
           </div>
         )}
       </div>
@@ -404,7 +469,7 @@ export default function ProjectsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {projects.map((p) => {
+            {visibleProjects.map((p) => {
               const isExpanded = expandedId === p.id;
               return (
                 <React.Fragment key={p.id}>
@@ -470,10 +535,12 @@ export default function ProjectsPage() {
                 </React.Fragment>
               );
             })}
-            {projects.length === 0 && (
+            {visibleProjects.length === 0 && (
               <TableRow>
                 <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                  Nenhum projeto cadastrado.
+                  {scope === "mine"
+                    ? "Você não está alocado em nenhum projeto."
+                    : "Nenhum projeto cadastrado."}
                 </TableCell>
               </TableRow>
             )}

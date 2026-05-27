@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { suggestFunctionPoints } from "@/lib/function-points";
 import { getCurrentMember, getUser, requireProjectMemberApi } from "@/lib/dal";
+import { isGuestActor, maskFPListIfGuest, maskFPIfGuest } from "@/lib/guest-payload";
 import { recordTaskCreated } from "@/lib/dal/task-activity-recorder";
 import { flattenTagEmbed, type TaskTagEmbedRow } from "@/lib/task-tags";
 
@@ -51,7 +52,8 @@ export async function GET(req: NextRequest) {
     _count: { iterations: iterationCounts[t.id] ?? 0 },
   }));
 
-  return NextResponse.json(result);
+  const guest = await isGuestActor();
+  return NextResponse.json(maskFPListIfGuest(result, guest));
 }
 
 export async function POST(req: NextRequest) {
@@ -137,7 +139,11 @@ export async function POST(req: NextRequest) {
       console.error("[task-activity] recordTaskCreated failed", e),
     );
 
-    return NextResponse.json(result, { status: 201 });
+    const guest = await isGuestActor();
+    return NextResponse.json(
+      result ? maskFPIfGuest(result, guest) : result,
+      { status: 201 },
+    );
   }
 
   return NextResponse.json(

@@ -31,6 +31,12 @@ export async function PUT(
   if (body.sourceReviewId !== undefined) {
     data.sourceReviewId = body.sourceReviewId || null;
   }
+  if (body.decision !== undefined) {
+    if (!["pending", "approved", "rejected"].includes(body.decision)) {
+      return NextResponse.json({ error: "invalid decision" }, { status: 400 });
+    }
+    data.decision = body.decision;
+  }
 
   if (body.status === "done") data.resolvedAt = new Date().toISOString();
   if (body.status && body.status !== "done") data.resolvedAt = null;

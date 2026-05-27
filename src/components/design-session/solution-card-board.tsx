@@ -329,7 +329,7 @@ function SolutionEditDialog({
   onClose: () => void;
   onUpdate: (patch: Partial<SolutionCard>) => void;
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const open = sol !== null;
   const filled = sol ? hasDetails(sol) : false;
 
@@ -338,7 +338,7 @@ function SolutionEditDialog({
       open={open}
       onOpenChange={(next) => {
         if (!next) {
-          setDetailsOpen(false);
+          setDetailsOpen(true);
           onClose();
         }
       }}

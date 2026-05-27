@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/dal";
+import { isGuestActor } from "@/lib/guest-payload";
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -69,7 +70,19 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  return NextResponse.json(result);
+  const guest = await isGuestActor();
+  const safe = guest
+    ? result.map((s) => ({
+        ...s,
+        totalFp: null,
+        members: s.members.map((m: { id: string; name: string; fpCapacity: number; fpPlanned: number }) => ({
+          ...m,
+          fpCapacity: null,
+          fpPlanned: null,
+        })),
+      }))
+    : result;
+  return NextResponse.json(safe);
 }
 
 export async function POST(req: NextRequest) {

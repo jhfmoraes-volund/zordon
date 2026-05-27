@@ -122,7 +122,7 @@ export default function StepPage({
         onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
         onStepClick={navigate}
         hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing"}
-        backHref={`/projects/${session.projectId}`}
+        backHref={`/projects/${session.projectId}?tab=sessions`}
         memoriaHref={`/design-sessions/${id}/memoria`}
       >
         <StepContent stepKey={currentStepDef.key} sessionId={id} />

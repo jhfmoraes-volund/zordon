@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, UserPlus, X } from "lucide-react";
+import { Check, Copy, LinkIcon, MoreVertical, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 
 type AccessRow = {
@@ -55,6 +55,13 @@ type Props = {
   onOpenChange: (open: boolean) => void;
 };
 
+type GeneratedLink = {
+  userId: string;
+  label: string;
+  link: string;
+  type: "set_password" | "magic_link";
+};
+
 export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
   const [rows, setRows] = useState<AccessRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -62,6 +69,40 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
   const [inviteRole, setInviteRole] =
     useState<AccessRow["role"]>("viewer");
   const [inviting, setInviting] = useState(false);
+  // Quando geramos/re-geramos um link, exibimos num card no topo até o user fechar.
+  const [generated, setGenerated] = useState<GeneratedLink | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success("Link copiado");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Não foi possível copiar. Selecione manualmente.");
+    }
+  }
+
+  async function regenerateLink(userId: string, label: string) {
+    const res = await fetch(
+      `/api/projects/${projectId}/access/${userId}/regenerate-link`,
+      { method: "POST" },
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      toast.error(body.error ?? "Falha ao gerar link");
+      return;
+    }
+    const json = await res.json();
+    setGenerated({
+      userId,
+      label,
+      link: json.link,
+      type: json.type,
+    });
+    await copyToClipboard(json.link);
+  }
 
   const load = async () => {
     setLoading(true);
@@ -126,10 +167,22 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
         toast.error(body.error ?? "Falha ao convidar");
         return;
       }
-      const json = await res.json();
-      toast.success(
-        json.emailDispatched ? "Convite enviado" : "Acesso concedido",
-      );
+      const json = (await res.json()) as {
+        userId: string;
+        inviteLink: string | null;
+        inviteType: "set_password" | "magic_link" | null;
+      };
+      if (json.inviteLink && json.inviteType) {
+        setGenerated({
+          userId: json.userId,
+          label: email,
+          link: json.inviteLink,
+          type: json.inviteType,
+        });
+        await copyToClipboard(json.inviteLink);
+      } else {
+        toast.success("Acesso concedido");
+      }
       setInviteEmail("");
       setInviteRole("viewer");
       await load();
@@ -189,10 +242,55 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
             </div>
           </div>
           <div className="text-[11px] text-muted-foreground">
-            Se a pessoa não tiver conta, criamos uma como guest e enviamos
-            magic link.
+            Se a pessoa não tiver conta, criamos uma como guest e geramos um
+            link de acesso pra você compartilhar (sem email).
           </div>
         </div>
+
+        {generated && (
+          <div className="mx-4 mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 sm:mx-6 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+            <div className="flex items-start gap-2">
+              <LinkIcon className="mt-0.5 h-4 w-4 text-emerald-700 dark:text-emerald-400" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                  {generated.type === "set_password"
+                    ? `Link de primeiro acesso pra ${generated.label}`
+                    : `Magic link gerado pra ${generated.label}`}
+                </div>
+                <p className="mt-0.5 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
+                  {generated.type === "set_password"
+                    ? "Ao abrir, a pessoa vai definir uma senha. Válido por 24h, uso único."
+                    : "Login 1-shot. Válido por 24h. Próximos logins via /login com a senha."}
+                </p>
+                <div className="mt-2 flex items-center gap-2 rounded-sm border bg-background px-2 py-1.5">
+                  <span className="flex-1 truncate font-mono text-xs">
+                    {generated.link}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => copyToClipboard(generated.link)}
+                    aria-label="Copiar link"
+                  >
+                    {copied ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setGenerated(null)}
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 sm:px-6">
           {loading && (
@@ -215,6 +313,7 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
               rows={guests}
               onRoleChange={updateRole}
               onRevoke={revoke}
+              onRegenerateLink={regenerateLink}
               emptyText="Nenhum guest convidado"
             />
           )}
@@ -229,12 +328,14 @@ function Section({
   rows,
   onRoleChange,
   onRevoke,
+  onRegenerateLink,
   emptyText,
 }: {
   title: string;
   rows: AccessRow[];
   onRoleChange: (userId: string, role: AccessRow["role"]) => void;
   onRevoke: (userId: string) => void;
+  onRegenerateLink?: (userId: string, label: string) => void;
   emptyText: string;
 }) {
   return (
@@ -316,6 +417,19 @@ function Section({
                       }
                     />
                     <DropdownMenuContent align="end">
+                      {onRegenerateLink && (
+                        <DropdownMenuItem
+                          onClick={() =>
+                            onRegenerateLink(
+                              r.userId,
+                              r.email ?? r.name ?? r.userId,
+                            )
+                          }
+                        >
+                          <LinkIcon className="h-4 w-4 mr-2" />
+                          Gerar novo link
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         onClick={() => onRevoke(r.userId)}
                         className="text-destructive"

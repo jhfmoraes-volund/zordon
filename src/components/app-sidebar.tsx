@@ -163,7 +163,11 @@ export function AppSidebar() {
             Projetos
           </SidebarGroupLabel>
           <SidebarMenu>
-            {projectNav.map((item) => {
+            {/* Guests só veem "Projetos". Clientes/Workflow são gerenciais. */}
+            {(isGuest
+              ? projectNav.filter((i) => i.href === "/projects")
+              : projectNav
+            ).map((item) => {
               // /design-sessions vive dentro do contexto de Projetos: highlight
               // o item "Projetos" também quando o usuário está numa sessão.
               const isActive =

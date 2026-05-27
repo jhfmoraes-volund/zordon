@@ -10,8 +10,15 @@ import { PageTitle } from "@/components/app-shell";
 import {
   ArrowLeft, Plus, CheckCircle2, Circle, Clock,
   ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink, Download,
-  Sparkles, Loader2,
+  Sparkles, Loader2, MoreHorizontal, Check, X, Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TaskActionWidget } from "@/components/meetings/task-action-widget";
 import { ImportMeetingModal } from "@/components/meetings/import-meeting-modal";
 import { PersonalNoteCard } from "@/components/meetings/personal-note-card";
@@ -41,6 +48,8 @@ type ActionItem = {
   assignee: Member;
   dueDate: string | null;
   status: string;
+  source: string;
+  decision: "pending" | "approved" | "rejected";
   sourceReviewId: string | null;
   sourceReview?: { project: { name: string } } | null;
   notes: string | null;
@@ -272,6 +281,70 @@ export default function MeetingDetailPage({
       );
       showErrorToast(e, { label: "Falha ao atualizar status" });
     }
+  };
+
+  const decideAction = async (action: ActionItem, decision: "approved" | "rejected") => {
+    const prevDecision = action.decision;
+    setMeeting((cur) =>
+      cur
+        ? {
+            ...cur,
+            actionItems: cur.actionItems.map((a) =>
+              a.id === action.id ? { ...a, decision } : a,
+            ),
+          }
+        : cur,
+    );
+    try {
+      await fetchOrThrow(`/api/meetings/${id}/actions/${action.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+    } catch (e) {
+      setMeeting((cur) =>
+        cur
+          ? {
+              ...cur,
+              actionItems: cur.actionItems.map((a) =>
+                a.id === action.id ? { ...a, decision: prevDecision } : a,
+              ),
+            }
+          : cur,
+      );
+      showErrorToast(e, { label: "Falha ao atualizar sugestão" });
+    }
+  };
+
+  const deleteAction = (action: ActionItem) => {
+    setConfirmState({
+      title: action.decision === "pending" ? "Excluir sugestão?" : "Excluir To-do?",
+      description:
+        action.decision === "pending"
+          ? "A sugestão da IA será removida. Isso é diferente de rejeitar — não fica histórico."
+          : "Essa To-do será removida permanentemente.",
+      confirmLabel: "Excluir",
+      destructive: true,
+      onConfirm: async () => {
+        const prevItems = meeting?.actionItems ?? [];
+        setMeeting((cur) =>
+          cur
+            ? {
+                ...cur,
+                actionItems: cur.actionItems.filter((a) => a.id !== action.id),
+              }
+            : cur,
+        );
+        try {
+          await fetchOrThrow(`/api/meetings/${id}/actions/${action.id}`, {
+            method: "DELETE",
+          });
+        } catch (e) {
+          setMeeting((cur) => (cur ? { ...cur, actionItems: prevItems } : cur));
+          showErrorToast(e, { label: "Falha ao excluir" });
+        }
+      },
+    });
   };
 
   const openCreateTodo = () => {
@@ -668,119 +741,79 @@ export default function MeetingDetailPage({
           </div>
         )}
 
-      {/* Action Items */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">To-dos</h2>
-          {canEdit && (
-            <Button size="sm" variant="outline" onClick={openCreateTodo}>
-              <Plus className="mr-1 h-4 w-4" />
-              Nova To-do
-            </Button>
-          )}
-        </div>
-
-        <div className="surface divide-y">
-          {meeting.actionItems.length === 0 && (
-            <div className="p-6 text-center text-muted-foreground text-sm">
-              Nenhuma To-do registrada.
-            </div>
-          )}
-          {meeting.actionItems.map((action) => {
-            const chip = lookupChip(ACTION_ITEM_STATUS, action.status);
-            const Icon = actionIcons[action.status] ?? Circle;
-            const iconColor = actionIconColor[action.status] ?? "text-muted-foreground";
-            const overdue = action.status !== "done" && isOverdue(action.dueDate);
-            return (
-              <div
-                key={action.id}
-                role={canEdit ? "button" : undefined}
-                tabIndex={canEdit ? 0 : undefined}
-                onClick={canEdit ? () => openEditTodo(action) : undefined}
-                onKeyDown={
-                  canEdit
-                    ? (e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openEditTodo(action);
-                        }
-                      }
-                    : undefined
-                }
-                className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3 transition-colors ${
-                  canEdit ? "cursor-pointer hover:bg-muted/40" : ""
-                }`}
-              >
-                {/* Linha 1 mobile / bloco principal desktop */}
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (canEdit) cycleActionStatus(action);
-                    }}
-                    disabled={!canEdit}
-                    className={`shrink-0 mt-0.5 ${iconColor} ${
-                      canEdit ? "hover:opacity-70 transition-opacity" : "cursor-default"
-                    }`}
-                    title={canEdit ? `Clique para mudar: ${chip.label}` : chip.label}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={`text-sm ${
-                        action.status === "done"
-                          ? "line-through text-muted-foreground"
-                          : ""
-                      }`}
-                    >
-                      {action.description}
-                    </p>
-                    {action.sourceReview?.project && (
-                      <span className="text-xs text-muted-foreground">
-                        Projeto: {action.sourceReview.project.name}
-                      </span>
-                    )}
-                  </div>
+      {/* AI Suggestions — só ToDos source='ai' com decision='pending' */}
+      {(() => {
+        const pending = meeting.actionItems.filter((a) => a.decision === "pending");
+        const visible = meeting.actionItems.filter((a) => a.decision !== "pending");
+        return (
+          <>
+            {pending.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-purple-500" />
+                  <h2 className="text-lg font-semibold">Sugestões da IA</h2>
+                  <span className="text-xs text-muted-foreground">
+                    ({pending.length} pendente{pending.length === 1 ? "" : "s"})
+                  </span>
                 </div>
-
-                {/* Linha 2 mobile / bloco direito desktop */}
-                <div
-                  className="flex items-center gap-2 flex-wrap pl-8 sm:pl-0 sm:shrink-0"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Badge variant="outline" className="text-xs">
-                    {action.assignee.name}
-                  </Badge>
-                  {action.dueDate && (
-                    <span
-                      className={`text-xs ${
-                        overdue
-                          ? "text-red-500 font-medium"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {overdue && "⚠ "}
-                      {fmtShortDate(action.dueDate)}
-                    </span>
-                  )}
-                  {canEdit ? (
-                    <button
-                      type="button"
-                      onClick={() => cycleActionStatus(action)}
-                      className="cursor-pointer"
-                    >
-                      <StatusChip {...chip} />
-                    </button>
-                  ) : (
-                    <StatusChip {...chip} />
-                  )}
+                <div className="surface divide-y">
+                  {pending.map((action) => (
+                    <ActionItemRow
+                      key={action.id}
+                      action={action}
+                      canEdit={canEdit}
+                      pending
+                      fmtShortDate={fmtShortDate}
+                      isOverdue={isOverdue}
+                      onOpen={openEditTodo}
+                      onCycleStatus={cycleActionStatus}
+                      onApprove={() => decideAction(action, "approved")}
+                      onReject={() => decideAction(action, "rejected")}
+                      onDelete={() => deleteAction(action)}
+                    />
+                  ))}
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            )}
+
+            {/* To-dos — só aprovados (default 'approved' p/ legacy + manuais) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold">To-dos</h2>
+                {canEdit && (
+                  <Button size="sm" variant="outline" onClick={openCreateTodo}>
+                    <Plus className="mr-1 h-4 w-4" />
+                    Nova To-do
+                  </Button>
+                )}
+              </div>
+
+              <div className="surface divide-y">
+                {visible.length === 0 && (
+                  <div className="p-6 text-center text-muted-foreground text-sm">
+                    Nenhuma To-do registrada.
+                  </div>
+                )}
+                {visible.map((action) => (
+                  <ActionItemRow
+                    key={action.id}
+                    action={action}
+                    canEdit={canEdit}
+                    pending={false}
+                    fmtShortDate={fmtShortDate}
+                    isOverdue={isOverdue}
+                    onOpen={openEditTodo}
+                    onCycleStatus={cycleActionStatus}
+                    onApprove={() => decideAction(action, "approved")}
+                    onReject={() => decideAction(action, "rejected")}
+                    onDelete={() => deleteAction(action)}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* General Notes */}
       <div className="space-y-2">
@@ -966,6 +999,187 @@ function ReviewCard({
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ─── ActionItemRow ──────────────────────────────────────────
+// Linha única de To-do. Renderizada em 2 contextos: Sugestões da IA (pending)
+// e lista normal (approved). O menu de 3 pontinhos muda conforme decision.
+
+function ActionItemRow({
+  action,
+  canEdit,
+  pending,
+  fmtShortDate,
+  isOverdue,
+  onOpen,
+  onCycleStatus,
+  onApprove,
+  onReject,
+  onDelete,
+}: {
+  action: ActionItem;
+  canEdit: boolean;
+  pending: boolean;
+  fmtShortDate: (d: string) => string;
+  isOverdue: (d: string | null) => boolean;
+  onOpen: (a: ActionItem) => void;
+  onCycleStatus: (a: ActionItem) => void;
+  onApprove: () => void;
+  onReject: () => void;
+  onDelete: () => void;
+}) {
+  const chip = lookupChip(ACTION_ITEM_STATUS, action.status);
+  const Icon = actionIcons[action.status] ?? Circle;
+  const iconColor = actionIconColor[action.status] ?? "text-muted-foreground";
+  const overdue = action.status !== "done" && isOverdue(action.dueDate);
+  const isAi = action.source === "ai";
+
+  return (
+    <div
+      role={canEdit ? "button" : undefined}
+      tabIndex={canEdit ? 0 : undefined}
+      onClick={canEdit ? () => onOpen(action) : undefined}
+      onKeyDown={
+        canEdit
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpen(action);
+              }
+            }
+          : undefined
+      }
+      className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3 transition-colors ${
+        canEdit ? "cursor-pointer hover:bg-muted/40" : ""
+      }`}
+    >
+      <div className="flex items-start gap-3 min-w-0 flex-1">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (canEdit && !pending) onCycleStatus(action);
+          }}
+          disabled={!canEdit || pending}
+          className={`shrink-0 mt-0.5 ${iconColor} ${
+            canEdit && !pending ? "hover:opacity-70 transition-opacity" : "cursor-default"
+          }`}
+          title={
+            pending
+              ? "Aprove a sugestão para mexer no status"
+              : canEdit
+                ? `Clique para mudar: ${chip.label}`
+                : chip.label
+          }
+        >
+          <Icon className="h-5 w-5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <p
+            className={`text-sm ${
+              action.status === "done" ? "line-through text-muted-foreground" : ""
+            }`}
+          >
+            {action.description}
+          </p>
+          {action.sourceReview?.project && (
+            <span className="text-xs text-muted-foreground">
+              Projeto: {action.sourceReview.project.name}
+            </span>
+          )}
+          {pending && action.notes && (
+            <p className="text-xs text-muted-foreground mt-1 italic line-clamp-2">
+              {action.notes}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="flex items-center gap-2 flex-wrap pl-8 sm:pl-0 sm:shrink-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {isAi && (
+          <StatusChip tone="purple" label="IA" />
+        )}
+        <Badge variant="outline" className="text-xs">
+          {action.assignee.name}
+        </Badge>
+        {action.dueDate && (
+          <span
+            className={`text-xs ${
+              overdue ? "text-red-500 font-medium" : "text-muted-foreground"
+            }`}
+          >
+            {overdue && "⚠ "}
+            {fmtShortDate(action.dueDate)}
+          </span>
+        )}
+        {!pending && (canEdit ? (
+          <button
+            type="button"
+            onClick={() => onCycleStatus(action)}
+            className="cursor-pointer"
+          >
+            <StatusChip {...chip} />
+          </button>
+        ) : (
+          <StatusChip {...chip} />
+        ))}
+        {canEdit && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  aria-label="Mais ações"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-44">
+              {pending && (
+                <>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onApprove();
+                    }}
+                  >
+                    <Check className="mr-2 size-3.5 text-green-700" />
+                    Aprovar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReject();
+                    }}
+                  >
+                    <X className="mr-2 size-3.5 text-red-700" />
+                    Rejeitar
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                <Trash2 className="mr-2 size-3.5" />
+                Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
     </div>
   );
 }
