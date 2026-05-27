@@ -22,7 +22,7 @@ import type { AgentRunRequest, AgentRunResult } from "./types";
  * stable prefix gets cached for ~5min. The volatile suffix is injected as a
  * leading user-message part right before the chat history — this keeps the
  * Anthropic ordering intact (system → user → assistant → ...) without
- * polluting the cacheable system block. See docs/vitor-cost-reduction-plan.md.
+ * polluting the cacheable system block. See docs/agents/vitor/vitor-cost-reduction-plan.md.
  */
 export async function runAgent(req: AgentRunRequest): Promise<AgentRunResult> {
   const { agent, thread, capabilities, userMessage } = req;

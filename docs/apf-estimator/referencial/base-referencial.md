@@ -311,7 +311,7 @@ _Sistema de escalas médicas (gestão de plantões, agendamento)_
 
 - **DET** (Data Element Types) = quantidade de campos únicos referenciados pela função.
 - **AR/TR** (Arquivos Referenciados / Tipos de Registro) = quantidade de tabelas/arquivos lógicos tocados.
-- **Complexidade** (Baixa/Média/Alta) deriva de DET × AR via [matriz IFPUG](../function-points-reference.md).
+- **Complexidade** (Baixa/Média/Alta) deriva de DET × AR via [matriz IFPUG](../../features/estimation/function-points-reference.md).
 - **Manutenção:** I = Inclusão (deflator 1.0), A = Alteração (deflator parcial), E = Exclusão (deflator 0.4). Maioria das entradas é I.
 - **PF ajustado** = PF IFPUG × deflator de manutenção × fator disciplina do projeto. Pra lookup de "quanto custa funcionalidade X", use **PF IFPUG bruto**.
 

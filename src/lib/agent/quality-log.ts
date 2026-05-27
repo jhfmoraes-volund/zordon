@@ -17,7 +17,7 @@ export type QualityCategory =
  * Filled later by either a cron heuristic, PM review, or auto-detect:
  *   humanVerdict: 'correct' | 'wrong' | 'edited' | null
  *
- * Used by /docs/alpha-roadmap-v4.md §6 for the post-30d dashboard.
+ * Used by /docs/agents/alpha/alpha-roadmap-v4.md §6 for the post-30d dashboard.
  */
 export async function logAgentQuality(input: {
   agentSlug?: string;

@@ -14,6 +14,7 @@ import { ImportMeetingModal } from "./import-meeting-modal";
 import { ProjectPicker } from "@/components/projects/project-picker";
 import { useAuth } from "@/contexts/auth-context";
 import { mondayOf, sundayOf, toDateStr } from "@/lib/sprint-dates";
+import { MEETING_TYPE_LONG_LABELS } from "@/lib/status-chips";
 
 type Member = { id: string; name: string; role: string };
 type Project = { id: string; name: string; status: string };
@@ -40,13 +41,6 @@ const TYPE_DESCRIPTIONS: Record<MeetingType, string> = {
     "Reunião privada — só você vê. Importe a transcrição do Granola; Alpha gera notes e To-dos pra você. Vincular projetos (opcional) permite que Alpha proponha Tasks naqueles projetos pra você aprovar depois.",
 };
 
-const TYPE_LABELS: Record<MeetingType, string> = {
-  pm_review: "Reunião com PMs",
-  general: "Reunião geral",
-  daily: "Daily",
-  super_planning: "Super Planning",
-  private: "Privada",
-};
 
 export type MeetingEditInitial = {
   id: string;
@@ -104,9 +98,7 @@ export function MeetingSheet({
   const [projects, setProjects] = useState<Project[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
 
-  const [type, setType] = useState<MeetingType>(
-    isBuilder ? "private" : (defaultType ?? "pm_review"),
-  );
+  const [type, setType] = useState<MeetingType>(defaultType ?? "private");
   const [date, setDate] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
@@ -131,10 +123,13 @@ export function MeetingSheet({
     const supabase = createClient();
     Promise.all([
       supabase.from("Member").select("id, name, role").eq("isGuest", false).order("name"),
+      // Em andamento (active + paused). Privada propõe Tasks em qualquer
+      // projeto vivo — sprint não é requisito. Encerrados (completed/archived)
+      // ficam fora.
       supabase
         .from("Project")
         .select("id, name, status")
-        .eq("status", "active")
+        .in("status", ["active", "paused"])
         .order("name"),
       supabase.from("Sprint").select("id, name, status, projectId").eq("status", "active"),
     ]).then(([m, p, s]) => {
@@ -194,7 +189,7 @@ export function MeetingSheet({
       );
     } else {
       // create — reset
-      setType(isBuilder ? "private" : (defaultType ?? "pm_review"));
+      setType(defaultType ?? "private");
       setDate(new Date().toISOString().slice(0, 10));
       setTitle("");
       setNotes("");
@@ -542,7 +537,7 @@ export function MeetingSheet({
                     onClick={() => switchType(t)}
                   >
                     {t === "private" && <Lock className="h-3 w-3 mr-1" />}
-                    {TYPE_LABELS[t]}
+                    {MEETING_TYPE_LONG_LABELS[t]}
                   </Button>
                 ))}
               </div>
@@ -638,11 +633,19 @@ export function MeetingSheet({
                     ? "single"
                     : "multi"
                 }
-                available={projects.map((p) => ({
-                  id: p.id,
-                  name: p.name,
-                  hasActiveSprint: sprints.some((s) => s.projectId === p.id),
-                }))}
+                available={projects
+                  // Daily/super_planning são sprint-bound: só projetos ativos.
+                  // Demais tipos (private/general/pm_review) aceitam pausados.
+                  .filter((p) =>
+                    type === "daily" || type === "super_planning"
+                      ? p.status === "active"
+                      : true,
+                  )
+                  .map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    hasActiveSprint: sprints.some((s) => s.projectId === p.id),
+                  }))}
                 selectedIds={Array.from(projectIds)}
                 onChange={(ids) => setProjectIds(new Set(ids))}
                 disabled={projectsLocked}
@@ -652,7 +655,7 @@ export function MeetingSheet({
                     ? "Selecionar projeto"
                     : "Vincular projetos"
                 }
-                emptyText="Nenhum projeto ativo"
+                emptyText="Nenhum projeto disponível"
               />
               {type === "super_planning" &&
                 selectedProjectId &&

@@ -14,11 +14,13 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   MEETING_STATUS, MEETING_TYPE, lookupChip, meetingStatusFromDate,
+  MEETING_TYPE_LONG_LABELS,
 } from "@/lib/status-chips";
 import { Pencil, Trash2 } from "lucide-react";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
 import { MeetingSheet, type MeetingEditInitial } from "@/components/meetings/meeting-sheet";
+import { fmtWeekdayShort as fmtDate } from "@/lib/date-utils";
 import { useAuth } from "@/contexts/auth-context";
 
 type Meeting = {
@@ -227,14 +229,6 @@ export default function MeetingsPage() {
     );
   };
 
-  const fmtDate = (d: string) =>
-    new Date(d).toLocaleDateString("pt-BR", {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
   // Collect all PMs that appear in any meeting (via reviews or attendees)
   const pmOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -280,11 +274,11 @@ export default function MeetingsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="pm_review">Reunião com PMs</SelectItem>
-              <SelectItem value="general">Reunião geral</SelectItem>
-              <SelectItem value="daily">Daily</SelectItem>
-              <SelectItem value="super_planning">Super Planning</SelectItem>
-              <SelectItem value="private">Privada</SelectItem>
+              <SelectItem value="pm_review">{MEETING_TYPE_LONG_LABELS.pm_review}</SelectItem>
+              <SelectItem value="general">{MEETING_TYPE_LONG_LABELS.general}</SelectItem>
+              <SelectItem value="daily">{MEETING_TYPE_LONG_LABELS.daily}</SelectItem>
+              <SelectItem value="super_planning">{MEETING_TYPE_LONG_LABELS.super_planning}</SelectItem>
+              <SelectItem value="private">{MEETING_TYPE_LONG_LABELS.private}</SelectItem>
             </SelectContent>
           </Select>
         </div>

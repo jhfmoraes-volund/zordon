@@ -43,14 +43,4 @@ export const TYPE_LABELS: Record<string, string> = {
 export const SCOPES = ["micro", "small", "medium", "large"] as const;
 export const COMPLEXITIES = ["trivial", "low", "medium", "high"] as const;
 
-// ─── Helpers ──────────────────────────────────────────────
-
-export function fmtDate(d: string | null) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-}
-
-export function isOverdue(d: string | null, status: string) {
-  if (!d || status === "done") return false;
-  return new Date(d) < new Date();
-}
+// Date helpers (fmtDate, isOverdue) movidos para @/lib/date-utils.

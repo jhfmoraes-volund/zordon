@@ -3089,6 +3089,7 @@ export type Database = {
           createdAt: string
           dailyTodosEveningEnabled: boolean
           dailyTodosEveningTime: string
+          dailyTodosLastSent: Json
           dailyTodosMorningEnabled: boolean
           dailyTodosMorningTime: string
           dedicationPercent: number
@@ -3117,6 +3118,7 @@ export type Database = {
           createdAt?: string
           dailyTodosEveningEnabled?: boolean
           dailyTodosEveningTime?: string
+          dailyTodosLastSent?: Json
           dailyTodosMorningEnabled?: boolean
           dailyTodosMorningTime?: string
           dedicationPercent?: number
@@ -3145,6 +3147,7 @@ export type Database = {
           createdAt?: string
           dailyTodosEveningEnabled?: boolean
           dailyTodosEveningTime?: string
+          dailyTodosLastSent?: Json
           dailyTodosMorningEnabled?: boolean
           dailyTodosMorningTime?: string
           dedicationPercent?: number

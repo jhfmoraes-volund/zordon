@@ -50,7 +50,7 @@ export interface PromptContext {
 /**
  * Output of buildPrompt — split in two so the engine can mark `stable` as
  * cacheable (Anthropic prompt cache via OpenRouter) and append `volatile`
- * without invalidating the cache. See docs/vitor-cost-reduction-plan.md F1.
+ * without invalidating the cache. See docs/agents/vitor/vitor-cost-reduction-plan.md F1.
  */
 export interface SystemPrompt {
   /** Stable prefix — identity, behavior rules, schemas. Cacheable across turns. */

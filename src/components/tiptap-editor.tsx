@@ -4,8 +4,18 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
 import {
   Bold,
   Italic,
@@ -33,6 +43,8 @@ export function TiptapEditor({
   debounceMs = 800,
 }: TiptapEditorProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
 
   const debouncedUpdate = useCallback(
     (html: string) => {
@@ -70,10 +82,18 @@ export function TiptapEditor({
       editor.chain().focus().unsetLink().run();
       return;
     }
-    const url = window.prompt("URL:");
+    // Pré-preenche com o href atual (se o cursor estiver sobre um link).
+    setLinkUrl((editor.getAttributes("link").href as string) ?? "");
+    setLinkDialogOpen(true);
+  };
+
+  const applyLink = () => {
+    const url = linkUrl.trim();
     if (url) {
       editor.chain().focus().setLink({ href: url }).run();
     }
+    setLinkDialogOpen(false);
+    setLinkUrl("");
   };
 
   const tools = [
@@ -134,37 +154,76 @@ export function TiptapEditor({
   ];
 
   return (
-    <div className="surface-inset rounded-md overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border/50">
-        {tools.map((tool, i) => {
-          if ("type" in tool && tool.type === "separator") {
+    <>
+      <div className="surface-inset rounded-md overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border/50">
+          {tools.map((tool, i) => {
+            if ("type" in tool && tool.type === "separator") {
+              return (
+                <div
+                  key={i}
+                  className="w-px h-4 bg-border/50 mx-1"
+                />
+              );
+            }
+            const Tool = tool as { icon: typeof Bold; action: () => void; active: boolean };
+            const Icon = Tool.icon;
             return (
-              <div
+              <Button
                 key={i}
-                className="w-px h-4 bg-border/50 mx-1"
-              />
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 ${Tool.active ? "bg-muted" : ""}`}
+                onClick={Tool.action}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </Button>
             );
-          }
-          const Tool = tool as { icon: typeof Bold; action: () => void; active: boolean };
-          const Icon = Tool.icon;
-          return (
-            <Button
-              key={i}
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={`h-7 w-7 ${Tool.active ? "bg-muted" : ""}`}
-              onClick={Tool.action}
-            >
-              <Icon className="h-3.5 w-3.5" />
-            </Button>
-          );
-        })}
+          })}
+        </div>
+
+        {/* Editor */}
+        <EditorContent editor={editor} />
       </div>
 
-      {/* Editor */}
-      <EditorContent editor={editor} />
-    </div>
+      <ResponsiveDialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <ResponsiveDialogContent className="sm:max-w-md">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Inserir link</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody>
+            <Field name="link-url">
+              <Field.Label>URL</Field.Label>
+              <Field.Control>
+                <Input
+                  type="url"
+                  inputMode="url"
+                  autoFocus
+                  placeholder="https://exemplo.com"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      applyLink();
+                    }
+                  }}
+                />
+              </Field.Control>
+            </Field>
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setLinkDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={applyLink} disabled={!linkUrl.trim()}>
+              Aplicar
+            </Button>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { Heart, ListChecks, Settings2, Users } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 import type { ChipTone } from "@/lib/status-chips";
+import { fmtDate } from "@/lib/date-utils";
 
 export type ClientProject = {
   id: string;
@@ -35,15 +36,6 @@ const HEALTH_LABEL: Record<string, string> = {
   at_risk: "em risco",
   critical: "crítico",
 };
-
-function fmtDate(d: string | null): string {
-  return d
-    ? new Date(d).toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "short",
-      })
-    : "–";
-}
 
 export function ClientProjectCard({
   project,

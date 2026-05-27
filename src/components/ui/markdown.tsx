@@ -6,6 +6,15 @@ import ReactMarkdown from "react-markdown";
 const COLLAPSED_PREVIEW_CHARS = 5000;
 
 const components = {
+  h1: ({ children }: { children?: React.ReactNode }) => (
+    <h1 className="text-lg font-semibold mt-4 mb-2 first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }: { children?: React.ReactNode }) => (
+    <h2 className="text-base font-semibold mt-4 mb-1.5 first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }: { children?: React.ReactNode }) => (
+    <h3 className="text-sm font-semibold mt-3 mb-1 first:mt-0">{children}</h3>
+  ),
   p: ({ children }: { children?: React.ReactNode }) => (
     <p className="whitespace-pre-wrap break-words mb-2 last:mb-0">{children}</p>
   ),

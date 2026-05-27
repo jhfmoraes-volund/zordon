@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { CsatResponse } from "@/lib/supabase/types";
+import { fmtDateLong as fmtDate } from "@/lib/date-utils";
 
 export type CsatResponseWithInterviewer = CsatResponse & {
   interviewer: { id: string; name: string } | null;
@@ -46,13 +47,6 @@ function ScoreTile({ label, value }: { label: string; value: number }) {
   );
 }
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 export function CsatResponseCard({ response, onEdit, onDelete }: Props) {
   const [expanded, setExpanded] = useState(false);

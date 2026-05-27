@@ -5,7 +5,7 @@
  * Default seco — sem filtros volta projeção mínima (id + título/nome).
  * Modelo opta-in nos campos pesados via `fields` / `includeJourney`.
  *
- * Plano: docs/vitor-normalization-plan-v2.md §2.
+ * Plano: docs/agents/vitor/vitor-normalization-plan-v2.md §2.
  */
 
 import { tool } from "ai";

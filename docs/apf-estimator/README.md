@@ -24,9 +24,9 @@ Sem código próprio. Tudo é markdown + uma planilha .xlsx gerada ad-hoc na ent
 
 ## Estratégia ativa: V3 v0 (zero código)
 
-Plano canônico: **[apf-estimator-plan-v3.md](../apf-estimator-plan-v3.md)**.
+Plano canônico: **[apf-estimator-plan-v3.md](../features/estimation/apf-estimator-plan-v3.md)**.
 
-V2 ([apf-estimator-plan-v2.md](../apf-estimator-plan-v2.md)) continua como referência de regras IFPUG (anti-double-count, faixa esperada SEPLAG-CE, fator disciplina). V1 ([apf-estimator-plan.md](../apf-estimator-plan.md)) é histórico.
+V2 ([apf-estimator-plan-v2.md](../archive/apf-estimator-plan-v2.md)) continua como referência de regras IFPUG (anti-double-count, faixa esperada SEPLAG-CE, fator disciplina). V1 ([apf-estimator-plan.md](../archive/apf-estimator-plan.md)) é histórico.
 
 ## Decisões fundadoras V3
 

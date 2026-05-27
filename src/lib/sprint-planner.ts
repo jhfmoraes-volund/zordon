@@ -14,7 +14,7 @@
  * Tasks sem `userStoryId` viram buckets singleton (preserva semântica antiga
  * pra tasks soltas / projetos sem story hierarchy).
  *
- * Documentação completa em `docs/sprint-planner-plan.md`.
+ * Documentação completa em `docs/features/sprints/sprint-planner-plan.md`.
  */
 
 export type TaskLayer = "DATA" | "API" | "REALTIME" | "UI" | "OPS";

@@ -39,14 +39,14 @@ Cinco padrões canônicos. Antes de criar componente novo, modal, form ou mutaç
 
 3. **Custom Confirm/Alert** — proibido `window.confirm()` / `alert()`. Use `ConfirmDialog` (`src/components/ui/confirm-dialog.tsx`): stateless, recebe `state: { title, description?, confirmLabel?, cancelLabel?, destructive?, onConfirm: () => void|Promise<void> } | null`, trata busy + close async. Erros vão em **Sonner toast** (não em alert/dialog).
 
-4. **Forms — Field compound API** (ver `docs/forms-standardization-plan.md`):
+4. **Forms — Field compound API** (ver `docs/platform/forms-standardization-plan.md`):
    - `<Field name required error><Field.Label/><Field.Control><Input|Select|Textarea/></Field.Control><Field.Hint/></Field>` — `Field.Control` injeta `id`/`aria-describedby`/`aria-invalid`/`aria-required` via `cloneElement`.
    - `<FormBody density="comfortable|compact">` controla densidade no escopo. `<Field.Row cols={2|3}>` para grid.
    - Altura via CSS var `--field-h` (não passar `h-9` no className do campo).
    - Estado: `useState` direto (sem react-hook-form). Validação Zod só em `src/app/api/**`, **não no client**.
    - Sem masked-input lib. Use `<Input type="date|number|tel|email">` nativo.
 
-5. **Optimistic updates (sempre que mutar coleção)** — ver `docs/optimistic-updates-runbook.md`:
+5. **Optimistic updates (sempre que mutar coleção)** — ver `docs/platform/optimistic-updates-runbook.md`:
    - Hook canônico: `useOptimisticCollection<T, X>(initial, reducer?)` em `src/hooks/use-optimistic-collection.ts`. Mutations base: `patch | create | delete | bulkPatch | bulkDelete | external_update`. Estende com `combineReducers(extra)`.
    - API: `mutate(mutation, persist, { errorLabel, reconcile?, retry? })` — aplica reducer otimista, roda `persist(signal)`, reconcilia committed.
    - Errors via `showErrorToast` (`src/lib/optimistic/toast.ts`): 403 → "sem permissão", 409 → "outro usuário editou", 5xx → auto-retry 1× + toast com "Tentar de novo", network/abort → "sem conexão. Mudança revertida".

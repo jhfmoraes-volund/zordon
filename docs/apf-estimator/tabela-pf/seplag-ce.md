@@ -3,8 +3,8 @@
 > **Repo:** `github.com/volund-ia/SEPLAG-CE` · commit `f285cd8e`
 > **Catálogo de origem:** [../catalogo-funcionalidades/seplag-ce.md](../catalogo-funcionalidades/seplag-ce.md)
 > **Base referencial usada:** [../referencial/base-referencial.md](../referencial/base-referencial.md) (215 funções rotuladas de medições oficiais históricas)
-> **Matriz IFPUG:** [../../function-points-reference.md](../../function-points-reference.md)
-> **Gerada em:** 2026-05-05 · **Marco 2 do** [V3](../../apf-estimator-plan-v3.md) · **Sem código** (lookup textual + matriz IFPUG aplicada por Claude).
+> **Matriz IFPUG:** [../../function-points-reference.md](../../features/estimation/function-points-reference.md)
+> **Gerada em:** 2026-05-05 · **Marco 2 do** [V3](../../features/estimation/apf-estimator-plan-v3.md) · **Sem código** (lookup textual + matriz IFPUG aplicada por Claude).
 
 ---
 

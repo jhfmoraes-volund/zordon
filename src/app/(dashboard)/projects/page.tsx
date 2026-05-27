@@ -36,6 +36,7 @@ import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { showErrorToast } from "@/lib/optimistic/toast";
 import { generateUniqueReferenceKey } from "@/lib/project-reference-key";
+import { fmtDate } from "@/lib/date-utils";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
@@ -76,9 +77,6 @@ function ProjectCardMobile({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const fmtDate = (d: string | null) =>
-    d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "–";
-
   return (
     <Link
       href={`/projects/${p.id}`}

@@ -12,19 +12,9 @@ import {
   nextCycleStatus,
 } from "@/components/ui/status-cycle-control";
 import { showErrorToast, fetchOrThrow } from "@/lib/optimistic/toast";
+import { fmtDateNumeric as fmtDue, isOverdue } from "@/lib/date-utils";
 
 const STATUS_ORDER = { todo: 0, doing: 1, done: 2 } as const;
-
-function fmtDue(date: string | null): string {
-  if (!date) return "";
-  const d = new Date(date);
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-}
-
-function isOverdue(date: string | null, status: string): boolean {
-  if (!date || status === "done") return false;
-  return new Date(date) < new Date();
-}
 
 export function TodosWidget() {
   const [todos, setTodos] = useState<Todo[]>([]);

@@ -1360,7 +1360,7 @@ Regras de escopo:
   //
   // CACHE BREAKPOINT — nao edite o conteudo do `stablePrefix` sem revisar impacto.
   // Qualquer mudanca aqui invalida o cache de TODAS as sessoes em curso por 5min.
-  // Ver docs/vitor-cost-reduction-plan.md F1.
+  // Ver docs/agents/vitor/vitor-cost-reduction-plan.md F1.
   //
   // Prefix ESTAVEL primeiro: identidade, tipo de sessao, lista de steps,
   // schema docs, instrucoes por step, regras de comportamento. Esse bloco

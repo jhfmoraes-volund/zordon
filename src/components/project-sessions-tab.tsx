@@ -20,6 +20,7 @@ import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { getStepsForSession } from "@/lib/design-session-steps";
 import { cn } from "@/lib/utils";
 import { TONE_DOT, type ChipTone } from "@/lib/status-chips";
+import { fmtDate as fmtShortDate } from "@/lib/date-utils";
 
 type DesignSession = {
   id: string;
@@ -405,9 +406,3 @@ export function ProjectSessionsTab({
   );
 }
 
-function fmtShortDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  });
-}

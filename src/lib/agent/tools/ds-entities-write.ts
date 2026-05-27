@@ -7,7 +7,7 @@
  * Princípio: write atômico por id, sem read-modify-write.
  * Validação Zod no input; execução direta via Supabase client ou RPC.
  *
- * Plano: docs/vitor-normalization-plan-v2.md §2.2-2.3.
+ * Plano: docs/agents/vitor/vitor-normalization-plan-v2.md §2.2-2.3.
  */
 
 import { tool } from "ai";

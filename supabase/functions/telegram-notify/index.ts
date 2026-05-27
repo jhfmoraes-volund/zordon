@@ -1,8 +1,14 @@
 // Edge Function: telegram-notify
 //
-// POST { notificationId } — invoked by the AFTER INSERT trigger on
-// public."Notification" via pg_net. Authenticated by service-role bearer
-// (the trigger pulls the key from Vault).
+// Two invocation modes, both authenticated by the shared Vault bearer:
+//
+//  1. POST { notificationId } — the AFTER INSERT trigger on
+//     public."Notification" hands off every new event notification here.
+//
+//  2. POST { dailyTodos: { memberId, slot } } — the daily-reminder cron calls
+//     this DIRECTLY (no Notification row), because a to-do reminder is state,
+//     not an event: the in-app side renders a live card from the Todo table,
+//     so only Telegram needs a push. Buckets are recomputed from Todo here.
 //
 // Skips silently when:
 //  - recipient has no telegramChatId
@@ -163,12 +169,10 @@ type TodoRow = {
 
 async function formatDailyTodos(
   supabase: SupabaseClient,
-  notification: NotificationRow,
+  memberId: string,
+  slot: "morning" | "evening",
   memberName: string | null,
 ): Promise<Rendered> {
-  const payload = notification.payload ?? {};
-  const slot = payload.slot ?? "morning";
-
   // "Today" anchor in America/Sao_Paulo. We work entirely in YYYY-MM-DD
   // strings so timezone-naive timestamps from Postgres compare cleanly.
   const todayISO = brtTodayISO();
@@ -178,7 +182,7 @@ async function formatDailyTodos(
   const { data: todoRows } = await supabase
     .from("Todo")
     .select("id, description, dueDate")
-    .eq("assigneeId", notification.recipientMemberId)
+    .eq("assigneeId", memberId)
     .is("resolvedAt", null)
     .neq("status", "done")
     .order("dueDate", { ascending: true, nullsFirst: false })
@@ -245,7 +249,7 @@ async function formatDailyTodos(
       : overdue.length > 0
         ? "evening_overdue"
         : "evening_clean";
-  const seed = `${slot}-${todayISO}-${notification.recipientMemberId}`;
+  const seed = `${slot}-${todayISO}-${memberId}`;
   const quote = pickQuote(category, seed);
 
   const lines: string[] = [
@@ -445,11 +449,12 @@ Deno.serve(async (req) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  let notificationId: string;
+  let body: {
+    notificationId?: unknown;
+    dailyTodos?: { memberId?: unknown; slot?: unknown };
+  };
   try {
-    const body = await req.json();
-    if (typeof body.notificationId !== "string") throw new Error();
-    notificationId = body.notificationId;
+    body = await req.json();
   } catch {
     return new Response("Bad Request", { status: 400 });
   }
@@ -457,6 +462,27 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  // ─── Mode 2: daily-todos direct push (no Notification row) ────────────────
+  // The cron passes { memberId, slot }. We resolve the member, honour the same
+  // mute checks, render from Todo, and send. Nothing touches Notification.
+  if (body.dailyTodos) {
+    const memberId = body.dailyTodos.memberId;
+    const slot = body.dailyTodos.slot;
+    if (
+      typeof memberId !== "string" ||
+      (slot !== "morning" && slot !== "evening")
+    ) {
+      return new Response("Bad Request", { status: 400 });
+    }
+    return await handleDailyTodos(supabase, memberId, slot);
+  }
+
+  // ─── Mode 1: event notification by id (the AFTER INSERT trigger) ──────────
+  if (typeof body.notificationId !== "string") {
+    return new Response("Bad Request", { status: 400 });
+  }
+  const notificationId = body.notificationId;
 
   // Pull notification + recipient in parallel-friendly fashion.
   const { data: notif, error: notifErr } = await supabase
@@ -510,27 +536,62 @@ Deno.serve(async (req) => {
     actorName = actor?.name ?? null;
   }
 
-  const rendered: Rendered =
-    notification.kind === "daily_todos"
-      ? await formatDailyTodos(supabase, notification, member.name)
-      : formatMessage(notification, actorName);
+  // daily_todos no longer arrives via Notification rows (the cron pushes it
+  // directly through Mode 2), so this path only renders event notifications.
+  const rendered: Rendered = formatMessage(notification, actorName);
   const result = await sendWithRetry(
     member.telegramChatId,
     rendered.text,
     rendered.keyboard,
   );
 
+  return await finalizeSend(supabase, member.id, result);
+});
+
+// ─── Daily-todos handler (Mode 2) ──────────────────────────────────────────
+async function handleDailyTodos(
+  supabase: SupabaseClient,
+  memberId: string,
+  slot: "morning" | "evening",
+): Promise<Response> {
+  const { data: member } = await supabase
+    .from("Member")
+    .select("id, name, telegramChatId, telegramKindsDisabled")
+    .eq("id", memberId)
+    .maybeSingle<MemberLite>();
+
+  if (!member?.telegramChatId) {
+    return Response.json({ skip: "no_chat_id" });
+  }
+  if (member.telegramKindsDisabled?.includes("daily_todos")) {
+    return Response.json({ skip: "kind_disabled" });
+  }
+
+  const rendered = await formatDailyTodos(supabase, memberId, slot, member.name);
+  // No open todos → formatDailyTodos still renders a greeting, but the cron
+  // already guards on open_count > 0, so we don't double-check here.
+  const result = await sendWithRetry(
+    member.telegramChatId,
+    rendered.text,
+    rendered.keyboard,
+  );
+  return await finalizeSend(supabase, member.id, result);
+}
+
+// ─── Shared send-result handling (403 wipe + logical-failure swallow) ──────
+async function finalizeSend(
+  supabase: SupabaseClient,
+  memberId: string,
+  result: { ok: boolean; status: number; data: unknown },
+): Promise<Response> {
   if (!result.ok) {
     // 403 = user blocked the bot or deleted the chat. Drop the chatId so we
     // stop trying — they reconnect through Settings if they want it back.
     if (result.status === 403) {
       await supabase
         .from("Member")
-        .update({
-          telegramChatId: null,
-          telegramConnectedAt: null,
-        })
-        .eq("id", member.id);
+        .update({ telegramChatId: null, telegramConnectedAt: null })
+        .eq("id", memberId);
       return Response.json({ skip: "blocked", action: "chat_id_wiped" });
     }
     console.error("[telegram-notify] sendMessage failed", {
@@ -542,6 +603,5 @@ Deno.serve(async (req) => {
       { status: 200 }, // 200 so pg_net doesn't retry on logical failures
     );
   }
-
   return Response.json({ ok: true });
-});
+}

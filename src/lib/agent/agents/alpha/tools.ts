@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { suggestFunctionPoints, OPEN_STATUSES } from "@/lib/function-points";
 import { TASK_STATUSES, TASK_TYPES, SCOPES, COMPLEXITIES } from "@/lib/task-constants";
+import { isOverdue } from "@/lib/date-utils";
 import {
   listMeetings,
   getMeetingDetail,
@@ -1932,7 +1933,7 @@ export function assembleAlphaTools(
         dueDate: a.dueDate,
         assignee: (a.assignee as { name: string } | null)?.name || "Sem responsavel",
         meetingDate: (a.meeting as { date: string } | null)?.date || "?",
-        isOverdue: a.dueDate ? new Date(a.dueDate) < new Date() : false,
+        isOverdue: isOverdue(a.dueDate, a.status),
       }));
 
       const overdue = actionList.filter((a) => a.isOverdue);

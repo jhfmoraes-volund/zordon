@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -199,7 +200,11 @@ export default function SquadsPage() {
           <Card key={s.id}>
             <CardHeader className="flex flex-row items-start justify-between pb-2">
               <div>
-                <CardTitle className="text-base">{s.name}</CardTitle>
+                <CardTitle className="text-base">
+                  <Link href={`/squads/${s.id}`} className="hover:underline">
+                    {s.name}
+                  </Link>
+                </CardTitle>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {s.projectSquads.map((ps) => (
                     <Badge key={ps.id} variant="secondary" className="text-xs">
