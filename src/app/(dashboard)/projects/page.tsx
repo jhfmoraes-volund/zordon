@@ -186,7 +186,7 @@ export default function ProjectsPage() {
         .select("*, client:Client(id, name), projectMembers:ProjectMember(id, member:Member(id, name, role, position)), pm:Member!pmId(id, name)")
         .order("createdAt", { ascending: false }),
       supabase.from("Client").select("id, name").order("name"),
-      supabase.from("Member").select("id, name, role, position").order("name"),
+      supabase.from("Member").select("id, name, role, position").eq("isGuest", false).order("name"),
     ]);
 
     if (projectsRes.data) {

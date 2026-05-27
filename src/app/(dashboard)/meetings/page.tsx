@@ -11,6 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   MEETING_STATUS, MEETING_TYPE, lookupChip, meetingStatusFromDate,
 } from "@/lib/status-chips";
@@ -150,6 +151,7 @@ export default function MeetingsPage() {
   const meetings = meetingsCollection.items;
   const setMeetings = meetingsCollection.setCommitted;
   const meetingMutate = meetingsCollection.mutate;
+  const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<"all" | "pm_review" | "general" | "daily" | "super_planning" | "private">("all");
   const [pmFilter, setPmFilter] = useState<string>("all");
 
@@ -192,13 +194,17 @@ export default function MeetingsPage() {
     // Use API route (not direct Supabase) so impersonation/visibility filters apply.
     // Browser-side createClient() sends the real user's JWT, which bypasses
     // server-side impersonation context.
-    const r = await fetch("/api/meetings");
-    if (!r.ok) {
-      setMeetings([]);
-      return;
+    try {
+      const r = await fetch("/api/meetings");
+      if (!r.ok) {
+        setMeetings([]);
+        return;
+      }
+      const data = await r.json();
+      setMeetings(data as Meeting[]);
+    } finally {
+      setLoading(false);
     }
-    const data = await r.json();
-    setMeetings(data as Meeting[]);
   };
 
   useEffect(() => { load(); }, []);
@@ -303,7 +309,15 @@ export default function MeetingsPage() {
 
       {/* Mobile: card list */}
       <div className="md:hidden space-y-3">
-        {filtered.length === 0 && (
+        {loading &&
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="surface p-4 space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          ))}
+        {!loading && filtered.length === 0 && (
           <div className="surface p-6 text-center text-sm text-muted-foreground">
             Nenhuma reunião registrada.
           </div>
@@ -425,7 +439,17 @@ export default function MeetingsPage() {
                 </TableRow>
               );
             })}
-            {filtered.length === 0 && (
+            {loading &&
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={`skeleton-${i}`}>
+                  {Array.from({ length: 8 }).map((_, j) => (
+                    <TableCell key={j}>
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            {!loading && filtered.length === 0 && (
               <TableRow>
                 <TableCell
                   colSpan={8}

@@ -73,7 +73,7 @@ export default function SquadsPage() {
         )
         .order("name"),
       supabase.from("Project").select("id, name").order("name"),
-      supabase.from("Member").select("id, name, role, position").order("name"),
+      supabase.from("Member").select("id, name, role, position").eq("isGuest", false).order("name"),
     ]);
 
     if (squadsRes.data) setSquads(squadsRes.data.map(mapSquadRow));

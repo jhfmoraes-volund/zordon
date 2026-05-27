@@ -4,9 +4,14 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ListChecks, Plus, ChevronDown, ChevronUp, CalendarDays } from "lucide-react";
-import { TodoSheet, TODO_STATUS_LABELS, type Todo } from "@/components/todo-sheet";
+import { TodoSheet, type Todo } from "@/components/todo-sheet";
 import { StatusChip } from "@/components/ui/status-chip";
-import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
+import {
+  StatusCycleIcon,
+  StatusCycleChip,
+  nextCycleStatus,
+} from "@/components/ui/status-cycle-control";
+import { showErrorToast, fetchOrThrow } from "@/lib/optimistic/toast";
 
 const STATUS_ORDER = { todo: 0, doing: 1, done: 2 } as const;
 
@@ -39,6 +44,27 @@ export function TodosWidget() {
     setLoading(true);
     load().finally(() => setLoading(false));
   }, [load]);
+
+  // Cicla o status (todo → doing → done) direto na lista, igual à reunião.
+  // Otimista: aplica o próximo status na hora e reverte se o PATCH falhar.
+  const cycleStatus = useCallback(async (todo: Todo) => {
+    const next = nextCycleStatus(todo.status);
+    setTodos((cur) =>
+      cur.map((t) => (t.id === todo.id ? { ...t, status: next } : t)),
+    );
+    try {
+      await fetchOrThrow(`/api/profile/todos/${todo.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+    } catch (e) {
+      setTodos((cur) =>
+        cur.map((t) => (t.id === todo.id ? { ...t, status: todo.status } : t)),
+      );
+      showErrorToast(e, { label: "Falha ao atualizar status" });
+    }
+  }, []);
 
   const sorted = [...todos].sort((a, b) => {
     const sd = (STATUS_ORDER[a.status as keyof typeof STATUS_ORDER] ?? 9)
@@ -125,9 +151,10 @@ export function TodosWidget() {
                       !isLast ? "border-b" : ""
                     }`}
                   >
-                    <StatusChip
-                      tone={lookupChip(ACTION_ITEM_STATUS, t.status).tone}
-                      label={TODO_STATUS_LABELS[t.status as keyof typeof TODO_STATUS_LABELS]}
+                    <StatusCycleIcon
+                      status={t.status}
+                      onCycle={() => cycleStatus(t)}
+                      className="mt-0.5"
                     />
                     <div className="flex-1 min-w-0">
                       <p
@@ -153,6 +180,15 @@ export function TodosWidget() {
                           </span>
                         )}
                       </div>
+                    </div>
+                    <div
+                      className="shrink-0 self-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <StatusCycleChip
+                        status={t.status}
+                        onCycle={() => cycleStatus(t)}
+                      />
                     </div>
                   </div>
                 );

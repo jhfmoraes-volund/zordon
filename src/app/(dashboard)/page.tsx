@@ -81,7 +81,9 @@ export default async function OverviewPage() {
     supabase.from("Project").select("*", { count: "exact", head: true }).eq("status", "active"),
     supabase.from("Sprint").select("*", { count: "exact", head: true }).eq("status", "active"),
 
-    // Members with their task assignments + squads
+    // Members with their task assignments + squads.
+    // Guests (Member-stub, isGuest=true) ficam fora — não são do time interno,
+    // não têm capacity e não devem aparecer em relatórios de capacidade.
     supabase.from("Member").select(`
       *,
       taskAssignments:TaskAssignment(
@@ -93,7 +95,7 @@ export default async function OverviewPage() {
       squadMemberships:SquadMember(
         squad:Squad(name)
       )
-    `).order("name"),
+    `).eq("isGuest", false).order("name"),
 
     // Overdue tasks
     supabase.from("Task")

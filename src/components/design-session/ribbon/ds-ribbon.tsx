@@ -1,6 +1,14 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { StepDef } from "@/lib/design-session-steps";
 
@@ -16,12 +24,16 @@ type Props = {
 };
 
 /**
- * Top sticky ribbon with one tab per Design Session step.
+ * Top sticky ribbon for navigating Design Session steps.
  *
- * Each tab shows `[●] N·Nome` where the dot color encodes status:
+ * Desktop (≥md): one tab per step. Each shows `[●] N·Nome` where the dot
+ * color encodes status:
  *  - done    → green (steps before current)
  *  - active  → primary (current step)
  *  - pending → muted (steps after current)
+ *
+ * Mobile (<md): a single dropdown (`DSStepSelect`) — the row doesn't fit a
+ * phone, so the current step is shown and the rest open on tap.
  *
  * Counters / subtitles live in the step sub-header, not here — the ribbon
  * stays scannable across all 10 inception steps.
@@ -41,42 +53,103 @@ export function DSRibbon({
         className,
       )}
     >
-      <div className="flex items-center gap-1 overflow-x-auto px-3 py-2 md:px-4">
+      <div className="flex items-center gap-1 px-3 py-2 md:px-4">
         {leftSlot ? (
           <div className="flex shrink-0 items-center gap-1 pr-2">
             {leftSlot}
           </div>
         ) : null}
+        {/* Mobile (<md): a single dropdown replaces the tab row — the 10
+            steps don't fit a phone width, and a list-on-tap beats a
+            horizontal scroll the user has to hunt through. */}
+        <DSStepSelect
+          steps={steps}
+          currentStep={currentStep}
+          onStepClick={onStepClick}
+          className="min-w-0 flex-1 md:hidden"
+        />
+        {/* Desktop (≥md): the full scannable tab row. */}
         <nav
           aria-label="Etapas da Design Session"
-          className="flex flex-nowrap items-center gap-0.5 md:gap-1"
+          className="hidden min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto scrollbar-none md:flex md:gap-1"
         >
-          {steps.map((step) => {
-            const status: TabStatus =
-              step.index < currentStep
-                ? "done"
-                : step.index === currentStep
-                  ? "active"
-                  : "pending";
-            return (
-              <DSRibbonTab
-                key={step.key}
-                number={step.index + 1}
-                name={step.title}
-                description={step.description}
-                status={status}
-                onClick={() => onStepClick(step.index)}
-              />
-            );
-          })}
+          {steps.map((step) => (
+            <DSRibbonTab
+              key={step.key}
+              number={step.index + 1}
+              name={step.title}
+              description={step.description}
+              status={stepStatus(step.index, currentStep)}
+              onClick={() => onStepClick(step.index)}
+            />
+          ))}
         </nav>
         {rightSlot ? (
-          <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">
+          <div className="flex shrink-0 items-center gap-1 pl-2">
             {rightSlot}
           </div>
         ) : null}
       </div>
     </div>
+  );
+}
+
+function stepStatus(index: number, currentStep: number): TabStatus {
+  if (index < currentStep) return "done";
+  if (index === currentStep) return "active";
+  return "pending";
+}
+
+/**
+ * Mobile step picker — collapsed trigger shows the active step
+ * (`● N · Nome  N/total`), tapping opens the full list with a status dot
+ * per step and a check on the current one.
+ */
+function DSStepSelect({
+  steps,
+  currentStep,
+  onStepClick,
+  className,
+}: {
+  steps: StepDef[];
+  currentStep: number;
+  onStepClick: (index: number) => void;
+  className?: string;
+}) {
+  const active = steps[currentStep];
+  return (
+    <Select
+      value={String(currentStep)}
+      onValueChange={(value) => onStepClick(Number(value))}
+    >
+      <SelectTrigger
+        size="sm"
+        aria-label="Escolher etapa da Design Session"
+        className={cn("w-full justify-between", className)}
+      >
+        <SelectValue>
+          {active ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <StatusDot status="active" />
+              <span className="tabular-nums">{currentStep + 1}</span>
+              <span className="truncate font-medium">· {active.title}</span>
+              <span className="shrink-0 text-muted-foreground tabular-nums">
+                {currentStep + 1}/{steps.length}
+              </span>
+            </span>
+          ) : null}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {steps.map((step) => (
+          <SelectItem key={step.key} value={String(step.index)}>
+            <StatusDot status={stepStatus(step.index, currentStep)} />
+            <span className="tabular-nums">{step.index + 1}</span>
+            <span className="truncate">{step.title}</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -95,6 +168,19 @@ function DSRibbonTab({
   status: TabStatus;
   onClick: () => void;
 }) {
+  const isActive = status === "active";
+  const ref = useRef<HTMLButtonElement | null>(null);
+
+  // Keep the active tab in view as the user advances — the ribbon scrolls
+  // horizontally on narrow viewports, so the current step can land off-screen.
+  useEffect(() => {
+    if (!isActive || !ref.current) return;
+    const el = ref.current;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    });
+  }, [isActive]);
+
   return (
     <Tooltip>
       <TooltipTrigger
@@ -102,23 +188,31 @@ function DSRibbonTab({
           <button
             type="button"
             {...props}
+            ref={(node: HTMLButtonElement | null) => {
+              ref.current = node;
+              const r = (props as { ref?: React.Ref<HTMLButtonElement> }).ref;
+              if (typeof r === "function") r(node);
+              else if (r) (r as React.MutableRefObject<HTMLButtonElement | null>).current = node;
+            }}
             onClick={onClick}
-            aria-current={status === "active" ? "step" : undefined}
+            aria-current={isActive ? "step" : undefined}
             className={cn(
               "group inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5",
               "text-xs transition-colors",
               "hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              status === "active" && "bg-muted/40 text-foreground",
+              isActive && "bg-muted/40 text-foreground",
               status === "done" && "text-muted-foreground",
               status === "pending" && "text-muted-foreground/70",
             )}
           >
             <StatusDot status={status} />
             <span className="tabular-nums">{number}</span>
+            {/* Name is always shown ≥md; on mobile only the active step expands
+                to show its name, keeping the row scannable. */}
             <span
               className={cn(
-                "hidden md:inline",
-                status === "active" && "font-medium",
+                "md:inline",
+                isActive ? "inline font-medium" : "hidden",
               )}
             >
               {name}

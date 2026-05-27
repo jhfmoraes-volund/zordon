@@ -130,7 +130,7 @@ export function MeetingSheet({
     if (!open) return;
     const supabase = createClient();
     Promise.all([
-      supabase.from("Member").select("id, name, role").order("name"),
+      supabase.from("Member").select("id, name, role").eq("isGuest", false).order("name"),
       supabase
         .from("Project")
         .select("id, name, status")

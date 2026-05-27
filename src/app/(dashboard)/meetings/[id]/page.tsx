@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PageTitle } from "@/components/app-shell";
 import {
-  ArrowLeft, Plus, CheckCircle2, Circle, Clock,
+  ArrowLeft, Plus,
   ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink, Download,
   Sparkles, Loader2, MoreHorizontal, Check, X, Trash2,
 } from "lucide-react";
@@ -19,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAlphaChat } from "@/components/alpha-chat";
 import { TaskActionWidget } from "@/components/meetings/task-action-widget";
 import { ImportMeetingModal } from "@/components/meetings/import-meeting-modal";
 import { PersonalNoteCard } from "@/components/meetings/personal-note-card";
@@ -28,11 +29,16 @@ import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import {
+  StatusCycleIcon,
+  StatusCycleChip,
+  nextCycleStatus,
+} from "@/components/ui/status-cycle-control";
+import {
   TodoSheet,
   type Todo as TodoSheetTodo,
 } from "@/components/todo-sheet";
 import {
-  MEETING_STATUS, MEETING_TYPE, HEALTH, ACTION_ITEM_STATUS, lookupChip,
+  MEETING_STATUS, MEETING_TYPE, HEALTH, lookupChip,
   meetingStatusFromDate,
 } from "@/lib/status-chips";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
@@ -113,24 +119,6 @@ const typeLongLabels: Record<string, string> = {
   private: "Reunião privada",
 };
 
-const actionIcons: Record<string, typeof Circle> = {
-  todo: Circle,
-  doing: Clock,
-  done: CheckCircle2,
-};
-
-const actionIconColor: Record<string, string> = {
-  todo: "text-red-500",
-  doing: "text-yellow-500",
-  done: "text-green-500",
-};
-
-const actionStatusCycle: Record<string, string> = {
-  todo: "doing",
-  doing: "done",
-  done: "todo",
-};
-
 // ─── Main Page ────────────────────────────────────────────
 
 export default function MeetingDetailPage({
@@ -140,6 +128,7 @@ export default function MeetingDetailPage({
 }) {
   const { id } = use(params);
   const { member: currentMember, effectiveAccessLevel } = useAuth();
+  const { status: alphaStatus } = useAlphaChat();
   const [suggesting, setSuggesting] = useState(false);
   const isBuilder = effectiveAccessLevel === "builder";
   const [meeting, setMeeting] = useState<Meeting | null>(null);
@@ -180,6 +169,21 @@ export default function MeetingDetailPage({
     load();
     fetch("/api/members").then((r) => r.json()).then(setMembers);
   }, [id]);
+
+  // O Alpha ingere a transcrição em background (kickoffIngest → thread nova) e
+  // só então grava notes/To-dos/Tasks com o meetingId desta reunião. Como a
+  // página só busca no mount, sem isto a seção de To-dos fica vazia até reload
+  // manual (os To-dos aparecem no Meu Perfil, que monta depois). Re-buscamos na
+  // borda de descida streaming/submitted → ready/idle, quando o Alpha terminou.
+  const prevAlphaStatus = useRef(alphaStatus);
+  useEffect(() => {
+    const wasRunning =
+      prevAlphaStatus.current === "streaming" ||
+      prevAlphaStatus.current === "submitted";
+    const settled = alphaStatus === "ready" || alphaStatus === "idle";
+    if (wasRunning && settled) load();
+    prevAlphaStatus.current = alphaStatus;
+  }, [alphaStatus]);
 
   if (loadError === "forbidden") {
     return (
@@ -251,7 +255,7 @@ export default function MeetingDetailPage({
   };
 
   const cycleActionStatus = async (action: ActionItem) => {
-    const nextStatus = actionStatusCycle[action.status];
+    const nextStatus = nextCycleStatus(action.status);
     setMeeting((cur) =>
       cur
         ? {
@@ -1030,9 +1034,6 @@ function ActionItemRow({
   onReject: () => void;
   onDelete: () => void;
 }) {
-  const chip = lookupChip(ACTION_ITEM_STATUS, action.status);
-  const Icon = actionIcons[action.status] ?? Circle;
-  const iconColor = actionIconColor[action.status] ?? "text-muted-foreground";
   const overdue = action.status !== "done" && isOverdue(action.dueDate);
   const isAi = action.source === "ai";
 
@@ -1056,25 +1057,13 @@ function ActionItemRow({
       }`}
     >
       <div className="flex items-start gap-3 min-w-0 flex-1">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (canEdit && !pending) onCycleStatus(action);
-          }}
-          disabled={!canEdit || pending}
-          className={`shrink-0 mt-0.5 ${iconColor} ${
-            canEdit && !pending ? "hover:opacity-70 transition-opacity" : "cursor-default"
-          }`}
-          title={
-            pending
-              ? "Aprove a sugestão para mexer no status"
-              : canEdit
-                ? `Clique para mudar: ${chip.label}`
-                : chip.label
-          }
-        >
-          <Icon className="h-5 w-5" />
-        </button>
+        <StatusCycleIcon
+          status={action.status}
+          canEdit={canEdit}
+          disabled={pending}
+          onCycle={() => onCycleStatus(action)}
+          className="mt-0.5"
+        />
         <div className="flex-1 min-w-0">
           <p
             className={`text-sm ${
@@ -1116,17 +1105,13 @@ function ActionItemRow({
             {fmtShortDate(action.dueDate)}
           </span>
         )}
-        {!pending && (canEdit ? (
-          <button
-            type="button"
-            onClick={() => onCycleStatus(action)}
-            className="cursor-pointer"
-          >
-            <StatusChip {...chip} />
-          </button>
-        ) : (
-          <StatusChip {...chip} />
-        ))}
+        {!pending && (
+          <StatusCycleChip
+            status={action.status}
+            canEdit={canEdit}
+            onCycle={() => onCycleStatus(action)}
+          />
+        )}
         {canEdit && (
           <DropdownMenu>
             <DropdownMenuTrigger
