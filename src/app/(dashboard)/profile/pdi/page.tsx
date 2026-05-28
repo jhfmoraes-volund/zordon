@@ -38,6 +38,10 @@ import {
   type ActionStatus,
 } from "@/lib/pdiCycles";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import {
+  ConfirmDialog,
+  type ConfirmState,
+} from "@/components/ui/confirm-dialog";
 
 type PdiAction = {
   id: string;
@@ -71,6 +75,7 @@ export default function PdiPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<PdiAction | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -126,18 +131,24 @@ export default function PdiPage() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Remover essa ação do PDI?")) return;
-    const snapshot = data?.actions ?? [];
-    setData((cur) =>
-      cur ? { ...cur, actions: cur.actions.filter((a) => a.id !== id) } : cur,
-    );
-    try {
-      await fetchOrThrow(`/api/profile/pdi/actions/${id}`, { method: "DELETE" });
-    } catch (e) {
-      setData((cur) => (cur ? { ...cur, actions: snapshot } : cur));
-      showErrorToast(e, { label: "Falha ao remover ação" });
-    }
+  const remove = (id: string) => {
+    setConfirmState({
+      title: "Remover essa ação do PDI?",
+      confirmLabel: "Remover",
+      destructive: true,
+      onConfirm: async () => {
+        const snapshot = data?.actions ?? [];
+        setData((cur) =>
+          cur ? { ...cur, actions: cur.actions.filter((a) => a.id !== id) } : cur,
+        );
+        try {
+          await fetchOrThrow(`/api/profile/pdi/actions/${id}`, { method: "DELETE" });
+        } catch (e) {
+          setData((cur) => (cur ? { ...cur, actions: snapshot } : cur));
+          showErrorToast(e, { label: "Falha ao remover ação" });
+        }
+      },
+    });
   };
 
   if (error) return <p className="p-6 text-sm text-red-600">{error}</p>;
@@ -205,6 +216,7 @@ export default function PdiPage() {
         action={editing}
         onSaved={load}
       />
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }

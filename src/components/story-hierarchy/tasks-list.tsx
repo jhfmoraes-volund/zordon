@@ -46,6 +46,10 @@ import type {
 } from "./types";
 import { TagChip, TagChipOverflow } from "@/components/tags/tag-chip";
 import type { ChipTone } from "@/lib/status-chips";
+import {
+  ConfirmDialog,
+  type ConfirmState,
+} from "@/components/ui/confirm-dialog";
 
 type SprintLite = {
   id: string;
@@ -149,6 +153,7 @@ export function TasksList({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lastClickedRef, setLastClickedRef] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const isMobile = useIsMobile();
 
@@ -316,9 +321,16 @@ export function TasksList({
   const handleBulkDelete = () => {
     if (selectedRefs.length === 0) return;
     const count = selectedRefs.length;
-    if (!confirm(`Deletar ${count} task${count > 1 ? "s" : ""}?`)) return;
-    onBulkDelete?.(selectedRefs);
-    clearSelection();
+    const refs = selectedRefs;
+    setConfirmState({
+      title: `Deletar ${count} task${count > 1 ? "s" : ""}?`,
+      confirmLabel: "Deletar",
+      destructive: true,
+      onConfirm: () => {
+        onBulkDelete?.(refs);
+        clearSelection();
+      },
+    });
   };
 
   const handleBulkUpdate = (patch: {
@@ -546,6 +558,7 @@ export function TasksList({
           </div>
         </SheetContent>
       </Sheet>
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }

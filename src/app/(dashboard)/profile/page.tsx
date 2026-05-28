@@ -26,6 +26,7 @@ import {
   type MemberSkillRow,
 } from "@/lib/memberSkills";
 import { PixelBar, PixelDot, pixelBarLabel, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
+import { PageContainer } from "@/components/app-shell";
 import { MemberBattery } from "@/components/member-battery";
 import { PdiWidget } from "@/components/pdi-widget";
 import { TodosWidget } from "@/components/todos-widget";
@@ -322,14 +323,20 @@ export default function ProfilePage() {
 
   if (!member) {
     return (
-      <div className="py-12 text-center text-muted-foreground">
-        Sua conta ainda não está vinculada a um membro. Peça ao admin.
-      </div>
+      <PageContainer>
+        <div className="py-12 text-center text-muted-foreground">
+          Sua conta ainda não está vinculada a um membro. Peça ao admin.
+        </div>
+      </PageContainer>
     );
   }
 
   if (loading || !data) {
-    return <div className="py-12 text-center text-muted-foreground">Carregando...</div>;
+    return (
+      <PageContainer>
+        <div className="py-12 text-center text-muted-foreground">Carregando...</div>
+      </PageContainer>
+    );
   }
 
   // Sort tasks: in_progress first, then review, todo, backlog
@@ -341,12 +348,13 @@ export default function ProfilePage() {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center justify-center h-12 w-12 rounded-full bg-primary/10 text-primary">
-          <User className="h-6 w-6" />
-        </div>
+    <PageContainer>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center h-12 w-12 rounded-full bg-primary/10 text-primary">
+            <User className="h-6 w-6" />
+          </div>
         <div>
           <h1 className="text-2xl font-bold">{data.member.name}</h1>
           <p className="text-sm text-muted-foreground">
@@ -538,7 +546,8 @@ export default function ProfilePage() {
         onClose={() => setOpenTaskId(null)}
         onAfterChange={reload}
       />
-    </div>
+      </div>
+    </PageContainer>
   );
 }
 

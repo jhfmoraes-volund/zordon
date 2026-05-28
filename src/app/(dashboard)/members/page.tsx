@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
 import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/app-shell";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -561,12 +562,13 @@ export default function MembersPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Membros"
-        onAdd={isAdmin ? openNew : undefined}
-        addLabel="Convidar membro"
-      />
+    <PageContainer>
+      <div className="space-y-6">
+        <PageHeader
+          title="Membros"
+          onAdd={isAdmin ? openNew : undefined}
+          addLabel="Convidar membro"
+        />
 
       {/* Filtro por categoria (Membros / Guests / Externos) */}
       <div className="flex justify-end">
@@ -962,7 +964,8 @@ export default function MembersPage() {
       </ResponsiveDialog>
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
-    </div>
+      </div>
+    </PageContainer>
   );
 }
 

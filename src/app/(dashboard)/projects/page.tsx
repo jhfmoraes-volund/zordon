@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/app-shell";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -386,12 +387,13 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Projetos"
-        onAdd={isGuest ? undefined : openNew}
-        addLabel="Novo Projeto"
-      />
+    <PageContainer>
+      <div className="space-y-6">
+        <PageHeader
+          title="Projetos"
+          onAdd={isGuest ? undefined : openNew}
+          addLabel="Novo Projeto"
+        />
 
       {!isGuest && (
         <div
@@ -781,6 +783,7 @@ export default function ProjectsPage() {
       </ResponsiveDialog>
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
-    </div>
+      </div>
+    </PageContainer>
   );
 }

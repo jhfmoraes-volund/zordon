@@ -7,6 +7,10 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAlphaChat } from "./store";
+import {
+  ConfirmDialog,
+  type ConfirmState,
+} from "@/components/ui/confirm-dialog";
 
 type Thread = {
   id: string;
@@ -55,6 +59,7 @@ export function AlphaHistorySheet() {
     newConversation,
   } = useAlphaChat();
   const [threads, setThreads] = useState<Thread[]>([]);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/agents/alpha/threads");
@@ -79,15 +84,21 @@ export function AlphaHistorySheet() {
     setHistoryOpen(false);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Apagar esta conversa?")) return;
-    const res = await fetch(`/api/agents/alpha/threads/${id}`, {
-      method: "DELETE",
+    setConfirmState({
+      title: "Apagar esta conversa?",
+      confirmLabel: "Apagar",
+      destructive: true,
+      onConfirm: async () => {
+        const res = await fetch(`/api/agents/alpha/threads/${id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) return;
+        if (id === threadId) newConversation();
+        refresh();
+      },
     });
-    if (!res.ok) return;
-    if (id === threadId) newConversation();
-    refresh();
   };
 
   return (
@@ -178,6 +189,7 @@ export function AlphaHistorySheet() {
           )}
         </div>
       </SheetContent>
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </Sheet>
   );
 }

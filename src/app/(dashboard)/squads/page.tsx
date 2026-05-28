@@ -18,6 +18,10 @@ import {
   ResponsiveDialogBody,
 } from "@/components/ui/responsive-dialog";
 import { Pencil, Trash2, UserPlus, FolderOpen } from "lucide-react";
+import {
+  ConfirmDialog,
+  type ConfirmState,
+} from "@/components/ui/confirm-dialog";
 
 type Squad = {
   id: string;
@@ -59,6 +63,7 @@ export default function SquadsPage() {
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Squad | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [form, setForm] = useState({
     name: "", projectIds: [] as string[], memberIds: [] as string[],
   });
@@ -185,10 +190,16 @@ export default function SquadsPage() {
     load();
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Remover este squad?")) return;
-    await createClient().from("Squad").delete().eq("id", id);
-    load();
+  const remove = (id: string) => {
+    setConfirmState({
+      title: "Remover este squad?",
+      confirmLabel: "Remover",
+      destructive: true,
+      onConfirm: async () => {
+        await createClient().from("Squad").delete().eq("id", id);
+        load();
+      },
+    });
   };
 
   return (
@@ -296,6 +307,7 @@ export default function SquadsPage() {
           </ResponsiveDialogFooter>
         </ResponsiveDialogContent>
       </ResponsiveDialog>
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }
