@@ -4,6 +4,36 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+<!-- BEGIN:repo-structure -->
+# Onde mora cada coisa (e onde colocar coisa nova)
+
+Mapa de alto nível. O detalhe vive nos READMEs locais — leia-os antes de criar arquivo numa pasta que não conhece: [`docs/README.md`](docs/README.md), [`scripts/README.md`](scripts/README.md).
+
+## src/
+
+| Pasta | Conteúdo | Onde colocar coisa nova |
+|-------|----------|-------------------------|
+| `src/app/` | Rotas (App Router). Grupos: `(auth)`, `(dashboard)`, `(focus)`, `(onboarding)`. API em `src/app/api/`. | Página → no grupo certo. Endpoint → `api/`. **Validação Zod fica só aqui**, não no client. |
+| `src/components/ui/` | Primitivos reutilizáveis (Button, Field, ResponsiveSheet…). | Componente genérico/reutilizável vai **aqui**. Ver bloco "UI patterns" antes de criar. |
+| `src/components/<feature>/` | Componentes de uma feature (`sprint/`, `design-session/`, `story-hierarchy/`…). | Componente acoplado a uma feature → pasta da feature, não em `ui/`. |
+| `src/lib/` | Lógica de domínio, integrações, helpers. Subsistemas grandes têm pasta própria (`agent/`, `dal/`, `insights/`, `optimistic/`). | Helper de domínio → `src/lib/`. Acesso a dados/queries → `src/lib/dal/`. |
+| `src/hooks/` | React hooks compartilhados (ex: `use-optimistic-collection.ts`). | Hook reutilizável entre features. |
+| `src/contexts/` | React contexts (auth, design-session). | Context global novo. |
+| `src/eval/` | Harness de avaliação dos agentes. | Baselines/testes de agente. |
+| `src/proxy.ts` | Middleware (Next 16) — auth + resolução de access_level por rota. | — |
+
+## Raiz do repo
+
+| Caminho | Conteúdo | Regra |
+|---------|----------|-------|
+| `docs/` | Planos, runbooks, PRDs — organizados por domínio. | **Doc novo vai na subpasta certa** (`docs/features/<domínio>/`, `docs/agents/<agente>/`, `docs/platform/`, `docs/prd/`, `docs/runbooks/`), nunca solto na raiz de `docs/`. Plano superado → `docs/archive/`. |
+| `scripts/` | CLIs de agente, ops, automação de git. | One-shot já executado → `scripts/archive/` (não some, só sai da vista). Migration de schema **não** vai aqui (ver Supabase). |
+| `supabase/migrations/` | Migrations de schema (`YYYYMMDD_nome.sql`). | **Toda** mudança de schema vai aqui e roda via `psql` (ver bloco Supabase). |
+| `public/` | Assets servidos estáticos. | Asset usado pela app. Não deixar asset órfão. |
+
+**Princípio:** antes de criar componente/modal/form/mutação, checar se um padrão canônico já cobre (ver "UI patterns"). Antes de criar doc na raiz de `docs/` ou script solto em `scripts/`, escolher a subpasta.
+<!-- END:repo-structure -->
+
 <!-- BEGIN:supabase-agent-rules -->
 # Supabase — migrations via psql
 

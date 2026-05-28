@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireMinLevelApi } from "@/lib/dal";
-import { ADMIN, MANAGER } from "@/lib/roles";
+import { MANAGER } from "@/lib/roles";
 
 /**
  * PATCH /api/projects/[id]/members/[memberId]
@@ -15,7 +15,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; memberId: string }> },
 ) {
-  const denied = await requireMinLevelApi(ADMIN);
+  // Alocação por projeto é gestão de time → MANAGER (coerente com o override
+  // de sprint, que já exige MANAGER, e com /members/[id] gateado em MANAGER).
+  const denied = await requireMinLevelApi(MANAGER);
   if (denied) return denied;
 
   const { id: projectId, memberId } = await params;

@@ -30,8 +30,9 @@ export async function GET(
         id,
         member:Member(
           id, name, position, specialty, seniority, fpCapacity,
-          githubUsername, isExternal,
-          skills:MemberSkill(towerKey, score)
+          githubUsername, isExternal, createdAt, onboardedAt,
+          skills:MemberSkill(towerKey, score),
+          projectMembers:ProjectMember(project:Project(id, name))
         )
       )
     `)
@@ -55,6 +56,8 @@ export async function GET(
   let fpDone = 0;
   let fpTotal = 0;
   let fpAllocated = 0;
+  // memberId → tasks assigned to them in the squad's active sprints.
+  const sprintTasksByMember: Record<string, number> = {};
 
   if (projectIds.length > 0) {
     const [tasksRes, sprintsRes] = await Promise.all([
@@ -92,6 +95,24 @@ export async function GET(
         .in("memberId", memberIds);
       fpAllocated = (allocs ?? []).reduce((acc, a) => acc + (a.fpAllocation ?? 0), 0);
     }
+
+    // Per-member task count in the active sprints: TaskAssignment → Task whose
+    // sprintId is active. Filtered to the squad's members.
+    if (activeSprintIds.length > 0 && memberIds.length > 0) {
+      const { data: assignments } = await supabase
+        .from("TaskAssignment")
+        .select("memberId, task:Task!inner(sprintId)")
+        .in("memberId", memberIds)
+        .in("task.sprintId", activeSprintIds);
+      for (const a of (assignments ?? []) as {
+        memberId: string | null;
+      }[]) {
+        if (a.memberId) {
+          sprintTasksByMember[a.memberId] =
+            (sprintTasksByMember[a.memberId] ?? 0) + 1;
+        }
+      }
+    }
   }
 
   const fpCapacity = (squad.members ?? []).reduce(
@@ -112,6 +133,7 @@ export async function GET(
       fpAllocated,
       fpCapacity,
     },
+    sprintTasksByMember,
   });
 }
 

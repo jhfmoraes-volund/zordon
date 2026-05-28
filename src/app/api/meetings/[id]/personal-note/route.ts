@@ -36,7 +36,7 @@ async function ensureCallerCanSeeMeeting(
   const supabase = db();
   const { data: meeting } = await supabase
     .from("Meeting")
-    .select("id, type, createdById, attendees:MeetingAttendee(memberId)")
+    .select("id, visibility, createdById, attendees:MeetingAttendee(memberId)")
     .eq("id", meetingId)
     .maybeSingle();
   if (!meeting) {
@@ -48,7 +48,7 @@ async function ensureCallerCanSeeMeeting(
     .map((a) => a.memberId)
     .filter((x): x is string => !!x);
   const visible = await canViewMeeting({
-    type: meeting.type,
+    visibility: meeting.visibility,
     attendeeMemberIds,
     linkedProjectPmIds: [],
     createdById: meeting.createdById ?? null,

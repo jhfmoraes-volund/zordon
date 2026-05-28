@@ -103,7 +103,7 @@ export async function GET(
 
   // db() bypasses RLS — apply meeting visibility rule here.
   const m = meeting as {
-    type: string;
+    visibility: string;
     createdById?: string | null;
     attendees?: { memberId: string | null }[];
     projectLinks?: { projectId: string }[];
@@ -123,7 +123,7 @@ export async function GET(
     }
   }
   const visible = await canViewMeeting({
-    type: m.type,
+    visibility: m.visibility,
     attendeeMemberIds,
     linkedProjectPmIds,
     createdById: m.createdById ?? null,
@@ -192,6 +192,8 @@ type PutBody = {
   title?: string | null;
   notes?: string | null;
   transcript?: string | null;
+  visibility?: "private" | "public";
+  kind?: string;
   pmMemberIds?: string[];
   attendees?: AttendeeInput[];
   projectIds?: string[];
@@ -225,6 +227,8 @@ export async function PUT(
     title?: string | null;
     date?: string;
     transcript?: string | null;
+    visibility?: "private" | "public";
+    kind?: string;
     transcriptSource?: "roam" | "granola" | null;
     transcriptSourceId?: string | null;
   } = {};
@@ -232,6 +236,8 @@ export async function PUT(
   if (body.title !== undefined) patch.title = body.title;
   if (body.transcript !== undefined) patch.transcript = body.transcript;
   if (body.date !== undefined) patch.date = new Date(body.date).toISOString();
+  if (body.visibility !== undefined) patch.visibility = body.visibility;
+  if (body.kind !== undefined) patch.kind = body.kind;
 
   if (body.transcriptSource !== undefined || body.transcriptSourceId !== undefined) {
     const src = body.transcriptSource ?? null;

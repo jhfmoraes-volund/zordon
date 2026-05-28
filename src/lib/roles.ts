@@ -67,6 +67,18 @@ export const POSITION_LABELS: Record<Position, string> = {
   "product-builder": "Product Builder",
 };
 
+/**
+ * Positions allowed to be the responsible PM of a project. Single source of
+ * truth for the PM dropdown filter (and its inverse, the "allocated members"
+ * list) — keep UI filters pointing here instead of hard-coding `=== "pm"`.
+ */
+export const PM_ELIGIBLE_POSITIONS: Position[] = ["pm", "head-ops"];
+
+/** Whether a member's position makes them eligible to be a project's PM. */
+export function isPmEligible(position: string | null | undefined): boolean {
+  return PM_ELIGIBLE_POSITIONS.includes(position as Position);
+}
+
 // ─── Legacy `Role` (cargo+access merged) ─────────────────
 // @deprecated — use AccessLevel for authz, Position for job title.
 

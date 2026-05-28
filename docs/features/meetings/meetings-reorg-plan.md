@@ -3,105 +3,137 @@
 > Decidido com João em 2026-05-27. Substitui o modelo de 5 tipos num único tab global.
 > Memory: `project_meetings_reorg`.
 
-## Princípio
+## Princípio: separar EVENTO de ARTEFATO
 
-Eixo novo: **"a reunião é sobre um projeto?"**
+A decisão central não é só mover abas — é **desfundir dois conceitos** que hoje são a mesma linha na tabela `Meeting`:
 
-- **Sim** → vira **Cerimônia**, dentro do tab do projeto (`projects/[id]`), irmão de Stories/Sprints/Sessions/Wiki. Análogo direto ao tab **Sessions** (Design Sessions).
-- **Não** → fica na **aba global `/meetings`**, agora só com 2 visibilidades: **privada** e **pública**.
+```
+EVENTO (Meeting)                    ARTEFATO (Cerimônia / DS)
+"o que aconteceu"                   "o trabalho do projeto"
+─────────────────                   ─────────────────────────
+transcript, participantes,          daily / planning / pm_review / DS
+data, fonte (Granola/Roam)          status, decisões, plano de tasks
+vive na aba global /meetings        vive no tab Cerimônias do projeto
+        │                                      │
+        └──────── link N:N (opcional) ─────────┘
+              "essa call alimentou essa planning"
+```
+
+Eixo de navegação: **"a reunião é sobre um projeto?"**
+- **Sim** → o trabalho vira **Cerimônia** (artefato), dentro do tab do projeto, irmão de Stories/Sprints/Sessions/Wiki. Análogo direto ao tab **Sessions** (DS).
+- **Não** → fica na **aba global `/meetings`**, só com 2 visibilidades: **privada** e **pública**.
 
 Mapeamento dos 5 tipos atuais:
 
 | Tipo atual | Destino | Dados em prod |
 |------------|---------|---------------|
-| `daily` | Cerimônia | 0 (greenfield) |
-| `super_planning` | Cerimônia | 2 (+ SuperPlanningSession + sprintId) |
-| `pm_review` | Cerimônia | 6 (+ 23 MeetingProjectReview) |
+| `daily` | Cerimônia (artefato) | 0 (greenfield) |
+| `super_planning` | Cerimônia (artefato) | 2 (+ SuperPlanningSession + sprintId) |
+| `pm_review` | Cerimônia (artefato, **por projeto**) | 6 (+ 23 MeetingProjectReview) |
 | `private` | Global, privada (dono só, sem admin bypass) | 7 |
 | `general` | Global, pública (quem participou vê) | — |
 
-A infra de dados (tabela `Meeting`, `MeetingSheet`, `POST /api/meetings`, RLS) **já suporta os 3 tipos**. O trabalho é de superfície + escopo, não de schema novo.
+### Decisões de modelagem (confirmadas com João)
+
+1. **Link reunião ↔ artefato é N:N** — uma call pode alimentar uma planning E uma DS. Tabela de junção, não FK obrigatório.
+2. **Cerimônia pode existir sem reunião** — cria-se a planning/daily direto no projeto (artefato puro); a reunião-evento é evidência **opcional**. Idêntico a como DS funciona hoje.
+3. **Overview de gestão = agregado na home do dashboard** (`(dashboard)/page.tsx`) — concatena as cerimônias de todos os projetos do gestor. Lê **artefatos**, não transcripts. É onde o status semanal do Alpha (Fase 3) aparece em nível de portfólio.
+4. **pm_review continua por projeto** — o projeto é dado, o PM é o revisor (pré-selecionar via `Project.pmId`).
+5. **Link bidirecional** — (a) de dentro da cerimônia/DS, anexar reunião; (b) de dentro da reunião, promover/linkar a cerimônia ou DS.
+
+A infra de dados (`Meeting`, `MeetingSheet`, `POST /api/meetings`, RLS) **já suporta os 3 tipos**. O novo schema é só a **tabela de link** N:N.
 
 ---
 
 ## Fase 1 — Cerimônias no projeto (começa aqui)
 
-**Risco:** baixo. `daily=0`, `super_planning=2`, `pm_review=6` — pouco dado, e nada se apaga nesta fase (a aba global continua funcionando em paralelo até a Fase 2).
+**Risco:** baixo. `daily=0`, `super_planning=2`, `pm_review=6` — pouco dado, nada se apaga (a aba global segue em paralelo até a Fase 2).
 
-### 1.1 Novo tab no projeto
+### 1.1 Schema — tabela de link N:N
+
+Nova migration `supabase/migrations/<data>_meeting_artifact_link.sql`:
+- Tabela `MeetingArtifactLink`: `{ id, meetingId FK→Meeting, artifactType ('ceremony'|'design_session'), artifactId, projectId, createdById, createdAt }`.
+  - Nota: "ceremony" não é tabela nova — é um `Meeting` de tipo daily/super_planning/pm_review. O link pode apontar Meeting↔Meeting (evento ↔ cerimônia) e Meeting↔DesignSession.
+  - Index por `meetingId` e por `(artifactType, artifactId)`.
+- RLS: visível a quem vê **ambos** os lados do link (reusa `canViewMeeting` + visibilidade de DS).
+- Rodar via psql (`source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql "$DIRECT_URL" -f ...`) e atualizar `database.types.ts`.
+
+> Decisão aberta p/ implementação: "Cerimônia" reusa a tabela `Meeting` (tipo) ou ganha tabela própria `ProjectCeremony`? Reusar `Meeting` é menos schema e preserva os 8 registros sem migração; tabela própria é mais limpa conceitualmente mas exige migrar SuperPlanningSession + MeetingProjectReview. **Recomendação: reusar `Meeting`** na Fase 1 (escopo via tipo + link), reavaliar na Fase 2.
+
+### 1.2 Novo tab no projeto
 
 - `src/app/(dashboard)/projects/[id]/_types.ts` — adicionar `"ceremonies"` ao union `TabKey`.
 - `src/app/(dashboard)/projects/[id]/page.tsx`:
-  - **TABS array** (linhas ~86-92): inserir `{ key: "ceremonies", label: "Cerimônias", icon: CalendarClock }` antes de `wiki`.
-  - **Render switch** (linhas ~1638-1712): inserir branch antes de `wiki`:
+  - **TABS array** (~86-92): inserir `{ key: "ceremonies", label: "Cerimônias", icon: CalendarClock }` antes de `wiki`.
+  - **Render switch** (~1638-1712): inserir branch antes de `wiki`:
     ```tsx
     ) : activeTab === "ceremonies" ? (
-      <ProjectCeremoniesTab
-        projectId={id}
-        projectName={project.name}
-        canManage={canManageSprint}
-      />
+      <ProjectCeremoniesTab projectId={id} projectName={project.name} canManage={canManageSprint} />
     ```
 
-### 1.2 Componente `ProjectCeremoniesTab`
+### 1.3 Componente `ProjectCeremoniesTab`
 
-- Novo: `src/components/project-ceremonies-tab.tsx`. **Copiar o esqueleto de `project-sessions-tab.tsx`**, trocando DesignSession por Meeting (filtrado por projeto + tipos de cerimônia).
-- Props: `{ projectId, projectName, canManage? }` (mesmo shape do SessionsTab).
-- Estado: `useOptimisticCollection<MeetingSummary>([])` (regra do CLAUDE.md — nunca setState direto após fetch em lista).
-- Filtros (tabs com contagem): `Todas | Daily | Planning | Review` por tipo. Espelha o padrão de filtros do SessionsTab (all/active/completed).
-- Botão de criar abre `MeetingSheet` com `defaultType` pré-setado conforme o filtro/contexto. **Reusa o MeetingSheet existente** — ele já tem os blocos de campo de daily/super_planning/pm_review.
-- Item da lista abre o sheet de detalhe (reusar o fluxo de detalhe atual de `/meetings/[id]`, ou abrir MeetingSheet em mode edit — decidir na implementação; SessionsTab abre detail sheet inline).
+- Novo: `src/components/project-ceremonies-tab.tsx`. **Copiar o esqueleto de `project-sessions-tab.tsx`**.
+- Props: `{ projectId, projectName, canManage? }`.
+- Estado: `useOptimisticCollection<CeremonySummary>([])` (regra CLAUDE.md — nunca setState direto após fetch em lista).
+- Filtros (tabs com contagem): `Todas | Daily | Planning | Review`.
+- Criar: abre `MeetingSheet` com `defaultType` + `projectId` fixado.
+- Item da lista: abre detalhe; no detalhe, **seção de reuniões linkadas** (anexar/desanexar) — direção (a) do link bidirecional.
 
-### 1.3 Fetch project-scoped
+### 1.4 Fetch project-scoped
 
-Opção escolhida: **nova rota** `GET /api/projects/[id]/ceremonies` (segue o padrão de `/members`, `/stories`, `/modules` — mais explícito que query Supabase direta, e centraliza o `canViewMeeting`).
+Nova rota `GET /api/projects/[id]/ceremonies` (padrão `/members`, `/stories`):
+- Filtra `Meeting` por projeto (via `MeetingProjectLink`) + `type IN ('daily','super_planning','pm_review')` + `canViewMeeting()` por linha.
+- Inclui contagem de reuniões-evento linkadas (via `MeetingArtifactLink`).
 
-- Handler filtra `Meeting` por `projectId` (via `MeetingProjectLink`) + `type IN ('daily','super_planning','pm_review')` + roda `canViewMeeting()` por linha.
-- Retorna o shape de summary que a lista precisa (id, type, date, title, sprint, contagens).
+### 1.5 MeetingSheet — ajuste de contexto
 
-### 1.4 MeetingSheet — ajuste de contexto
+- Aberto do tab Cerimônias: `projectId` fixado (sem ProjectPicker genérico).
+- `super_planning`: mantém exigência de sprint ativa (`route.ts:145-165`).
+- `pm_review` no projeto: pré-seleciona o PM via `Project.pmId` (projeto dado, PM revisor).
 
-- Quando aberto a partir do tab de Cerimônias, o `projectId` já vem fixado (não mostra o ProjectPicker, ou mostra travado no projeto atual). Hoje o picker é genérico; aqui o projeto é o contexto.
-- `super_planning` continua exigindo sprint ativa (validação atual em `route.ts:145-165` permanece).
-- `pm_review` no contexto de projeto: revisa **aquele** projeto (não a lista de PMs transversal). Esse é o ajuste mais delicado — hoje pm_review parte de uma seleção de PMs e deriva os projetos. No tab do projeto, é o inverso: o projeto é dado, o PM é o revisor. **Precisa de decisão de UX na hora de implementar** (provavelmente: pré-seleciona o PM do projeto via `Project.pmId`).
+### 1.6 Link bidirecional (direção b)
 
-### 1.5 O que NÃO muda na Fase 1
+- Na reunião-evento (global), ação "Linkar a uma cerimônia/DS" → escreve `MeetingArtifactLink`.
+- Reusa o padrão de picker existente; não precisa de tela nova pesada.
 
-- A aba global `/meetings` continua existindo e funcionando (com todos os 5 tipos) até a Fase 2.
-- Nenhuma migração de dados destrutiva. Os 8 meetings de projeto (2 planning + 6 review) passam a **também** aparecer no tab do projeto via filtro — sem mover linha nenhuma.
-- RLS / `canViewMeeting` inalterado (visibilidade por attendee/PM já é project-aware).
+### 1.7 O que NÃO muda na Fase 1
+
+- Aba global `/meetings` segue com os 5 tipos até a Fase 2.
+- Zero migração destrutiva. Os 8 meetings de projeto passam a **também** aparecer no tab via filtro.
+- RLS / `canViewMeeting` inalterado.
 
 ---
 
 ## Fase 2 — Aba global vira privada/pública
 
-> Depende da Fase 1 estar de pé (cerimônias já têm casa no projeto).
+> Depende da Fase 1 de pé.
 
-- `/meetings` passa a listar/criar **só** `private` e `general`.
-- `MeetingSheet` (no contexto global) some os tipos daily/super_planning/pm_review do seletor.
-- `general` é apresentado como "pública": quem participou vê (regra de attendee já existe em `canViewMeeting`).
-- `private` permanece dono-só, sem admin bypass.
-- Decisão a tomar: os meetings de cerimônia ainda aparecem em `/meetings` ou somem de lá de vez (só no projeto)? Provavelmente somem — senão a simplificação não acontece de verdade.
-- Coupling a tratar: 83 decision points mapeados (maior em `meeting-sheet.tsx` ~35 e `meetings/[id]/page.tsx` ~17), RPC de visibilidade em `20260428_meeting_visibility.sql` com type checks hardcoded.
+- `/meetings` lista/cria **só** `private` e `general`.
+- `MeetingSheet` global: some daily/super_planning/pm_review do seletor.
+- `general` = "pública" (quem participou vê); `private` = dono-só.
+- Cerimônias somem de `/meetings` (só no projeto) — senão a simplificação não acontece.
+- Coupling: 83 decision points (maior em `meeting-sheet.tsx` ~35, `meetings/[id]/page.tsx` ~17); RPC de visibilidade em `20260428_meeting_visibility.sql` com type checks hardcoded.
 
 ---
 
-## Fase 3 — Alpha escreve status semanal no Wiki
+## Fase 3 — Alpha → status semanal (Wiki por projeto + Overview agregado)
 
-> A parte mais interessante. Vem por último: o Alpha precisa que as cerimônias/reuniões já estejam organizadas pra ter o que ler.
+> A feature de produto de verdade. Vem por último: precisa dos artefatos organizados pra ter o que ler.
 
-- **Modelo já aceita:** `ProjectWikiSection` é JSON polimórfico (`data: Json` por `sectionKey`). Adicionar section `weekly_status` com shape tipo `{ week, summary, highlights[], risks[], generatedAt, sourceMeetingIds[] }`.
-- **Endpoint já existe:** `PUT /api/projects/[id]/wiki/[sectionKey]` aceita `{ data, title? }`.
-- **Falta no Alpha:** tool `update_wiki_section` em `src/lib/agent/agents/alpha/tools.ts` (write tool, gated por `capabilities.writeTools`). Alpha já tem `get_recent_meetings` / `getMeetingDetail` pra leitura.
-- **Gatilho:** rodar no fluxo de insights (`/api/cron/run-alpha-insights`, pg_cron) ou sob demanda. Alpha lê as reuniões públicas + cerimônias da semana → escreve o pulso do projeto na section.
-- Comportamento desejado (palavras do João): "o Alpha pudesse ler as reuniões e colocar um status de como está o projeto naquela semana".
+- **Nível projeto:** section `weekly_status` em `ProjectWikiSection` (JSON polimórfico já aceita). Shape `{ week, summary, highlights[], risks[], generatedAt, sourceArtifactIds[] }`. Endpoint `PUT /api/projects/[id]/wiki/[sectionKey]` já existe.
+- **Nível portfólio:** seção na **home do dashboard** (`(dashboard)/page.tsx`) concatena os `weekly_status` de todos os projetos do gestor. Resolve a visão transversal.
+- **Falta no Alpha:** tool `update_wiki_section` em `src/lib/agent/agents/alpha/tools.ts` (write tool, gated por `capabilities.writeTools`). Alpha já lê via `get_recent_meetings` / `getMeetingDetail`.
+- **Insumo:** Alpha lê os **artefatos** (cerimônias) + reuniões linkadas da semana → sintetiza o pulso. Como lê artefato estruturado (não transcript cru), a síntese é mais confiável.
+- **Gatilho:** fluxo de insights (`/api/cron/run-alpha-insights`, pg_cron) ou sob demanda.
+- **Risco de produto:** status auto-gerado só vale se um humano lê e concorda. O valor está na qualidade da síntese, não no plumbing. Tratar a Fase 3 como o *porquê* do projeto; Fases 1-2 são a fundação que a habilita.
 
 ---
 
 ## Ordem de execução
 
-1. **Fase 1** ← agora.
+1. **Fase 1** ← agora (schema de link + tab + componente).
 2. Fase 2 (simplifica o global).
-3. Fase 3 (Alpha → Wiki).
+3. Fase 3 (Alpha → status, projeto + portfólio).
 
 Cada fase é entregável e reversível de forma independente.

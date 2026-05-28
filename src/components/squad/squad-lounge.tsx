@@ -19,15 +19,27 @@ import { FolderOpen, StickyNote } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { SquadBigNumbers, type SquadMetrics } from "./big-numbers";
 import { MuralPost, type MuralPostData } from "./mural-post";
+import { MemberCard, type SquadMemberCard } from "./member-card";
+
+type ApiMember = {
+  id: string;
+  name: string;
+  position: string | null;
+  fpCapacity: number;
+  createdAt: string | null;
+  onboardedAt: string | null;
+  projectMembers: { project: { id: string; name: string } | null }[] | null;
+};
 
 type Payload = {
   squad: {
     id: string;
     name: string;
     projectSquads: { id: string; project: { id: string; name: string } | null }[];
-    members: { id: string; member: { id: string; name: string } | null }[];
+    members: { id: string; member: ApiMember | null }[];
   };
   metrics: SquadMetrics;
+  sprintTasksByMember: Record<string, number>;
 };
 
 /** Mock seed so the corkboard isn't empty during the prototype. */
@@ -130,11 +142,28 @@ export function SquadLounge({ squadId }: { squadId: string }) {
   if (!data)
     return <p className="p-6 text-sm text-muted-foreground">Carregando…</p>;
 
-  const { squad, metrics } = data;
+  const { squad, metrics, sprintTasksByMember } = data;
   const projects = (squad.projectSquads ?? [])
     .map((ps) => ps.project)
     .filter((p): p is { id: string; name: string } => Boolean(p));
-  const memberCount = (squad.members ?? []).filter((sm) => sm.member).length;
+
+  const memberCards: SquadMemberCard[] = (squad.members ?? [])
+    .map((sm) => sm.member)
+    .filter((m): m is ApiMember => Boolean(m))
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      position: m.position,
+      fpCapacity: m.fpCapacity,
+      createdAt: m.createdAt,
+      onboardedAt: m.onboardedAt,
+      projects: (m.projectMembers ?? [])
+        .map((pm) => pm.project)
+        .filter((p): p is { id: string; name: string } => Boolean(p)),
+      sprintTaskCount: sprintTasksByMember[m.id] ?? 0,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const memberCount = memberCards.length;
 
   return (
     <div className="space-y-6">
@@ -162,6 +191,15 @@ export function SquadLounge({ squadId }: { squadId: string }) {
       </div>
 
       <SquadBigNumbers metrics={metrics} />
+
+      {/* Members — vertical cards, up to 5 per row */}
+      {memberCards.length > 0 ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {memberCards.map((m, i) => (
+            <MemberCard key={m.id} member={m} index={i} />
+          ))}
+        </div>
+      ) : null}
 
       {/* The mural — board column (DS kanban frame) holding written post-its.
           BoardColumn renders the header/count, the empty-state, and the

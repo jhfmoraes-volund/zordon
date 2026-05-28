@@ -446,3 +446,31 @@ Idealmente faça **esta refatoração antes** da reorg tocar o page, pra o tab n
 num arquivo já enxuto. Se a reorg já tiver adicionado o tab quando você chegar aqui, só
 trate `ProjectCeremoniesTab` como mais um caso do switch (não precisa de hook de ação —
 ele se auto-gerencia, como `ProjectSessionsTab`).
+
+---
+
+## 10. Resultado (concluído — ZRD-JM-97..101)
+
+Executado em 5 fases, cada uma tsc-clean e commitada separadamente:
+
+| Fase | Commit | O que saiu do page | page.tsx |
+|------|--------|--------------------|----------|
+| — | (baseline) | — | 2002 |
+| 1 | ZRD-JM-97 | `useTaxonomyActions` (8 handlers + module/persona dialog state) | 1875 |
+| 2 | ZRD-JM-98 | `useSprintActions` (9 handlers + 7 estados de UI) | 1743 |
+| 3 | ZRD-JM-99 | `useStoryActions` (7 handlers) | 1609 |
+| 4 | ZRD-JM-100 | `useTaskActions` (25 handlers + findTaskIdByRef + refsToIds + clone state) | 934 |
+| 5 | ZRD-JM-101 | limpeza de 12 imports órfãos | 929 |
+
+**Por que 929 e não as ~450 do alvo da seção 7:** o alvo assumia mover só lógica, e
+moveu — **zero handler solto** sobrou no page (`grep` da verificação dá 0). As 929 linhas
+restantes são **JSX de render** (5 tabs, dialogs, sheets, ribbons, header) + a tab de
+Cerimônias que a reorg adicionou no meio do caminho. Deflacionar isso exigiria extrair o
+markup de cada tab em subcomponentes — uma "Fase 6" que estava **fora de escopo** desta
+refatoração (que era de lógica, não de apresentação). Decisão consciente de parar aqui:
+o God-component de *lógica* foi desmontado; a árvore de JSX é uma refatoração separada.
+
+**Não-regressões herdadas:** o eslint reporta 2 errors no page (`react-hooks/preserve-manual-memoization`
+no useMemo de `capacities`, e `react-hooks/set-state-in-effect` no effect de default-sprint).
+Ambos **pré-existem** ao refactor (confirmado em `610b5d9~1`) — vieram verbatim do original,
+não foram introduzidos aqui. Ficam como dívida pré-existente, fora do escopo deste runbook.

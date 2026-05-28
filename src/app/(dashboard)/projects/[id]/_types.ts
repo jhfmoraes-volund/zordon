@@ -4,6 +4,7 @@ export type TabKey =
   | "stories"
   | "sprints"
   | "sessions"
+  | "ceremonies"
   | "wiki"
   | "settings";
 

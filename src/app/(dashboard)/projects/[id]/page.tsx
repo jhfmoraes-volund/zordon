@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   BookOpen,
+  CalendarClock,
   FileText,
   Lightbulb,
   Pencil,
@@ -22,16 +23,11 @@ import {
 import { PageTitle } from "@/components/app-shell";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { ProjectEditSheet } from "@/components/project-edit-sheet";
+import { ProjectCeremoniesTab } from "@/components/project-ceremonies-tab";
 import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { ProjectWiki } from "@/components/project-wiki";
-import {
-  SprintDialog,
-  type SprintFormData,
-} from "@/components/sprint-dialog";
-import {
-  SprintContextSheet,
-  type SprintContextSheetMode,
-} from "@/components/sprint/sprint-context-sheet";
+import { SprintDialog } from "@/components/sprint-dialog";
+import { SprintContextSheet } from "@/components/sprint/sprint-context-sheet";
 import { SuggestSprintsSheet } from "@/components/sprint/suggest-sprints-sheet";
 import { StatusChip } from "@/components/ui/status-chip";
 import { createClient } from "@/lib/supabase/client";
@@ -43,10 +39,7 @@ import {
   TaskSheet,
   TaskDuplicateDialog,
   TaskCloneDialog,
-  type ProjectLite,
-  type TaskTag,
 } from "@/components/story-hierarchy";
-import type { ChipTone } from "@/lib/status-chips";
 import {
   adaptMember,
   adaptModule,
@@ -64,18 +57,12 @@ import {
   SprintRibbon,
   type NavValue,
   type Sprint as SprintView,
-  type SprintDeleteAction,
   type SprintMemberCapacity,
 } from "@/components/sprint";
-import type { AcceptanceCriterionRow } from "@/lib/dal/story-hierarchy";
-import { toast } from "sonner";
-import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
-import { tempId as makeTempId } from "@/lib/optimistic/reconcile";
-import { suggestFunctionPoints } from "@/lib/function-points";
 import { useAuth } from "@/contexts/auth-context";
 import { hasMinAccessLevel } from "@/lib/roles";
 
-import type { RawTask, TabKey } from "./_types";
+import type { TabKey } from "./_types";
 import { useProjectMeta } from "./_hooks/use-project-meta";
 import { useStoryHierarchy } from "./_hooks/use-story-hierarchy";
 import { useTasksAndSprints } from "./_hooks/use-tasks-and-sprints";
@@ -91,6 +78,7 @@ const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
+  { key: "ceremonies", label: "Cerimônias", icon: CalendarClock },
   { key: "wiki", label: "Wiki", icon: FileText },
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -535,28 +523,29 @@ export default function ProjectDetailPage({
         />
       ) : null}
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b overflow-x-auto scrollbar-none -mx-3 px-3 md:mx-0 md:px-0">
+      {/* Tabs — mobile: só ícones, distribuídos, sem scroll. Desktop: ícone + label + badge. */}
+      <div className="flex border-b -mx-3 px-3 md:mx-0 md:px-0 md:gap-1">
         {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
-            className={`flex shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            aria-label={tab.label}
+            className={`flex flex-1 shrink-0 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap md:flex-none md:justify-start md:px-4 md:py-2 ${
               activeTab === tab.key
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            <tab.icon className="size-4" />
-            {tab.label}
+            <tab.icon className="size-5 md:size-4" />
+            <span className="hidden md:inline">{tab.label}</span>
             {tab.key === "stories" ? (
-              <Badge variant="secondary" className="ml-1 h-5 text-xs">
+              <Badge variant="secondary" className="ml-1 hidden h-5 text-xs md:inline-flex">
                 {stories.length}
               </Badge>
             ) : null}
             {tab.key === "sprints" ? (
-              <Badge variant="secondary" className="ml-1 h-5 text-xs">
+              <Badge variant="secondary" className="ml-1 hidden h-5 text-xs md:inline-flex">
                 {sprints.length}
               </Badge>
             ) : null}
@@ -618,6 +607,12 @@ export default function ProjectDetailPage({
         />
       ) : activeTab === "sessions" ? (
         <ProjectSessionsTab
+          projectId={id}
+          projectName={project.name}
+          canManage={canManageSprint}
+        />
+      ) : activeTab === "ceremonies" ? (
+        <ProjectCeremoniesTab
           projectId={id}
           projectName={project.name}
           canManage={canManageSprint}

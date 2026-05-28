@@ -545,43 +545,44 @@ export const requireProjectMemberApi = requireProjectEditTasksApi;
 // ═══════════════════════════════════════════════════════════
 
 type MeetingVisibilityCtx = {
-  type: string;
+  /** Eixo de acesso. `type` permanece só como rótulo legado (não governa). */
+  visibility: string;
   attendeeMemberIds: string[];
   linkedProjectPmIds: string[];
   createdById?: string | null;
 };
 
 /**
- * Mirror of public.can_view_meeting(meetingId) — given a meeting's type,
- * its attendee memberIds, and the pmIds of any linked projects, decide
- * if the *acting* caller can see it.
+ * Mirror of public.can_view_meeting(meetingId) — agora governado por
+ * VISIBILITY (não mais por type). Dado a visibilidade da reunião, seus
+ * attendees, e os pmIds dos projetos linkados, decide se o caller (acting) vê.
  *
  *   - private: SÓ o creator. Admin NÃO vê (privada é privada).
- *   - Admin (head-ops / ceo / cro): vê tudo exceto private.
- *   - Otherwise (pm_review / general / daily / super_planning):
- *       acting memberId ∈ attendeeMemberIds.
+ *   - public:  admin vê tudo; senão, quem participou (attendee) OU é PM
+ *              de um projeto linkado (cerimônias legadas como Meeting).
  *
- * Builder visibility is intentional: a builder added as an attendee on
- * any non-private meeting gets read-only access to it. Daily/super_planning
- * thus require the PM to add the builder as an attendee on creation/edit.
- *
- * Honors impersonation: admin impersonating PM Pedro will be filtered
- * exactly like Pedro.
+ * Builder visibility is intentional: builder adicionado como attendee numa
+ * reunião pública tem leitura. Honors impersonation: admin impersonando PM
+ * Pedro é filtrado exatamente como Pedro.
  */
 export async function canViewMeeting(
   ctx: MeetingVisibilityCtx,
 ): Promise<boolean> {
   const memberId = await getActorMemberId();
 
-  if (ctx.type === "private") {
+  if (ctx.visibility === "private") {
     // Sem admin bypass — só quem criou vê.
     return !!memberId && !!ctx.createdById && ctx.createdById === memberId;
   }
 
+  // public
   const level = await getEffectiveAccessLevel();
   if (hasMinAccessLevel(level, "admin")) return true;
   if (!memberId) return false;
-  return ctx.attendeeMemberIds.includes(memberId);
+  return (
+    ctx.attendeeMemberIds.includes(memberId) ||
+    ctx.linkedProjectPmIds.includes(memberId)
+  );
 }
 
 /**
