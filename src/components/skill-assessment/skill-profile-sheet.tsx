@@ -20,6 +20,7 @@ import {
   type MemberSkillRow,
 } from "@/lib/memberSkills";
 import { roleLabel } from "@/lib/roles";
+import { fmtDateLong } from "@/lib/date-utils";
 
 type SkillResponse = {
   member: { id: string; name: string; role: string; position: string | null; specialty: string | null };
@@ -49,20 +50,24 @@ export function SkillProfileSheet({ memberId, open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (!open || !memberId) return;
-    let cancelled = false;
-    setLoading(true);
-    setData(null);
-    fetch(`/api/members/${memberId}/skills`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!cancelled) setData(d);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    const controller = new AbortController();
+    async function load() {
+      setLoading(true);
+      setData(null);
+      try {
+        const r = await fetch(`/api/members/${memberId}/skills`, {
+          signal: controller.signal,
+        });
+        const d = r.ok ? await r.json() : null;
+        setData(d);
+      } catch {
+        // aborted or network error — leave data as null
+      } finally {
+        setLoading(false);
+      }
+    }
+    void load();
+    return () => controller.abort();
   }, [open, memberId]);
 
   return (
@@ -187,11 +192,7 @@ function SheetBody({ data }: { data: SkillResponse }) {
             {lastUpdated && (
               <p className="text-[10px] text-muted-foreground">
                 Última atualização:{" "}
-                {new Date(lastUpdated).toLocaleDateString("pt-BR", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}
+                {fmtDateLong(lastUpdated)}
               </p>
             )}
           </>

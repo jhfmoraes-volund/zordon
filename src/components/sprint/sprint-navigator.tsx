@@ -14,6 +14,7 @@ import { lookupChip, SPRINT_STATUS } from "@/lib/status-chips";
 import type { Task } from "@/components/story-hierarchy";
 import { sprintFP } from "./helpers";
 import type { Sprint } from "./types";
+import { fmtDate } from "@/lib/date-utils";
 
 /** Ids reservados para views sintéticas (não-sprint) no carrossel. */
 export type SyntheticViewId = "backlog" | "all";
@@ -47,12 +48,6 @@ type Props = {
    */
   showSyntheticViews?: boolean;
 };
-
-const fmt = (d: string) =>
-  new Date(d + "T00:00:00").toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  });
 
 function isSyntheticId(id: NavValue): id is SyntheticViewId {
   return id === "backlog" || id === "all";
@@ -156,7 +151,7 @@ export function SprintNavigator({
         </span>
         <span aria-hidden className="hidden text-muted-foreground/50 sm:inline">·</span>
         <span className="hidden font-mono text-xs tabular-nums text-muted-foreground sm:inline">
-          {fmt(currentSprint.startDate)} → {fmt(currentSprint.endDate)}
+          {fmtDate(currentSprint.startDate + "T00:00:00")} → {fmtDate(currentSprint.endDate + "T00:00:00")}
         </span>
         {pct !== null ? (
           <>

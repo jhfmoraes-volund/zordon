@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { PixelBar, PixelHud } from "@/components/ui/pixel-bar";
 import { towerLabel } from "@/lib/memberSkills";
 import { ACTION_STATUS_LABELS, type ActionStatus } from "@/lib/pdiCycles";
+import { fmtDate } from "@/lib/date-utils";
 
 type PdiAction = {
   id: string;
@@ -23,9 +24,6 @@ type PdiSummary = {
   cycle: { label: string; startDate: string; endDate: string };
   actions: PdiAction[];
 };
-
-const fmtShort = (d: string) =>
-  new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
 export function PdiWidget() {
   const [summary, setSummary] = useState<PdiSummary | null>(null);
@@ -154,7 +152,7 @@ export function PdiWidget() {
                               overdue ? "text-red-500" : "text-muted-foreground"
                             }`}
                           >
-                            · {fmtShort(a.dueAt)}
+                            · {fmtDate(a.dueAt)}
                           </span>
                         )}
                       </div>

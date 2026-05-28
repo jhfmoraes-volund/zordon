@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { fmtDate } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import type { NotificationItem as NotifData } from "@/hooks/use-notifications";
 
@@ -68,7 +69,7 @@ function relativeTime(iso: string): string {
   if (h < 24) return `${h}h`;
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d`;
-  return new Date(iso).toLocaleDateString("pt-BR");
+  return fmtDate(iso);
 }
 
 export function NotificationItem({

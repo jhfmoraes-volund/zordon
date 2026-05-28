@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, Pencil, Trash2 } from "lucide-react";
+import { fmtDate } from "@/lib/date-utils";
 import { Markdown } from "@/components/ui/markdown";
 import {
   Tooltip,
@@ -593,5 +594,5 @@ function formatRelative(iso: string): string {
   const d = Math.floor(h / 24);
   if (d === 1) return "ontem";
   if (d < 30) return `${d}d atrás`;
-  return new Date(iso).toLocaleDateString("pt-BR");
+  return fmtDate(iso);
 }

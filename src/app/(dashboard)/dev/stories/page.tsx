@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { fmtDate } from "@/lib/date-utils";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -630,12 +631,6 @@ function OverviewTab({
 }) {
   const stats = projectStats(sprints, tasks);
   const active = sprints.find((s) => s.id === activeSprintId);
-  const fmt = (d: string) =>
-    new Date(d + "T00:00:00").toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "short",
-    });
-
   return (
     <div className="space-y-6">
       <SprintSummaryStats stats={stats} />
@@ -655,7 +650,7 @@ function OverviewTab({
               <p className="text-base font-semibold">{active.name}</p>
             </div>
             <span className="font-mono text-xs tabular-nums text-muted-foreground">
-              {fmt(active.startDate)} → {fmt(active.endDate)}
+              {fmtDate(active.startDate)} → {fmtDate(active.endDate)}
             </span>
             <span className="ml-auto flex items-center gap-3 text-sm">
               <span className="font-mono tabular-nums">

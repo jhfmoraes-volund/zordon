@@ -19,6 +19,7 @@ import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { ACTION_ITEM_STATUS, lookupChip } from "@/lib/status-chips";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { fmtDateLong } from "@/lib/date-utils";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -449,7 +450,7 @@ function TodoSheetBody({
                 <FileText className="h-3.5 w-3.5" />
                 <span>
                   Reunião de{" "}
-                  {new Date(todo.meeting.date).toLocaleDateString("pt-BR")}
+                  {fmtDateLong(todo.meeting.date)}
                   {todo.meeting.title && ` — ${todo.meeting.title}`}
                 </span>
               </div>
@@ -481,7 +482,7 @@ function TodoSheetBody({
           <>
             <span className="text-xs text-muted-foreground">
               {todo?.createdAt &&
-                `Criada em ${new Date(todo.createdAt).toLocaleDateString("pt-BR")}`}
+                `Criada em ${fmtDateLong(todo.createdAt)}`}
             </span>
             <Button variant="ghost" size="sm" onClick={handleDelete} className="text-destructive">
               <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remover

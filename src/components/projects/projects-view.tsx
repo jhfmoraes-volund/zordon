@@ -493,9 +493,9 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
                       <StatusChip {...lookupChip(PROJECT_STATUS, p.status)} dot />
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {p.startDate ? new Date(p.startDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "–"}
+                      {p.startDate ? fmtDate(p.startDate) : "–"}
                       {" → "}
-                      {p.endDate ? new Date(p.endDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "–"}
+                      {p.endDate ? fmtDate(p.endDate) : "–"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">

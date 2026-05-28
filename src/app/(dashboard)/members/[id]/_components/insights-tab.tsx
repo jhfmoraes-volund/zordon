@@ -15,6 +15,7 @@ import { Sparkles, TrendingUp, TrendingDown, Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { PixelHud, pixelTone } from "@/components/ui/pixel-bar";
 import { OK_GREEN, WARN_RED } from "./types";
+import { fmtDate } from "@/lib/date-utils";
 
 export type InsightWeekDone = {
   weekStart: string; // ISO
@@ -36,8 +37,6 @@ const MIX_COLORS = [
   "oklch(0.7 0.16 320)",
 ];
 
-const fmtWeek = (iso: string) =>
-  new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
 export function InsightsTab({
   done,
@@ -148,7 +147,7 @@ export function InsightsTab({
                 <Legend color="oklch(0.6 0.13 250)" label="entregue" />
               </span>
             </div>
-            <PlanVsDone planned={m.plannedSeries} done={m.doneSeries} labels={m.series.map((s) => fmtWeek(s.weekStart))} />
+            <PlanVsDone planned={m.plannedSeries} done={m.doneSeries} labels={m.series.map((s) => fmtDate(s.weekStart))} />
           </div>
         </CardContent>
       </Card>
@@ -216,8 +215,8 @@ export function InsightsTab({
             <PixelHud size="xs" tone="muted">carga semana a semana (verde→vermelho)</PixelHud>
             <PixelHeatstrip pcts={m.loadPcts} />
             <div className="flex justify-between text-[9px] text-muted-foreground/70">
-              <span>{m.series[0] && fmtWeek(m.series[0].weekStart)}</span>
-              <span>{m.series[m.series.length - 1] && fmtWeek(m.series[m.series.length - 1].weekStart)}</span>
+              <span>{m.series[0] && fmtDate(m.series[0].weekStart)}</span>
+              <span>{m.series[m.series.length - 1] && fmtDate(m.series[m.series.length - 1].weekStart)}</span>
             </div>
           </div>
         </CardContent>

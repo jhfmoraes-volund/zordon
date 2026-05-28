@@ -14,6 +14,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { fmtDateNumeric } from "@/lib/date-utils";
 import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
 import {
   ConfirmDialog,
@@ -43,10 +44,7 @@ function formatRelative(iso: string): string {
   if (diffH < 24) return `${diffH}h`;
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD}d`;
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
+  return fmtDateNumeric(iso);
 }
 
 function toUIMessages(messages: StoredMessage[]): UIMessage[] {

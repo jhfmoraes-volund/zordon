@@ -11,6 +11,7 @@ import {
   ConfirmDialog,
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
+import { fmtDateNumeric } from "@/lib/date-utils";
 
 type Thread = {
   id: string;
@@ -28,10 +29,7 @@ function formatRelative(iso: string): string {
   if (diffH < 24) return `${diffH}h`;
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD}d`;
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
+  return fmtDateNumeric(iso);
 }
 
 /**
@@ -69,8 +67,15 @@ export function AlphaHistorySheet() {
   }, []);
 
   useEffect(() => {
-    if (historyOpen) refresh();
-  }, [historyOpen, refresh]);
+    if (!historyOpen) return;
+    async function load() {
+      const res = await fetch("/api/agents/alpha/threads");
+      if (!res.ok) return;
+      const data = await res.json();
+      setThreads(data.threads ?? []);
+    }
+    void load();
+  }, [historyOpen]);
 
   if (!enabled) return null;
 

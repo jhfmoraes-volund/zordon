@@ -6,6 +6,7 @@ import { lookupChip, SPRINT_STATUS } from "@/lib/status-chips";
 import type { Task } from "@/components/story-hierarchy";
 import { sprintFP } from "./helpers";
 import type { Sprint } from "./types";
+import { fmtDate } from "@/lib/date-utils";
 
 type Props = {
   sprints: Sprint[];
@@ -17,12 +18,6 @@ type Props = {
   /** Compact card width — default 180px. */
   cardWidth?: number;
 };
-
-const fmt = (d: string) =>
-  new Date(d + "T00:00:00").toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  });
 
 export function SprintTimeline({
   sprints,
@@ -68,7 +63,7 @@ export function SprintTimeline({
                 <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} />
               </div>
               <div className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                {fmt(s.startDate)} → {fmt(s.endDate)}
+                {fmtDate(s.startDate + "T00:00:00")} → {fmtDate(s.endDate + "T00:00:00")}
               </div>
               <div className="flex items-center justify-between text-[11px]">
                 <span className="font-mono tabular-nums text-muted-foreground">

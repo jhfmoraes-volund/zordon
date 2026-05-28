@@ -45,11 +45,9 @@ import {
   type SprintOverride,
 } from "@/app/(dashboard)/members/[id]/_components/types";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { fmtDate } from "@/lib/date-utils";
 
 const WINDOW_WEEKS = 12;
-
-const fmtShort = (iso: string) =>
-  new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
 type Props = {
   memberId: string;
@@ -139,8 +137,8 @@ export function MemberCapacityView({ memberId: id, initialPayload, initialDoneWe
           return {
             sprintId: s.sprintId,
             projectId: s.projectId,
-            weekStart: fmtShort(s.startDate),
-            weekEnd: fmtShort(s.endDate),
+            weekStart: fmtDate(s.startDate),
+            weekEnd: fmtDate(s.endDate),
             isCurrent: wkStart.getTime() === currentWeekStart.getTime(),
             isPast: new Date(s.endDate) < currentWeekStart,
             contract,

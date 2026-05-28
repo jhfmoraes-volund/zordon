@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { fmtDate } from "@/lib/date-utils";
 
 const KINDS: Array<{ id: string; label: string; description: string }> = [
   {
@@ -391,5 +392,5 @@ function fmtRelative(iso: string): string {
   if (h < 24) return `há ${h}h`;
   const d = Math.floor(h / 24);
   if (d < 7) return `há ${d} dias`;
-  return new Date(iso).toLocaleDateString("pt-BR");
+  return fmtDate(iso);
 }

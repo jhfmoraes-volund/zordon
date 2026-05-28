@@ -13,10 +13,10 @@ import {
   User, Zap, FolderKanban, ListTodo, ArrowRight, Sparkles, ArrowUpRight, Star, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { fmtDate, isOverdue } from "@/lib/date-utils";
+import { fmtDate, fmtDateNumeric, isOverdue } from "@/lib/date-utils";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SPRINT_STATUS, TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
-import { roleLabel, specialtyLabel } from "@/lib/roles";
+import { roleLabel } from "@/lib/roles";
 import {
   TOWERS,
   derivePrimaryTowers,
@@ -80,12 +80,6 @@ type MeData = {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-const fmtSprintDate = (d: string) =>
-  new Date(d + "T00:00:00").toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  });
-
 type SprintGroup = {
   projectId: string;
   projectName: string;
@@ -112,6 +106,89 @@ function groupSprintsByProject(sprints: MeSprint[]): SprintGroup[] {
   return Array.from(groups.values()).sort((a, b) =>
     a.projectName.localeCompare(b.projectName, "pt-BR"),
   );
+}
+
+// ─── Data fetching (module-level — stable, no component closure) ──────────
+
+const FETCH_STATUSES = [...OPEN_STATUSES, "backlog"];
+
+async function loadProfile(
+  memberId: string,
+  memberInfo: { name: string; role: string; position: string; fpCapacity: number },
+): Promise<MeData> {
+  const supabase = createClient();
+  const [assignmentsRes, allocationsRes, pmProjectsRes] = await Promise.all([
+    supabase
+      .from("TaskAssignment")
+      .select("*, task:Task(id, title, reference, status, type, functionPoints, dueDate, sprintId, projectId, project:Project(name), sprint:Sprint(id, name, status, startDate, endDate))")
+      .eq("memberId", memberId),
+    supabase
+      .from("ProjectMember")
+      .select("*, project:Project(id, name, status)")
+      .eq("memberId", memberId),
+    // Projetos onde sou PM (sem ProjectMember explícito). Sem isso, PMs
+    // perdem a contagem de "Projetos" e a lista "Meus Projetos" no /profile.
+    supabase
+      .from("Project")
+      .select("id, name, status")
+      .eq("pmId", memberId),
+  ]);
+
+  const assignments = (assignmentsRes.data ?? []) as {
+    task: MeTask & {
+      sprint: { id: string; name: string; status: MeSprint["status"]; startDate: string; endDate: string } | null;
+    };
+  }[];
+  const tasks = assignments
+    .map((a) => a.task)
+    .filter((t) => FETCH_STATUSES.includes(t.status));
+  const projectMap = new Map<string, MeProject>();
+  for (const pa of (allocationsRes.data ?? []) as { project: MeProject }[]) {
+    if (pa.project) projectMap.set(pa.project.id, pa.project);
+  }
+  for (const p of (pmProjectsRes.data ?? []) as MeProject[]) {
+    if (p && !projectMap.has(p.id)) projectMap.set(p.id, p);
+  }
+  const projects = Array.from(projectMap.values());
+
+  const fpOpen = tasks
+    .filter((t) => (OPEN_STATUSES as readonly string[]).includes(t.status))
+    .reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
+
+  const sprintMap = new Map<string, MeSprint>();
+  for (const t of tasks) {
+    if (!t.sprint) continue;
+    const fp = t.functionPoints ?? 0;
+    const isDone = t.status === "done";
+    const existing = sprintMap.get(t.sprint.id);
+    if (existing) {
+      existing.taskCount++;
+      existing.fpTotal += fp;
+      if (isDone) { existing.doneCount++; existing.fpDone += fp; }
+    } else {
+      sprintMap.set(t.sprint.id, {
+        id: t.sprint.id,
+        name: t.sprint.name,
+        status: t.sprint.status,
+        startDate: t.sprint.startDate,
+        endDate: t.sprint.endDate,
+        projectId: t.projectId,
+        projectName: t.project.name,
+        taskCount: 1,
+        fpTotal: fp,
+        doneCount: isDone ? 1 : 0,
+        fpDone: isDone ? fp : 0,
+      });
+    }
+  }
+
+  return {
+    member: { id: memberId, name: memberInfo.name, role: memberInfo.role, position: memberInfo.position, fpCapacity: memberInfo.fpCapacity },
+    fpOpen,
+    tasks,
+    sprints: Array.from(sprintMap.values()),
+    projects,
+  };
 }
 
 // ─── Page ─────────────────────────────────────────────────
@@ -150,101 +227,24 @@ export default function ProfilePage() {
   const [capacity, setCapacity] = useState<CapacitySummary | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
-  const FETCH_STATUSES = [...OPEN_STATUSES, "backlog"];
-
-  const fetchProfile = async (memberId: string, memberInfo: typeof member) => {
-    const supabase = createClient();
-    const [assignmentsRes, allocationsRes, pmProjectsRes] = await Promise.all([
-      supabase
-        .from("TaskAssignment")
-        .select("*, task:Task(id, title, reference, status, type, functionPoints, dueDate, sprintId, projectId, project:Project(name), sprint:Sprint(id, name, status, startDate, endDate))")
-        .eq("memberId", memberId),
-      supabase
-        .from("ProjectMember")
-        .select("*, project:Project(id, name, status)")
-        .eq("memberId", memberId),
-      // Projetos onde sou PM (sem ProjectMember explícito). Sem isso, PMs
-      // perdem a contagem de "Projetos" e a lista "Meus Projetos" no /profile.
-      supabase
-        .from("Project")
-        .select("id, name, status")
-        .eq("pmId", memberId),
-    ]);
-
-    const assignments = (assignmentsRes.data ?? []) as {
-      task: MeTask & {
-        sprint: { id: string; name: string; status: MeSprint["status"]; startDate: string; endDate: string } | null;
-      };
-    }[];
-    const tasks = assignments
-      .map((a) => a.task)
-      .filter((t) => FETCH_STATUSES.includes(t.status));
-    const projectMap = new Map<string, MeProject>();
-    for (const pa of (allocationsRes.data ?? []) as { project: MeProject }[]) {
-      if (pa.project) projectMap.set(pa.project.id, pa.project);
-    }
-    for (const p of (pmProjectsRes.data ?? []) as MeProject[]) {
-      if (p && !projectMap.has(p.id)) projectMap.set(p.id, p);
-    }
-    const projects = Array.from(projectMap.values());
-
-    // FP em aberto (open statuses)
-    const fpOpen = tasks
-      .filter((t) => (OPEN_STATUSES as readonly string[]).includes(t.status))
-      .reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
-
-    // Sprints where I have tasks
-    const sprintMap = new Map<string, MeSprint>();
-    for (const t of tasks) {
-      if (!t.sprint) continue;
-      const fp = t.functionPoints ?? 0;
-      const isDone = t.status === "done";
-      const existing = sprintMap.get(t.sprint.id);
-      if (existing) {
-        existing.taskCount++;
-        existing.fpTotal += fp;
-        if (isDone) {
-          existing.doneCount++;
-          existing.fpDone += fp;
-        }
-      } else {
-        sprintMap.set(t.sprint.id, {
-          id: t.sprint.id,
-          name: t.sprint.name,
-          status: t.sprint.status,
-          startDate: t.sprint.startDate,
-          endDate: t.sprint.endDate,
-          projectId: t.projectId,
-          projectName: t.project.name,
-          taskCount: 1,
-          fpTotal: fp,
-          doneCount: isDone ? 1 : 0,
-          fpDone: isDone ? fp : 0,
-        });
-      }
-    }
-
-    return {
-      member: { id: memberId, name: memberInfo!.name, role: memberInfo!.role, position: memberInfo!.position, fpCapacity: memberInfo!.fpCapacity },
-      fpOpen,
-      tasks,
-      sprints: Array.from(sprintMap.values()),
-      projects,
-    } as MeData;
-  };
-
   const reload = () => {
     if (!member) return;
-    fetchProfile(member.id, member).then(setData).catch(() => {});
+    loadProfile(member.id, member).then(setData).catch(() => {});
   };
 
   useEffect(() => {
     if (!member) return;
-    setLoading(true);
-    fetchProfile(member.id, member)
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    void (async () => {
+      setLoading(true);
+      try {
+        const result = await loadProfile(member.id, member);
+        setData(result);
+      } catch {
+        // silently ignore
+      } finally {
+        setLoading(false);
+      }
+    })();
 
     fetch("/api/profile/skills")
       .then((r) => (r.ok ? r.json() : null))
@@ -319,7 +319,7 @@ export default function ProfilePage() {
         });
       })
       .catch(() => {});
-  }, [member?.id]);
+  }, [member]);
 
   if (!member) {
     return (
@@ -487,7 +487,7 @@ export default function ProfilePage() {
                           <StatusChip {...lookupChip(SPRINT_STATUS, s.status)} />
                         </div>
                         <div className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                          {fmtSprintDate(s.startDate)} → {fmtSprintDate(s.endDate)}
+                          {fmtDateNumeric(s.startDate)} → {fmtDateNumeric(s.endDate)}
                         </div>
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-mono tabular-nums text-muted-foreground">

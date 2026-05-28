@@ -42,6 +42,7 @@ import {
   ConfirmDialog,
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
+import { fmtDate, fmtDateLong } from "@/lib/date-utils";
 
 export type PdiAction = {
   id: string;
@@ -64,11 +65,6 @@ export type PdiViewPayload = {
   pdi: { id: string; status: string };
   actions: PdiAction[];
 };
-
-const fmtShort = (d: string) =>
-  new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-const fmtFull = (d: string) =>
-  new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
 
 export function PdiView({ initial }: { initial: PdiViewPayload }) {
   const [data, setData] = useState<PdiViewPayload>(initial);
@@ -228,7 +224,7 @@ function CycleHeader({
               <Badge>{cycle.label}</Badge>
             </div>
             <p className="text-sm text-muted-foreground tabular-nums">
-              {fmtFull(cycle.startDate)} — {fmtFull(cycle.endDate)}
+              {fmtDateLong(cycle.startDate)} — {fmtDateLong(cycle.endDate)}
             </p>
           </div>
           <div className="text-right">
@@ -306,7 +302,7 @@ function ActionCard({
                 }`}
               >
                 <Calendar className="h-3 w-3" />
-                {fmtShort(action.dueAt)}
+                {fmtDate(action.dueAt)}
               </span>
             )}
           </div>
