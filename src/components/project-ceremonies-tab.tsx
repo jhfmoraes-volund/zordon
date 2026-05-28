@@ -11,6 +11,7 @@ import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { tempId } from "@/lib/optimistic/reconcile";
 import { toast } from "sonner";
+import { PlanningCreateDialog } from "@/components/planning/planning-create-dialog";
 
 // ─── Tab Rituais (user-facing) ──────────────────────────────────────────
 // Conceito user-facing: "Ritual" — abarca Planning hoje, Daily/Review depois.
@@ -94,6 +95,7 @@ export function ProjectCeremoniesTab({
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [creating, setCreating] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,14 +126,18 @@ export function ProjectCeremoniesTab({
     return plannings;
   }, [plannings]);
 
-  async function handleCreate() {
+  function handleCreate() {
+    setCreateDialogOpen(true);
+  }
+
+  async function handleConfirmCreate(sprintId: string | null) {
     if (creating) return;
     setCreating(true);
     try {
       const optimistic: Planning = {
         id: tempId("planning"),
         projectId,
-        sprintId: null,
+        sprintId,
         sprintName: null,
         phase: "idle",
         scheduledFor: new Date().toISOString(),
@@ -151,7 +157,7 @@ export function ProjectCeremoniesTab({
           const res = await fetchOrThrow("/api/planning", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ projectId }),
+            body: JSON.stringify({ projectId, sprintId }),
             signal,
           });
           const row = (await res.json()) as {
@@ -161,8 +167,6 @@ export function ProjectCeremoniesTab({
             scheduledFor: string | null;
             facilitatorId: string | null;
           };
-          // Server retorna a row do banco (PlanningCeremonyRow), não o
-          // shape de PlanningSummary. Convertemos pro shape da lista.
           const full: Planning = {
             ...optimistic,
             id: row.id,
@@ -175,8 +179,6 @@ export function ProjectCeremoniesTab({
         },
         {
           errorLabel: "Falha ao criar Planning",
-          // Reconcile: substitui o temp pelo real (ref project_ui_patterns
-          // → feedback_optimistic_reconcile_create).
           reconcile: (prev, real) => [
             ...prev.filter((p) => p.id !== optimistic.id),
             real,
@@ -185,8 +187,8 @@ export function ProjectCeremoniesTab({
       );
 
       if (created) {
+        setCreateDialogOpen(false);
         toast.success("Ritual criado.");
-        // Navega pro command center — UX natural: criou, abre pra trabalhar.
         router.push(`/rituals/${created.id}`);
       }
     } catch (err) {
@@ -344,6 +346,14 @@ export function ProjectCeremoniesTab({
       <p className="px-1 text-[10px] text-muted-foreground">
         Detalhe da Planning (command center) ainda em construção.
       </p>
+
+      <PlanningCreateDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        projectId={projectId}
+        onCreate={handleConfirmCreate}
+        creating={creating}
+      />
     </div>
   );
 }

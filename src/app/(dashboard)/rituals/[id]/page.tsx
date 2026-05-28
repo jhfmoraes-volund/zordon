@@ -197,7 +197,7 @@ export default function RitualDetailPage({
     [id],
   );
 
-  const { messages, status, sendMessage, stop, setMessages } = useChat({ transport });
+  const { messages, status, sendMessage, stop } = useChat({ transport });
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
@@ -290,7 +290,7 @@ export default function RitualDetailPage({
     return (
       <div className="p-6 space-y-4">
         <p className="text-sm text-muted-foreground">Ritual não encontrado.</p>
-        <Link href={planning ? `/projects/${planning.projectId}?tab=ceremonies` : "/projects"}>
+        <Link href="/projects">
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Voltar
           </Button>
@@ -303,7 +303,7 @@ export default function RitualDetailPage({
     return (
       <div className="p-6 space-y-4">
         <p className="text-sm text-muted-foreground">Você não tem acesso a este ritual.</p>
-        <Link href={planning ? `/projects/${planning.projectId}?tab=ceremonies` : "/projects"}>
+        <Link href="/projects">
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Voltar
           </Button>
