@@ -80,6 +80,7 @@ import { useProjectMeta } from "./_hooks/use-project-meta";
 import { useStoryHierarchy } from "./_hooks/use-story-hierarchy";
 import { useTasksAndSprints } from "./_hooks/use-tasks-and-sprints";
 import { useProjectMembers } from "./_hooks/use-project-members";
+import { useTaxonomyActions } from "./_hooks/use-taxonomy-actions";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
 
@@ -188,17 +189,13 @@ export default function ProjectDetailPage({
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(taskParam);
 
-  const [moduleDialog, setModuleDialog] = useState<{
-    open: boolean;
-    suggested?: string;
-  }>({ open: false });
-  const [personaDialog, setPersonaDialog] = useState<{ open: boolean }>({
-    open: false,
-  });
   const [duplicateTaskRef, setDuplicateTaskRef] = useState<string | null>(null);
   const [cloneTaskRef, setCloneTaskRef] = useState<string | null>(null);
   const [targetProjects, setTargetProjects] = useState<ProjectLite[]>([]);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+
+  // ─── Action hooks ────────────────────────────────────────────────────────────
+  const taxonomy = useTaxonomyActions({ id, loadStoryHierarchy, setConfirmState });
 
   // Sprint focada (id de sprint real) derivada do sprintView.
   // null quando view sintética ("backlog"/"all") ou ainda não resolvida.
@@ -1360,130 +1357,6 @@ export default function ProjectDetailPage({
     );
   }
 
-  async function handleApproveProposedModule(story: AdaptedStory) {
-    if (!story.proposedModuleName) return;
-    try {
-      await fetchOrThrow(
-        `/api/stories/${story.reference}/promote-proposed-module`,
-        { method: "POST" },
-      );
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao promover módulo" });
-    }
-  }
-
-  async function handleValidateAc(story: AdaptedStory) {
-    try {
-      await fetchOrThrow(`/api/stories/${story.reference}/validate-ac`, {
-        method: "POST",
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao validar AC" });
-    }
-  }
-
-  async function handleCreateModule(data: {
-    name: string;
-    description?: string;
-  }) {
-    try {
-      await fetchOrThrow(`/api/projects/${id}/modules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao criar módulo" });
-    }
-  }
-
-  async function handleUpdateModule(
-    modId: string,
-    data: { name?: string; description?: string },
-  ) {
-    try {
-      await fetchOrThrow(`/api/projects/${id}/modules/${modId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao editar módulo" });
-    }
-  }
-
-  async function handleDeleteModule(modId: string) {
-    setConfirmState({
-      title: "Deletar módulo?",
-      confirmLabel: "Deletar",
-      destructive: true,
-      onConfirm: async () => {
-        try {
-          await fetchOrThrow(`/api/projects/${id}/modules/${modId}`, {
-            method: "DELETE",
-          });
-          await loadStoryHierarchy();
-        } catch (e) {
-          showErrorToast(e, { label: "Falha ao deletar módulo" });
-        }
-      },
-    });
-  }
-
-  async function handleCreatePersona(data: {
-    name: string;
-    description?: string;
-  }) {
-    try {
-      await fetchOrThrow(`/api/projects/${id}/personas`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao criar persona" });
-    }
-  }
-
-  async function handleUpdatePersona(
-    perId: string,
-    data: { name?: string; description?: string },
-  ) {
-    try {
-      await fetchOrThrow(`/api/projects/${id}/personas/${perId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao editar persona" });
-    }
-  }
-
-  async function handleDeletePersona(perId: string) {
-    setConfirmState({
-      title: "Deletar persona?",
-      confirmLabel: "Deletar",
-      destructive: true,
-      onConfirm: async () => {
-        try {
-          await fetchOrThrow(`/api/projects/${id}/personas/${perId}`, {
-            method: "DELETE",
-          });
-          await loadStoryHierarchy();
-        } catch (e) {
-          showErrorToast(e, { label: "Falha ao deletar persona" });
-        }
-      },
-    });
-  }
-
   // ─── Render ────────────────────────────────────────────────────────────────
 
   if (!project) {
@@ -1701,12 +1574,12 @@ export default function ProjectDetailPage({
           personas={personas}
           moduleUsage={moduleUsage}
           personaUsage={personaUsage}
-          onCreateModule={handleCreateModule}
-          onUpdateModule={handleUpdateModule}
-          onDeleteModule={handleDeleteModule}
-          onCreatePersona={handleCreatePersona}
-          onUpdatePersona={handleUpdatePersona}
-          onDeletePersona={handleDeletePersona}
+          onCreateModule={taxonomy.handleCreateModule}
+          onUpdateModule={taxonomy.handleUpdateModule}
+          onDeleteModule={taxonomy.handleDeleteModule}
+          onCreatePersona={taxonomy.handleCreatePersona}
+          onUpdatePersona={taxonomy.handleUpdatePersona}
+          onDeletePersona={taxonomy.handleDeletePersona}
           onUpdateProject={loadProject}
         />
       ) : null}
@@ -1726,13 +1599,13 @@ export default function ProjectDetailPage({
             : undefined
         }
         onCreateModuleRequested={(suggested) =>
-          setModuleDialog({ open: true, suggested })
+          taxonomy.setModuleDialog({ open: true, suggested })
         }
-        onCreatePersonaRequested={() => setPersonaDialog({ open: true })}
+        onCreatePersonaRequested={() => taxonomy.setPersonaDialog({ open: true })}
         onApproveProposedModule={(s) =>
-          handleApproveProposedModule(s as AdaptedStory)
+          taxonomy.handleApproveProposedModule(s as AdaptedStory)
         }
-        onValidateAc={(s) => handleValidateAc(s as AdaptedStory)}
+        onValidateAc={(s) => taxonomy.handleValidateAc(s as AdaptedStory)}
         onOpenTask={(ref) => {
           setSelectedStoryRef(null);
           setSelectedTaskRef(ref);
@@ -1780,24 +1653,24 @@ export default function ProjectDetailPage({
 
       {/* Inline taxonomy dialogs (invoked from story-sheet edit form) */}
       <ModuleDialog
-        open={moduleDialog.open}
+        open={taxonomy.moduleDialog.open}
         onOpenChange={(open) =>
-          setModuleDialog((s) => ({
+          taxonomy.setModuleDialog((s) => ({
             ...s,
             open,
             suggested: open ? s.suggested : undefined,
           }))
         }
-        suggestedName={moduleDialog.suggested}
+        suggestedName={taxonomy.moduleDialog.suggested}
         onSubmit={async (data) => {
-          await handleCreateModule(data);
+          await taxonomy.handleCreateModule(data);
         }}
       />
       <PersonaDialog
-        open={personaDialog.open}
-        onOpenChange={(open) => setPersonaDialog({ open })}
+        open={taxonomy.personaDialog.open}
+        onOpenChange={(open) => taxonomy.setPersonaDialog({ open })}
         onSubmit={async (data) => {
-          await handleCreatePersona(data);
+          await taxonomy.handleCreatePersona(data);
         }}
       />
 
