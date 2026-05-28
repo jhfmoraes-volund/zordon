@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     const {
       date,
       notes,
-      type = "pm_review",
+      type = "general",
       visibility: visibilityInput,
       kind: kindInput,
       title = null,
@@ -117,23 +117,6 @@ export async function POST(req: NextRequest) {
         { error: "transcriptSource e transcriptSourceId devem vir juntos." },
         { status: 400 }
       );
-    }
-
-    // Builder gate: only private meetings, no linked projects.
-    const callerLevel = await getEffectiveAccessLevel();
-    if (!hasMinAccessLevel(callerLevel, "manager")) {
-      if (type !== "private") {
-        return NextResponse.json(
-          { error: "Builders só podem criar reuniões privadas." },
-          { status: 403 },
-        );
-      }
-      if (projectIds.length > 0) {
-        return NextResponse.json(
-          { error: "Builders não podem vincular projetos a uma reunião privada." },
-          { status: 403 },
-        );
-      }
     }
 
     const supabase = db();

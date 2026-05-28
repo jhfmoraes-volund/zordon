@@ -89,15 +89,18 @@ function groupByDay(items: ImportableMeeting[]): { day: string; sample: string; 
 }
 
 export function TranscriptModal({
-  sessionId,
+  apiUrl,
   open,
   onOpenChange,
   onImported,
+  subtitle,
 }: {
-  sessionId: string;
+  /** Base URL for both GET (list importable) and POST (import). */
+  apiUrl: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported: (t: ImportedTranscript) => void;
+  subtitle?: string;
 }) {
   const isMobile = useIsMobile();
   const router = useRouter();
@@ -118,7 +121,7 @@ export function TranscriptModal({
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/design-sessions/${sessionId}/transcripts`);
+      const res = await fetch(apiUrl);
       if (!res.ok) {
         setLoadError(`HTTP ${res.status}`);
         return;
@@ -149,7 +152,7 @@ export function TranscriptModal({
     setImportError(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, sessionId]);
+  }, [open, apiUrl]);
 
   const handleSelectSource = (s: SourceKey) => {
     setActiveSource(s);
@@ -178,7 +181,7 @@ export function TranscriptModal({
     setImporting(true);
     setImportError(null);
     try {
-      const res = await fetch(`/api/design-sessions/${sessionId}/transcripts`, {
+      const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: selected.source, sourceId: selected.id }),
@@ -219,7 +222,7 @@ export function TranscriptModal({
             Importar transcrição
           </SheetTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Vitor vai usar a transcrição como contexto da sessão.
+            {subtitle ?? "Vitor vai usar a transcrição como contexto da sessão."}
           </p>
 
           <div
@@ -349,7 +352,7 @@ export function TranscriptModal({
 
               {!activeSlice.needsAuth && activeSlice.available.length > 0 && filteredItems.length === 0 && (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhuma reunião combina com "{query}".
+                  Nenhuma reunião combina com &ldquo;{query}&rdquo;.
                 </p>
               )}
             </>

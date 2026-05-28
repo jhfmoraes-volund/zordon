@@ -8,29 +8,16 @@ import {
   ArrowLeft,
   BookOpen,
   Check,
-  ChevronRight,
   FileText,
   Loader2,
-  MessageSquare,
   RotateCcw,
   Sparkles,
-  Trash2,
-  Unlink,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageTitle } from "@/components/app-shell";
 import { StatusChip } from "@/components/ui/status-chip";
-import { Input } from "@/components/ui/input";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogFooter,
-} from "@/components/ui/responsive-dialog";
 import { ConversationFab } from "@/components/ui/conversation/conversation-fab";
 import { ConversationPanel } from "@/components/ui/conversation";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -40,57 +27,9 @@ import { fmtDate } from "@/lib/date-utils";
 import type { PlanningDetail } from "@/lib/dal/planning";
 import type { PlanningPhase } from "@/lib/planning/phase";
 import type { ChipTone } from "@/lib/status-chips";
-
-// ─── Types ────────────────────────────────────────────────────────────────
-
-type PlanningAction = {
-  id: string;
-  type: "create" | "update" | "delete" | "move" | "review";
-  payload: Record<string, unknown>;
-  decision: "pending" | "approved" | "rejected";
-  execution: "pending" | "applied" | "failed" | "skipped";
-  source: "ai" | "manual";
-  aiReasoning: string | null;
-  aiConfidence: number | null;
-  errorMessage: string | null;
-  notes: string | null;
-  reviewReasons: string[] | null;
-  reviewNote: string | null;
-  createdAt: string;
-  updatedAt: string;
-  meetingId: string | null;
-  planningCeremonyId: string | null;
-  projectId: string;
-  taskId: string | null;
-  targetSprintId: string | null;
-  task: {
-    id: string;
-    reference: string | null;
-    title: string;
-    status: string;
-    scope: string;
-    type: string;
-    priority: number;
-    sprintId: string | null;
-    projectId: string;
-  } | null;
-  targetSprint: { id: string; name: string } | null;
-};
-
-type MeetingOption = {
-  id: string;
-  title: string | null;
-  date: string;
-  kind: string;
-};
-
-type TranscriptOption = {
-  id: string;
-  title: string | null;
-  source: string;
-  capturedAt: string | null;
-  byline: string | null;
-};
+import { BriefingTree } from "@/components/planning/briefing-tree";
+import { ProposalCard, type PlanningAction } from "@/components/planning/proposal-card";
+import { ContextSheet } from "@/components/planning/context-sheet";
 
 // ─── Constants ───────────────────────────────────────────────────────────
 
@@ -101,32 +40,6 @@ const PHASE_META: Record<PlanningPhase, { label: string; tone: ChipTone }> = {
   approving: { label: "Revisão", tone: "cyan" },
   closed: { label: "Concluída", tone: "green" },
   archived: { label: "Arquivada", tone: "muted" },
-};
-
-const ACTION_TYPE_LABEL: Record<string, string> = {
-  create: "Criar",
-  update: "Atualizar",
-  delete: "Excluir",
-  move: "Mover",
-  review: "Revisar",
-};
-
-const NOTE_KIND_LABEL: Record<string, string> = {
-  summary: "Resumo",
-  theme: "Tema",
-  risk: "Risco",
-  capacity_signal: "Capacidade",
-  code_observation: "Código",
-  open_question: "Questão",
-};
-
-const NOTE_KIND_TONE: Record<string, ChipTone> = {
-  summary: "blue",
-  theme: "purple",
-  risk: "red",
-  capacity_signal: "amber",
-  code_observation: "muted",
-  open_question: "cyan",
 };
 
 // ─── Phase controls ───────────────────────────────────────────────────────
@@ -212,202 +125,6 @@ function PhaseRibbon({
   );
 }
 
-// ─── Meeting picker ───────────────────────────────────────────────────────
-
-function MeetingPickerDialog({
-  open,
-  onOpenChange,
-  linkedIds,
-  onLink,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  linkedIds: Set<string>;
-  onLink: (meetingId: string) => Promise<void>;
-}) {
-  const [meetings, setMeetings] = useState<MeetingOption[]>([]);
-  const [q, setQ] = useState("");
-  const [linking, setLinking] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    fetch("/api/meetings")
-      .then((r) => r.json())
-      .then((data: Array<{ id: string; title: string | null; date: string; kind?: string; type?: string }>) => {
-        setMeetings(
-          data.map((m) => ({
-            id: m.id,
-            title: m.title,
-            date: m.date,
-            kind: m.kind ?? m.type ?? "general",
-          })),
-        );
-      })
-      .catch(() => {});
-  }, [open]);
-
-  const filtered = meetings.filter((m) => {
-    if (linkedIds.has(m.id)) return false;
-    if (!q) return true;
-    const search = q.toLowerCase();
-    return (m.title ?? "").toLowerCase().includes(search) || fmtDate(m.date).includes(search);
-  });
-
-  const handleLink = async (id: string) => {
-    setLinking(id);
-    try {
-      await onLink(id);
-      onOpenChange(false);
-    } finally {
-      setLinking(null);
-    }
-  };
-
-  return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="max-w-md">
-        <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Adicionar reunião</ResponsiveDialogTitle>
-        </ResponsiveDialogHeader>
-        <div className="px-4 py-2 space-y-3">
-          <Input
-            placeholder="Buscar..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            autoFocus
-          />
-          <div className="max-h-72 overflow-y-auto divide-y rounded-md border">
-            {filtered.length === 0 && (
-              <div className="p-4 text-sm text-muted-foreground text-center">
-                {meetings.length === 0 ? "Carregando…" : "Nenhuma reunião encontrada."}
-              </div>
-            )}
-            {filtered.map((m) => (
-              <button
-                key={m.id}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
-                onClick={() => handleLink(m.id)}
-                disabled={linking === m.id}
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{m.title ?? `Reunião ${fmtDate(m.date)}`}</p>
-                  <p className="text-xs text-muted-foreground">{fmtDate(m.date)}</p>
-                </div>
-                {linking === m.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-        <ResponsiveDialogFooter className="px-4 pb-4">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-        </ResponsiveDialogFooter>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
-  );
-}
-
-// ─── Transcript picker ────────────────────────────────────────────────────
-
-function TranscriptPickerDialog({
-  open,
-  onOpenChange,
-  linkedIds,
-  onLink,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  linkedIds: Set<string>;
-  onLink: (transcriptRefId: string) => Promise<void>;
-}) {
-  const [transcripts, setTranscripts] = useState<TranscriptOption[]>([]);
-  const [q, setQ] = useState("");
-  const [linking, setLinking] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    fetch("/api/transcripts")
-      .then((r) => r.json())
-      .then((data: TranscriptOption[]) => setTranscripts(data))
-      .catch(() => {});
-  }, [open]);
-
-  const filtered = transcripts.filter((t) => {
-    if (linkedIds.has(t.id)) return false;
-    if (!q) return true;
-    const search = q.toLowerCase();
-    return (t.title ?? "").toLowerCase().includes(search) ||
-      (t.byline ?? "").toLowerCase().includes(search);
-  });
-
-  const handleLink = async (id: string) => {
-    setLinking(id);
-    try {
-      await onLink(id);
-      onOpenChange(false);
-    } finally {
-      setLinking(null);
-    }
-  };
-
-  return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="max-w-md">
-        <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Adicionar transcript</ResponsiveDialogTitle>
-        </ResponsiveDialogHeader>
-        <div className="px-4 py-2 space-y-3">
-          <Input
-            placeholder="Buscar..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            autoFocus
-          />
-          <div className="max-h-72 overflow-y-auto divide-y rounded-md border">
-            {filtered.length === 0 && (
-              <div className="p-4 text-sm text-muted-foreground text-center">
-                {transcripts.length === 0 ? "Carregando…" : "Nenhum transcript encontrado."}
-              </div>
-            )}
-            {filtered.map((t) => (
-              <button
-                key={t.id}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
-                onClick={() => handleLink(t.id)}
-                disabled={linking === t.id}
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{t.title ?? "Transcript sem título"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t.source}
-                    {t.capturedAt ? ` · ${fmtDate(t.capturedAt)}` : ""}
-                    {t.byline ? ` · ${t.byline}` : ""}
-                  </p>
-                </div>
-                {linking === t.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-        <ResponsiveDialogFooter className="px-4 pb-4">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-        </ResponsiveDialogFooter>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
-  );
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────
 
 export default function RitualDetailPage({
@@ -423,8 +140,7 @@ export default function RitualDetailPage({
   const [transitioning, setTransitioning] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [meetingPickerOpen, setMeetingPickerOpen] = useState(false);
-  const [transcriptPickerOpen, setTranscriptPickerOpen] = useState(false);
+  const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
 
   const threadIdRef = useRef<string | null>(null);
@@ -524,64 +240,7 @@ export default function RitualDetailPage({
     }
   };
 
-  // ─── Meeting curadoria ─────────────────────────────────────────────────
-
-  const linkedMeetingIds = useMemo(
-    () => new Set((planning?.linkedMeetings ?? []).map((l) => l.meetingId)),
-    [planning],
-  );
-
-  const handleLinkMeeting = async (meetingId: string) => {
-    try {
-      await fetchOrThrow(`/api/planning/${id}/meetings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meetingId }),
-      });
-      await loadPlanning();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao linkar reunião" });
-    }
-  };
-
-  const handleUnlinkMeeting = (meetingId: string, title: string) => {
-    setConfirmState({
-      title: "Remover reunião?",
-      description: `"${title}" será desvinculada desta planning.`,
-      confirmLabel: "Remover",
-      destructive: true,
-      onConfirm: async () => {
-        try {
-          await fetchOrThrow(`/api/planning/${id}/meetings?meetingId=${meetingId}`, {
-            method: "DELETE",
-          });
-          await loadPlanning();
-        } catch (e) {
-          showErrorToast(e, { label: "Falha ao remover reunião" });
-        }
-      },
-    });
-  };
-
   // ─── Transcript curadoria ──────────────────────────────────────────────
-
-  const linkedTranscriptIds = useMemo(
-    () => new Set((planning?.linkedTranscripts ?? []).map((l) => l.transcriptRefId)),
-    [planning],
-  );
-
-  const handleLinkTranscript = async (transcriptRefId: string) => {
-    try {
-      await fetchOrThrow(`/api/planning/${id}/transcripts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcriptRefId }),
-      });
-      await loadPlanning();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao linkar transcript" });
-    }
-  };
 
   const handleUnlinkTranscript = (transcriptRefId: string, title: string) => {
     setConfirmState({
@@ -623,32 +282,6 @@ export default function RitualDetailPage({
         }
       },
     });
-  };
-
-  // ─── Action decision ───────────────────────────────────────────────────
-
-  const handleDecideAction = async (actionId: string, decision: "approved" | "rejected") => {
-    setActions((prev) =>
-      prev.map((a) => (a.id === actionId ? { ...a, decision } : a)),
-    );
-    try {
-      await fetchOrThrow(`/api/planning/${id}/actions/${actionId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision }),
-      });
-      // approved/rejected sempre decrementa pendingCount (veio de pending)
-      setPlanning((prev) =>
-        prev
-          ? { ...prev, pendingActionCount: Math.max(0, prev.pendingActionCount - 1) }
-          : prev,
-      );
-    } catch (e) {
-      setActions((prev) =>
-        prev.map((a) => (a.id === actionId ? { ...a, decision: "pending" } : a)),
-      );
-      showErrorToast(e, { label: "Falha ao salvar decisão" });
-    }
   };
 
   // ─── Render guards ────────────────────────────────────────────────────
@@ -695,7 +328,7 @@ export default function RitualDetailPage({
 
   const leftPane = (
     <div className="space-y-4 min-w-0">
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Link href="/rituals">
@@ -709,6 +342,19 @@ export default function RitualDetailPage({
               <p className="text-xs text-muted-foreground">{fmtDate(planning.scheduledFor)}</p>
             )}
           </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setContextSheetOpen(true)}
+          >
+            <FileText className="h-3.5 w-3.5 mr-1.5" />
+            Contexto
+            {planning.linkedTranscriptCount > 0 && (
+              <Badge className="ml-1.5 h-4 px-1 text-[10px]">
+                {planning.linkedTranscriptCount}
+              </Badge>
+            )}
+          </Button>
         </div>
 
         <PhaseRibbon
@@ -724,166 +370,22 @@ export default function RitualDetailPage({
         )}
       </div>
 
-      {/* ── Curadoria — Reuniões ── */}
-      <section className="surface p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Reuniões{" "}
-            <span className="font-normal normal-case">
-              ({planning.linkedMeetingCount})
-            </span>
-          </h2>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => setMeetingPickerOpen(true)}
-          >
-            Adicionar
-          </Button>
-        </div>
-
-        {planning.linkedMeetings.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nenhuma reunião vinculada.</p>
-        ) : (
-          <ul className="divide-y">
-            {planning.linkedMeetings.map((l) => (
-              <li key={l.meetingId} className="flex items-center gap-2 py-2">
-                <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">
-                    {l.meeting?.title ?? `Reunião ${l.meeting?.date ? fmtDate(l.meeting.date) : l.meetingId}`}
-                  </p>
-                  {l.meeting?.date && (
-                    <p className="text-xs text-muted-foreground">{fmtDate(l.meeting.date)}</p>
-                  )}
-                </div>
-                {l.meeting && (
-                  <Link
-                    href={`/meetings/${l.meetingId}`}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                  >
-                    ver
-                  </Link>
-                )}
-                <button
-                  className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                  title="Desvincular"
-                  onClick={() =>
-                    handleUnlinkMeeting(
-                      l.meetingId,
-                      l.meeting?.title ?? "esta reunião",
-                    )
-                  }
-                >
-                  <Unlink className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ── Curadoria — Transcripts ── */}
-      <section className="surface p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Transcripts{" "}
-            <span className="font-normal normal-case">
-              ({planning.linkedTranscriptCount})
-            </span>
-          </h2>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => setTranscriptPickerOpen(true)}
-          >
-            Adicionar
-          </Button>
-        </div>
-
-        {planning.linkedTranscripts.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nenhum transcript vinculado.</p>
-        ) : (
-          <ul className="divide-y">
-            {planning.linkedTranscripts.map((l) => (
-              <li key={l.transcriptRefId} className="flex items-center gap-2 py-2">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">
-                    {l.transcript?.title ?? "Transcript sem título"}
-                  </p>
-                  {l.transcript?.capturedAt && (
-                    <p className="text-xs text-muted-foreground">
-                      {l.transcript.source} · {fmtDate(l.transcript.capturedAt)}
-                    </p>
-                  )}
-                </div>
-                <Badge variant="outline" className="text-xs shrink-0 capitalize">
-                  {l.weight}
-                </Badge>
-                <button
-                  className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                  title="Desvincular"
-                  onClick={() =>
-                    handleUnlinkTranscript(
-                      l.transcriptRefId,
-                      l.transcript?.title ?? "este transcript",
-                    )
-                  }
-                >
-                  <Unlink className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ── Context Notes ── */}
+      {/* Briefing Tree */}
       {(activeNotes.length > 0 || planning.phase === "reading" || planning.phase === "proposing") && (
-        <section className="surface p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Notas do briefing{" "}
-            <span className="font-normal normal-case">({activeNotes.length})</span>
-          </h2>
-
-          {activeNotes.length === 0 ? (
+        activeNotes.length === 0 ? (
+          <section className="surface p-4">
             <p className="text-xs text-muted-foreground">
               {planning.phase === "reading"
-                ? "Vitoria está lendo os insumos…"
+                ? "Vitória está lendo os insumos…"
                 : "Nenhuma nota ativa."}
             </p>
-          ) : (
-            <ul className="space-y-2">
-              {activeNotes.map((note) => (
-                <li
-                  key={note.id}
-                  className="rounded-lg border p-3 space-y-1.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <StatusChip
-                      tone={NOTE_KIND_TONE[note.kind] ?? "neutral"}
-                      label={NOTE_KIND_LABEL[note.kind] ?? note.kind}
-                    />
-                    <button
-                      className="text-muted-foreground hover:text-foreground transition-colors mt-0.5"
-                      title="Dispensar"
-                      onClick={() => handleDismissNote(note.id)}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <p className="text-sm leading-relaxed">{note.content}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+          </section>
+        ) : (
+          <BriefingTree notes={activeNotes} onDismiss={handleDismissNote} />
+        )
       )}
 
-      {/* ── Actions — Propostas pendentes ── */}
+      {/* Propostas pendentes */}
       {(planning.phase === "proposing" || planning.phase === "approving" || pendingActions.length > 0) && (
         <section className="surface p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -899,36 +401,41 @@ export default function RitualDetailPage({
           {pendingActions.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               {planning.phase === "proposing"
-                ? "Vitoria está gerando propostas…"
+                ? "Vitória está gerando propostas…"
                 : "Nenhuma proposta pendente."}
             </p>
           ) : (
-            <ul className="divide-y">
+            <div className="grid gap-2 sm:grid-cols-2">
               {pendingActions.map((action) => (
-                <ActionRow
+                <ProposalCard
                   key={action.id}
                   action={action}
-                  onApprove={() => handleDecideAction(action.id, "approved")}
-                  onReject={() => handleDecideAction(action.id, "rejected")}
+                  planningId={id}
+                  onDecide={loadActions}
                 />
               ))}
-            </ul>
+            </div>
           )}
         </section>
       )}
 
-      {/* ── Actions — Decididas ── */}
+      {/* Decididas */}
       {decidedActions.length > 0 && (
         <section className="surface p-4 space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Revisadas{" "}
             <span className="font-normal normal-case">({decidedActions.length})</span>
           </h2>
-          <ul className="divide-y">
+          <div className="grid gap-2 sm:grid-cols-2 opacity-60">
             {decidedActions.map((action) => (
-              <ActionRow key={action.id} action={action} decided />
+              <ProposalCard
+                key={action.id}
+                action={action}
+                planningId={id}
+                onDecide={loadActions}
+              />
             ))}
-          </ul>
+          </div>
         </section>
       )}
     </div>
@@ -978,102 +485,16 @@ export default function RitualDetailPage({
         </>
       )}
 
-      {/* Dialogs */}
-      <MeetingPickerDialog
-        open={meetingPickerOpen}
-        onOpenChange={setMeetingPickerOpen}
-        linkedIds={linkedMeetingIds}
-        onLink={handleLinkMeeting}
-      />
-
-      <TranscriptPickerDialog
-        open={transcriptPickerOpen}
-        onOpenChange={setTranscriptPickerOpen}
-        linkedIds={linkedTranscriptIds}
-        onLink={handleLinkTranscript}
+      <ContextSheet
+        planningId={id}
+        open={contextSheetOpen}
+        onOpenChange={setContextSheetOpen}
+        linkedTranscripts={planning.linkedTranscripts}
+        onUnlink={handleUnlinkTranscript}
+        onImported={loadPlanning}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
-  );
-}
-
-// ─── ActionRow ─────────────────────────────────────────────────────────────
-
-function ActionRow({
-  action,
-  onApprove,
-  onReject,
-  decided = false,
-}: {
-  action: PlanningAction;
-  onApprove?: () => void;
-  onReject?: () => void;
-  decided?: boolean;
-}) {
-  const taskTitle =
-    action.task?.title ??
-    (action.payload?.title as string | undefined) ??
-    (action.payload?.description as string | undefined) ??
-    "—";
-
-  const typeTone: ChipTone =
-    action.type === "delete" ? "red" : action.type === "create" ? "green" : "slate";
-
-  return (
-    <li className="py-3 space-y-1.5">
-      <div className="flex items-start gap-2">
-        <StatusChip tone={typeTone} label={ACTION_TYPE_LABEL[action.type] ?? action.type} />
-        <p className="flex-1 text-sm font-medium leading-snug min-w-0 truncate">
-          {taskTitle}
-        </p>
-        {decided && (
-          <StatusChip
-            tone={action.decision === "approved" ? "green" : "red"}
-            label={action.decision === "approved" ? "Aprovado" : "Rejeitado"}
-          />
-        )}
-      </div>
-
-      {action.aiReasoning && (
-        <p className="text-xs text-muted-foreground line-clamp-2 pl-0.5">
-          {action.aiReasoning}
-        </p>
-      )}
-
-      {action.task && (
-        <div className="flex items-center gap-3 pl-0.5">
-          <Link
-            href={`/projects/${action.task.projectId}`}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {action.task.reference && `#${action.task.reference} · `}ver projeto
-          </Link>
-        </div>
-      )}
-
-      {!decided && onApprove && onReject && (
-        <div className="flex items-center gap-2 pt-0.5">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs text-green-700 border-green-200 hover:bg-green-50"
-            onClick={onApprove}
-          >
-            <Check className="mr-1 h-3 w-3" />
-            Aprovar
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs text-red-700 border-red-200 hover:bg-red-50"
-            onClick={onReject}
-          >
-            <X className="mr-1 h-3 w-3" />
-            Rejeitar
-          </Button>
-        </div>
-      )}
-    </li>
   );
 }

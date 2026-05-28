@@ -20,7 +20,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
-import type { MeetingType } from "./meeting-sheet";
 import { useAlphaChat } from "@/components/alpha-chat";
 import type {
   ImportableMeeting,
@@ -45,8 +44,8 @@ type Props = {
   | {
       /** Cria a Meeting + dispara a ingestão. Usado pelo MeetingSheet. */
       mode: "create";
-      type: MeetingType;
-      pmMemberIds: string[];
+      visibility: "private" | "public";
+      kind: string;
       attendees: AttendeeInput[];
       projectIds: string[];
     }
@@ -54,8 +53,8 @@ type Props = {
       /** Reusa uma Meeting existente; só dispara a ingestão pelo Alpha. */
       mode: "existing";
       meetingId: string;
-      /** Tipo da meeting existente — usado pra forçar Granola se 'private'. */
-      type?: MeetingType;
+      /** Visibilidade da meeting — usado pra forçar Granola se 'private'. */
+      visibility?: "private" | "public";
     }
 );
 
@@ -100,15 +99,15 @@ function groupByDay(items: ImportableMeeting[]): { day: string; sample: string; 
 }
 
 export function ImportMeetingModal(props: Props) {
-  const { open, onOpenChange, mode } = props;
+  const { open, onOpenChange } = props;
   const isMobile = useIsMobile();
   const router = useRouter();
   const { kickoffIngest } = useAlphaChat();
 
   // Privada usa exclusivamente Granola — sem aba Roam.
   const isPrivate =
-    (props.mode === "create" && props.type === "private") ||
-    (props.mode === "existing" && props.type === "private");
+    (props.mode === "create" && props.visibility === "private") ||
+    (props.mode === "existing" && props.visibility === "private");
 
   const [data, setData] = useState<MeetingsImportResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,48 +121,49 @@ export function ImportMeetingModal(props: Props) {
   const [selected, setSelected] = useState<{ source: SourceKey; id: string } | null>(null);
   const [query, setQuery] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await fetch("/api/integrations/meetings");
-      if (!res.ok) {
-        setLoadError(`HTTP ${res.status}`);
-        return;
-      }
-      const body = (await res.json()) as MeetingsImportResponse;
-      setData(body);
-      // Privada: força Granola, ignora cache.
-      if (isPrivate) {
-        setActiveSource("granola");
-        return;
-      }
-      // Auto-select the tab that actually has results, respecting the last
-      // user pick — but only on first load (later loads keep the user's tab).
-      const cached = window.localStorage.getItem(LAST_SOURCE_KEY) as SourceKey | null;
-      const candidate =
-        cached && body.sources[cached]?.available.length > 0
-          ? cached
-          : body.sources.roam.available.length > 0
-            ? "roam"
-            : body.sources.granola.available.length > 0
-              ? "granola"
-              : (cached ?? "roam");
-      setActiveSource(candidate);
-    } catch (err) {
-      setLoadError((err as Error).message || "Erro de rede");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [retryCount, setRetryCount] = useState(0);
+  const retry = () => setRetryCount((n) => n + 1);
 
   useEffect(() => {
     if (!open) return;
     setSelected(null);
     setQuery("");
+    const load = async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const res = await fetch("/api/integrations/meetings");
+        if (!res.ok) {
+          setLoadError(`HTTP ${res.status}`);
+          return;
+        }
+        const body = (await res.json()) as MeetingsImportResponse;
+        setData(body);
+        // Privada: força Granola, ignora cache.
+        if (isPrivate) {
+          setActiveSource("granola");
+          return;
+        }
+        // Auto-select the tab that actually has results, respecting the last
+        // user pick — but only on first load (later loads keep the user's tab).
+        const cached = window.localStorage.getItem(LAST_SOURCE_KEY) as SourceKey | null;
+        const candidate =
+          cached && body.sources[cached]?.available.length > 0
+            ? cached
+            : body.sources.roam.available.length > 0
+              ? "roam"
+              : body.sources.granola.available.length > 0
+                ? "granola"
+                : (cached ?? "roam");
+        setActiveSource(candidate);
+      } catch (err) {
+        setLoadError((err as Error).message || "Erro de rede");
+      } finally {
+        setLoading(false);
+      }
+    };
     load();
-  }, [open]);
+  }, [open, isPrivate, retryCount]);
 
   const handleSelectSource = (s: SourceKey) => {
     setActiveSource(s);
@@ -202,15 +202,13 @@ export function ImportMeetingModal(props: Props) {
         const meetingDate = meeting.start.slice(0, 10);
         const title = meeting.title?.trim() || null;
         const body = {
-          type: props.type,
+          visibility: props.visibility,
+          kind: props.kind,
           date: `${meetingDate}T12:00:00`,
           title,
           notes: null,
-          pmMemberIds: props.type === "pm_review" ? props.pmMemberIds : [],
           attendees: props.attendees,
-          projectIds: ["general", "daily", "super_planning", "private"].includes(props.type)
-            ? props.projectIds
-            : [],
+          projectIds: props.projectIds,
           transcriptSource: selected.source,
           transcriptSourceId: selected.id,
         };
@@ -242,7 +240,7 @@ export function ImportMeetingModal(props: Props) {
         source: selected.source,
         sourceId: selected.id,
         overwrite: props.mode === "existing",
-        meetingType: props.mode === "create" ? props.type : props.type,
+        meetingType: props.mode === "create" ? props.visibility : (props.visibility ?? "public"),
       });
       onOpenChange(false);
       if (needsNavigate) router.push(`/meetings/${meetingId}`);
@@ -331,7 +329,7 @@ export function ImportMeetingModal(props: Props) {
           {loading && <LoadingSkeleton />}
 
           {!loading && loadError && (
-            <ErrorBlock message={loadError} onRetry={load} />
+            <ErrorBlock message={loadError} onRetry={retry} />
           )}
 
           {!loading && !loadError && activeSlice && (
@@ -392,7 +390,7 @@ export function ImportMeetingModal(props: Props) {
               {/* Filter returned zero */}
               {!activeSlice.needsAuth && activeSlice.available.length > 0 && filteredItems.length === 0 && (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhuma reunião combina com "{query}".
+                  Nenhuma reunião combina com &ldquo;{query}&rdquo;.
                 </p>
               )}
             </>

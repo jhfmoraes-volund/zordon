@@ -457,6 +457,7 @@ export async function unlinkTranscriptFromPlanning(
 export async function findOrCreateTranscriptRef(input: {
   source: "roam" | "granola" | "manual";
   sourceId: string;
+  fullText?: string | null;
   title?: string | null;
   byline?: string | null;
   capturedAt?: string | null;
@@ -479,6 +480,7 @@ export async function findOrCreateTranscriptRef(input: {
     .insert({
       source: input.source,
       sourceId: input.sourceId,
+      fullText: input.fullText ?? null,
       title: input.title ?? null,
       byline: input.byline ?? null,
       capturedAt: input.capturedAt ?? null,

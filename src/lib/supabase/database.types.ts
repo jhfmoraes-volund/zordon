@@ -5526,6 +5526,7 @@ export type Database = {
         Row: {
           byline: string | null
           capturedAt: string | null
+          fullText: string | null
           id: string
           importedAt: string
           importedById: string | null
@@ -5537,6 +5538,7 @@ export type Database = {
         Insert: {
           byline?: string | null
           capturedAt?: string | null
+          fullText?: string | null
           id?: string
           importedAt?: string
           importedById?: string | null
@@ -5548,6 +5550,7 @@ export type Database = {
         Update: {
           byline?: string | null
           capturedAt?: string | null
+          fullText?: string | null
           id?: string
           importedAt?: string
           importedById?: string | null

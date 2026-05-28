@@ -167,11 +167,21 @@ export function buildVitoriaTools(planningId: string) {
       execute: async ({ transcriptRefId }) => {
         const { data: ref } = await db()
           .from("TranscriptRef")
-          .select("id, title, source, sourceId, capturedAt, meetingId")
+          .select("id, title, source, sourceId, capturedAt, meetingId, fullText")
           .eq("id", transcriptRefId)
           .single();
 
         if (!ref) return { ok: false, error: "TranscriptRef não encontrado" };
+
+        if (ref.fullText) {
+          return {
+            ok: true,
+            id: ref.id,
+            title: ref.title,
+            capturedAt: ref.capturedAt,
+            content: ref.fullText,
+          };
+        }
 
         if (ref.meetingId) {
           const { data: meeting } = await db()

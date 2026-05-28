@@ -68,15 +68,10 @@ const VIS_FILTERS: { key: FilterKey; label: string }[] = [
 export default function MeetingsPage() {
   const { member: currentMember, effectiveAccessLevel } = useAuth();
   const isBuilder = effectiveAccessLevel === "builder";
-  // Builder só edita a própria reunião privada; manager+ edita tudo.
-  // O servidor reforça isso; a UI só evita mostrar ações inúteis.
+  // Qualquer membro edita reuniões que criou; manager+ edita tudo.
   const canEditRow = (m: Meeting): boolean => {
     if (!isBuilder) return true;
-    return (
-      m.visibility === "private" &&
-      !!currentMember &&
-      m.createdById === currentMember.id
-    );
+    return !!currentMember && m.createdById === currentMember.id;
   };
 
   const collection = useOptimisticCollection<Meeting>([]);
@@ -101,14 +96,10 @@ export default function MeetingsPage() {
 
   const openEdit = (m: Meeting) => {
     setSheetMode("edit");
-    // O MeetingSheet legado ainda fala em `type` (pm_review|general|daily|
-    // super_planning|private). Até ele migrar pra visibility/kind, mapeamos:
-    // privada → "private"; qualquer pública → "general" (tipo neutro, sem
-    // exigência de projeto/PM no form).
-    const legacyType = m.visibility === "private" ? "private" : "general";
     setEditing({
       id: m.id,
-      type: legacyType,
+      visibility: m.visibility,
+      kind: m.kind ?? "general",
       date: m.date,
       title: m.title,
       notes: m.notes,
@@ -122,7 +113,6 @@ export default function MeetingsPage() {
       projectLinks: m.projectLinks.map((l) => ({
         project: l.project ? { id: l.project.id } : null,
       })),
-      projectReviews: [],
     });
     setSheetOpen(true);
   };

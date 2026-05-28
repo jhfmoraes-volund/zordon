@@ -883,7 +883,7 @@ export default function MeetingDetailPage({
         onOpenChange={setImportOpen}
         mode="existing"
         meetingId={meeting.id}
-        type={meeting.type}
+        visibility={meeting.type === "private" ? "private" : "public"}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
