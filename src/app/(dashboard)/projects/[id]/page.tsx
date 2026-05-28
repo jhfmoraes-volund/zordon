@@ -82,6 +82,7 @@ import { useTasksAndSprints } from "./_hooks/use-tasks-and-sprints";
 import { useProjectMembers } from "./_hooks/use-project-members";
 import { useTaxonomyActions } from "./_hooks/use-taxonomy-actions";
 import { useSprintActions } from "./_hooks/use-sprint-actions";
+import { useStoryActions } from "./_hooks/use-story-actions";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
 
@@ -211,6 +212,18 @@ export default function ProjectDetailPage({
 
   const modules = useMemo(() => rawModules.map(adaptModule), [rawModules]);
   const personas = useMemo(() => rawPersonas.map(adaptPersona), [rawPersonas]);
+
+  const storyActions = useStoryActions({
+    id,
+    project,
+    personas,
+    rawStories,
+    setRawStories,
+    loadStoryHierarchy,
+    setConfirmState,
+    selectedStoryRef,
+    setSelectedStoryRef,
+  });
   const stories: AdaptedStory[] = useMemo(
     () => rawStories.map(adaptStory),
     [rawStories],
@@ -388,44 +401,6 @@ export default function ProjectDetailPage({
   // ─── Mutators ──────────────────────────────────────────────────────────────
 
   /**
-   * Create a stub story and open the StorySheet on it in edit mode. Mirrors
-   * the TaskSheet pattern: the user fills in title/want/persona/module on the
-   * form they already know. If it was a misclick, they delete via the row's
-   * kebab menu like any other story.
-   *
-   * `refinementStatus="draft"` is reserved for AI-proposed stories pending
-   * human review (revealed only inside the originating Design Session), and is
-   * set explicitly by that flow — never by this manual button. Manual stubs
-   * nascem 'refined' (default no DAL) e aparecem na lista do projeto na hora.
-   */
-  async function handleCreateStory() {
-    if (!project?.referenceKey) {
-      showErrorToast(
-        new Error("Project precisa de referenceKey. Configure em Settings."),
-        { label: "Não é possível criar story" },
-      );
-      return;
-    }
-    try {
-      const res = await fetchOrThrow(`/api/projects/${id}/stories`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "Nova story",
-          want: "A definir.",
-          personaId: personas[0]?.id ?? null,
-          moduleId: null,
-        }),
-      });
-      const { story } = (await res.json()) as { story: { reference: string } };
-      await loadStoryHierarchy();
-      setSelectedStoryRef(story.reference);
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao criar story" });
-    }
-  }
-
-  /**
    * Create a backlog task and open the unified TaskSheet on it. The sheet
    * persists each field inline (saved on blur via the inline mutators), so
    * there's no "create form" — the user just edits the new task. The task
@@ -533,115 +508,6 @@ export default function ProjectDetailPage({
       return;
     }
     await loadTasksAndSprints();
-  }
-
-  async function handleStoryPatch(
-    storyRef: string,
-    patch: Partial<AdaptedStory>,
-  ) {
-    const dbStory = rawStories.find((s) => s.reference === storyRef);
-    if (!dbStory) return;
-    // Optimistic — keys in AdaptedStory map 1:1 to rawStory columns. Apply
-    // immediately so the sheet's adapted view reflects the edit without
-    // waiting for the PATCH + refetch round-trip.
-    setRawStories((prev) =>
-      prev.map((s) =>
-        s.reference === storyRef
-          ? ({ ...s, ...patch } as typeof s)
-          : s,
-      ),
-    );
-    try {
-      await fetchOrThrow(`/api/stories/${storyRef}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao salvar story" });
-      await loadStoryHierarchy();
-    }
-  }
-
-  async function handleStoryAcCreate(
-    storyRef: string,
-    text: string,
-    order: number,
-  ) {
-    try {
-      await fetchOrThrow(`/api/stories/${storyRef}/acceptance`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, order }),
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Criar critério" });
-    }
-  }
-
-  async function handleStoryAcUpdateText(
-    storyRef: string,
-    acId: string,
-    text: string,
-  ) {
-    try {
-      await fetchOrThrow(`/api/stories/${storyRef}/acceptance/${acId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Salvar critério" });
-    }
-  }
-
-  async function handleStoryAcToggle(
-    storyRef: string,
-    acId: string,
-    checked: boolean,
-  ) {
-    try {
-      await fetchOrThrow(`/api/stories/${storyRef}/acceptance/${acId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ checked }),
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Marcar critério" });
-    }
-  }
-
-  async function handleStoryAcDelete(storyRef: string, acId: string) {
-    try {
-      await fetchOrThrow(`/api/stories/${storyRef}/acceptance/${acId}`, {
-        method: "DELETE",
-      });
-      await loadStoryHierarchy();
-    } catch (e) {
-      showErrorToast(e, { label: "Remover critério" });
-    }
-  }
-
-  async function handleDeleteStory(storyRef: string) {
-    setConfirmState({
-      title: `Deletar story ${storyRef}?`,
-      description: "Tasks relacionadas serão desvinculadas.",
-      confirmLabel: "Deletar",
-      destructive: true,
-      onConfirm: async () => {
-        if (selectedStoryRef === storyRef) setSelectedStoryRef(null);
-        try {
-          await fetchOrThrow(`/api/stories/${storyRef}`, { method: "DELETE" });
-          await loadStoryHierarchy();
-        } catch (e) {
-          showErrorToast(e, { label: "Falha ao deletar story" });
-        }
-      },
-    });
   }
 
   /** Inline edits from the TasksList row. taskRef is the public reference;
@@ -1382,8 +1248,8 @@ export default function ProjectDetailPage({
           onOpenStory={(ref) => {
             setSelectedStoryRef(ref);
           }}
-          onCreateStory={handleCreateStory}
-          onDeleteStory={handleDeleteStory}
+          onCreateStory={storyActions.handleCreateStory}
+          onDeleteStory={storyActions.handleDeleteStory}
         />
       ) : activeTab === "sprints" ? (
         <SprintsTab
@@ -1461,7 +1327,7 @@ export default function ProjectDetailPage({
         onClose={() => setSelectedStoryRef(null)}
         onPatch={(patch) =>
           selectedStory
-            ? handleStoryPatch(selectedStory.reference, patch as Partial<AdaptedStory>)
+            ? storyActions.handleStoryPatch(selectedStory.reference, patch as Partial<AdaptedStory>)
             : undefined
         }
         onCreateModuleRequested={(suggested) =>
@@ -1482,10 +1348,10 @@ export default function ProjectDetailPage({
           setSelectedStoryRef(null);
           await handleCreateTask({ userStoryId: story.__id });
         }}
-        onAcCreate={handleStoryAcCreate}
-        onAcUpdateText={handleStoryAcUpdateText}
-        onAcToggle={handleStoryAcToggle}
-        onAcDelete={handleStoryAcDelete}
+        onAcCreate={storyActions.handleStoryAcCreate}
+        onAcUpdateText={storyActions.handleStoryAcUpdateText}
+        onAcToggle={storyActions.handleStoryAcToggle}
+        onAcDelete={storyActions.handleStoryAcDelete}
       />
 
       {/* Task sheet — inline edit + create share the same panel. */}
