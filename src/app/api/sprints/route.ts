@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const statusParam = searchParams.get("status");
+  const projectIdParam = searchParams.get("projectId");
   const supabase = db();
 
   let query = supabase
@@ -30,16 +31,21 @@ export async function GET(req: NextRequest) {
     query = query.in("status", statuses);
   }
 
+  if (projectIdParam) {
+    query = query.eq("projectId", projectIdParam);
+  }
+
   const { data: sprints, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const result = (sprints ?? []).map(({ tasks, ...sprint }: any) => {
+  type SprintTask = { status: string; functionPoints: number | null; assignments: { member: { id: string; name: string; fpCapacity: number } | null }[] };
+  const result = (sprints ?? []).map(({ tasks, ...sprint }: { tasks: SprintTask[] } & Record<string, unknown>) => {
     const total = tasks.length;
-    const done = tasks.filter((t: any) => t.status === "done").length;
+    const done = tasks.filter((t) => t.status === "done").length;
     // totalFp = planejado da sprint (status ≠ backlog), alinhado com fp_planned da view
     const totalFp = tasks
-      .filter((t: any) => t.status !== "backlog")
-      .reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0);
+      .filter((t) => t.status !== "backlog")
+      .reduce((s: number, t) => s + (t.functionPoints ?? 0), 0);
 
     const memberMap = new Map<string, { id: string; name: string; fpCapacity: number; fpPlanned: number }>();
     for (const task of tasks) {

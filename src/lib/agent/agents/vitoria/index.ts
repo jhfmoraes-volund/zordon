@@ -48,6 +48,17 @@ export const vitoriaAgent: AgentDefinition = {
       .eq("planningCeremonyId", planningId)
       .eq("decision", "pending");
 
+    // Tasks da sprint — Vitoria usa pra referências de contexto e propostas
+    let sprintTasks: Array<{ id: string; title: string; status: string; priority: number; scope: string }> = [];
+    if (planning.sprintId) {
+      const { data: tasks } = await db()
+        .from("Task")
+        .select("id, title, status, priority, scope")
+        .eq("sprintId", planning.sprintId)
+        .order("priority", { ascending: false });
+      sprintTasks = tasks ?? [];
+    }
+
     return {
       planningId,
       phase: planning.phase,
@@ -57,6 +68,7 @@ export const vitoriaAgent: AgentDefinition = {
       linkedMeetings: planning.linkedMeetings ?? [],
       linkedTranscripts: planning.linkedTranscripts ?? [],
       activeNotes,
+      sprintTasks,
       pendingActionCount: pendingActionCount ?? 0,
       memberId: req.memberId ?? null,
     };

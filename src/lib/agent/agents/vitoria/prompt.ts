@@ -52,6 +52,11 @@ Quando pedir mais contexto ao PM, limite a 1-2 perguntas por vez.`;
     ? activeNotes.map((n) => `[${n.kind}] ${n.content}`).join("\n")
     : "nenhuma nota de contexto ainda";
 
+  const sprintTasks = (agentContext.sprintTasks as Array<{ id: string; title: string; status: string; priority: number; scope: string }> ?? []);
+  const tasksBlock = sprintTasks.length > 0
+    ? sprintTasks.map((t) => `- [${t.status}] ${t.title} (scope: ${t.scope}, priority: ${t.priority})`).join("\n")
+    : "nenhuma task na sprint";
+
   const volatile = `## Estado atual da planning (ID: ${planId})
 
 **Fase**: ${phase}
@@ -59,6 +64,9 @@ Quando pedir mais contexto ao PM, limite a 1-2 perguntas por vez.`;
 **Reuniões linkadas**: ${linkedMeetings}
 **Transcripts linkados**: ${linkedTranscripts}
 **Ações pendentes**: ${agentContext.pendingActionCount ?? 0}
+
+### Tasks existentes na sprint
+${tasksBlock}
 
 ### Notas de contexto ativas
 ${notesBlock}`;

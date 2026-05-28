@@ -290,7 +290,7 @@ export default function RitualDetailPage({
     return (
       <div className="p-6 space-y-4">
         <p className="text-sm text-muted-foreground">Ritual não encontrado.</p>
-        <Link href="/rituals">
+        <Link href={planning ? `/projects/${planning.projectId}?tab=ceremonies` : "/projects"}>
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Voltar
           </Button>
@@ -303,7 +303,7 @@ export default function RitualDetailPage({
     return (
       <div className="p-6 space-y-4">
         <p className="text-sm text-muted-foreground">Você não tem acesso a este ritual.</p>
-        <Link href="/rituals">
+        <Link href={planning ? `/projects/${planning.projectId}?tab=ceremonies` : "/projects"}>
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Voltar
           </Button>
@@ -331,7 +331,7 @@ export default function RitualDetailPage({
       {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <Link href="/rituals">
+          <Link href={planning ? `/projects/${planning.projectId}?tab=ceremonies` : "/projects"}>
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
               <ArrowLeft className="h-4 w-4" />
             </Button>
