@@ -2,7 +2,7 @@
 
 Lista de **ações do usuário** extraídas do repo, em linguagem de produto. Saída intermediária do pipeline V3 — entra como entrada da Fase B (tabela PF). **Sem código** — markdown puro.
 
-Plano canônico: [../../apf-estimator-plan-v3.md](../../apf-estimator-plan-v3.md).
+Plano canônico: [../../apf-estimator-plan-v3.md](../../features/estimation/apf-estimator-plan-v3.md).
 
 ## Granularidade
 

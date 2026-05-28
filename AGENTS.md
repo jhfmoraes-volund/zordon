@@ -4,6 +4,36 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+<!-- BEGIN:repo-structure -->
+# Onde mora cada coisa (e onde colocar coisa nova)
+
+Mapa de alto nível. O detalhe vive nos READMEs locais — leia-os antes de criar arquivo numa pasta que não conhece: [`docs/README.md`](docs/README.md), [`scripts/README.md`](scripts/README.md).
+
+## src/
+
+| Pasta | Conteúdo | Onde colocar coisa nova |
+|-------|----------|-------------------------|
+| `src/app/` | Rotas (App Router). Grupos: `(auth)`, `(dashboard)`, `(focus)`, `(onboarding)`. API em `src/app/api/`. | Página → no grupo certo. Endpoint → `api/`. **Validação Zod fica só aqui**, não no client. |
+| `src/components/ui/` | Primitivos reutilizáveis (Button, Field, ResponsiveSheet…). | Componente genérico/reutilizável vai **aqui**. Ver bloco "UI patterns" antes de criar. |
+| `src/components/<feature>/` | Componentes de uma feature (`sprint/`, `design-session/`, `story-hierarchy/`…). | Componente acoplado a uma feature → pasta da feature, não em `ui/`. |
+| `src/lib/` | Lógica de domínio, integrações, helpers. Subsistemas grandes têm pasta própria (`agent/`, `dal/`, `insights/`, `optimistic/`). | Helper de domínio → `src/lib/`. Acesso a dados/queries → `src/lib/dal/`. |
+| `src/hooks/` | React hooks compartilhados (ex: `use-optimistic-collection.ts`). | Hook reutilizável entre features. |
+| `src/contexts/` | React contexts (auth, design-session). | Context global novo. |
+| `src/eval/` | Harness de avaliação dos agentes. | Baselines/testes de agente. |
+| `src/proxy.ts` | Middleware (Next 16) — auth + resolução de access_level por rota. | — |
+
+## Raiz do repo
+
+| Caminho | Conteúdo | Regra |
+|---------|----------|-------|
+| `docs/` | Planos, runbooks, PRDs — organizados por domínio. | **Doc novo vai na subpasta certa** (`docs/features/<domínio>/`, `docs/agents/<agente>/`, `docs/platform/`, `docs/prd/`, `docs/runbooks/`), nunca solto na raiz de `docs/`. Plano superado → `docs/archive/`. |
+| `scripts/` | CLIs de agente, ops, automação de git. | One-shot já executado → `scripts/archive/` (não some, só sai da vista). Migration de schema **não** vai aqui (ver Supabase). |
+| `supabase/migrations/` | Migrations de schema (`YYYYMMDD_nome.sql`). | **Toda** mudança de schema vai aqui e roda via `psql` (ver bloco Supabase). |
+| `public/` | Assets servidos estáticos. | Asset usado pela app. Não deixar asset órfão. |
+
+**Princípio:** antes de criar componente/modal/form/mutação, checar se um padrão canônico já cobre (ver "UI patterns"). Antes de criar doc na raiz de `docs/` ou script solto em `scripts/`, escolher a subpasta.
+<!-- END:repo-structure -->
+
 <!-- BEGIN:supabase-agent-rules -->
 # Supabase — migrations via psql
 
@@ -39,14 +69,14 @@ Cinco padrões canônicos. Antes de criar componente novo, modal, form ou mutaç
 
 3. **Custom Confirm/Alert** — proibido `window.confirm()` / `alert()`. Use `ConfirmDialog` (`src/components/ui/confirm-dialog.tsx`): stateless, recebe `state: { title, description?, confirmLabel?, cancelLabel?, destructive?, onConfirm: () => void|Promise<void> } | null`, trata busy + close async. Erros vão em **Sonner toast** (não em alert/dialog).
 
-4. **Forms — Field compound API** (ver `docs/forms-standardization-plan.md`):
+4. **Forms — Field compound API** (ver `docs/platform/forms-standardization-plan.md`):
    - `<Field name required error><Field.Label/><Field.Control><Input|Select|Textarea/></Field.Control><Field.Hint/></Field>` — `Field.Control` injeta `id`/`aria-describedby`/`aria-invalid`/`aria-required` via `cloneElement`.
    - `<FormBody density="comfortable|compact">` controla densidade no escopo. `<Field.Row cols={2|3}>` para grid.
    - Altura via CSS var `--field-h` (não passar `h-9` no className do campo).
    - Estado: `useState` direto (sem react-hook-form). Validação Zod só em `src/app/api/**`, **não no client**.
    - Sem masked-input lib. Use `<Input type="date|number|tel|email">` nativo.
 
-5. **Optimistic updates (sempre que mutar coleção)** — ver `docs/optimistic-updates-runbook.md`:
+5. **Optimistic updates (sempre que mutar coleção)** — ver `docs/platform/optimistic-updates-runbook.md`:
    - Hook canônico: `useOptimisticCollection<T, X>(initial, reducer?)` em `src/hooks/use-optimistic-collection.ts`. Mutations base: `patch | create | delete | bulkPatch | bulkDelete | external_update`. Estende com `combineReducers(extra)`.
    - API: `mutate(mutation, persist, { errorLabel, reconcile?, retry? })` — aplica reducer otimista, roda `persist(signal)`, reconcilia committed.
    - Errors via `showErrorToast` (`src/lib/optimistic/toast.ts`): 403 → "sem permissão", 409 → "outro usuário editou", 5xx → auto-retry 1× + toast com "Tentar de novo", network/abort → "sem conexão. Mudança revertida".

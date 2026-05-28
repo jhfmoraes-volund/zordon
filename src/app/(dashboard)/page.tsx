@@ -12,6 +12,7 @@ import { TeamCapacityWidget } from "@/components/team-capacity-widget";
 import type { SprintInput } from "@/lib/weekBuckets";
 import { requireMinLevel } from "@/lib/dal";
 import { MANAGER, ADMIN, getRoleLevel } from "@/lib/roles";
+import { fmtDate } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +35,6 @@ function endOfWeek(date: Date): Date {
   return end;
 }
 
-function fmtDate(d: Date) {
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-}
 
 function usageColor(pct: number) {
   if (pct <= 0.5) return "bg-green-500";

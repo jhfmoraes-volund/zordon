@@ -29,13 +29,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Pencil, Trash2, Users, ChevronDown, ChevronRight, MoreVertical, ListChecks } from "lucide-react";
-import { hasMinAccessLevel, roleLabel } from "@/lib/roles";
+import { hasMinAccessLevel, isPmEligible, roleLabel } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { showErrorToast } from "@/lib/optimistic/toast";
 import { generateUniqueReferenceKey } from "@/lib/project-reference-key";
+import { fmtDate } from "@/lib/date-utils";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
@@ -76,9 +77,6 @@ function ProjectCardMobile({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const fmtDate = (d: string | null) =>
-    d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "–";
-
   return (
     <Link
       href={`/projects/${p.id}`}
@@ -598,16 +596,16 @@ export default function ProjectsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {members
-                        .filter((m) => m.position === "pm")
+                        .filter((m) => isPmEligible(m.position))
                         .map((m) => (
                           <SelectItem key={m.id} value={m.id}>
                             {m.name}
                           </SelectItem>
                         ))}
-                      {members.filter((m) => m.position === "pm").length ===
-                        0 && (
+                      {members.filter((m) => isPmEligible(m.position))
+                        .length === 0 && (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                          Nenhum membro com role &quot;pm&quot; cadastrado
+                          Nenhum membro elegível a PM cadastrado
                         </div>
                       )}
                     </SelectContent>
@@ -622,7 +620,7 @@ export default function ProjectsPage() {
                 </Field.Hint>
                 <div className="flex min-h-[40px] flex-wrap gap-1.5 rounded-md border p-3">
                   {members
-                    .filter((m) => m.position !== "pm")
+                    .filter((m) => !isPmEligible(m.position))
                     .map((m) => {
                       const isSelected = form.memberIds.includes(m.id);
                       return (
@@ -641,7 +639,8 @@ export default function ProjectsPage() {
                         </Badge>
                       );
                     })}
-                  {members.filter((m) => m.position !== "pm").length === 0 && (
+                  {members.filter((m) => !isPmEligible(m.position)).length ===
+                    0 && (
                     <span className="text-xs text-muted-foreground">
                       Nenhum membro cadastrado
                     </span>

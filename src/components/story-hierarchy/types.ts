@@ -1,5 +1,5 @@
 // Domain types for the Module → UserStory → Task hierarchy.
-// Mirror the schema-alvo in `docs/story-hierarchy-plan.md` (V2).
+// Mirror the schema-alvo in `docs/features/story-hierarchy/story-hierarchy-plan.md` (V2).
 //
 // Mock data and real fetched data both conform to these — the components in
 // this folder don't care about the source.

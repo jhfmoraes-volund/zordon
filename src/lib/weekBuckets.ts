@@ -196,3 +196,68 @@ export function bucketSprintsByWeek(
 
   return buckets;
 }
+
+// ─── Event bucketing (doneAt-based) ──────────────────────
+
+export type DoneTaskEvent = {
+  /** ISO timestamp the task was marked done. */
+  doneAt: string;
+  fp: number;
+  projectId: string;
+  projectName: string;
+};
+
+export type DoneWeekBucket = {
+  weekStart: Date;
+  weekEnd: Date;
+  isCurrent: boolean;
+  /** Σ FP done in this week. */
+  doneFp: number;
+  /** Per-project breakdown of done FP. */
+  byProject: { projectId: string; projectName: string; doneFp: number }[];
+};
+
+/**
+ * Bucket point-in-time delivery events (tasks done at a timestamp) into ISO
+ * weeks. Unlike {@link bucketSprintsByWeek}, which prorates a date *range*
+ * across weeks, each task lands in exactly one week — the one its `doneAt`
+ * falls into. Used by the Insights tab for historical throughput.
+ *
+ * `weeks` buckets ending at the current week, walking backwards. A task
+ * outside the window is dropped.
+ */
+export function bucketTasksByWeek(
+  tasks: DoneTaskEvent[],
+  weeks: number,
+): DoneWeekBucket[] {
+  const currentWeekStart = startOfWeek(startOfDay(new Date()));
+  const firstWeek = addDays(currentWeekStart, -7 * (weeks - 1));
+
+  const buckets: DoneWeekBucket[] = [];
+  const indexByTime = new Map<number, number>();
+  for (let i = 0; i < weeks; i++) {
+    const weekStart = addDays(firstWeek, i * 7);
+    const weekEnd = addDays(weekStart, 6);
+    indexByTime.set(weekStart.getTime(), i);
+    buckets.push({
+      weekStart,
+      weekEnd,
+      isCurrent: weekStart.getTime() === currentWeekStart.getTime(),
+      doneFp: 0,
+      byProject: [],
+    });
+  }
+
+  for (const t of tasks) {
+    const wkStart = startOfWeek(startOfDay(new Date(t.doneAt)));
+    const idx = indexByTime.get(wkStart.getTime());
+    if (idx === undefined) continue; // outside window
+    const bucket = buckets[idx];
+    bucket.doneFp += t.fp;
+    const existing = bucket.byProject.find((p) => p.projectId === t.projectId);
+    if (existing) existing.doneFp += t.fp;
+    else bucket.byProject.push({ projectId: t.projectId, projectName: t.projectName, doneFp: t.fp });
+  }
+
+  return buckets;
+}

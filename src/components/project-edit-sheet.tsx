@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
-import { roleLabel } from "@/lib/roles";
+import { isPmEligible, roleLabel } from "@/lib/roles";
 import { showErrorToast } from "@/lib/optimistic/toast";
 
 type ClientOption = { id: string; name: string };
@@ -243,15 +243,16 @@ export function ProjectEditSheet({
               </SelectTrigger>
               <SelectContent>
                 {allMembers
-                  .filter((m) => m.position === "pm")
+                  .filter((m) => isPmEligible(m.position))
                   .map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.name}
                     </SelectItem>
                   ))}
-                {allMembers.filter((m) => m.position === "pm").length === 0 && (
+                {allMembers.filter((m) => isPmEligible(m.position)).length ===
+                  0 && (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    Nenhum membro com role &quot;pm&quot; cadastrado
+                    Nenhum membro elegível a PM cadastrado
                   </div>
                 )}
               </SelectContent>
@@ -265,7 +266,7 @@ export function ProjectEditSheet({
             </p>
             <div className="flex flex-wrap gap-1.5 p-3 border rounded-md min-h-[40px]">
               {allMembers
-                .filter((m) => m.position !== "pm")
+                .filter((m) => !isPmEligible(m.position))
                 .map((m) => {
                   const isSelected = form.memberIds.includes(m.id);
                   return (
@@ -284,7 +285,8 @@ export function ProjectEditSheet({
                     </Badge>
                   );
                 })}
-              {allMembers.filter((m) => m.position !== "pm").length === 0 && (
+              {allMembers.filter((m) => !isPmEligible(m.position)).length ===
+                0 && (
                 <span className="text-xs text-muted-foreground">
                   Nenhum membro cadastrado
                 </span>

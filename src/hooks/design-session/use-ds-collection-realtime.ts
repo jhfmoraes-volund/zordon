@@ -5,7 +5,7 @@
  * pra refletir mudanças vindas de outros clients (Vitor, UI de outras tabs).
  *
  * Usado pelos hooks `usePersonas`, `useBrainstormFeatures`, etc.
- * Plano: docs/vitor-normalization-plan-v2.md §3.3.
+ * Plano: docs/agents/vitor/vitor-normalization-plan-v2.md §3.3.
  */
 
 import { useEffect } from "react";

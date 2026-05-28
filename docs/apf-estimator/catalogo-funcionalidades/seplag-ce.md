@@ -4,7 +4,7 @@
 > **Stack:** Vite + React + TS + Supabase · file-system routing em `src/pages/` (react-router)
 > **Domínio:** Sistema de gestão de documentos oficiais (Diário Oficial Eletrônico — DOE) — modelos, edição, finalização, tramitação, publicação e rastreabilidade.
 >
-> **Status:** v0 (Claude gera, João revisa). Marco 1 do [V3](../../apf-estimator-plan-v3.md).
+> **Status:** v0 (Claude gera, João revisa). Marco 1 do [V3](../../features/estimation/apf-estimator-plan-v3.md).
 
 ## Visão geral do sistema
 

@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationItem } from "./notification-item";
+import { TodoSummaryCard } from "./todo-summary-card";
 import type { NotificationItem as NotifData } from "@/hooks/use-notifications";
 
 type DayBucket = "today" | "yesterday" | "this_week" | "older";
@@ -129,6 +130,9 @@ export function NotificationBell() {
         </ResponsiveSheetHeader>
 
         <ResponsiveSheetBody className="px-0 py-0">
+          {/* Live to-do state — pinned, self-hiding, outside the unread badge. */}
+          <TodoSummaryCard open={open} />
+
           {loading && !hasAny && (
             <div className="space-y-3 p-4">
               {[0, 1, 2].map((i) => (
@@ -138,7 +142,7 @@ export function NotificationBell() {
           )}
 
           {!loading && !hasAny && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+            <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
               <Bell className="size-8 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">
                 Tudo em dia. Sem notificações por aqui.

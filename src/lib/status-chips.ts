@@ -48,6 +48,18 @@ export const MEETING_TYPE = defineRegistry({
   private:        { label: "Privada",        tone: "pink" },
 });
 
+// Labels longos (selects, headers, títulos derivados). MEETING_TYPE.label é o
+// chip curto ("PMs", "Geral"); estes são a forma por extenso. SSOT única — antes
+// estavam duplicados em meeting-sheet, meetings/[id] e meetings/page (com
+// "private" divergindo entre "Privada" e "Reunião privada").
+export const MEETING_TYPE_LONG_LABELS: Record<keyof typeof MEETING_TYPE, string> = {
+  daily: "Daily",
+  pm_review: "Reunião com PMs",
+  general: "Reunião geral",
+  super_planning: "Super Planning",
+  private: "Privada",
+};
+
 // ─── Project ─────────────────────────────────────────────
 
 export const PROJECT_STATUS = defineRegistry({

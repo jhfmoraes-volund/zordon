@@ -2633,6 +2633,7 @@ export type Database = {
           createdById: string | null
           date: string
           id: string
+          kind: string
           notes: string | null
           sprintId: string | null
           title: string | null
@@ -2641,12 +2642,14 @@ export type Database = {
           transcriptSourceId: string | null
           type: string
           updatedAt: string
+          visibility: string
         }
         Insert: {
           createdAt?: string
           createdById?: string | null
           date: string
           id?: string
+          kind?: string
           notes?: string | null
           sprintId?: string | null
           title?: string | null
@@ -2655,12 +2658,14 @@ export type Database = {
           transcriptSourceId?: string | null
           type?: string
           updatedAt: string
+          visibility?: string
         }
         Update: {
           createdAt?: string
           createdById?: string | null
           date?: string
           id?: string
+          kind?: string
           notes?: string | null
           sprintId?: string | null
           title?: string | null
@@ -2669,6 +2674,7 @@ export type Database = {
           transcriptSourceId?: string | null
           type?: string
           updatedAt?: string
+          visibility?: string
         }
         Relationships: [
           {
@@ -3089,6 +3095,7 @@ export type Database = {
           createdAt: string
           dailyTodosEveningEnabled: boolean
           dailyTodosEveningTime: string
+          dailyTodosLastSent: Json
           dailyTodosMorningEnabled: boolean
           dailyTodosMorningTime: string
           dedicationPercent: number
@@ -3117,6 +3124,7 @@ export type Database = {
           createdAt?: string
           dailyTodosEveningEnabled?: boolean
           dailyTodosEveningTime?: string
+          dailyTodosLastSent?: Json
           dailyTodosMorningEnabled?: boolean
           dailyTodosMorningTime?: string
           dedicationPercent?: number
@@ -3145,6 +3153,7 @@ export type Database = {
           createdAt?: string
           dailyTodosEveningEnabled?: boolean
           dailyTodosEveningTime?: string
+          dailyTodosLastSent?: Json
           dailyTodosMorningEnabled?: boolean
           dailyTodosMorningTime?: string
           dedicationPercent?: number

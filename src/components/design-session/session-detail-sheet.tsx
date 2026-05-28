@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
 import { DESIGN_SESSION_STATUS, lookupChip } from "@/lib/status-chips";
 import { getStepsForSession, type StepDef } from "@/lib/design-session-steps";
+import { fmtDateLong as fmtDate } from "@/lib/date-utils";
 import { toast } from "sonner";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -451,10 +452,3 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Markdown } from "@/components/ui/markdown";
 import { PageTitle } from "@/components/app-shell";
 import {
   ArrowLeft, Plus,
@@ -39,9 +40,10 @@ import {
 } from "@/components/todo-sheet";
 import {
   MEETING_STATUS, MEETING_TYPE, HEALTH, lookupChip,
-  meetingStatusFromDate,
+  meetingStatusFromDate, MEETING_TYPE_LONG_LABELS,
 } from "@/lib/status-chips";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { fmtDateFull as fmtDate, fmtDateNumeric as fmtShortDate, isOverdue } from "@/lib/date-utils";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -111,14 +113,6 @@ type Meeting = {
 // ─── Constants ────────────────────────────────────────────
 
 // Long-form labels for the detail-page header (registry has short labels for lists)
-const typeLongLabels: Record<string, string> = {
-  pm_review: "Reunião com PMs",
-  general: "Reunião geral",
-  daily: "Daily",
-  super_planning: "Super Planning",
-  private: "Reunião privada",
-};
-
 // ─── Main Page ────────────────────────────────────────────
 
 export default function MeetingDetailPage({
@@ -135,6 +129,7 @@ export default function MeetingDetailPage({
   const [loadError, setLoadError] = useState<"forbidden" | "notfound" | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [notes, setNotes] = useState("");
+  const [editingNotes, setEditingNotes] = useState(false);
   const [todoSheetOpen, setTodoSheetOpen] = useState(false);
   const [editingTodo, setEditingTodo] = useState<TodoSheetTodo | null>(null);
   const [collapsedPms, setCollapsedPms] = useState<Set<string>>(new Set());
@@ -216,17 +211,6 @@ export default function MeetingDetailPage({
   if (!meeting) {
     return <div className="p-6 text-muted-foreground">Carregando...</div>;
   }
-
-  const fmtDate = (d: string) =>
-    new Date(d).toLocaleDateString("pt-BR", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
-
-  const fmtShortDate = (d: string) =>
-    new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
   // ─── Handlers ─────────────────────────────────────────
 
@@ -414,11 +398,6 @@ export default function MeetingDetailPage({
     }
   };
 
-  const isOverdue = (d: string | null) => {
-    if (!d) return false;
-    return new Date(d) < new Date();
-  };
-
   // Mode de edição: manager+ edita normalmente; builder só pode editar
   // privadas que ele mesmo criou (server enforces — UI mantém clean).
   const canEdit = !isBuilder
@@ -525,7 +504,7 @@ export default function MeetingDetailPage({
             <h1 className="text-2xl font-bold truncate">{headerTitle}</h1>
             <StatusChip
               tone={lookupChip(MEETING_TYPE, meeting.type).tone}
-              label={typeLongLabels[meeting.type] ?? meeting.type}
+              label={MEETING_TYPE_LONG_LABELS[meeting.type] ?? meeting.type}
             />
             <StatusChip
               {...lookupChip(MEETING_STATUS, meetingStatusFromDate(meeting.date))}
@@ -768,7 +747,6 @@ export default function MeetingDetailPage({
                       canEdit={canEdit}
                       pending
                       fmtShortDate={fmtShortDate}
-                      isOverdue={isOverdue}
                       onOpen={openEditTodo}
                       onCycleStatus={cycleActionStatus}
                       onApprove={() => decideAction(action, "approved")}
@@ -805,7 +783,6 @@ export default function MeetingDetailPage({
                     canEdit={canEdit}
                     pending={false}
                     fmtShortDate={fmtShortDate}
-                    isOverdue={isOverdue}
                     onOpen={openEditTodo}
                     onCycleStatus={cycleActionStatus}
                     onApprove={() => decideAction(action, "approved")}
@@ -821,21 +798,42 @@ export default function MeetingDetailPage({
 
       {/* General Notes */}
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Notas gerais</h2>
-        <Textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={canEdit ? saveNotes : undefined}
-          rows={4}
-          disabled={!canEdit}
-          placeholder={
-            canEdit
-              ? "Anotações gerais da reunião..."
-              : notes
-                ? ""
-                : "Sem notas gerais."
-          }
-        />
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Notas gerais</h2>
+          {canEdit &&
+            (editingNotes ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEditingNotes(false);
+                  saveNotes();
+                }}
+              >
+                Concluir
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={() => setEditingNotes(true)}>
+                Editar
+              </Button>
+            ))}
+        </div>
+        {canEdit && editingNotes ? (
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={saveNotes}
+            rows={12}
+            autoFocus
+            placeholder="Anotações gerais da reunião... (suporta markdown: ## título, **negrito**, - listas)"
+          />
+        ) : notes.trim() ? (
+          <div className="surface p-4 text-sm">
+            <Markdown>{notes}</Markdown>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Sem notas gerais.</p>
+        )}
       </div>
 
       {/* Transcript bruto (read-only, collapsible) — exibido quando existe. */}
@@ -1016,7 +1014,6 @@ function ActionItemRow({
   canEdit,
   pending,
   fmtShortDate,
-  isOverdue,
   onOpen,
   onCycleStatus,
   onApprove,
@@ -1027,14 +1024,13 @@ function ActionItemRow({
   canEdit: boolean;
   pending: boolean;
   fmtShortDate: (d: string) => string;
-  isOverdue: (d: string | null) => boolean;
   onOpen: (a: ActionItem) => void;
   onCycleStatus: (a: ActionItem) => void;
   onApprove: () => void;
   onReject: () => void;
   onDelete: () => void;
 }) {
-  const overdue = action.status !== "done" && isOverdue(action.dueDate);
+  const overdue = isOverdue(action.dueDate, action.status);
   const isAi = action.source === "ai";
 
   return (

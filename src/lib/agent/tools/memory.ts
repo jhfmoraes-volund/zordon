@@ -1,7 +1,7 @@
 /**
  * Memory tools — Vitor's structured memory layer.
  *
- * Plan: docs/vitor-memory-plan.md
+ * Plan: docs/agents/vitor/vitor-memory-plan.md
  *
  * Convention:
  *   - Factory pattern: each tool is a function that closes over sessionId/projectId.

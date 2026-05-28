@@ -13,7 +13,7 @@ import {
   User, Zap, FolderKanban, ListTodo, ArrowRight, Sparkles, ArrowUpRight, Star, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { fmtDate, isOverdue } from "@/lib/task-constants";
+import { fmtDate, isOverdue } from "@/lib/date-utils";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SPRINT_STATUS, TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
 import { roleLabel, specialtyLabel } from "@/lib/roles";

@@ -1,6 +1,6 @@
 # Vitor Eval Suite
 
-Mede se o Vitor está ficando **mais inteligente**, não só mais ativo. 10 conversas-douradas que cobrem as 10 categorias definidas em [docs/vitor-memory-plan.md § Eval suite](../../../docs/vitor-memory-plan.md).
+Mede se o Vitor está ficando **mais inteligente**, não só mais ativo. 10 conversas-douradas que cobrem as 10 categorias definidas em [docs/agents/vitor/vitor-memory-plan.md § Eval suite](../../../docs/agents/vitor/vitor-memory-plan.md).
 
 Cada caso descreve:
 - **Setup**: fixtures (decisions, open questions, research, project memory, business context, step data) que existem antes do Vitor ser invocado.

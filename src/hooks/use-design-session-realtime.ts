@@ -6,7 +6,7 @@
  * UI pluga via `onChange(entity, event, row)` no seu `useOptimisticCollection`
  * (dispatch `external_update` em INSERT/UPDATE, `delete` em DELETE).
  *
- * Plano: docs/vitor-normalization-plan-v2.md §3.3.
+ * Plano: docs/agents/vitor/vitor-normalization-plan-v2.md §3.3.
  * Padrão: src/hooks/use-notifications.ts (realtime channel + filter por session).
  */
 

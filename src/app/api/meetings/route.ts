@@ -20,7 +20,7 @@ const MEETING_SELECT = `
     *, member:Member(id, name)
   ),
   projectLinks:MeetingProjectLink(
-    *, project:Project(id, name, status)
+    *, project:Project(id, name, status, pmId)
   )
 `;
 
@@ -43,19 +43,21 @@ export async function GET() {
     .order("date", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // db() bypasses RLS, so filter by visibility here. Rule is unified
-  // (canViewMeeting): admin sees everything except `private`; everyone
-  // else (manager+ included) sees meetings where they're in MeetingAttendee.
-  // `private` is creator-only — admin doesn't see private notes either.
+  // db() bypasses RLS, so filter by visibility here. Rule (canViewMeeting,
+  // governado por visibility): private = creator-only (sem admin bypass);
+  // public = admin OU attendee OU PM de projeto linkado.
   const visible: typeof meetings = [];
   for (const m of meetings ?? []) {
     const attendeeMemberIds = ((m as { attendees?: { memberId: string | null }[] }).attendees ?? [])
       .map((a) => a.memberId)
       .filter((x): x is string => !!x);
+    const linkedProjectPmIds = ((m as { projectLinks?: { project: { pmId: string | null } | null }[] }).projectLinks ?? [])
+      .map((l) => l.project?.pmId ?? null)
+      .filter((x): x is string => !!x);
     const ok = await canViewMeeting({
-      type: (m as { type: string }).type,
+      visibility: (m as { visibility: string }).visibility,
       attendeeMemberIds,
-      linkedProjectPmIds: [],
+      linkedProjectPmIds,
       createdById: (m as { createdById?: string | null }).createdById ?? null,
     });
     if (ok) visible.push(m);
@@ -76,6 +78,8 @@ export async function POST(req: NextRequest) {
       date,
       notes,
       type = "pm_review",
+      visibility: visibilityInput,
+      kind: kindInput,
       title = null,
       pmMemberIds = [],
       attendees = [],
@@ -88,6 +92,8 @@ export async function POST(req: NextRequest) {
       date: string;
       notes?: string;
       type?: "pm_review" | "general" | "daily" | "super_planning" | "private";
+      visibility?: "private" | "public";
+      kind?: string;
       title?: string | null;
       pmMemberIds?: string[];
       attendees?: AttendeeInput[];
@@ -97,6 +103,14 @@ export async function POST(req: NextRequest) {
       transcriptSourceId?: string | null;
       transcript?: string | null;
     } = body;
+
+    // Modelo novo: visibility GOVERNA acesso, kind é rótulo leve. Durante a
+    // transição, se não vier explícito, deriva do `type` legado.
+    const visibility: "private" | "public" =
+      visibilityInput ?? (type === "private" ? "private" : "public");
+    const kind: string =
+      kindInput ??
+      (type === "super_planning" ? "planning" : type === "private" ? "general" : type);
 
     if ((transcriptSource && !transcriptSourceId) || (!transcriptSource && transcriptSourceId)) {
       return NextResponse.json(
@@ -250,11 +264,17 @@ export async function POST(req: NextRequest) {
     const memberId = await getMemberId();
     const stamp: {
       createdById?: string;
+      visibility?: "private" | "public";
+      kind?: string;
       transcriptSource?: "roam" | "granola";
       transcriptSourceId?: string;
       transcript?: string;
     } = {};
     if (memberId) stamp.createdById = memberId;
+    // visibility/kind sempre carimbados (RPC não os conhece; default da
+    // coluna é 'private', então sem isto reunião pública nasceria privada).
+    stamp.visibility = visibility;
+    stamp.kind = kind;
     if (transcriptSource && transcriptSourceId) {
       stamp.transcriptSource = transcriptSource;
       stamp.transcriptSourceId = transcriptSourceId;

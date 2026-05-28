@@ -2,7 +2,7 @@
 
 ## Estratégia
 
-Pipeline V3 em duas fases — catálogo de funcionalidades (Claude escreve, João revisa) → tabela PF (lookup base referencial + LLM tie-breaker). Plano canônico: [../../apf-estimator-plan-v3.md](../../apf-estimator-plan-v3.md).
+Pipeline V3 em duas fases — catálogo de funcionalidades (Claude escreve, João revisa) → tabela PF (lookup base referencial + LLM tie-breaker). Plano canônico: [../../apf-estimator-plan-v3.md](../../features/estimation/apf-estimator-plan-v3.md).
 
 ## Premissa
 

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/ui/markdown";
+import { fmtDateLong as fmtDate } from "@/lib/date-utils";
 
 interface Decision {
   id: string;
@@ -86,10 +87,6 @@ const CONFIDENCE_LABEL: Record<Decision["confidence"], string> = {
 
 function ageDays(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function shortId(id: string): string {
