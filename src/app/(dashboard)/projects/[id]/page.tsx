@@ -81,6 +81,7 @@ import { useStoryHierarchy } from "./_hooks/use-story-hierarchy";
 import { useTasksAndSprints } from "./_hooks/use-tasks-and-sprints";
 import { useProjectMembers } from "./_hooks/use-project-members";
 import { useTaxonomyActions } from "./_hooks/use-taxonomy-actions";
+import { useSprintActions } from "./_hooks/use-sprint-actions";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
 
@@ -168,24 +169,6 @@ export default function ProjectDetailPage({
 
   const [accessOpen, setAccessOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [sprintDialogOpen, setSprintDialogOpen] = useState(false);
-  const [suggestSheetOpen, setSuggestSheetOpen] = useState(false);
-  const [suggestSheetTargetId, setSuggestSheetTargetId] = useState<
-    string | null
-  >(null);
-  const [sprintAction, setSprintAction] = useState<
-    | { mode: "activate-replacing" | "activate-fresh"; targetId: string }
-    | { mode: "reopen-replacing" | "reopen-fresh"; targetId: string }
-    | null
-  >(null);
-  const [sprintDeleteTargetId, setSprintDeleteTargetId] = useState<
-    string | null
-  >(null);
-  const [sprintEditingId, setSprintEditingId] = useState<string | null>(null);
-  const [sprintContextSheet, setSprintContextSheet] = useState<{
-    sprintId: string;
-    mode: SprintContextSheetMode;
-  } | null>(null);
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(taskParam);
 
@@ -283,6 +266,15 @@ export default function ProjectDetailPage({
       })),
     [rawSprints],
   );
+
+  const sprintActions = useSprintActions({
+    id,
+    supabase,
+    sprints,
+    loadTasksAndSprints,
+    sprintView,
+    setSprintView,
+  });
 
   /**
    * Build per-(sprint × member) capacity rows.
@@ -394,132 +386,6 @@ export default function ProjectDetailPage({
     tasks.find((t) => t.reference === selectedTaskRef) ?? null;
 
   // ─── Mutators ──────────────────────────────────────────────────────────────
-
-  async function handleCreateSprint(form: SprintFormData) {
-    const now = new Date().toISOString();
-    setSprintDialogOpen(false);
-    const goal = form.goal.trim();
-    const newId = crypto.randomUUID();
-    const { error } = await supabase.from("Sprint").insert({
-      id: newId,
-      projectId: id,
-      name: form.name,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      status: form.status,
-      goal: goal === "" ? null : goal,
-      updatedAt: now,
-    });
-    if (error) {
-      const message =
-        error.code === "23505"
-          ? error.message.includes("sprint_unique_week_per_project")
-            ? "Já existe um sprint nessa semana neste projeto."
-            : "Já existe um sprint com esse nome neste projeto."
-          : error.message;
-      showErrorToast(new Error(message), { label: "Falha ao criar sprint" });
-      return;
-    }
-    await loadTasksAndSprints();
-    if (form.autoFillFromBacklog) {
-      setSuggestSheetTargetId(newId);
-      setSuggestSheetOpen(true);
-    }
-  }
-
-  async function handleUpdateSprint(targetId: string, form: SprintFormData) {
-    setSprintEditingId(null);
-    const goal = form.goal.trim();
-    try {
-      await fetchOrThrow(`/api/sprints/${targetId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          status: form.status,
-          goal: goal === "" ? null : goal,
-        }),
-      });
-      toast.success("Sprint atualizada");
-      await loadTasksAndSprints();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao atualizar sprint" });
-    }
-  }
-
-  function requestActivateSprint(targetId: string) {
-    const hasActive = sprints.some((s) => s.status === "active");
-    setSprintAction({
-      mode: hasActive ? "activate-replacing" : "activate-fresh",
-      targetId,
-    });
-  }
-
-  function requestCompleteSprint(targetId: string) {
-    setSprintContextSheet({ sprintId: targetId, mode: "complete" });
-  }
-
-  function requestReopenSprint(targetId: string) {
-    const hasActive = sprints.some((s) => s.status === "active");
-    setSprintAction({
-      mode: hasActive ? "reopen-replacing" : "reopen-fresh",
-      targetId,
-    });
-  }
-
-  async function handleActivateSprint(targetId: string) {
-    try {
-      await fetchOrThrow(`/api/sprints/${targetId}/activate`, { method: "POST" });
-      toast.success("Sprint ativada");
-      await loadTasksAndSprints();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao ativar sprint" });
-    }
-  }
-
-  async function handleReopenSprint(targetId: string) {
-    try {
-      await fetchOrThrow(`/api/sprints/${targetId}/reopen`, { method: "POST" });
-      toast.success("Sprint reaberta");
-      await loadTasksAndSprints();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao reabrir sprint" });
-    }
-  }
-
-  function handleDeleteSprint(targetId: string) {
-    setSprintDeleteTargetId(targetId);
-  }
-
-  async function deleteSprint(
-    targetId: string,
-    action: SprintDeleteAction,
-    taskCount: number,
-  ) {
-    try {
-      await fetchOrThrow(`/api/sprints/${targetId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskAction: action }),
-      });
-      // Mensagem reflete o que de fato aconteceu: sprint vazia não tem
-      // tasks pra mover, mesmo que o action canônico seja "moveToBacklog".
-      const message =
-        taskCount === 0
-          ? "Sprint excluída"
-          : action === "moveToBacklog"
-            ? "Sprint excluída · tasks movidas pro backlog"
-            : "Sprint e tasks excluídas";
-      toast.success(message);
-      if (sprintView === targetId) setSprintView(null);
-      await loadTasksAndSprints();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao excluir sprint" });
-      throw e;
-    }
-  }
 
   /**
    * Create a stub story and open the StorySheet on it in edit mode. Mirrors
@@ -1537,14 +1403,14 @@ export default function ProjectDetailPage({
           canManageSprint={canManageSprint}
           setSprintView={setSprintView}
           setSelectedTaskRef={setSelectedTaskRef}
-          setSprintContextSheet={setSprintContextSheet}
-          setSprintDialogOpen={setSprintDialogOpen}
-          setSuggestSheetOpen={setSuggestSheetOpen}
-          setSprintEditingId={setSprintEditingId}
-          requestActivateSprint={requestActivateSprint}
-          requestCompleteSprint={requestCompleteSprint}
-          requestReopenSprint={requestReopenSprint}
-          handleDeleteSprint={handleDeleteSprint}
+          setSprintContextSheet={sprintActions.setSprintContextSheet}
+          setSprintDialogOpen={sprintActions.setSprintDialogOpen}
+          setSuggestSheetOpen={sprintActions.setSuggestSheetOpen}
+          setSprintEditingId={sprintActions.setSprintEditingId}
+          requestActivateSprint={sprintActions.requestActivateSprint}
+          requestCompleteSprint={sprintActions.requestCompleteSprint}
+          requestReopenSprint={sprintActions.requestReopenSprint}
+          handleDeleteSprint={sprintActions.handleDeleteSprint}
           handleCreateTask={handleCreateTask}
           handleInlineStatusChange={handleInlineStatusChange}
           handleInlineAssigneeChange={handleInlineAssigneeChange}
@@ -1688,8 +1554,8 @@ export default function ProjectDetailPage({
 
       {/* Sprint create / edit dialog */}
       {(() => {
-        const editingSprint = sprintEditingId
-          ? rawSprints.find((s) => s.id === sprintEditingId) ?? null
+        const editingSprint = sprintActions.sprintEditingId
+          ? rawSprints.find((s) => s.id === sprintActions.sprintEditingId) ?? null
           : null;
         const editingPayload = editingSprint
           ? {
@@ -1703,23 +1569,23 @@ export default function ProjectDetailPage({
           : null;
         return (
           <SprintDialog
-            open={sprintDialogOpen || sprintEditingId !== null}
+            open={sprintActions.sprintDialogOpen || sprintActions.sprintEditingId !== null}
             onOpenChange={(next) => {
               if (!next) {
-                setSprintDialogOpen(false);
-                setSprintEditingId(null);
+                sprintActions.setSprintDialogOpen(false);
+                sprintActions.setSprintEditingId(null);
               } else {
-                setSprintDialogOpen(true);
+                sprintActions.setSprintDialogOpen(true);
               }
             }}
             editing={editingPayload}
             existingSprints={rawSprints
-              .filter((s) => s.id !== sprintEditingId)
+              .filter((s) => s.id !== sprintActions.sprintEditingId)
               .map((s) => ({ startDate: s.startDate, endDate: s.endDate }))}
             onSave={(form) =>
               editingPayload
-                ? handleUpdateSprint(editingPayload.id, form)
-                : handleCreateSprint(form)
+                ? sprintActions.handleUpdateSprint(editingPayload.id, form)
+                : sprintActions.handleCreateSprint(form)
             }
             allowAutoFill
           />
@@ -1727,10 +1593,10 @@ export default function ProjectDetailPage({
       })()}
 
       <SuggestSprintsSheet
-        open={suggestSheetOpen}
+        open={sprintActions.suggestSheetOpen}
         onOpenChange={(next) => {
-          setSuggestSheetOpen(next);
-          if (!next) setSuggestSheetTargetId(null);
+          sprintActions.setSuggestSheetOpen(next);
+          if (!next) sprintActions.setSuggestSheetTargetId(null);
         }}
         projectId={id}
         backlogHint={backlogTasks.length}
@@ -1741,17 +1607,18 @@ export default function ProjectDetailPage({
               !rawTasks.some((t) => t.sprintId === s.id),
           )
           .map((s) => ({ id: s.id, name: s.name }))}
-        initialTargetSprintId={suggestSheetTargetId}
+        initialTargetSprintId={sprintActions.suggestSheetTargetId}
         onApplied={() => loadTasksAndSprints()}
       />
 
       {/* Sprint activate / complete / reopen confirmation */}
-      {sprintAction ? (() => {
-        const target = sprints.find((s) => s.id === sprintAction.targetId);
+      {sprintActions.sprintAction ? (() => {
+        const action = sprintActions.sprintAction;
+        const target = sprints.find((s) => s.id === action.targetId);
         if (!target) return null;
         const isReplacing =
-          sprintAction.mode === "activate-replacing" ||
-          sprintAction.mode === "reopen-replacing";
+          action.mode === "activate-replacing" ||
+          action.mode === "reopen-replacing";
         const previousActive = isReplacing
           ? sprints.find((s) => s.status === "active") ?? null
           : null;
@@ -1766,19 +1633,19 @@ export default function ProjectDetailPage({
         return (
           <SprintActionDialog
             open
-            onOpenChange={(open) => !open && setSprintAction(null)}
-            mode={sprintAction.mode}
+            onOpenChange={(open) => !open && sprintActions.setSprintAction(null)}
+            mode={action.mode}
             target={target}
             previousActive={previousActive}
             previousActiveTaskStats={previousActiveTaskStats}
             onConfirm={async () => {
               if (
-                sprintAction.mode === "reopen-replacing" ||
-                sprintAction.mode === "reopen-fresh"
+                action.mode === "reopen-replacing" ||
+                action.mode === "reopen-fresh"
               ) {
-                await handleReopenSprint(sprintAction.targetId);
+                await sprintActions.handleReopenSprint(action.targetId);
               } else {
-                await handleActivateSprint(sprintAction.targetId);
+                await sprintActions.handleActivateSprint(action.targetId);
               }
             }}
           />
@@ -1786,22 +1653,23 @@ export default function ProjectDetailPage({
       })() : null}
 
       {/* Sprint delete confirmation (with task-handling choice) */}
-      {sprintDeleteTargetId ? (() => {
-        const target = sprints.find((s) => s.id === sprintDeleteTargetId);
+      {sprintActions.sprintDeleteTargetId ? (() => {
+        const deleteTargetId = sprintActions.sprintDeleteTargetId;
+        const target = sprints.find((s) => s.id === deleteTargetId);
         if (!target) return null;
         // rawTasks já filtra drafts no loader; usar a fonte canônica evita
         // qualquer drift do pipeline de adapt.
         const taskCount = rawTasks.filter(
-          (t) => t.sprintId === sprintDeleteTargetId,
+          (t) => t.sprintId === deleteTargetId,
         ).length;
         return (
           <SprintDeleteDialog
             open
-            onOpenChange={(open) => !open && setSprintDeleteTargetId(null)}
+            onOpenChange={(open) => !open && sprintActions.setSprintDeleteTargetId(null)}
             sprintName={target.name}
             taskCount={taskCount}
             onConfirm={(action) =>
-              deleteSprint(sprintDeleteTargetId, action, taskCount)
+              sprintActions.deleteSprint(deleteTargetId, action, taskCount)
             }
           />
         );
@@ -1809,14 +1677,14 @@ export default function ProjectDetailPage({
 
       {/* Sprint context sheet (goal + retro) */}
       <SprintContextSheet
-        open={sprintContextSheet !== null}
-        onOpenChange={(open) => !open && setSprintContextSheet(null)}
+        open={sprintActions.sprintContextSheet !== null}
+        onOpenChange={(open) => !open && sprintActions.setSprintContextSheet(null)}
         sprint={
-          sprintContextSheet
-            ? sprints.find((s) => s.id === sprintContextSheet.sprintId) ?? null
+          sprintActions.sprintContextSheet
+            ? sprints.find((s) => s.id === sprintActions.sprintContextSheet!.sprintId) ?? null
             : null
         }
-        mode={sprintContextSheet?.mode ?? "view"}
+        mode={sprintActions.sprintContextSheet?.mode ?? "view"}
         onSaved={() => loadTasksAndSprints()}
       />
 
