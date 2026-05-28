@@ -22,6 +22,7 @@ import {
   type WeekBucket,
   type WeekSprintRow,
 } from "@/lib/weekBuckets";
+import { fmtDate } from "@/lib/date-utils";
 
 type Props = {
   sprints: SprintInput[];
@@ -119,9 +120,6 @@ export function WeeklyAllocation({ sprints, weeklyCapacity, projects }: Props) {
   );
 }
 
-const fmtShort = (d: Date) =>
-  d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-
 function WeekBlock({
   bucket,
   weeklyCapacity,
@@ -171,7 +169,7 @@ function WeekBlock({
 
           <div className="flex-1 min-w-0">
             <span className="text-sm font-medium tabular-nums">
-              {fmtShort(bucket.weekStart)} — {fmtShort(bucket.weekEnd)}
+              {fmtDate(bucket.weekStart)} — {fmtDate(bucket.weekEnd)}
             </span>
             <span className="text-xs text-muted-foreground ml-2">
               {bucket.sprints.length} sprint{bucket.sprints.length === 1 ? "" : "s"}

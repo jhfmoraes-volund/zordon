@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fmtDateNumeric } from "@/lib/date-utils";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
@@ -261,10 +262,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
               </span>
               <span className="text-muted-foreground">
                 ·{" "}
-                {new Date(t.meetingStart).toLocaleDateString("pt-BR", {
-                  day: "2-digit",
-                  month: "2-digit",
-                })}
+                {fmtDateNumeric(t.meetingStart)}
               </span>
               <button
                 type="button"

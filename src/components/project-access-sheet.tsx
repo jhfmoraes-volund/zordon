@@ -22,6 +22,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Check, Copy, LinkIcon, MoreVertical, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ConfirmDialog,
+  type ConfirmState,
+} from "@/components/ui/confirm-dialog";
 
 type AccessRow = {
   userId: string;
@@ -72,6 +76,7 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
   // Quando geramos/re-geramos um link, exibimos num card no topo até o user fechar.
   const [generated, setGenerated] = useState<GeneratedLink | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   async function copyToClipboard(text: string) {
     try {
@@ -136,17 +141,23 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
     }
   };
 
-  const revoke = async (userId: string) => {
-    if (!confirm("Revogar acesso desta pessoa ao projeto?")) return;
-    const prev = rows;
-    setRows((r) => r.filter((x) => x.userId !== userId));
-    const res = await fetch(`/api/projects/${projectId}/access/${userId}`, {
-      method: "DELETE",
+  const revoke = (userId: string) => {
+    setConfirmState({
+      title: "Revogar acesso desta pessoa ao projeto?",
+      confirmLabel: "Revogar",
+      destructive: true,
+      onConfirm: async () => {
+        const prev = rows;
+        setRows((r) => r.filter((x) => x.userId !== userId));
+        const res = await fetch(`/api/projects/${projectId}/access/${userId}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          setRows(prev);
+          toast.error("Falha ao revogar");
+        }
+      },
     });
-    if (!res.ok) {
-      setRows(prev);
-      toast.error("Falha ao revogar");
-    }
   };
 
   const invite = async () => {
@@ -319,6 +330,7 @@ export function ProjectAccessSheet({ projectId, open, onOpenChange }: Props) {
           )}
         </div>
       </ResponsiveSheetContent>
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </ResponsiveSheet>
   );
 }

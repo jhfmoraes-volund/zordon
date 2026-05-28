@@ -14,7 +14,12 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { fmtDateNumeric } from "@/lib/date-utils";
 import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
+import {
+  ConfirmDialog,
+  type ConfirmState,
+} from "@/components/ui/confirm-dialog";
 
 type Thread = {
   id: string;
@@ -39,10 +44,7 @@ function formatRelative(iso: string): string {
   if (diffH < 24) return `${diffH}h`;
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD}d`;
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
+  return fmtDateNumeric(iso);
 }
 
 function toUIMessages(messages: StoredMessage[]): UIMessage[] {
@@ -72,6 +74,7 @@ export default function OpsPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const kickoffFiredRef = useRef(false);
 
   const transport = useMemo(
@@ -182,23 +185,29 @@ export default function OpsPage() {
     setHistoryOpen(false);
   };
 
-  const handleDeleteThread = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteThread = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Apagar esta conversa?")) return;
-    const snapshot = threads;
-    setThreads((prev) => prev.filter((t) => t.id !== id));
-    if (id === threadId) {
-      setThreadId(null);
-      chat.setMessages([]);
-    }
-    try {
-      await fetchOrThrow(`/api/agents/alpha/threads/${id}`, {
-        method: "DELETE",
-      });
-    } catch (err) {
-      setThreads(snapshot);
-      showErrorToast(err, { label: "Falha ao apagar conversa" });
-    }
+    setConfirmState({
+      title: "Apagar esta conversa?",
+      confirmLabel: "Apagar",
+      destructive: true,
+      onConfirm: async () => {
+        const snapshot = threads;
+        setThreads((prev) => prev.filter((t) => t.id !== id));
+        if (id === threadId) {
+          setThreadId(null);
+          chat.setMessages([]);
+        }
+        try {
+          await fetchOrThrow(`/api/agents/alpha/threads/${id}`, {
+            method: "DELETE",
+          });
+        } catch (err) {
+          setThreads(snapshot);
+          showErrorToast(err, { label: "Falha ao apagar conversa" });
+        }
+      },
+    });
   };
 
   const renderThreadsList = () => (
@@ -300,6 +309,7 @@ export default function OpsPage() {
           </SheetContent>
         </Sheet>
       )}
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }

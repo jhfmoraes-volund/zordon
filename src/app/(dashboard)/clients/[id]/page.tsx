@@ -49,6 +49,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast } from "@/lib/optimistic/toast";
 import { hasMinAccessLevel } from "@/lib/roles";
+import { fmtDate } from "@/lib/date-utils";
 import type { Client } from "@/lib/supabase/types";
 
 type EditForm = {
@@ -272,7 +273,7 @@ export default function ClientDetailPage({
   function confirmDeleteCsat(r: CsatResponseWithInterviewer) {
     setConfirmState({
       title: "Remover entrevista?",
-      description: `Entrevista de ${new Date(r.interviewedAt).toLocaleDateString("pt-BR")} será apagada.`,
+      description: `Entrevista de ${fmtDate(r.interviewedAt)} será apagada.`,
       destructive: true,
       confirmLabel: "Excluir",
       onConfirm: async () => {

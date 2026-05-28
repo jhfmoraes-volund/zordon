@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Eye, Link2, Lock } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -53,12 +54,15 @@ type Meeting = {
   projectLinks: { project: { id: string; name: string } | null }[];
 };
 
-type FilterKey = "all" | Visibility;
+// "shared" não é uma visibilidade — é um recorte: reuniões que eu vejo mas
+// não criei (alguém me adicionou). Ortogonal a private/public.
+type FilterKey = "all" | Visibility | "shared";
 
 const VIS_FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "Todas" },
   { key: "public", label: "Públicas" },
   { key: "private", label: "Privadas" },
+  { key: "shared", label: "Compartilhadas" },
 ];
 
 export default function MeetingsPage() {
@@ -176,32 +180,45 @@ export default function MeetingsPage() {
     return Array.from(set);
   }, [meetings]);
 
+  // Compartilhada comigo = vejo (GET já filtrou por acesso) mas não criei.
+  const isSharedWithMe = (m: Meeting): boolean =>
+    !!currentMember && m.createdById !== currentMember.id;
+
   const counts = useMemo(() => {
     let pub = 0;
     let priv = 0;
+    let shared = 0;
     for (const m of meetings) {
       if (m.visibility === "public") pub += 1;
       else priv += 1;
+      if (isSharedWithMe(m)) shared += 1;
     }
-    return { all: meetings.length, public: pub, private: priv };
-  }, [meetings]);
+    return { all: meetings.length, public: pub, private: priv, shared };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetings, currentMember]);
 
   const visible = useMemo(() => {
     return meetings.filter((m) => {
-      if (visFilter !== "all" && m.visibility !== visFilter) return false;
+      if (visFilter === "shared") {
+        if (!isSharedWithMe(m)) return false;
+      } else if (visFilter !== "all" && m.visibility !== visFilter) {
+        return false;
+      }
       if (kindFilter !== "all" && m.kind !== kindFilter) return false;
       return true;
     });
-  }, [meetings, visFilter, kindFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetings, visFilter, kindFilter, currentMember]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Reuniões"
-        description="Reuniões privadas e públicas. Cerimônias de projeto vivem no próprio projeto."
-        onAdd={openCreate}
-        addLabel="Nova reunião"
-      />
+    <PageContainer>
+      <div className="space-y-6">
+        <PageHeader
+          title="Reuniões"
+          description="Reuniões privadas e públicas. Cerimônias de projeto vivem no próprio projeto."
+          onAdd={openCreate}
+          addLabel="Nova reunião"
+        />
 
       <div className="flex flex-wrap items-center gap-2">
         <div
@@ -296,7 +313,13 @@ export default function MeetingsPage() {
         </div>
       ) : visible.length === 0 ? (
         <div className="surface py-12 text-center text-sm text-muted-foreground">
-          Nenhuma reunião{visFilter !== "all" ? ` ${VIS_FILTERS.find((f) => f.key === visFilter)?.label.toLowerCase()}` : ""}.
+          {visFilter === "shared"
+            ? "Nenhuma reunião compartilhada com você."
+            : visFilter === "public"
+              ? "Nenhuma reunião pública."
+              : visFilter === "private"
+                ? "Nenhuma reunião privada."
+                : "Nenhuma reunião."}
         </div>
       ) : (
         <ul className="divide-y rounded-md border bg-card">
@@ -395,6 +418,7 @@ export default function MeetingsPage() {
           })}
         </ul>
       )}
-    </div>
+      </div>
+    </PageContainer>
   );
 }

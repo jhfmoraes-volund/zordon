@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fmtDate } from "@/lib/date-utils";
 import { Target, Sparkles, AlertTriangle, Lightbulb, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -232,7 +233,7 @@ export function SprintContextSheet({
                   {mode === "complete"
                     ? "Reflita antes de fechar o sprint. Todos os campos são opcionais."
                     : retro
-                    ? `Registrada em ${new Date(retro.completedAt).toLocaleDateString("pt-BR")}.`
+                    ? `Registrada em ${fmtDate(retro.completedAt)}.`
                     : "Sem retrospectiva registrada."}
                 </p>
               </div>

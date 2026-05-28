@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:seed": "npx tsx supabase/seed/seed.ts",
     "db:types": "npx supabase gen types typescript --project-id ugvqlmapqlobigkjboae > src/lib/supabase/database.types.ts",
+    "gen:phase-sql": "npx tsx scripts/gen-phase-sql.ts",
     "eval:vitor": "npx tsx --tsconfig tsconfig.eval.json src/eval/vitor/runner.ts"
   },
   "dependencies": {
