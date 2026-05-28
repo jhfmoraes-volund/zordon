@@ -350,6 +350,40 @@ export async function createPlanning(input: {
 }
 
 /**
+ * Atualiza campos editáveis: sprint, facilitador, data agendada.
+ * Phase NÃO é alterada aqui — usa updatePlanningPhase.
+ */
+export async function updatePlanning(
+  id: string,
+  patch: {
+    sprintId?: string | null;
+    facilitatorId?: string | null;
+    scheduledFor?: string | null;
+  },
+): Promise<PlanningCeremonyRow> {
+  const { data, error } = await db()
+    .from("PlanningCeremony")
+    .update({ ...patch, updatedAt: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Arquiva uma planning (soft-delete via phase='archived').
+ * Mantém dados para auditoria; só esconde da lista ativa.
+ */
+export async function archivePlanning(id: string): Promise<void> {
+  const { error } = await db()
+    .from("PlanningCeremony")
+    .update({ phase: "archived", updatedAt: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/**
  * Aplica uma transição de phase já APROVADA pela state machine.
  * O caller passa `to` + `stamps` (vindos de `transition()`).
  *

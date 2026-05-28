@@ -182,6 +182,45 @@ export async function ensureThread(
 }
 
 /**
+ * Ensures a thread exists for a PlanningCeremony.
+ * Uses agentName = planningId + channel = "planning" so each planning
+ * has its own thread without touching the DesignSession FK on sessionId.
+ */
+export async function ensurePlanningThread(
+  planningId: string,
+  createdBy?: string,
+): Promise<string> {
+  const { data: existing } = await db()
+    .from("ChatThread")
+    .select("id")
+    .eq("agentName", planningId)
+    .eq("channel", "planning")
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  const { data: created, error } = await db()
+    .from("ChatThread")
+    .insert({
+      sessionId: null,
+      agentName: planningId,
+      channel: "planning",
+      createdBy: createdBy || null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[ensurePlanningThread] insert failed:", error.message);
+    throw new Error(`Failed to create planning thread: ${error.message}`);
+  }
+
+  return created!.id;
+}
+
+/**
  * Ensures a thread exists for a standalone agent (no DesignSession),
  * scoped to a specific member so each user keeps a private history.
  * Uses agentName + channel + createdBy as the unique key.

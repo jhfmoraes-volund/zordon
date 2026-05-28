@@ -11,7 +11,7 @@ import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { tempId } from "@/lib/optimistic/reconcile";
 import { toast } from "sonner";
-import { PlanningCreateDialog } from "@/components/planning/planning-create-dialog";
+import { PlanningSheet } from "@/components/planning/planning-sheet";
 
 // ─── Tab Rituais (user-facing) ──────────────────────────────────────────
 // Conceito user-facing: "Ritual" — abarca Planning hoje, Daily/Review depois.
@@ -347,12 +347,12 @@ export function ProjectCeremoniesTab({
         Detalhe da Planning (command center) ainda em construção.
       </p>
 
-      <PlanningCreateDialog
+      <PlanningSheet
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         projectId={projectId}
         onCreate={handleConfirmCreate}
-        creating={creating}
+        saving={creating}
       />
     </div>
   );

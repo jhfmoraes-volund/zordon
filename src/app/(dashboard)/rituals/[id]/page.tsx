@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
@@ -10,6 +11,7 @@ import {
   Check,
   FileText,
   Loader2,
+  Pencil,
   RotateCcw,
   Sparkles,
 } from "lucide-react";
@@ -30,6 +32,7 @@ import type { ChipTone } from "@/lib/status-chips";
 import { BriefingTree } from "@/components/planning/briefing-tree";
 import { ProposalCard, type PlanningAction } from "@/components/planning/proposal-card";
 import { ContextSheet } from "@/components/planning/context-sheet";
+import { PlanningSheet } from "@/components/planning/planning-sheet";
 
 // ─── Constants ───────────────────────────────────────────────────────────
 
@@ -59,7 +62,7 @@ function PhaseRibbon({
     planning.linkedMeetingCount > 0 || planning.linkedTranscriptCount > 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       <StatusChip tone={meta.tone} label={meta.label} dot />
 
       {phase === "idle" && (
@@ -82,7 +85,7 @@ function PhaseRibbon({
           onClick={() => onTransition("idle")}
         >
           {transitioning ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />}
-          Resetar briefing
+          Resetar
         </Button>
       )}
 
@@ -94,7 +97,7 @@ function PhaseRibbon({
           onClick={() => onTransition("approving")}
         >
           {transitioning ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-          Revisar propostas ({planning.pendingActionCount})
+          Revisar ({planning.pendingActionCount})
         </Button>
       )}
 
@@ -133,6 +136,7 @@ export default function RitualDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
 
   const [planning, setPlanning] = useState<PlanningDetail | null>(null);
   const [actions, setActions] = useState<PlanningAction[]>([]);
@@ -141,6 +145,7 @@ export default function RitualDetailPage({
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
+  const [editSheetOpen, setEditSheetOpen] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
 
   const threadIdRef = useRef<string | null>(null);
@@ -202,9 +207,9 @@ export default function RitualDetailPage({
   const handleSubmit = useCallback(() => {
     const text = input.trim();
     if (!text || status === "streaming" || status === "submitted") return;
-    sendMessage({ text }, { body: { threadId, planningId: id } });
+    sendMessage({ text });
     setInput("");
-  }, [input, status, sendMessage, threadId, id]);
+  }, [input, status, sendMessage]);
 
   // ─── Phase transition ──────────────────────────────────────────────────
 
@@ -320,28 +325,136 @@ export default function RitualDetailPage({
   const pendingActions = actions.filter((a) => a.decision === "pending");
   const decidedActions = actions.filter((a) => a.decision !== "pending");
 
-  // ─── Render ───────────────────────────────────────────────────────────
-
   const title = planning.sprintName
     ? `Planning · ${planning.sprintName}`
     : "Planning";
 
+  const backHref = `/projects/${planning.projectId}?tab=ceremonies`;
+
+  // ─── Chat panel ───────────────────────────────────────────────────────
+
+  const chatPanel = (
+    <ConversationPanel
+      agent="vitoria"
+      variant={isMobile ? "mobile" : "desktop"}
+      messages={messages as UIMessage[]}
+      status={status}
+      input={input}
+      onInputChange={setInput}
+      onSubmit={handleSubmit}
+      onStop={stop}
+      isOpen={mobileOpen}
+      onOpenChange={setMobileOpen}
+      planMode={planMode}
+      onPlanModeChange={setPlanMode}
+      className="h-full"
+    />
+  );
+
+  // ─── Left pane: BriefingTree + Proposals ─────────────────────────────
+
   const leftPane = (
-    <div className="space-y-4 min-w-0">
-      {/* Header */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Link href={planning ? `/projects/${planning.projectId}?tab=ceremonies` : "/projects"}>
+    <div className="surface overflow-y-auto min-h-0">
+      <h3 className="sticky top-0 z-10 bg-card/95 backdrop-blur text-sm font-semibold px-5 pt-5 pb-3 border-b">
+        Contexto de briefing
+      </h3>
+      <div className="px-5 py-4 space-y-4">
+        {activeNotes.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {planning.phase === "reading"
+              ? "Vitória está lendo os insumos…"
+              : planning.phase === "idle"
+              ? "Inicie a leitura para que Vitória extraia o contexto das reuniões."
+              : "Nenhuma nota ativa."}
+          </p>
+        ) : (
+          <BriefingTree notes={activeNotes} onDismiss={handleDismissNote} />
+        )}
+
+        {(planning.phase === "proposing" || planning.phase === "approving" || pendingActions.length > 0) && (
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-violet-500" />
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Propostas{" "}
+                <span className="font-normal normal-case">
+                  ({pendingActions.length} pendente{pendingActions.length !== 1 ? "s" : ""})
+                </span>
+              </h2>
+            </div>
+
+            {pendingActions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {planning.phase === "proposing"
+                  ? "Vitória está gerando propostas…"
+                  : "Nenhuma proposta pendente."}
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {pendingActions.map((action) => (
+                  <ProposalCard
+                    key={action.id}
+                    action={action}
+                    planningId={id}
+                    onDecide={loadActions}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {decidedActions.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Revisadas{" "}
+              <span className="font-normal normal-case">({decidedActions.length})</span>
+            </h2>
+            <div className="grid gap-2 sm:grid-cols-2 opacity-60">
+              {decidedActions.map((action) => (
+                <ProposalCard
+                  key={action.id}
+                  action={action}
+                  planningId={id}
+                  onDecide={loadActions}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+
+  // ─── Render ───────────────────────────────────────────────────────────
+
+  return (
+    <div className="w-full -m-6 h-full flex flex-col min-h-0">
+      <PageTitle title={title} />
+
+      {/* Top bar — header + ribbon */}
+      <div className="shrink-0 border-b bg-background px-6 py-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link href={backHref}>
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold truncate">{title}</h1>
+            <h1 className="text-base font-bold truncate">{title}</h1>
             {planning.scheduledFor && (
               <p className="text-xs text-muted-foreground">{fmtDate(planning.scheduledFor)}</p>
             )}
           </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setEditSheetOpen(true)}
+            className="h-8 w-8 p-0"
+            title="Editar Planning"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -370,108 +483,12 @@ export default function RitualDetailPage({
         )}
       </div>
 
-      {/* Briefing Tree */}
-      {(activeNotes.length > 0 || planning.phase === "reading" || planning.phase === "proposing") && (
-        activeNotes.length === 0 ? (
-          <section className="surface p-4">
-            <p className="text-xs text-muted-foreground">
-              {planning.phase === "reading"
-                ? "Vitória está lendo os insumos…"
-                : "Nenhuma nota ativa."}
-            </p>
-          </section>
-        ) : (
-          <BriefingTree notes={activeNotes} onDismiss={handleDismissNote} />
-        )
-      )}
+      {/* Content: tree (left) + chat (right) — each column scrolls independently */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] gap-4 p-4">
+        {leftPane}
 
-      {/* Propostas pendentes */}
-      {(planning.phase === "proposing" || planning.phase === "approving" || pendingActions.length > 0) && (
-        <section className="surface p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-violet-500" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Propostas{" "}
-              <span className="font-normal normal-case">
-                ({pendingActions.length} pendente{pendingActions.length !== 1 ? "s" : ""})
-              </span>
-            </h2>
-          </div>
-
-          {pendingActions.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {planning.phase === "proposing"
-                ? "Vitória está gerando propostas…"
-                : "Nenhuma proposta pendente."}
-            </p>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {pendingActions.map((action) => (
-                <ProposalCard
-                  key={action.id}
-                  action={action}
-                  planningId={id}
-                  onDecide={loadActions}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Decididas */}
-      {decidedActions.length > 0 && (
-        <section className="surface p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Revisadas{" "}
-            <span className="font-normal normal-case">({decidedActions.length})</span>
-          </h2>
-          <div className="grid gap-2 sm:grid-cols-2 opacity-60">
-            {decidedActions.map((action) => (
-              <ProposalCard
-                key={action.id}
-                action={action}
-                planningId={id}
-                onDecide={loadActions}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
-  );
-
-  const chatPanel = (
-    <ConversationPanel
-      agent="vitoria"
-      variant={isMobile ? "mobile" : "desktop"}
-      messages={messages as UIMessage[]}
-      status={status}
-      input={input}
-      onInputChange={setInput}
-      onSubmit={handleSubmit}
-      onStop={stop}
-      isOpen={mobileOpen}
-      onOpenChange={setMobileOpen}
-      planMode={planMode}
-      onPlanModeChange={setPlanMode}
-      className="h-full"
-    />
-  );
-
-  return (
-    <div className="min-h-0 h-full flex flex-col">
-      <PageTitle title={title} />
-
-      <div className="flex-1 min-h-0 lg:grid lg:grid-cols-[1fr_380px] lg:gap-4 lg:overflow-hidden">
-        {/* Left — scrollable */}
-        <div className="overflow-y-auto p-4 lg:p-6 space-y-0">
-          {leftPane}
-        </div>
-
-        {/* Right — chat, sticky desktop */}
         {!isMobile && (
-          <div className="hidden lg:flex lg:flex-col lg:overflow-hidden lg:py-4 lg:pr-4">
+          <div className="min-h-0">
             {chatPanel}
           </div>
         )}
@@ -492,6 +509,15 @@ export default function RitualDetailPage({
         linkedTranscripts={planning.linkedTranscripts}
         onUnlink={handleUnlinkTranscript}
         onImported={loadPlanning}
+      />
+
+      <PlanningSheet
+        open={editSheetOpen}
+        onOpenChange={setEditSheetOpen}
+        projectId={planning.projectId}
+        planning={planning}
+        onUpdated={loadPlanning}
+        onDeleted={() => router.push(backHref)}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />

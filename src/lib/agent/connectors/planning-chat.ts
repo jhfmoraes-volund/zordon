@@ -2,7 +2,7 @@ import { getUser, getCurrentMember, requireProjectViewApi } from "@/lib/dal";
 import { getPlanningById } from "@/lib/dal/planning";
 import { runAgent } from "../engine";
 import {
-  ensureThread,
+  ensurePlanningThread,
   persistResponseMessage,
   persistUserMessage,
 } from "../context";
@@ -67,7 +67,7 @@ export const planningChatConnector = {
     const member = await getCurrentMember();
     const threadId =
       requestedThreadId ??
-      (await ensureThread(planningId, "planning", member?.id));
+      (await ensurePlanningThread(planningId, member?.id));
 
     await persistUserMessage(threadId, message);
 
