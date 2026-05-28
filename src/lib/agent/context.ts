@@ -149,7 +149,7 @@ export function persistResponseMessage(threadId: string) {
  */
 export async function ensureThread(
   sessionId: string,
-  channel: "web" | "telegram" | "trigger" | "briefing",
+  channel: "web" | "telegram" | "trigger" | "briefing" | "planning",
   createdBy?: string
 ): Promise<string> {
   const { data: existing } = await db()

@@ -2970,7 +2970,7 @@ export type Database = {
           errorMessage: string | null
           execution: string
           id: string
-          meetingId: string
+          meetingId: string | null
           notes: string | null
           payload: Json
           planningCeremonyId: string | null
@@ -2978,6 +2978,7 @@ export type Database = {
           reviewNote: string | null
           reviewReasons: string[] | null
           source: string
+          sourceNoteIds: string[]
           targetSprintId: string | null
           taskId: string | null
           type: string
@@ -2995,7 +2996,7 @@ export type Database = {
           errorMessage?: string | null
           execution?: string
           id?: string
-          meetingId: string
+          meetingId?: string | null
           notes?: string | null
           payload?: Json
           planningCeremonyId?: string | null
@@ -3003,6 +3004,7 @@ export type Database = {
           reviewNote?: string | null
           reviewReasons?: string[] | null
           source: string
+          sourceNoteIds?: string[]
           targetSprintId?: string | null
           taskId?: string | null
           type: string
@@ -3020,7 +3022,7 @@ export type Database = {
           errorMessage?: string | null
           execution?: string
           id?: string
-          meetingId?: string
+          meetingId?: string | null
           notes?: string | null
           payload?: Json
           planningCeremonyId?: string | null
@@ -3028,6 +3030,7 @@ export type Database = {
           reviewNote?: string | null
           reviewReasons?: string[] | null
           source?: string
+          sourceNoteIds?: string[]
           targetSprintId?: string | null
           taskId?: string | null
           type?: string

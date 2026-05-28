@@ -65,7 +65,7 @@ export type PhaseContext = {
  * de um lado específico (ex: `reading → proposing` é o Alpha terminando
  * a ingestão; `proposing → approving` é o PM clicando).
  */
-export type Actor = "pm" | "alpha";
+export type Actor = "pm" | "alpha" | "vitoria";
 
 /**
  * Side effects que a API deve aplicar no UPDATE (timestamps a stampar).
@@ -169,14 +169,14 @@ export function transition(
     }
 
     case "reading->proposing": {
-      // Alpha emite "briefing pronto" — exige ≥1 summary + ≥3 outras notes.
-      if (actor !== "alpha") {
+      // Alpha ou Vitoria emitem "briefing pronto" — exige ≥1 summary + ≥3 outras notes.
+      if (actor !== "alpha" && actor !== "vitoria") {
         return {
           ok: false,
           from,
           to,
           reason: "wrong_actor",
-          detail: "só Alpha dispara reading → proposing",
+          detail: "só Alpha ou Vitoria dispara reading → proposing",
         };
       }
       if (ctx.summaryNoteCount < 1) {
