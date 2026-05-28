@@ -1,0 +1,306 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+import { PageHeader } from "@/components/page-header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogBody,
+} from "@/components/ui/responsive-dialog";
+import { Pencil, Trash2, UserPlus, FolderOpen } from "lucide-react";
+import {
+  ConfirmDialog,
+  type ConfirmState,
+} from "@/components/ui/confirm-dialog";
+
+export type Squad = {
+  id: string;
+  name: string;
+  projectSquads: { id: string; project: { id: string; name: string } }[];
+  members: { id: string; member: { id: string; name: string; role: string; position: string | null } }[];
+};
+
+export type Project = { id: string; name: string };
+export type Member = { id: string; name: string; role: string; position: string | null };
+
+type Props = {
+  initialSquads: Squad[];
+  initialProjects: Project[];
+  initialMembers: Member[];
+};
+
+export function SquadsTable({ initialSquads, initialProjects, initialMembers }: Props) {
+  const [squads, setSquads] = useState<Squad[]>(initialSquads);
+  const [projects] = useState<Project[]>(initialProjects);
+  const [allMembers] = useState<Member[]>(initialMembers);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Squad | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [form, setForm] = useState({
+    name: "", projectIds: [] as string[], memberIds: [] as string[],
+  });
+
+  const reload = async () => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("Squad")
+      .select(
+        "*, SquadMember(*, member:Member(*)), ProjectSquad(*, project:Project(id, name))",
+      )
+      .order("name");
+    if (data) setSquads(data.map(mapSquadRow));
+  };
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ name: "", projectIds: [], memberIds: [] });
+    setOpen(true);
+  };
+
+  const openEdit = (s: Squad) => {
+    setEditing(s);
+    setForm({
+      name: s.name,
+      projectIds: s.projectSquads.map((ps) => ps.project.id),
+      memberIds: s.members.map((m) => m.member.id),
+    });
+    setOpen(true);
+  };
+
+  const toggleProject = (projectId: string) => {
+    setForm((f) => ({
+      ...f,
+      projectIds: f.projectIds.includes(projectId)
+        ? f.projectIds.filter((id) => id !== projectId)
+        : [...f.projectIds, projectId],
+    }));
+  };
+
+  const toggleMember = (memberId: string) => {
+    setForm((f) => ({
+      ...f,
+      memberIds: f.memberIds.includes(memberId)
+        ? f.memberIds.filter((id) => id !== memberId)
+        : [...f.memberIds, memberId],
+    }));
+  };
+
+  const save = async () => {
+    const supabase = createClient();
+
+    if (editing) {
+      await supabase
+        .from("Squad")
+        .update({ name: form.name })
+        .eq("id", editing.id);
+
+      await Promise.all([
+        supabase.from("SquadMember").delete().eq("squadId", editing.id),
+        supabase.from("ProjectSquad").delete().eq("squadId", editing.id),
+      ]);
+
+      const memberRows = form.memberIds.map((memberId) => ({
+        id: crypto.randomUUID(),
+        squadId: editing.id,
+        memberId,
+      }));
+      const projectRows = form.projectIds.map((projectId) => ({
+        id: crypto.randomUUID(),
+        projectId,
+        squadId: editing.id,
+      }));
+
+      await Promise.all([
+        memberRows.length > 0
+          ? supabase.from("SquadMember").insert(memberRows)
+          : Promise.resolve(),
+        projectRows.length > 0
+          ? supabase.from("ProjectSquad").insert(projectRows)
+          : Promise.resolve(),
+      ]);
+    } else {
+      const squadId = crypto.randomUUID();
+      await supabase
+        .from("Squad")
+        .insert({ id: squadId, name: form.name, updatedAt: new Date().toISOString() });
+
+      const memberRows = form.memberIds.map((memberId) => ({
+        id: crypto.randomUUID(),
+        squadId,
+        memberId,
+      }));
+      const projectRows = form.projectIds.map((projectId) => ({
+        id: crypto.randomUUID(),
+        projectId,
+        squadId,
+      }));
+
+      await Promise.all([
+        memberRows.length > 0
+          ? supabase.from("SquadMember").insert(memberRows)
+          : Promise.resolve(),
+        projectRows.length > 0
+          ? supabase.from("ProjectSquad").insert(projectRows)
+          : Promise.resolve(),
+      ]);
+    }
+
+    setOpen(false);
+    reload();
+  };
+
+  const remove = (id: string) => {
+    setConfirmState({
+      title: "Remover este squad?",
+      confirmLabel: "Remover",
+      destructive: true,
+      onConfirm: async () => {
+        await createClient().from("Squad").delete().eq("id", id);
+        reload();
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Squads" onAdd={openNew} addLabel="Novo Squad" />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {squads.map((s) => (
+          <Card key={s.id}>
+            <CardHeader className="flex flex-row items-start justify-between pb-2">
+              <div>
+                <CardTitle className="text-base">
+                  <Link href={`/squads/${s.id}`} className="hover:underline">
+                    {s.name}
+                  </Link>
+                </CardTitle>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {s.projectSquads.map((ps) => (
+                    <Badge key={ps.id} variant="secondary" className="text-xs">
+                      <FolderOpen className="mr-1 h-3 w-3" />
+                      {ps.project.name}
+                    </Badge>
+                  ))}
+                  {s.projectSquads.length === 0 && (
+                    <span className="text-xs text-muted-foreground">Sem projetos</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => remove(s.id)}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {s.members.map((sm) => (
+                  <Badge key={sm.id} variant="outline">
+                    {sm.member.name}
+                  </Badge>
+                ))}
+                {s.members.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Sem membros</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {squads.length === 0 && (
+          <p className="text-muted-foreground col-span-2 text-center py-8">
+            Nenhum squad cadastrado.
+          </p>
+        )}
+      </div>
+
+      <ResponsiveDialog open={open} onOpenChange={setOpen}>
+        <ResponsiveDialogContent>
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>{editing ? "Editar Squad" : "Novo Squad"}</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Nome</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Projetos</Label>
+              <div className="flex flex-wrap gap-2 surface-inset p-3 min-h-[44px]">
+                {projects.map((p) => (
+                  <Badge
+                    key={p.id}
+                    variant={form.projectIds.includes(p.id) ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => toggleProject(p.id)}
+                  >
+                    <FolderOpen className="mr-1 h-3 w-3" />
+                    {p.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Membros</Label>
+              <div className="flex flex-wrap gap-2 surface-inset p-3 min-h-[44px]">
+                {allMembers.map((m) => (
+                  <Badge
+                    key={m.id}
+                    variant={form.memberIds.includes(m.id) ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => toggleMember(m.id)}
+                  >
+                    <UserPlus className="mr-1 h-3 w-3" />
+                    {m.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button onClick={save} disabled={!form.name}>Salvar</Button>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
+    </div>
+  );
+}
+
+/** Map Supabase row shape (PascalCase join tables) to the Squad type used by the UI. */
+export function mapSquadRow(row: Record<string, unknown>): Squad {
+  const projectSquads = (
+    (row.ProjectSquad as Array<Record<string, unknown>> | undefined) ?? []
+  ).map((ps) => ({
+    id: ps.id as string,
+    project: ps.project as { id: string; name: string },
+  }));
+
+  const members = (
+    (row.SquadMember as Array<Record<string, unknown>> | undefined) ?? []
+  ).map((sm) => ({
+    id: sm.id as string,
+    member: sm.member as { id: string; name: string; role: string; position: string | null },
+  }));
+
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    projectSquads,
+    members,
+  };
+}

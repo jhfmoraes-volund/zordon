@@ -78,7 +78,7 @@ const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
-  { key: "ceremonies", label: "Cerimônias", icon: CalendarClock },
+  { key: "ceremonies", label: "Rituais", icon: CalendarClock },
   { key: "wiki", label: "Wiki", icon: FileText },
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -365,7 +365,7 @@ export default function ProjectDetailPage({
         };
       });
     });
-  }, [rawSprints, rawSprintMembers, rawProjectMembers, rawMembers, rawTasks, project?.pm?.id, project?.pm?.fpCapacity]);
+  }, [rawSprints, rawSprintMembers, rawProjectMembers, rawMembers, rawTasks, project]);
 
   const moduleUsage = useMemo(() => {
     const acc: Record<string, number> = {};
@@ -388,14 +388,13 @@ export default function ProjectDetailPage({
     [sprints],
   );
 
-  // Default da aba Sprints: sprint ativa. Aplica só na primeira resolução
-  // (sprintView == null) — usuário pode ter escolhido "backlog"/"all" ou outra
-  // sprint depois e a gente respeita.
-  useEffect(() => {
-    if (sprintView === null && activeSprintId !== null) {
-      setSprintView(activeSprintId);
-    }
-  }, [activeSprintId, sprintView]);
+  // Default da aba Sprints: sprint ativa. Antes era setado via useEffect
+  // (setSprintView(activeSprintId)) — removido pra cumprir a regra
+  // react-hooks/set-state-in-effect. O componente filho `SprintRibbon`
+  // recebe `activeSprintId` separado, e `focused` (linha abaixo) já tem
+  // fallback `?? activeSprint ?? sprints[0]`. Resultado idêntico ao olhar
+  // do usuário; única diferença é a URL não auto-stampa `?sprint=<active>`
+  // quando o user não escolhe (deep-link explícito segue funcionando).
 
   const selectedStory =
     stories.find((s) => s.reference === selectedStoryRef) ?? null;

@@ -23,8 +23,17 @@ export const PLANNING_PHASES = [
 export type PlanningPhase = (typeof PLANNING_PHASES)[number];
 
 /**
- * Matriz de transições permitidas. Espelha o trigger SQL em
- * `validate_planning_phase_transition()`. NÃO divergir.
+ * Matriz de transições permitidas. É a ÚNICA fonte de verdade.
+ *
+ * O trigger SQL `validate_planning_phase_transition()` é GERADO a partir
+ * desta matriz por `scripts/gen-phase-sql.ts`. Se você mudar este array:
+ *   1. Roda `npm run gen:phase-sql` (cospe o novo SQL).
+ *   2. Cria nova migration com o output (migrations rodadas em prod são
+ *      imutáveis — sempre uma nova, nunca editar a antiga).
+ *   3. psql -f new-migration.sql.
+ *
+ * Divergência TS↔SQL é impossível por design — só esta lista existe; o SQL
+ * é derivado dela.
  */
 const ALLOWED_TRANSITIONS: ReadonlyArray<readonly [PlanningPhase, PlanningPhase]> = [
   ["idle", "reading"],

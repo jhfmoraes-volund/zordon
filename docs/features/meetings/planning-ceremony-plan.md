@@ -233,7 +233,9 @@ A UX é familiar (chat + ribbon de stats), mas o **conteúdo** é diferente do B
 | `reading\|proposing → idle` | PM "resetar briefing" | — | DELETE `PlanningContextNote` desta planning; mantém links |
 | `closed → archived` | cron (30d após close) OU PM manual | — | só pra Overview/Wiki não poluir |
 
-**Implementação:** `src/lib/planning/phase.ts` (TS puro, testável) + validação na API antes do UPDATE. Aprendizado Meeting (`canViewMeeting` TS + `can_view_meeting` SQL precisam coexistir) — adiciona **trigger `BEFORE UPDATE` leve** em `PlanningCeremony` que rejeita transições impossíveis (ex: `closed → reading`). TS valida ricamente (pré-condições, side effects); trigger é só o cinto de segurança contra escrita via service_role/seed.
+**Implementação:** `src/lib/planning/phase.ts` (TS puro, testável) + validação na API antes do UPDATE. Aprendizado Meeting (`canViewMeeting` TS + `can_view_meeting` SQL precisam coexistir) — trigger `BEFORE UPDATE` em `PlanningCeremony` rejeita transições impossíveis (ex: `closed → reading`). TS valida ricamente (pré-condições, side effects); trigger é o cinto de segurança contra escrita via service_role/seed.
+
+**Sincronia TS ↔ SQL (resolvido 2026-05-28):** o trigger SQL é **gerado** a partir da matriz `ALLOWED_TRANSITIONS` em `phase.ts` via `scripts/gen-phase-sql.ts` (comando `npm run gen:phase-sql`). Single source of truth — divergência impossível por design. Toda mudança na matriz: editar TS → regenerar → criar **nova** migration (migrations rodadas em prod são imutáveis). Teste `scripts/gen-phase-sql.test.ts` valida que toda transição da matriz aparece 1× no SQL e que não há "transições fantasma".
 
 ## O que reusa, o que é novo
 
