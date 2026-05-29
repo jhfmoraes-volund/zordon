@@ -175,3 +175,34 @@ iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS VTRDISC-007
 iter 2026-05-29T23:39:38Z: PASS VTRDISC-008
   files: src/components/design-session/design-session-tree.tsx
   learnings: Changed emptyMessage from 'user story' → 'PRD'; added 'PRD Tree' reference. Verified: 0 'Story Tree', ≥1 'PRD Tree|PRDs', typecheck passes.
+Perfect! Commit successful with hash **7e547b9**. Now let me create the final summary:
+
+---
+
+## Iteração 5 — VTRDISC-008 concluída
+
+**Story escolhida:** VTRDISC-008 — Renomear Story Tree → PRD Tree em design-session-tree.tsx
+
+**Verificações executadas:**
+1. ✓ `grep -cE 'Story Tree|story tree'` → 0 (sem referências a "Story Tree")
+2. ✓ `grep -cE 'PRD Tree|PRDs'` → 1 (contém "PRD Tree" ou "PRDs", ≥1)
+3. ✓ `npx tsc --noEmit` → exit 0 (typecheck passa)
+
+**Implementação:**
+- Atualizado `emptyMessage` na linha 217: 
+  - **Antes**: "Nenhuma user story criada ainda. Peça ao Vitor para gerar o esqueleto da árvore (modo Tree)."
+  - **Depois**: "Nenhum PRD criado ainda. Peça ao Vitor para gerar PRDs (modo PRD Tree)."
+- Mudança cirúrgica: apenas 1 linha de texto visível alterada
+- Nenhuma variável ou prop renomeada (conforme D2 do PRD — sem churn de imports)
+
+**Arquivos modificados:**
+- `src/components/design-session/design-session-tree.tsx` (1 linha)
+- `scripts/ralph/features/vitor-discovery-only/prd.json` (passes: true)
+- `scripts/ralph/features/vitor-discovery-only/progress.txt` (learning appended)
+
+**Commit hash:** 7e547b9
+
+**Próximo passo sugerido:** Story **VTRDISC-009** (regression test prompt-tools-coherence) agora é elegível — todas suas dependências (VTRDISC-003, -004, -005, -006, -007) passaram. Esta é a última story da feature. Próxima iteração deve implementar VTRDISC-009, concluindo o PRD vitor-discovery-only.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS VTRDISC-009
+  files: src/eval/vitor/prompt-tools-coherence.test.ts, src/lib/agent/prompt.ts (fix removed refs)
+  learnings: Created regression test checking absence of 8 removed tools (create_user_story, update_user_story, delete_user_story, set_story_refinement, manage_story_ac, create_task, update_task, delete_task) and presence of 3 PRD tools (propose_prd, update_prd, approve_prd). Fixed 2 stale refs (delete_task, delete_user_story) in Nivel 3 confirmation list. Test passes via npx tsx. Feature vitor-discovery-only complete (all 9 stories pass).

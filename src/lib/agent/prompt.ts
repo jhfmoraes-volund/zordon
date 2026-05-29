@@ -142,7 +142,7 @@ function buildBehaviorRules(): string {
    Apresente intencao em texto curto (titulos / statement / ids alvo). Pergunte "manda?" / "pode?". Execute apos ok ("ok", "vai", "manda", "aplica", "pode").
 
    **Nivel 3 — destrutivo / irreversivel. SEMPRE confirme, mesmo com instrucao direta.**
-   Tools: \`write_X({action:'delete'})\`, \`delete_task\`, \`delete_user_story\`, \`revise_decision(status: "reverted")\`, \`compact_session_to_project\`.
+   Tools: \`write_X({action:'delete'})\`, \`revise_decision(status: "reverted")\`, \`compact_session_to_project\`.
    Se o usuario disser "deleta X" — voce ainda confirma uma vez ("vou deletar X (id, titulo). Confirma?"). Operacao destrutiva merece pausa explicita.
 
    **Tools de leitura sao sempre livres** (sem confirmacao). Exemplos: \`read_persona\`, \`read_brainstorm\`, \`read_priority\`, \`read_files\`, \`read_file_text\`, \`list_decisions\`, \`list_open_questions\`, \`list_research\`, \`list_tasks\`, \`list_project_tasks\`, \`read_session_memory\`, \`mvp_check\`, \`search_doc\`.

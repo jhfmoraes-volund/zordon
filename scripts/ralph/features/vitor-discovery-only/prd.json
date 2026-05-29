@@ -300,7 +300,8 @@
       "estimateMinutes": 20,
       "touches": [
         "src/eval/vitor/prompt-tools-coherence.test.ts"
-      ]
+      ],
+      "passes": true
     }
   ]
 }
