@@ -43,3 +43,21 @@ Excelente! Iteração concluída com sucesso.
 iter 2026-05-29T21:35:44Z: PASS WIKI-003
   files: supabase/migrations/20260530e_project_wiki_section_source_table.sql
   learnings: FK ON DELETE CASCADE garante limpeza automática de sources quando seção wiki deletada; RLS via EXISTS + JOIN permite SELECT sem expor sources de projetos inacessíveis.
+Perfect! Commit completed successfully. Let me provide a summary:
+
+---
+
+## Resumo da iteração Ralph #3
+
+**Story escolhida:** WIKI-003 — Migration: ProjectWikiSectionSource table
+
+**Verificações executadas:**
+✅ Migration criada em `supabase/migrations/20260530e_project_wiki_section_source_table.sql`  
+✅ Executada via `psql "$DIRECT_URL" -f ...` sem erros (CREATE TABLE, 2× CREATE INDEX, ALTER TABLE, CREATE POLICY, REVOKE)  
+✅ Ambos os índices criados: `ix_pwss_section` (wikiSectionId) e `ix_pwss_source` (sourceType, sourceId)  
+✅ RLS habilitado com policy `pwss_select` (via EXISTS + JOIN com ProjectWikiSection + can_view_project)  
+✅ INSERT/UPDATE/DELETE revogados de role `authenticated` (verificado via `has_table_privilege` = false)
+
+**Commit:** `6b805b7` — ralph(project-wiki): WIKI-003 Migration ProjectWikiSectionSource table
+
+**Próximo passo sugerido:** WIKI-004 (Regenerate database.types.ts) — todas as dependências (WIKI-001, WIKI-002, WIKI-003) agora passaram, elegível para próxima iteração.

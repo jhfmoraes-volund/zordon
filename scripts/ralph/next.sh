@@ -27,7 +27,19 @@ READY_DIR="$REPO_ROOT/docs/prd/ready"
 IN_PROGRESS_DIR="$REPO_ROOT/docs/prd/in-progress"
 BLOCKED_DIR="$REPO_ROOT/docs/prd/blocked"
 
-MAX_ITER="${1:-10}"
+# Parse args: --yes/-y pula confirmação; primeiro arg numérico é max_iter
+ASSUME_YES=0
+MAX_ITER=10
+for arg in "$@"; do
+  case "$arg" in
+    -y|--yes) ASSUME_YES=1 ;;
+    *)
+      if [[ "$arg" =~ ^[0-9]+$ ]]; then
+        MAX_ITER="$arg"
+      fi
+      ;;
+  esac
+done
 
 # shellcheck source=lib/prd-paths.sh
 source "$RALPH_DIR/lib/prd-paths.sh"
@@ -49,9 +61,10 @@ if [ "${#in_progress_files[@]}" -gt 1 ]; then
   exit 1
 fi
 
+resume_mode=0
 if [ "${#in_progress_files[@]}" -eq 1 ]; then
   next_path="${in_progress_files[0]}"
-  echo "▶ Retomando PRD já em in-progress: $(basename "$next_path")"
+  resume_mode=1
 else
   if [ ! -d "$READY_DIR" ]; then
     echo "❌ $READY_DIR não existe. Crie pastas: mkdir -p $READY_DIR" >&2
@@ -66,11 +79,60 @@ else
     echo "   - Ver fila completa:  ls docs/prd/*/prd-*.md"
     exit 0
   fi
-  # Move pra in-progress
+fi
+
+filename="$(basename "$next_path")"
+feature_preview="${filename#prd-}"
+feature_preview="${feature_preview%.md}"
+prdjson_preview="$RALPH_DIR/features/$feature_preview/prd.json"
+passes_preview="?"
+total_preview="?"
+if [ -f "$prdjson_preview" ]; then
+  passes_preview="$(jq '[.userStories[] | select(.passes==true)] | length' "$prdjson_preview" 2>/dev/null || echo "?")"
+  total_preview="$(jq '.userStories | length' "$prdjson_preview" 2>/dev/null || echo "?")"
+fi
+
+echo ""
+echo "═══════════════════════════════════════════════════════════════════════"
+if [ "$resume_mode" -eq 1 ]; then
+  echo "  📍 RETOMAR — $feature_preview ($passes_preview/$total_preview stories) em in-progress/"
+else
+  echo "  ⏭ PRÓXIMO — $feature_preview ($passes_preview/$total_preview stories) de ready/"
+fi
+echo "  max_iter: $MAX_ITER · branch: $(git rev-parse --abbrev-ref HEAD)"
+
+# Mostrar outras opções na fila pra contexto
+ready_others="$(find "$READY_DIR" -maxdepth 1 -name 'prd-*.md' -type f 2>/dev/null | sort)"
+if [ "$resume_mode" -eq 1 ] && [ -n "$ready_others" ]; then
+  echo ""
+  echo "  ⚠ Há PRDs em ready/ aguardando (mas in-progress tem prioridade):"
+  echo "$ready_others" | sed "s|.*/|     • |"
+fi
+echo "═══════════════════════════════════════════════════════════════════════"
+
+# Confirmação (skipa se --yes ou stdin não-TTY)
+if [ "$ASSUME_YES" -ne 1 ]; then
+  if [ -t 0 ]; then
+    read -p "Continuar? [y/N] " confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+      echo "⏸ Cancelado pelo usuário."
+      exit 0
+    fi
+  else
+    echo ""
+    echo "❌ stdin não é TTY e --yes não foi passado. Use:"
+    echo "   bash scripts/ralph/next.sh --yes [max_iter]"
+    echo "   ou rode no terminal interativo."
+    exit 1
+  fi
+fi
+
+# Se for novo PRD, move pra in-progress agora
+if [ "$resume_mode" -eq 0 ]; then
   mkdir -p "$IN_PROGRESS_DIR"
-  mv "$next_path" "$IN_PROGRESS_DIR/$(basename "$next_path")"
-  next_path="$IN_PROGRESS_DIR/$(basename "$next_path")"
-  echo "▶ Picked: $(basename "$next_path") — movido pra in-progress/"
+  mv "$next_path" "$IN_PROGRESS_DIR/$filename"
+  next_path="$IN_PROGRESS_DIR/$filename"
+  echo "▶ Movido pra in-progress/"
 fi
 
 # Deriva feature do filename: prd-<feature>.md

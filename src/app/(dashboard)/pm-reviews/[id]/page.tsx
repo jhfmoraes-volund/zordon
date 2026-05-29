@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageTitle } from "@/components/app-shell";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
@@ -19,6 +19,8 @@ import type { PMReviewDetail } from "@/lib/dal/pm-review";
 import { PMReviewReport } from "@/components/pm-review/pm-review-report";
 import { PMReviewRibbon } from "@/components/pm-review/pm-review-ribbon";
 import { PMReviewSheet } from "@/components/pm-review/pm-review-sheet";
+import { PMReviewWizard } from "@/components/pm-review/pm-review-wizard";
+import { PMReviewInsumosSheet } from "@/components/pm-review/pm-review-insumos-sheet";
 
 const SYNTHESIZE_PROMPT =
   "Sintetize o report agora. Use update_pm_review_report com as 6 seções fixas em markdown, baseado nas notes ativas e fontes linkadas.";
@@ -37,6 +39,8 @@ export default function PMReviewPage({
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [editSheetOpen, setEditSheetOpen] = useState(false);
+  const [insumosSheetOpen, setInsumosSheetOpen] = useState(false);
+  const [wizardExpanded, setWizardExpanded] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
 
   const threadIdRef = useRef<string | null>(null);
@@ -143,11 +147,19 @@ export default function PMReviewPage({
     setInput("");
   }, [input, status, sendMessage]);
 
-  const handleRequestSync = useCallback(() => {
-    if (status === "streaming" || status === "submitted") return;
-    sendMessage({ text: SYNTHESIZE_PROMPT });
-    if (isMobile) setMobileOpen(true);
-  }, [status, sendMessage, isMobile]);
+  // Envia mensagem direta no chat (sem digitar). Usada pelos CTAs do wizard.
+  const handleSendToVitoria = useCallback(
+    (text: string) => {
+      if (status === "streaming" || status === "submitted") return;
+      sendMessage({ text });
+      if (isMobile) setMobileOpen(true);
+    },
+    [status, sendMessage, isMobile],
+  );
+
+  const handleSynthesize = useCallback(() => {
+    handleSendToVitoria(SYNTHESIZE_PROMPT);
+  }, [handleSendToVitoria]);
 
   // ─── Publish ──────────────────────────────────────────────────────────
 
@@ -209,6 +221,23 @@ export default function PMReviewPage({
   }
 
   const backHref = `/projects/${pmReview.projectId}?tab=ceremonies`;
+  const hasReport = pmReview.reportMarkdown !== null;
+  const refreshing = status === "streaming" || status === "submitted";
+
+  const wizard = (
+    <PMReviewWizard
+      pmReviewId={pmReview.id}
+      linkedTranscripts={pmReview.linkedTranscripts}
+      linkedMeetings={pmReview.linkedMeetings}
+      notes={pmReview.notes}
+      hasReport={hasReport}
+      refreshing={refreshing}
+      onOpenInsumos={() => setInsumosSheetOpen(true)}
+      onSendToVitoria={handleSendToVitoria}
+      onSynthesize={handleSynthesize}
+      onChanged={loadPMReview}
+    />
+  );
 
   const chatPanel = (
     <ConversationPanel
@@ -244,19 +273,42 @@ export default function PMReviewPage({
         busy={busy}
         onEdit={() => setEditSheetOpen(true)}
         onPublish={handlePublish}
+        onOpenContext={() => setInsumosSheetOpen(true)}
       />
 
-      {/* Report (esquerda) + chat com Vitoria (direita) */}
+      {/* Main panel: wizard (sem report) OU report + collapsible curar (com report) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] gap-4 p-4">
         <div className="surface overflow-y-auto min-h-0 p-6">
-          <PMReviewReport
-            reportMarkdown={pmReview.reportMarkdown}
-            reportGeneratedAt={pmReview.reportGeneratedAt}
-            notes={pmReview.notes}
-            projectContext={pmReview.projectContext}
-            onRequestSync={handleRequestSync}
-            refreshing={status === "streaming" || status === "submitted"}
-          />
+          {hasReport ? (
+            <>
+              <PMReviewReport
+                reportMarkdown={pmReview.reportMarkdown}
+                reportGeneratedAt={pmReview.reportGeneratedAt}
+                notes={pmReview.notes}
+                projectContext={pmReview.projectContext}
+                onRequestSync={handleSynthesize}
+                refreshing={refreshing}
+              />
+              {/* Curar contexto — collapsible no rodapé */}
+              <div className="mt-8 border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => setWizardExpanded((v) => !v)}
+                  className="flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                >
+                  {wizardExpanded ? (
+                    <ChevronUp className="size-3.5" />
+                  ) : (
+                    <ChevronDown className="size-3.5" />
+                  )}
+                  Curar contexto (insumos · notas · síntese)
+                </button>
+                {wizardExpanded && <div className="mt-3">{wizard}</div>}
+              </div>
+            </>
+          ) : (
+            wizard
+          )}
         </div>
 
         {!isMobile && <div className="min-h-0">{chatPanel}</div>}
@@ -272,6 +324,16 @@ export default function PMReviewPage({
           {chatPanel}
         </>
       )}
+
+      <PMReviewInsumosSheet
+        pmReviewId={pmReview.id}
+        projectId={pmReview.projectId}
+        open={insumosSheetOpen}
+        onOpenChange={setInsumosSheetOpen}
+        linkedTranscripts={pmReview.linkedTranscripts}
+        linkedMeetings={pmReview.linkedMeetings}
+        onChanged={loadPMReview}
+      />
 
       <PMReviewSheet
         open={editSheetOpen}

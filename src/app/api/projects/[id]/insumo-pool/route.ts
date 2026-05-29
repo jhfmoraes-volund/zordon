@@ -78,7 +78,7 @@ export async function GET(
     const sprintName = (p.sprint as { name: string } | null)?.name ?? null;
     for (const l of (p.links ?? []) as Array<{
       transcriptRefId: string;
-      transcript: PoolTranscript["origin"] extends infer _ ? unknown : never;
+      transcript: unknown;
     }>) {
       const t = (l as { transcript: PoolTranscript & { id: string } | null }).transcript;
       if (!t) continue;
