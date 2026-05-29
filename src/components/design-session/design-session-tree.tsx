@@ -214,7 +214,7 @@ export function DesignSessionTree({
         onOpenStory={onOpenStory}
         onOpenTask={(taskId) => setOpenTaskId(taskId)}
         extraStoryActions={renderVitorActions}
-        emptyMessage="Nenhuma user story criada ainda. Peça ao Vitor para gerar o esqueleto da árvore (modo Tree)."
+        emptyMessage="Nenhum PRD criado ainda. Peça ao Vitor para gerar PRDs (modo PRD Tree)."
       />
 
       <TaskSheetByRef

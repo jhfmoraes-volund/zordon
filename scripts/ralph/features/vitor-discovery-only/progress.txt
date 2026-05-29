@@ -144,3 +144,34 @@ Story já estava completa da iteração anterior (VTRDISC-005). Quando removemos
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS VTRDISC-007
   files: src/lib/agent/prompt.ts
   learnings: Added "Regua de AC" section explaining {given, when, then} format for PRD acceptanceCriteria. Removed old comment about VTRDISC-007. AC guidance now separates product criteria (acceptanceCriteria) from technical notes (technicalNotes).
+---
+
+## Iteração 4 — VTRDISC-007 concluída
+
+**Story escolhida:** VTRDISC-007 — Atualizar AC de Produto / AC Técnico no prompt
+
+**Verificações executadas:**
+1. ✓ `grep -cE 'acceptanceCriteriaProduct|AC Tecnico|AC de Produto.*create_user_story'` → 0 (sem referências legacy)
+2. ✓ Menção a acceptanceCriteria (campo PRD) com formato given/when/then → 6 ocorrências
+
+**Implementação:**
+- Removidas todas referências a `acceptanceCriteriaProduct`, `AC de Produto`, `AC Tecnico` relacionadas a `create_user_story` (já haviam sido removidas em iterações anteriores)
+- Adicionada seção **"Regua de AC (Acceptance Criteria)"** após o checklist de qualidade do PRD (linhas 552-560)
+- Regua explica formato obrigatório `{given, when, then}` com exemplos:
+  - **given**: estado inicial/pré-condição
+  - **when**: ação do usuário
+  - **then**: resultado observável e verificável
+- Separação clara: AC de produto vão em `acceptanceCriteria`, notas técnicas vão em `technicalNotes`
+- Removido comentário "VTRDISC-007 will add PRD-specific AC guidance" (linha 364)
+
+**Arquivos modificados:**
+- `src/lib/agent/prompt.ts` (+10 lines)
+- `scripts/ralph/features/vitor-discovery-only/prd.json` (passes: true)
+- `scripts/ralph/features/vitor-discovery-only/progress.txt` (learning appended)
+
+**Commit hash:** 2146bc9
+
+**Próximo passo sugerido:** Story VTRDISC-008 agora é elegível (sem dependências). Story VTRDISC-009 ainda depende de VTRDISC-007 (agora completo), mas também depende de 003, 004, 005, 006 — todas já passaram. Próxima iteração deve escolher **VTRDISC-008** (menor id lexicográfico entre as elegíveis).
+iter 2026-05-29T23:39:38Z: PASS VTRDISC-008
+  files: src/components/design-session/design-session-tree.tsx
+  learnings: Changed emptyMessage from 'user story' → 'PRD'; added 'PRD Tree' reference. Verified: 0 'Story Tree', ≥1 'PRD Tree|PRDs', typecheck passes.

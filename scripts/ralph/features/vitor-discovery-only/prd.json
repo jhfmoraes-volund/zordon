@@ -261,7 +261,8 @@
       "estimateMinutes": 15,
       "touches": [
         "src/components/design-session/design-session-tree.tsx"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "VTRDISC-009",
