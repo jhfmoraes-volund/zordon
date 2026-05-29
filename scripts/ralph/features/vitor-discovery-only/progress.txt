@@ -4,3 +4,21 @@ iter 2026-05-29T23:07:31Z: PASS VTRDISC-001
 iter 2026-05-29T23:10:00Z: PASS VTRDISC-002
   files: src/lib/agent/agents/vitor/index.ts (já implementado na iter anterior)
   learnings: pickVerbosity já mapeava PRD_DRAFTING→refinement, PRD_REVIEW→execution, default→discovery. Checks confirmaram zero refs legacy.
+---
+
+## Iteração 2 — VTRDISC-002 concluída
+
+**Story escolhida:** VTRDISC-002 — Atualizar pickVerbosity em vitor/index.ts pra novas sub-phases
+
+**Verificações executadas:**
+1. `npx tsc --noEmit` → ✓ exit 0
+2. `grep -cE 'BRIEFING_SUB_PHASES.STORY_TREE|...' src/lib/agent/agents/vitor/index.ts` → ✓ 0 (sem refs legacy)
+
+**Resultado:** A implementação já estava completa da iteração anterior (commit f3059b1). A função `pickVerbosity` já reconhece `PRD_DRAFTING` → 'refinement', `PRD_REVIEW` → 'execution', e fallback 'discovery' para valores legacy.
+
+**Commit hash:** 5947cca
+
+**Próximo passo sugerido:** Stories VTRDISC-003, 004, 005, 007 e 008 agora são elegíveis (todas dependem apenas de VTRDISC-001 que passou). A próxima iteração deve escolher VTRDISC-003 (menor id lexicográfico).
+iter 2026-05-29T23:16:34Z: PASS VTRDISC-003
+  files: src/lib/agent/prompt.ts
+  learnings: Reescreveu Sub-fase STORY_TREE→PRD_DRAFTING com checklist 8-bullets, exemplo few-shot propose_prd completo com sourceCardIds≥2 (bs#a7f3k2m, bs#d9p1x8q) e technicalNotes citando D-NN. Tools: list_prds, read_session_memory, propose_prd em lote.
