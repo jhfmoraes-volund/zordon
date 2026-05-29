@@ -203,7 +203,8 @@
       "estimateMinutes": 25,
       "touches": [
         "src/lib/agent/prompt.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "VTRDISC-007",
