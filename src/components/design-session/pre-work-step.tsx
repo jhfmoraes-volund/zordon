@@ -344,7 +344,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
           onClose={() => setMobileOpen(false)}
         />
         <TranscriptModal
-          sessionId={sessionId}
+          apiUrl={`/api/design-sessions/${sessionId}/transcripts`}
           open={roamModalOpen}
           onOpenChange={setRoamModalOpen}
           onImported={(t) => setTranscripts((cur) => [t, ...cur])}
@@ -386,7 +386,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
       </div>
 
       <TranscriptModal
-        sessionId={sessionId}
+        apiUrl={`/api/design-sessions/${sessionId}/transcripts`}
         open={roamModalOpen}
         onOpenChange={setRoamModalOpen}
         onImported={(t) => setTranscripts((cur) => [t, ...cur])}

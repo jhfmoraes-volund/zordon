@@ -17,6 +17,7 @@ type Props = {
 const PALETTE: Record<AgentId, string> = {
   alpha: "0.637 0.237 22",
   vitor: "0.74 0.18 55",
+  vitoria: "0.606 0.25 292",
 };
 
 export function ConversationFab({

@@ -1,7 +1,8 @@
 import { AlphaIcon } from "@/components/icons/alpha-icon";
 import { VitorIcon } from "@/components/icons/vitor-icon";
+import { VitoriaIcon } from "@/components/icons/vitoria-icon";
 
-export type AgentId = "alpha" | "vitor";
+export type AgentId = "alpha" | "vitor" | "vitoria";
 
 export type AgentTheme = {
   id: AgentId;
@@ -52,6 +53,21 @@ export const AGENT_THEMES: Record<AgentId, AgentTheme> = {
     collapseThreshold: 3,
     planEventName: "chat:planmode:vitor",
     planStorageKey: "chat.planMode.vitor",
+  },
+  vitoria: {
+    id: "vitoria",
+    label: "Vitoria",
+    icon: VitoriaIcon,
+    // Violeta — ritmo, cerimônia, planejamento.
+    accent: "oklch(0.606 0.25 292)",
+    accentRaw: "0.606 0.25 292",
+    tileBgRaw: "0.16 0.06 292",
+    accentSoft: "oklch(0.606 0.25 292 / 0.08)",
+    glow: "0 0 14px -4px oklch(0.606 0.25 292 / 0.25)",
+    emptyHint: "Olá. Vamos montar a melhor planning da semana.",
+    collapseThreshold: 6,
+    planEventName: "chat:planmode:vitoria",
+    planStorageKey: "chat.planMode.vitoria",
   },
 };
 

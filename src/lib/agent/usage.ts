@@ -16,6 +16,12 @@ type RecordArgs = {
   }>;
   /** OpenRouter generation id from event.response.id — used to look up details via /generation. */
   generationId: string | null;
+  /** Project this call belongs to. Used pra agrupar custo por projeto no painel. */
+  projectId?: string | null;
+  /** Sub-call discriminator: 'turn' (default) | 'extract' | 'enrich' | 'estimate' | 'other'. */
+  callKind?: "turn" | "extract" | "enrich" | "estimate" | "other";
+  /** Wall-clock latency da chamada (ms). */
+  latencyMs?: number | null;
 };
 
 type LMUsage = {
@@ -109,6 +115,9 @@ export async function recordAgentUsage(args: RecordArgs): Promise<void> {
         reasoningTokens: totalUsage.reasoningTokens ?? null,
         costUsd: totalCost,
         generationId: args.generationId,
+        projectId: args.projectId ?? null,
+        callKind: args.callKind ?? "turn",
+        latencyMs: args.latencyMs ?? null,
         rawUsage: {
           totalUsage: totalUsage as unknown as Json,
           stepCount: args.steps.length,
@@ -121,5 +130,74 @@ export async function recordAgentUsage(args: RecordArgs): Promise<void> {
     }
   } catch (err) {
     console.error("[recordAgentUsage] unexpected error:", err);
+  }
+}
+
+type SubAgentArgs = {
+  agentName: string;       // 'vitoria' | 'alpha'
+  callKind: "extract" | "enrich" | "estimate" | "other";
+  modelId: string;
+  threadId: string | null; // sessão (ChatThread) que originou a chamada
+  memberId: string | null | undefined;
+  projectId: string | null | undefined;
+  /** Retorno de `generateObject`/`generateText` — formato AI SDK. */
+  usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    cachedInputTokens?: number;
+    reasoningTokens?: number;
+  };
+  /** providerMetadata da resposta (pra extrair `cost` do OpenRouter). */
+  providerMetadata: unknown;
+  generationId?: string | null;
+  latencyMs: number;
+};
+
+/**
+ * Persiste 1 row em AgentUsage pra chamada single-shot (sub-agente
+ * Haiku/Sonnet via generateObject). Distinto de `recordAgentUsage` que
+ * agrega N steps de streamText.
+ *
+ * Falhas são swallowed — telemetria nunca bloqueia a resposta.
+ */
+export async function recordSubAgentUsage(args: SubAgentArgs): Promise<void> {
+  try {
+    const orUsage = getOrUsage(args.providerMetadata);
+    const cost = typeof orUsage.cost === "number" ? orUsage.cost : 0;
+
+    const promptTokens = args.usage.inputTokens ?? 0;
+    const completionTokens = args.usage.outputTokens ?? 0;
+    const totalTokens =
+      args.usage.totalTokens ?? promptTokens + completionTokens;
+
+    const { error } = await db()
+      .from("AgentUsage")
+      .insert({
+        threadId: args.threadId,
+        agentName: args.agentName,
+        memberId: args.memberId ?? null,
+        modelId: args.modelId,
+        promptTokens,
+        completionTokens,
+        totalTokens,
+        cachedPromptTokens: args.usage.cachedInputTokens ?? null,
+        reasoningTokens: args.usage.reasoningTokens ?? null,
+        costUsd: cost,
+        generationId: args.generationId ?? null,
+        projectId: args.projectId ?? null,
+        callKind: args.callKind,
+        latencyMs: args.latencyMs,
+        rawUsage: {
+          usage: args.usage as unknown as Json,
+          providerMetadata: args.providerMetadata as Json,
+        } as unknown as Json,
+      });
+
+    if (error) {
+      console.error("[recordSubAgentUsage] insert failed:", error.message);
+    }
+  } catch (err) {
+    console.error("[recordSubAgentUsage] unexpected error:", err);
   }
 }

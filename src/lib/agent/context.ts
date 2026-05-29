@@ -149,7 +149,7 @@ export function persistResponseMessage(threadId: string) {
  */
 export async function ensureThread(
   sessionId: string,
-  channel: "web" | "telegram" | "trigger" | "briefing",
+  channel: "web" | "telegram" | "trigger" | "briefing" | "planning",
   createdBy?: string
 ): Promise<string> {
   const { data: existing } = await db()
@@ -176,6 +176,45 @@ export async function ensureThread(
   if (error) {
     console.error("[ensureThread] insert failed:", error.message, error.details, error.hint);
     throw new Error(`Failed to create chat thread: ${error.message}`);
+  }
+
+  return created!.id;
+}
+
+/**
+ * Ensures a thread exists for a PlanningCeremony.
+ * Uses agentName = planningId + channel = "planning" so each planning
+ * has its own thread without touching the DesignSession FK on sessionId.
+ */
+export async function ensurePlanningThread(
+  planningId: string,
+  createdBy?: string,
+): Promise<string> {
+  const { data: existing } = await db()
+    .from("ChatThread")
+    .select("id")
+    .eq("agentName", planningId)
+    .eq("channel", "planning")
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  const { data: created, error } = await db()
+    .from("ChatThread")
+    .insert({
+      sessionId: null,
+      agentName: planningId,
+      channel: "planning",
+      createdBy: createdBy || null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[ensurePlanningThread] insert failed:", error.message);
+    throw new Error(`Failed to create planning thread: ${error.message}`);
   }
 
   return created!.id;

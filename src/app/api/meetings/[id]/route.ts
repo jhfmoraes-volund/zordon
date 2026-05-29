@@ -164,12 +164,7 @@ async function gateEdit(meetingId: string): Promise<Response | null> {
       status: 403,
     });
   }
-  // Builder: can only edit private meetings they created themselves.
-  if (m.type !== "private") {
-    return new Response("Forbidden — builders can only edit private meetings", {
-      status: 403,
-    });
-  }
+  // Builder: can only edit meetings they created themselves.
   const actorMemberId = await getActorMemberId();
   if (!actorMemberId || actorMemberId !== m.createdById) {
     return new Response("Forbidden — only the creator can modify", {
@@ -388,18 +383,6 @@ export async function PUT(
 
   // 4. Project links (C — daily/general permitem, super_planning trava)
   if (body.projectIds !== undefined && type !== "pm_review") {
-    // Builder editing a private: cannot link projects. Manager+ continues
-    // to be able to link projects on private meetings (existing behavior).
-    const editorLevel = await getEffectiveAccessLevel();
-    if (
-      !hasMinAccessLevel(editorLevel, "manager") &&
-      body.projectIds.length > 0
-    ) {
-      return NextResponse.json(
-        { error: "Builders não podem vincular projetos a uma reunião privada." },
-        { status: 403 },
-      );
-    }
     if (type === "super_planning") {
       return NextResponse.json(
         { error: "Não é possível alterar o projeto de uma reunião Super Planning." },

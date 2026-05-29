@@ -93,11 +93,22 @@ function expectErr(
   assert.deepEqual(r.stamps, {}, "approving não stampa timestamp");
 }
 
-// approving → closed (PM, 0 pendentes)
+// approving → closed (PM) — staging-commit: sem check de pendentes
 {
   const r = expectOk("approving", "closed", ctx({ pendingActionCount: 0 }), "pm");
   assert.equal(r.stamps.closedAt, FIXED_NOW);
 }
+
+// approving → closed (PM) também passa com pendentes — concludePlanning aplica
+{
+  const r = expectOk("approving", "closed", ctx({ pendingActionCount: 3 }), "pm");
+  assert.equal(r.stamps.closedAt, FIXED_NOW);
+}
+
+// Atalhos staging-commit: qualquer fase ativa → closed
+expectOk("idle", "closed", ctx(), "pm");
+expectOk("reading", "closed", ctx(), "pm");
+expectOk("proposing", "closed", ctx({ pendingActionCount: 2 }), "pm");
 
 // closed → archived
 {
@@ -117,15 +128,16 @@ expectOk("proposing", "idle", ctx(), "pm");
 // ─── 2. TRANSIÇÕES INVÁLIDAS ────────────────────────────────────────────────
 
 // Fora da matriz
-expectErr("idle", "closed", ctx({ linkedMeetingCount: 1 }), "pm", "invalid_transition");
 expectErr("idle", "archived", ctx(), "pm", "invalid_transition");
 expectErr("closed", "reading", ctx(), "pm", "invalid_transition");
+expectErr("closed", "idle", ctx(), "pm", "invalid_transition"); // sem reopen
 expectErr("approving", "idle", ctx(), "pm", "invalid_transition"); // reset só de reading/proposing
 
 // Ator errado
 expectErr("idle", "reading", ctx({ linkedMeetingCount: 1 }), "alpha", "wrong_actor");
 expectErr("reading", "proposing", ctx({ contextNoteCount: 4, summaryNoteCount: 1 }), "pm", "wrong_actor");
 expectErr("approving", "closed", ctx(), "alpha", "wrong_actor");
+expectErr("idle", "closed", ctx(), "alpha", "wrong_actor"); // só PM conclui
 expectErr("reading", "idle", ctx(), "alpha", "wrong_actor");
 
 // Pré-condição: idle → reading sem insumo
@@ -146,8 +158,6 @@ expectErr(
 // Pré-condição: proposing → approving sem actions pendentes
 expectErr("proposing", "approving", ctx(), "pm", "missing_preconditions");
 
-// Pré-condição: approving → closed com pendentes restantes
-expectErr("approving", "closed", ctx({ pendingActionCount: 1 }), "pm", "missing_preconditions");
 
 // Phase desconhecida
 expectErr("foo", "reading", ctx(), "pm", "unknown_phase");
@@ -155,9 +165,9 @@ expectErr("idle", "bar", ctx({ linkedMeetingCount: 1 }), "pm", "unknown_phase");
 
 // ─── 3. nextPhases ─────────────────────────────────────────────────────────
 
-assert.deepEqual(nextPhases("idle").sort(), ["reading"].sort());
-assert.deepEqual(nextPhases("reading").sort(), ["idle", "proposing"].sort());
-assert.deepEqual(nextPhases("proposing").sort(), ["approving", "idle"].sort());
+assert.deepEqual(nextPhases("idle").sort(), ["closed", "reading"].sort());
+assert.deepEqual(nextPhases("reading").sort(), ["closed", "idle", "proposing"].sort());
+assert.deepEqual(nextPhases("proposing").sort(), ["approving", "closed", "idle"].sort());
 assert.deepEqual(nextPhases("approving"), ["closed"]);
 assert.deepEqual(nextPhases("closed"), ["archived"]);
 assert.deepEqual(nextPhases("archived"), [], "archived é terminal");

@@ -5,8 +5,16 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { getModel } from "@/lib/ai/provider";
+import { recordSubAgentUsage } from "../../../usage";
 
 const HAIKU_MODEL = "anthropic/claude-haiku-4.5";
+
+export type ExtractActionsTelemetry = {
+  agentName: string;                    // 'alpha'
+  threadId: string | null | undefined;
+  memberId: string | null | undefined;
+  projectId: string | null | undefined;
+};
 const MAX_TASKS_IN_CONTEXT = 500;
 
 // ─── Tipos de input ──────────────────────────────────────────────────────────
@@ -232,6 +240,7 @@ function formatUserPrompt(input: ExtractActionsInput): string {
 
 export async function extractActions(
   input: ExtractActionsInput,
+  telemetry?: ExtractActionsTelemetry,
 ): Promise<ExtractionResult> {
   // Cortar lista de tasks pra não estourar contexto (limite definido na arch).
   const trimmedInput: ExtractActionsInput = {
@@ -240,13 +249,29 @@ export async function extractActions(
   };
 
   const userPrompt = formatUserPrompt(trimmedInput);
+  const startedAt = Date.now();
 
-  const { object } = await generateObject({
+  const result = await generateObject({
     model: getModel(HAIKU_MODEL),
     schema: extractionResultSchema,
     system: SYSTEM_PROMPT,
     prompt: userPrompt,
   });
 
-  return object;
+  if (telemetry) {
+    void recordSubAgentUsage({
+      agentName: telemetry.agentName,
+      callKind: "extract",
+      modelId: HAIKU_MODEL,
+      threadId: telemetry.threadId ?? null,
+      memberId: telemetry.memberId ?? null,
+      projectId: telemetry.projectId ?? null,
+      usage: result.usage,
+      providerMetadata: result.providerMetadata,
+      generationId: result.response?.id ?? null,
+      latencyMs: Date.now() - startedAt,
+    });
+  }
+
+  return result.object;
 }

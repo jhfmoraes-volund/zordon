@@ -81,7 +81,9 @@ export type MeetingTaskAction = {
 export type MeetingTaskActionSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  meetingId: string;
+  meetingId?: string;
+  /** Override completo da URL de decisão (ex: para planning). */
+  decisionUrl?: string;
   action: MeetingTaskAction;
   projectId: string;
   onChange?: () => void;
@@ -104,6 +106,7 @@ export function MeetingTaskActionSheet(props: MeetingTaskActionSheetProps) {
 function Body({
   action,
   meetingId,
+  decisionUrl,
   projectId,
   onChange,
   onOpenChange,
@@ -133,8 +136,8 @@ function Body({
     if (action.type === "create") return;
     if (!action.taskId) return;
     let cancelled = false;
-    setBindingTask(true);
     (async () => {
+      setBindingTask(true);
       const supabase = createClient();
       const [taskRes, acRes] = await Promise.all([
         supabase
@@ -213,6 +216,7 @@ function Body({
     <ProposalShell
       action={action}
       meetingId={meetingId}
+      decisionUrl={decisionUrl}
       buildDecisionPayload={buildDecisionPayload}
       loading={loading}
       onClose={() => onOpenChange(false)}
@@ -415,7 +419,7 @@ function RichTaskBody({
     setField("tagIds", tagIds);
   };
 
-  const handleAcCreate = async (_ref: string, text: string, _order: number) => {
+  const handleAcCreate = async (_ref: string, text: string) => {
     setPayload((prev) => {
       const list = Array.isArray(prev.acceptanceCriteria)
         ? (prev.acceptanceCriteria as Array<{ id?: string; text: string }>)

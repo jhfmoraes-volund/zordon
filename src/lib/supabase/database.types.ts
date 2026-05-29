@@ -218,6 +218,53 @@ export type Database = {
           },
         ]
       }
+      AgentProposalOutcome: {
+        Row: {
+          agentName: string
+          callKind: string
+          createdAt: string
+          decidedAt: string
+          decision: string
+          editsJson: Json | null
+          fpEstimated: number | null
+          fpReal: number | null
+          id: string
+          proposalId: string
+        }
+        Insert: {
+          agentName: string
+          callKind?: string
+          createdAt?: string
+          decidedAt?: string
+          decision: string
+          editsJson?: Json | null
+          fpEstimated?: number | null
+          fpReal?: number | null
+          id?: string
+          proposalId: string
+        }
+        Update: {
+          agentName?: string
+          callKind?: string
+          createdAt?: string
+          decidedAt?: string
+          decision?: string
+          editsJson?: Json | null
+          fpEstimated?: number | null
+          fpReal?: number | null
+          id?: string
+          proposalId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "AgentProposalOutcome_proposalId_fkey"
+            columns: ["proposalId"]
+            isOneToOne: false
+            referencedRelation: "MeetingTaskAction"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       AgentQualityLog: {
         Row: {
           agentSlug: string
@@ -307,13 +354,16 @@ export type Database = {
         Row: {
           agentName: string
           cachedPromptTokens: number | null
+          callKind: string
           completionTokens: number
           costUsd: number
           createdAt: string
           generationId: string | null
           id: string
+          latencyMs: number | null
           memberId: string | null
           modelId: string
+          projectId: string | null
           promptTokens: number
           rawUsage: Json | null
           reasoningTokens: number | null
@@ -323,13 +373,16 @@ export type Database = {
         Insert: {
           agentName: string
           cachedPromptTokens?: number | null
+          callKind?: string
           completionTokens?: number
           costUsd?: number
           createdAt?: string
           generationId?: string | null
           id?: string
+          latencyMs?: number | null
           memberId?: string | null
           modelId: string
+          projectId?: string | null
           promptTokens?: number
           rawUsage?: Json | null
           reasoningTokens?: number | null
@@ -339,13 +392,16 @@ export type Database = {
         Update: {
           agentName?: string
           cachedPromptTokens?: number | null
+          callKind?: string
           completionTokens?: number
           costUsd?: number
           createdAt?: string
           generationId?: string | null
           id?: string
+          latencyMs?: number | null
           memberId?: string | null
           modelId?: string
+          projectId?: string | null
           promptTokens?: number
           rawUsage?: Json | null
           reasoningTokens?: number | null
@@ -379,6 +435,13 @@ export type Database = {
             columns: ["memberId"]
             isOneToOne: false
             referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
             referencedColumns: ["id"]
           },
           {
@@ -2970,7 +3033,7 @@ export type Database = {
           errorMessage: string | null
           execution: string
           id: string
-          meetingId: string
+          meetingId: string | null
           notes: string | null
           payload: Json
           planningCeremonyId: string | null
@@ -2978,6 +3041,7 @@ export type Database = {
           reviewNote: string | null
           reviewReasons: string[] | null
           source: string
+          sourceNoteIds: string[]
           targetSprintId: string | null
           taskId: string | null
           type: string
@@ -2995,7 +3059,7 @@ export type Database = {
           errorMessage?: string | null
           execution?: string
           id?: string
-          meetingId: string
+          meetingId?: string | null
           notes?: string | null
           payload?: Json
           planningCeremonyId?: string | null
@@ -3003,6 +3067,7 @@ export type Database = {
           reviewNote?: string | null
           reviewReasons?: string[] | null
           source: string
+          sourceNoteIds?: string[]
           targetSprintId?: string | null
           taskId?: string | null
           type: string
@@ -3020,7 +3085,7 @@ export type Database = {
           errorMessage?: string | null
           execution?: string
           id?: string
-          meetingId?: string
+          meetingId?: string | null
           notes?: string | null
           payload?: Json
           planningCeremonyId?: string | null
@@ -3028,6 +3093,7 @@ export type Database = {
           reviewNote?: string | null
           reviewReasons?: string[] | null
           source?: string
+          sourceNoteIds?: string[]
           targetSprintId?: string | null
           taskId?: string | null
           type?: string
@@ -5523,34 +5589,40 @@ export type Database = {
         Row: {
           byline: string | null
           capturedAt: string | null
+          fullText: string | null
           id: string
           importedAt: string
           importedById: string | null
           meetingId: string | null
           source: string
           sourceId: string | null
+          storagePath: string | null
           title: string | null
         }
         Insert: {
           byline?: string | null
           capturedAt?: string | null
+          fullText?: string | null
           id?: string
           importedAt?: string
           importedById?: string | null
           meetingId?: string | null
           source: string
           sourceId?: string | null
+          storagePath?: string | null
           title?: string | null
         }
         Update: {
           byline?: string | null
           capturedAt?: string | null
+          fullText?: string | null
           id?: string
           importedAt?: string
           importedById?: string | null
           meetingId?: string | null
           source?: string
           sourceId?: string | null
+          storagePath?: string | null
           title?: string | null
         }
         Relationships: [

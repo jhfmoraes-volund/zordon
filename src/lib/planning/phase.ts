@@ -42,6 +42,12 @@ const ALLOWED_TRANSITIONS: ReadonlyArray<readonly [PlanningPhase, PlanningPhase]
   ["proposing", "approving"],
   ["proposing", "idle"], // reset briefing
   ["approving", "closed"],
+  // Staging-commit model: PM can conclude (close) from any active phase.
+  // The concludePlanning DAL applies pending actions as a side effect, so the
+  // shortcut is safe — no "0 pending" precondition needed.
+  ["idle", "closed"],
+  ["reading", "closed"],
+  ["proposing", "closed"],
   ["closed", "archived"],
 ];
 
@@ -65,7 +71,7 @@ export type PhaseContext = {
  * de um lado específico (ex: `reading → proposing` é o Alpha terminando
  * a ingestão; `proposing → approving` é o PM clicando).
  */
-export type Actor = "pm" | "alpha";
+export type Actor = "pm" | "alpha" | "vitoria";
 
 /**
  * Side effects que a API deve aplicar no UPDATE (timestamps a stampar).
@@ -169,14 +175,14 @@ export function transition(
     }
 
     case "reading->proposing": {
-      // Alpha emite "briefing pronto" — exige ≥1 summary + ≥3 outras notes.
-      if (actor !== "alpha") {
+      // Alpha ou Vitoria emitem "briefing pronto" — exige ≥1 summary + ≥3 outras notes.
+      if (actor !== "alpha" && actor !== "vitoria") {
         return {
           ok: false,
           from,
           to,
           reason: "wrong_actor",
-          detail: "só Alpha dispara reading → proposing",
+          detail: "só Alpha ou Vitoria dispara reading → proposing",
         };
       }
       if (ctx.summaryNoteCount < 1) {
@@ -225,24 +231,19 @@ export function transition(
       break;
     }
 
+    case "idle->closed":
+    case "reading->closed":
+    case "proposing->closed":
     case "approving->closed": {
-      // PM aprovou/dispensou todas — exige 0 pendentes.
+      // Staging-commit: PM conclui a planning. As actions pendentes são
+      // aplicadas pela DAL (`concludePlanning`) — não há check de pending aqui.
       if (actor !== "pm") {
         return {
           ok: false,
           from,
           to,
           reason: "wrong_actor",
-          detail: "só PM dispara approving → closed",
-        };
-      }
-      if (ctx.pendingActionCount > 0) {
-        return {
-          ok: false,
-          from,
-          to,
-          reason: "missing_preconditions",
-          detail: `ainda há ${ctx.pendingActionCount} proposta(s) pendente(s)`,
+          detail: "só PM dispara conclusão da planning",
         };
       }
       stamps.closedAt = now();

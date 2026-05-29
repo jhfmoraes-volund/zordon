@@ -35,7 +35,9 @@ export type ProposalDecisionPayload = {
 
 export type ProposalShellProps = {
   action: MeetingTaskAction;
-  meetingId: string;
+  meetingId?: string;
+  /** Override completo da URL de decisão (ex: para planning). */
+  decisionUrl?: string;
   /** Local buffer that the caller manages. Returned to the API on Aprovar. */
   buildDecisionPayload: () => ProposalDecisionPayload;
   /** True while the inner view is still loading project context. */
@@ -49,6 +51,7 @@ export type ProposalShellProps = {
 export function ProposalShell({
   action,
   meetingId,
+  decisionUrl,
   buildDecisionPayload,
   loading,
   onClose,
@@ -64,8 +67,9 @@ export function ProposalShell({
   ) => {
     setBusy(true);
     try {
+      const url = decisionUrl ?? `/api/meetings/${meetingId}/task-actions/${action.id}`;
       const res = await fetch(
-        `/api/meetings/${meetingId}/task-actions/${action.id}`,
+        url,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
