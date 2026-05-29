@@ -1,0 +1,163 @@
+{
+  "feature": "vitor-discovery-only",
+  "title": "Vitor discovery-only — prompt cleanup + sub-phases rename",
+  "prd_path": "docs/prd/backlog/prd-vitor-discovery-only.md",
+  "parent_prd": "prd-vitor-output-as-prd",
+  "userStories": [
+    {
+      "id": "VTRDISC-001",
+      "title": "Renomear BRIEFING_SUB_PHASES (constants + ALL_BRIEFING_SUB_PHASES)",
+      "description": "Em src/lib/design-sessions/constants.ts: renomear STORY_TREE→PRD_DRAFTING, STORY_DETAIL→PRD_REVIEW. Remover TASK_BREAKDOWN. Atualizar ALL_BRIEFING_SUB_PHASES e DEFAULT_BRIEFING_SUB_PHASE. Valores também mudam: 'prd_drafting', 'prd_review'. MODULE_DISCOVERY inalterado.",
+      "acceptanceCriteria": [
+        "constants.ts exporta BRIEFING_SUB_PHASES com chaves MODULE_DISCOVERY, PRD_DRAFTING, PRD_REVIEW",
+        "Valores: module_discovery, prd_drafting, prd_review",
+        "ALL_BRIEFING_SUB_PHASES tem 3 entradas",
+        "Sem STORY_TREE/STORY_DETAIL/TASK_BREAKDOWN em constants.ts"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'STORY_TREE|STORY_DETAIL|TASK_BREAKDOWN' src/lib/design-sessions/constants.ts", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'PRD_DRAFTING|PRD_REVIEW' src/lib/design-sessions/constants.ts", "expected": ">=2" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["src/lib/design-sessions/constants.ts"]
+    },
+    {
+      "id": "VTRDISC-002",
+      "title": "Atualizar pickVerbosity em vitor/index.ts pra novas sub-phases",
+      "description": "Função pickVerbosity: case PRD_DRAFTING → 'refinement', case PRD_REVIEW → 'execution', default → 'discovery' (fallback legacy).",
+      "acceptanceCriteria": [
+        "pickVerbosity reconhece PRD_DRAFTING e PRD_REVIEW",
+        "Default fallback mapeia valores legacy pra 'discovery'",
+        "Sem refs a STORY_TREE/STORY_DETAIL/TASK_BREAKDOWN no switch"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'BRIEFING_SUB_PHASES.STORY_TREE|BRIEFING_SUB_PHASES.STORY_DETAIL|BRIEFING_SUB_PHASES.TASK_BREAKDOWN' src/lib/agent/agents/vitor/index.ts", "expected": "0" }
+      ],
+      "dependsOn": ["VTRDISC-001"],
+      "estimateMinutes": 10,
+      "touches": ["src/lib/agent/agents/vitor/index.ts"]
+    },
+    {
+      "id": "VTRDISC-003",
+      "title": "Reescrever Sub-phase STORY_TREE no prompt → PRD_DRAFTING",
+      "description": "Bloco STORY_TREE (~linhas 543-590) reescrito pra PRD_DRAFTING. Fluxo: list_prds → propose_prd em lote. Sem refs a create_user_story/want/soThat/AC fields de US. Manter '8 linhas máx no chat'. Incluir 1 exemplo curto propose_prd.",
+      "acceptanceCriteria": [
+        "Bloco STORY_TREE substituído por PRD_DRAFTING",
+        "Seção menciona apenas list_prds e propose_prd",
+        "Exemplo propose_prd presente com problem ≥50 chars e ≥3 acceptanceCriteria"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase STORY_TREE|sub-phase story_tree' src/lib/agent/prompt.ts", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase PRD_DRAFTING|sub-phase prd_drafting' src/lib/agent/prompt.ts", "expected": ">=1" }
+      ],
+      "dependsOn": ["VTRDISC-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/prompt.ts"]
+    },
+    {
+      "id": "VTRDISC-004",
+      "title": "Reescrever Sub-phase STORY_DETAIL no prompt → PRD_REVIEW",
+      "description": "Bloco STORY_DETAIL (~linhas 595-630) reescrito pra PRD_REVIEW. Fluxo: update_prd + approve_prd. Sub-phase terminal — step briefing completo quando todos PRDs aprovados.",
+      "acceptanceCriteria": [
+        "Bloco STORY_DETAIL substituído por PRD_REVIEW",
+        "Menciona update_prd e approve_prd; sem create_user_story",
+        "Instrução de terminação do step presente"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase STORY_DETAIL|sub-phase story_detail' src/lib/agent/prompt.ts", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase PRD_REVIEW|sub-phase prd_review' src/lib/agent/prompt.ts", "expected": ">=1" }
+      ],
+      "dependsOn": ["VTRDISC-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/prompt.ts"]
+    },
+    {
+      "id": "VTRDISC-005",
+      "title": "Remover Sub-phase TASK_BREAKDOWN do prompt",
+      "description": "Bloco TASK_BREAKDOWN (~linhas 635-855, incluindo exemplos create_task com FP/scope/complexity) removido inteiro. Não substituir — tasks são responsabilidade da Vitoria.",
+      "acceptanceCriteria": [
+        "Sem 'Sub-phase TASK_BREAKDOWN' no prompt",
+        "Sem create_task/set_story_refinement/FP/scope/complexity (contexto Vitor)",
+        "Prompt ≥200 linhas menor que estado pré-story"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase TASK_BREAKDOWN|TASK_BREAKDOWN' src/lib/agent/prompt.ts", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -cE '\\bcreate_task\\b|\\bset_story_refinement\\b' src/lib/agent/prompt.ts", "expected": "0" }
+      ],
+      "dependsOn": ["VTRDISC-001"],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/agent/prompt.ts"]
+    },
+    {
+      "id": "VTRDISC-006",
+      "title": "Substituir exemplos create_user_story/create_task por propose_prd",
+      "description": "Linhas ~750-855 (blocos '→ create_user_story(...)' e '→ create_task(...)') substituídos por 2-3 exemplos completos propose_prd com todos campos: title, oneLiner, problem ≥50 chars, goal, personaIds, userJourney, ≥3 acceptanceCriteria, successMetrics, outOfScope, technicalNotes, risksAndAssumptions.",
+      "acceptanceCriteria": [
+        "Sem '→ create_user_story(' ou '→ create_task(' no prompt",
+        "Pelo menos 1 '→ propose_prd(' com todos campos obrigatórios"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -cE '→ create_user_story\\(|→ create_task\\(' src/lib/agent/prompt.ts", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -cE '→ propose_prd\\(' src/lib/agent/prompt.ts", "expected": ">=1" }
+      ],
+      "dependsOn": ["VTRDISC-003", "VTRDISC-004", "VTRDISC-005"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/prompt.ts"]
+    },
+    {
+      "id": "VTRDISC-007",
+      "title": "Atualizar AC de Produto / AC Técnico no prompt",
+      "description": "Linhas ~360-390 (bloco 'AC de Produto vai em create_user_story.acceptanceCriteriaProduct' / 'AC Tecnico vai em create_task.acceptanceCriteria'). Substituir por: 'AC viram array jsonb acceptanceCriteria do PRD (formato {given, when, then}). Notas técnicas em campo technicalNotes separado.'",
+      "acceptanceCriteria": [
+        "Sem 'acceptanceCriteriaProduct' no prompt",
+        "Sem 'AC Tecnico' ou 'AC de Produto.*create_user_story' no prompt",
+        "Menção a acceptanceCriteria (campo PRD) com formato given/when/then"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -cE 'acceptanceCriteriaProduct|AC Tecnico|AC de Produto.*create_user_story' src/lib/agent/prompt.ts", "expected": "0" }
+      ],
+      "dependsOn": ["VTRDISC-001"],
+      "estimateMinutes": 15,
+      "touches": ["src/lib/agent/prompt.ts"]
+    },
+    {
+      "id": "VTRDISC-008",
+      "title": "Renomear Story Tree → PRD Tree em design-session-tree.tsx",
+      "description": "Trocar labels visíveis 'Story Tree'→'PRD Tree', 'stories'→'PRDs' (contexto header/empty state). Filename permanece design-session-tree.tsx. Atualizar aria-label.",
+      "acceptanceCriteria": [
+        "Texto 'Story Tree' não aparece no componente",
+        "Texto 'PRD Tree' presente no header",
+        "aria-label correto"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -cE 'Story Tree|story tree' src/components/design-session/design-session-tree.tsx", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'PRD Tree|PRDs' src/components/design-session/design-session-tree.tsx", "expected": ">=1" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["src/components/design-session/design-session-tree.tsx"]
+    },
+    {
+      "id": "VTRDISC-009",
+      "title": "Adicionar regression test prompt-tools-coherence",
+      "description": "Criar src/eval/vitor/prompt-tools-coherence.test.ts: importa buildSystemPrompt, constrói prompt mínimo, assertfalla ausência de regex \\b(create_user_story|update_user_story|delete_user_story|set_story_refinement|manage_story_ac|create_task|update_task|delete_task)\\b. Assertfalla presença de propose_prd/update_prd/approve_prd. Roda em CI.",
+      "acceptanceCriteria": [
+        "Arquivo src/eval/vitor/prompt-tools-coherence.test.ts existe",
+        "Teste passa via pnpm vitest run",
+        "Cobre os 8 tools removidos via regex"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f src/eval/vitor/prompt-tools-coherence.test.ts && echo ok", "expected": "ok" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "pnpm vitest run src/eval/vitor/prompt-tools-coherence.test.ts", "expected": "Tests passed" }
+      ],
+      "dependsOn": ["VTRDISC-003", "VTRDISC-004", "VTRDISC-005", "VTRDISC-006", "VTRDISC-007"],
+      "estimateMinutes": 20,
+      "touches": ["src/eval/vitor/prompt-tools-coherence.test.ts"]
+    }
+  ]
+}

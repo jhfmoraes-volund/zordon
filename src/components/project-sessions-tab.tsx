@@ -361,7 +361,35 @@ export function ProjectSessionsTab({
         onDelete={remove}
         onVisibilityChanged={(id, visibility) => {
           setSessions((prev) =>
-            prev.map((s) => (s.id === id ? { ...s, visibility } : s)),
+            prev.map((s) =>
+              s.id === id
+                ? {
+                    ...s,
+                    visibility,
+                    // Trigger no DB demote automático; espelhar no client.
+                    isMain: visibility === "public" ? s.isMain : false,
+                  }
+                : s,
+            ),
+          );
+        }}
+        onMainChanged={(id, isMain) => {
+          // Toggle exclusivo: ao marcar uma, a anterior do mesmo (project, type)
+          // perde o flag no server. Espelhar no client.
+          const target = sessions.find((s) => s.id === id);
+          setSessions((prev) =>
+            prev.map((s) => {
+              if (s.id === id) return { ...s, isMain };
+              if (
+                isMain &&
+                target &&
+                s.type === target.type &&
+                s.isMain
+              ) {
+                return { ...s, isMain: false };
+              }
+              return s;
+            }),
           );
         }}
       />

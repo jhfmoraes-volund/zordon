@@ -525,7 +525,6 @@ export default function ProjectDetailPage({
       {/* Tabs — mobile: só ícones, distribuídos, sem scroll. Desktop: ícone + label + badge. */}
       <div className="flex border-b -mx-3 px-3 md:mx-0 md:px-0 md:gap-1">
         {visibleTabs.map((tab) => {
-          const isStories = tab.key === "stories";
           const node = (
             <button
               key={tab.key}
@@ -553,24 +552,6 @@ export default function ProjectDetailPage({
             </button>
           );
 
-          // Inject "PRDs" Link right after Stories tab. PRDs vivem em /projects/[id]/prds,
-          // route separada — navega via Link em vez de trocar de tab. Visível pra
-          // builder+ (mesma regra dos demais tabs gerenciáveis; guest segue sem ver).
-          if (isStories && !isGuest) {
-            return (
-              <span key="stories-and-prds" className="contents">
-                {node}
-                <Link
-                  href={`/projects/${id}/prds`}
-                  aria-label="PRDs"
-                  className="flex flex-1 shrink-0 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 border-transparent text-muted-foreground transition-colors whitespace-nowrap hover:text-foreground md:flex-none md:justify-start md:px-4 md:py-2"
-                >
-                  <FileText className="size-5 md:size-4" />
-                  <span className="hidden md:inline">PRDs</span>
-                </Link>
-              </span>
-            );
-          }
           return node;
         })}
       </div>

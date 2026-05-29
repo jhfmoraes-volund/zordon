@@ -28,6 +28,7 @@ import { createClient } from "@/lib/supabase/client";
 import { DESIGN_SESSION_STATUS, lookupChip } from "@/lib/status-chips";
 import { getStepsForSession, type StepDef } from "@/lib/design-session-steps";
 import { fmtDateLong as fmtDate } from "@/lib/date-utils";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -62,6 +63,28 @@ type Participant = {
   member: { id: string; name: string; role: string | null } | null;
 };
 
+type Prd = {
+  id: string;
+  reference: string;
+  title: string;
+  status: string;
+  updatedAt: string;
+};
+
+const PRD_STATUS_TONE: Record<string, "slate" | "amber" | "green" | "muted"> = {
+  draft: "slate",
+  review: "amber",
+  approved: "green",
+  superseded: "muted",
+};
+
+const PRD_STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  review: "Em revisão",
+  approved: "Aprovado",
+  superseded: "Substituído",
+};
+
 type Props = {
   session: SessionDetailSummary | null;
   canManage?: boolean;
@@ -71,6 +94,8 @@ type Props = {
   onDelete?: (id: string) => void;
   /** Called after a successful visibility change so the parent list can re-fetch. */
   onVisibilityChanged?: (id: string, visibility: "public" | "internal") => void;
+  /** Called after a successful main toggle — parent re-fetches to dedupe per (project, type). */
+  onMainChanged?: (id: string, isMain: boolean) => void;
 };
 
 export function SessionDetailSheet({
@@ -81,6 +106,7 @@ export function SessionDetailSheet({
   onExport,
   onDelete,
   onVisibilityChanged,
+  onMainChanged,
 }: Props) {
   return (
     <ResponsiveSheet
@@ -98,6 +124,7 @@ export function SessionDetailSheet({
             onExport={onExport}
             onDelete={onDelete}
             onVisibilityChanged={onVisibilityChanged}
+            onMainChanged={onMainChanged}
           />
         ) : null}
       </ResponsiveSheetContent>
@@ -113,15 +140,57 @@ function Inner({
   onExport,
   onDelete,
   onVisibilityChanged,
+  onMainChanged,
 }: Props & { session: SessionDetailSummary }) {
   const [participants, setParticipants] = useState<Participant[] | null>(null);
   const [steps, setSteps] = useState<StepDef[] | null>(null);
+  const [prds, setPrds] = useState<Prd[] | null>(null);
   const [visibility, setVisibility] = useState(session.visibility);
   const [savingVisibility, setSavingVisibility] = useState(false);
+  const [isMain, setIsMain] = useState(session.isMain);
+  const [savingMain, setSavingMain] = useState(false);
 
   useEffect(() => {
     setVisibility(session.visibility);
-  }, [session.id, session.visibility]);
+    setIsMain(session.isMain);
+  }, [session.id, session.visibility, session.isMain]);
+
+  async function toggleMain() {
+    if (visibility !== "public") return;
+    const next = !isMain;
+    setSavingMain(true);
+    const prev = isMain;
+    setIsMain(next);
+    try {
+      const res = await fetch(`/api/design-sessions/${session.id}/main`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ isMain: next }),
+      });
+      if (!res.ok) {
+        setIsMain(prev);
+        const msg =
+          res.status === 403
+            ? "Você não tem permissão pra marcar como principal."
+            : res.status === 400
+              ? "Só sessions públicas podem ser principais."
+              : "Não foi possível atualizar.";
+        toast.error(msg);
+        return;
+      }
+      onMainChanged?.(session.id, next);
+      toast.success(
+        next
+          ? "Marcada como principal — substitui a anterior do mesmo tipo."
+          : "Desmarcada como principal.",
+      );
+    } catch {
+      setIsMain(prev);
+      toast.error("Sem conexão. Tente novamente.");
+    } finally {
+      setSavingMain(false);
+    }
+  }
 
   async function toggleVisibility() {
     const next = visibility === "public" ? "internal" : "public";
@@ -161,7 +230,7 @@ function Inner({
     let cancelled = false;
     const supabase = createClient();
     (async () => {
-      const [partsRes, sessRes] = await Promise.all([
+      const [partsRes, sessRes, prdsRes] = await Promise.all([
         supabase
           .from("DesignSessionParticipant")
           .select(
@@ -173,6 +242,12 @@ function Inner({
           .select("type, selectedSteps")
           .eq("id", session.id)
           .maybeSingle(),
+        supabase
+          .from("ProductRequirement")
+          .select("id, reference, title, status, updatedAt")
+          .eq("designSessionId", session.id)
+          .is("dismissedAt", null)
+          .order("createdAt", { ascending: false }),
       ]);
       if (cancelled) return;
       const rawParts = (partsRes.data ?? []) as unknown as Array<{
@@ -202,6 +277,7 @@ function Inner({
       } else {
         setSteps(getStepsForSession({ type: session.type }));
       }
+      setPrds((prdsRes.data ?? []) as Prd[]);
     })();
     return () => {
       cancelled = true;
@@ -249,22 +325,54 @@ function Inner({
                   <EyeOff className="size-3" /> Interna
                 </Badge>
               )}
+              {isMain && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-amber-300 bg-amber-50 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
+                >
+                  <Star className="size-3 fill-current" /> Main
+                </Badge>
+              )}
             </div>
             <ResponsiveSheetTitle className="font-heading text-xl font-semibold leading-snug">
               {session.title}
             </ResponsiveSheetTitle>
             {canManage && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={toggleVisibility}
-                disabled={savingVisibility}
-                className="h-7 text-xs"
-              >
-                {visibility === "public"
-                  ? "Tornar interna"
-                  : "Tornar pública (visível pra guests)"}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={toggleVisibility}
+                  disabled={savingVisibility}
+                  className="h-7 text-xs"
+                >
+                  {visibility === "public"
+                    ? "Tornar interna"
+                    : "Tornar pública (visível pra guests)"}
+                </Button>
+                {visibility === "public" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={toggleMain}
+                    disabled={savingMain}
+                    className="h-7 text-xs"
+                    title={
+                      isMain
+                        ? "Desmarcar como principal"
+                        : "Marcar como principal do projeto (substitui a anterior do mesmo tipo)"
+                    }
+                  >
+                    <Star
+                      className={cn(
+                        "size-3.5",
+                        isMain && "fill-current text-amber-500",
+                      )}
+                    />
+                    {isMain ? "Desmarcar principal" : "Marcar como principal"}
+                  </Button>
+                )}
+              </div>
             )}
           </div>
           <Button
@@ -377,6 +485,51 @@ function Inner({
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <Stat label="Items" value={session.itemCount} />
           </div>
+        </section>
+
+        <Separator />
+
+        {/* PRDs — outputs desta DS */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="font-medium uppercase tracking-wider">PRDs</span>
+            {prds && <span className="tabular-nums">{prds.length}</span>}
+          </div>
+          {prds === null ? (
+            <div className="space-y-1.5">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-2/3" />
+            </div>
+          ) : prds.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Nenhum PRD ainda. Vitor vai gerar PRDs a partir desta DS.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {prds.map((prd) => {
+                const tone = PRD_STATUS_TONE[prd.status] ?? "slate";
+                const label = PRD_STATUS_LABEL[prd.status] ?? prd.status;
+                return (
+                  <li key={prd.id}>
+                    <Link
+                      href={`/projects/${session.projectId}/prds/${prd.id}`}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {prd.reference}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {prd.title}
+                      </span>
+                      <StatusChip tone={tone} dot>
+                        {label}
+                      </StatusChip>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <Separator />
