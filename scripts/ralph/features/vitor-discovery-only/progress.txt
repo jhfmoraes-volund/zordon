@@ -1,3 +1,6 @@
 iter 2026-05-29T23:07:31Z: PASS VTRDISC-001
   files: src/lib/design-sessions/constants.ts, src/lib/agent/agents/vitor/index.ts, src/lib/agent/prompt.ts
   learnings: Renamed BRIEFING_SUB_PHASES to PRD flow (PRD_DRAFTING, PRD_REVIEW). pickVerbosity fallback handles legacy values. Fixed all type errors via import updates.
+iter 2026-05-29T23:10:00Z: PASS VTRDISC-002
+  files: src/lib/agent/agents/vitor/index.ts (já implementado na iter anterior)
+  learnings: pickVerbosity já mapeava PRD_DRAFTING→refinement, PRD_REVIEW→execution, default→discovery. Checks confirmaram zero refs legacy.

@@ -65,7 +65,8 @@
       "estimateMinutes": 10,
       "touches": [
         "src/lib/agent/agents/vitor/index.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "VTRDISC-003",
