@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RoamIntegrationCard, GranolaIntegrationCard } from "./integrations-card";
+import { GitHubIntegrationCard } from "./composio-card";
 import { TelegramCard } from "@/components/settings/telegram-card";
+import { AppearanceCard } from "@/components/settings/appearance-card";
 
 export default function SettingsPage() {
   const { userEmail } = useAuth();
@@ -97,8 +99,10 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-4">
+        <AppearanceCard />
         <RoamIntegrationCard />
         <GranolaIntegrationCard />
+        <GitHubIntegrationCard />
         <TelegramCard />
         <Card>
         <CardHeader>

@@ -2,8 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, JetBrains_Mono, Cormorant_Garamond } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/contexts/theme-context";
-import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme/bootstrap";
-import { DEFAULT_THEME_ID } from "@/lib/theme/themes";
+import { readThemeCookie } from "@/lib/theme/server";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -47,23 +46,22 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Cookie lido no SSR → data-theme pintado na primeira resposta → zero FOUC.
+  const initialTheme = await readThemeCookie();
+
   return (
     <html
       lang="pt-BR"
       className={`dark ${spaceGrotesk.variable} ${jetbrainsMono.variable} ${cormorant.variable} h-full antialiased`}
-      data-theme={DEFAULT_THEME_ID}
+      data-theme={initialTheme}
     >
-      <head>
-        {/* Anti-FOUC: lê tema salvo e seta data-theme antes do CSS aplicar. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
-      </head>
       <body className="min-h-full flex">
-        <ThemeProvider initialTheme={DEFAULT_THEME_ID}>
+        <ThemeProvider initialTheme={initialTheme}>
           {children}
           <Toaster richColors />
         </ThemeProvider>

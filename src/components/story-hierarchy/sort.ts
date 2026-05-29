@@ -1,5 +1,4 @@
-// Sort utilities for Task lists. Shared by TasksList (project page) and
-// MeetingTaskList (meetings page) so behavior stays consistent.
+// Sort utilities for Task lists. Used by TasksList (project page).
 
 import type { Member, Story, Task, TaskStatus } from "./types";
 

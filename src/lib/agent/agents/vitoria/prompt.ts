@@ -128,6 +128,37 @@ mesma planning.
 - **get_dependency_graph(sprintId)** — grafo de bloqueios (1 hop) da sprint.
   Use quando o PM perguntar "o que está bloqueado?" ou "qual a ordem disso?".
 
+## Contexto do código (3 camadas)
+
+Você tem 3 níveis de awareness do repositório, do mais barato pro mais caro:
+
+**T1 — Manifest** (sempre no prompt, vide seção "Manifest do repositório")
+- Resumo curado: AGENTS.md/CLAUDE.md/README + file tree depth 2 + package.json scripts
+- Gerado UMA vez quando o PM linka o repo (via "Importar → Repositório GitHub" no Contexto)
+- **Use isso primeiro** pra: saber onde criar componentes, qual script roda testes/build,
+  convenções gerais, estrutura de pastas. Se a resposta tá no manifest, NÃO chame tool.
+
+**T2 — Leitura on-demand** (tools GITHUB_*, só quando precisa de detalhe)
+- **GITHUB_GET_REPOSITORY_CONTENT(owner, repo, path, ref?)** — lê 1 arquivo OU lista 1
+  pasta (GitHub API decide pelo path). Use quando o manifest só dá pista mas você
+  precisa do código exato pra grounding ou quer ver o que tem dentro de uma pasta.
+- **GITHUB_GET_A_REPOSITORY(owner, repo)** — metadados (branch default, linguagem,
+  visibility). Raro — manifest já cobre.
+
+**T3 — Busca / navegação** (último recurso, mais caro)
+- **GITHUB_SEARCH_CODE(q)** — quando PM cita "como já fizemos X" e você não sabe onde
+  está. Query estilo GitHub: \`repo:owner/name termo extension:ts\`.
+- **GITHUB_LIST_BRANCHES(owner, repo)** — só se for genuinamente necessário.
+
+**Regras duras:**
+- Owner/name/branch sempre vêm da seção "Repositório do projeto" abaixo. Se está vazio,
+  **avise o PM** em vez de chutar.
+- **Não derrame contexto**: leia o arquivo MENOR que responde a pergunta. Cada call conta no orçamento.
+- Cite paths exatos no description SDD da proposta (ex \`src/lib/x.ts:42\`) — é
+  o que diferencia "tarefa genérica" de "tarefa grounded".
+- Se o manifest não foi gerado ainda (status: "❌ não gerado"), peça pro PM clicar
+  "Atualizar manifest" no Contexto — sem isso você opera às cegas estruturalmente.
+
 ## Memória cross-agent (Vitor ↔ Vitoria)
 
 Você compartilha memória de projeto com o **Vitor** (agente de Design Session).
@@ -229,6 +260,43 @@ Quando pedir mais contexto ao PM, limite a 1-2 perguntas por vez.`;
     ? sprintBlockers.map((b) => `- task ${b.taskId} ${b.kind} task ${b.dependsOn}`).join("\n")
     : "nenhum bloqueio detectado";
 
+  const repoOwner = agentContext.projectRepoOwner as string | null | undefined;
+  const repoName = agentContext.projectRepoName as string | null | undefined;
+  const repoUrl = agentContext.projectRepoUrl as string | null | undefined;
+  const repoBranch = agentContext.projectRepoBranch as string | null | undefined;
+  const repoManifest = agentContext.projectRepoManifest as string | null | undefined;
+  const repoManifestUpdatedAt =
+    agentContext.projectRepoManifestUpdatedAt as string | null | undefined;
+  const githubConnected = Boolean(agentContext.githubConnected);
+  const repoBlock = (() => {
+    const lines: string[] = [];
+    if (repoOwner && repoName) {
+      lines.push(`- Owner: ${repoOwner}`);
+      lines.push(`- Name: ${repoName}`);
+      if (repoBranch) lines.push(`- Default branch: ${repoBranch}`);
+      if (repoManifestUpdatedAt) {
+        lines.push(`- Manifest gerado em: ${repoManifestUpdatedAt}`);
+      } else {
+        lines.push(`- Manifest: ❌ não gerado ainda (PM clica "Atualizar manifest" no Contexto)`);
+      }
+    } else if (repoUrl) {
+      lines.push(`- URL: ${repoUrl} (sem owner/name parseados — extraia da URL)`);
+    } else {
+      lines.push("- (projeto não tem repo configurado — avise o PM)");
+    }
+    lines.push(
+      `- GitHub conectado pelo facilitador: ${githubConnected ? "SIM (tools GITHUB_* disponíveis)" : "NÃO (sem tools — peça pro PM conectar em /settings)"}`,
+    );
+    return lines.join("\n");
+  })();
+
+  // Manifest: bloco grande (~5-8k tokens). Vai numa seção própria do volátil
+  // pra Vitória ter awareness estrutural permanente do repo. Anthropic prompt
+  // cache no engine pega isso → tokens são contados só na 1ª chamada da sessão.
+  const repoManifestBlock = repoManifest
+    ? `\n\n## Manifest do repositório (T1 — sempre disponível)\n\n${repoManifest}\n`
+    : "";
+
   const pendingActions = (agentContext.pendingActions as PendingAction[] | undefined) ?? [];
   const pendingBlock = pendingActions.length > 0
     ? pendingActions.map((a) => `- id=${a.id} type=${a.type}${a.taskId ? ` taskId=${a.taskId}` : ""}${a.targetSprintId ? ` targetSprintId=${a.targetSprintId}` : ""}\n  payload: ${truncate(JSON.stringify(a.payload), 240)}\n  reasoning: ${truncate(a.aiReasoning ?? "(vazio)", 200)}`).join("\n")
@@ -321,6 +389,9 @@ ${tasksBlock}
 
 ### Bloqueios detectados na sprint
 ${blockersBlock}
+
+### Repositório do projeto
+${repoBlock}${repoManifestBlock}
 
 ## Sessão
 

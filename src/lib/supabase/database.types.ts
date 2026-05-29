@@ -3193,6 +3193,7 @@ export type Database = {
           telegramConnectedAt: string | null
           telegramKindsDisabled: string[]
           telegramUsername: string | null
+          theme: string
           updatedAt: string
           userId: string | null
         }
@@ -3222,6 +3223,7 @@ export type Database = {
           telegramConnectedAt?: string | null
           telegramKindsDisabled?: string[]
           telegramUsername?: string | null
+          theme?: string
           updatedAt: string
           userId?: string | null
         }
@@ -3251,6 +3253,7 @@ export type Database = {
           telegramConnectedAt?: string | null
           telegramKindsDisabled?: string[]
           telegramUsername?: string | null
+          theme?: string
           updatedAt?: string
           userId?: string | null
         }
@@ -4116,6 +4119,8 @@ export type Database = {
           planningCadence: string | null
           pmId: string | null
           referenceKey: string | null
+          repoManifest: string | null
+          repoManifestUpdatedAt: string | null
           repoUrl: string | null
           startDate: string | null
           status: string
@@ -4139,6 +4144,8 @@ export type Database = {
           planningCadence?: string | null
           pmId?: string | null
           referenceKey?: string | null
+          repoManifest?: string | null
+          repoManifestUpdatedAt?: string | null
           repoUrl?: string | null
           startDate?: string | null
           status?: string
@@ -4162,6 +4169,8 @@ export type Database = {
           planningCadence?: string | null
           pmId?: string | null
           referenceKey?: string | null
+          repoManifest?: string | null
+          repoManifestUpdatedAt?: string | null
           repoUrl?: string | null
           startDate?: string | null
           status?: string
@@ -5843,6 +5852,60 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_usage_hourly_mv: {
+        Row: {
+          agent_name: string | null
+          bucket_hour: string | null
+          cached_input_tokens: number | null
+          call_kind: string | null
+          calls: number | null
+          cost_usd: number | null
+          input_tokens: number | null
+          member_id: string | null
+          model_id: string | null
+          output_tokens: number | null
+          project_id: string | null
+          reasoning_tokens: number | null
+          total_tokens: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "AgentUsage_memberId_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_memberId_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_memberId_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_memberId_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentUsage_projectId_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_summary: {
         Row: {
           createdAt: string | null
@@ -6212,6 +6275,7 @@ export type Database = {
         Args: { p_kind: string; p_persona_id: string; p_step: Json }
         Returns: Json
       }
+      refresh_agent_usage_hourly_mv: { Args: never; Returns: undefined }
       renumber_sprints_chronologically: {
         Args: { p_project_id: string }
         Returns: undefined

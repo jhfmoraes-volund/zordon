@@ -57,14 +57,11 @@ export const alphaAgent: AgentDefinition = {
       }
     }
 
-    const threadId = (agentContext.threadId as string | undefined) ?? undefined;
-
     const nativeTools = assembleAlphaTools(capabilities, {
       activeMeetingId,
       routeProjectId: routeProjectIdValue,
       routeSprintId: routeSprintIdValue,
       currentMemberId,
-      threadId,
       alphaHierarchyEnabled,
     });
 

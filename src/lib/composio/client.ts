@@ -42,14 +42,23 @@ async function getClient(): Promise<ComposioClient | null> {
   _client = new Composio({
     apiKey,
     provider: new VercelProvider(),
+    // SDK exige version explícita por tool execution; "latest" libera sem
+    // hardcodar data específica (Composio v3 atualiza schemas continuamente).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    toolkitVersions: { github: "latest" } as any,
   });
   return _client;
 }
 
-const GITHUB_AUTH_CONFIG_ID_ENV = "COMPOSIO_GITHUB_AUTH_CONFIG_ID";
-
+// Aceita os 2 nomes — COMPOSIO_GITHUB_APP_ID é o que o usuário colocou no .env
+// inicialmente, AUTH_CONFIG_ID é o nome técnico correto (Composio chama de
+// "Auth Config", não "App"). Qualquer um funciona.
 function githubAuthConfigId(): string | null {
-  return process.env[GITHUB_AUTH_CONFIG_ID_ENV] ?? null;
+  return (
+    process.env.COMPOSIO_GITHUB_AUTH_CONFIG_ID ??
+    process.env.COMPOSIO_GITHUB_APP_ID ??
+    null
+  );
 }
 
 export type ComposioConnectionStatus = {
@@ -75,7 +84,7 @@ export async function initiateConnection(
   if (!authConfigId) {
     return {
       error:
-        "COMPOSIO_GITHUB_AUTH_CONFIG_ID ausente. Crie um Auth Config no painel Composio (toolkit=github, Composio-managed OAuth) e copie o ac_xxx pro .env.",
+        "COMPOSIO_GITHUB_AUTH_CONFIG_ID (ou COMPOSIO_GITHUB_APP_ID) ausente. Crie um Auth Config no painel Composio (toolkit=github, Composio-managed OAuth) e copie o ac_xxx pro .env.",
     };
   }
   void toolkit; // toolkit é implícito via authConfigId; mantido pra clarity da API
@@ -183,6 +192,85 @@ export async function getUserTools(
   } catch (err) {
     console.warn("[composio] getUserTools failed:", (err as Error).message);
     return {};
+  }
+}
+
+/**
+ * Resolve dinamicamente o slug real de uma tool do Composio dado intenção
+ * semântica. Composio muda nomes (`GITHUB_LIST_REPOSITORIES` virou
+ * `GITHUB_LIST_REPOSITORIES_FOR_AUTHENTICATED_USER` etc); resolver em runtime
+ * é mais resiliente que hardcode.
+ *
+ * `keywords` precisam TODAS aparecer no slug (case-insensitive, AND).
+ * Cache in-memory por (toolkit + keywords) — slugs raramente mudam mid-session.
+ */
+const SLUG_CACHE = new Map<string, string>();
+
+export async function findToolSlug(
+  userId: string,
+  toolkit: "github",
+  keywords: string[],
+): Promise<string | null> {
+  const cacheKey = `${toolkit}::${keywords.join("|").toLowerCase()}`;
+  const hit = SLUG_CACHE.get(cacheKey);
+  if (hit) return hit;
+
+  const client = await getClient();
+  if (!client) return null;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const c = client as any;
+    const tools = (await c.tools.get(userId, {
+      toolkits: [toolkit],
+      limit: 200,
+    })) as Record<string, unknown>;
+    const slugs = Object.keys(tools);
+    const lower = keywords.map((k) => k.toLowerCase());
+    const match = slugs.find((s) => {
+      const sl = s.toLowerCase();
+      return lower.every((k) => sl.includes(k));
+    });
+    if (match) SLUG_CACHE.set(cacheKey, match);
+    return match ?? null;
+  } catch (err) {
+    console.warn("[composio] findToolSlug failed:", (err as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Executa uma tool do Composio direto (sem AI loop) — útil quando server
+ * precisa do output cru (ex listar repos pra picker, fetchar AGENTS.md
+ * pra gerar manifest).
+ */
+export async function executeTool(
+  userId: string,
+  toolSlug: string,
+  args: Record<string, unknown>,
+): Promise<
+  | { ok: true; data: unknown }
+  | { ok: false; error: string }
+> {
+  const client = await getClient();
+  if (!client) return { ok: false, error: "Composio não configurado" };
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const c = client as any;
+    const result = await c.tools.execute(toolSlug, {
+      userId,
+      arguments: args,
+      // Belt+suspenders: toolkitVersions já configurado no construtor, mas
+      // se a SDK reclamar mesmo assim, esse skip libera.
+      dangerouslySkipVersionCheck: true,
+    });
+    if (!result?.successful) {
+      return { ok: false, error: String(result?.error ?? "Tool execution failed") };
+    }
+    return { ok: true, data: result.data };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
   }
 }
 

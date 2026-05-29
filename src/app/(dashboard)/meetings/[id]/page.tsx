@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/ui/markdown";
-import { PageTitle } from "@/components/app-shell";
+import { PageContainer, PageTitle } from "@/components/app-shell";
 import {
   ArrowLeft, Plus,
   ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink, Download,
@@ -21,7 +21,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAlphaChat } from "@/components/alpha-chat";
-import { TaskActionWidget } from "@/components/meetings/task-action-widget";
 import { ImportMeetingModal } from "@/components/meetings/import-meeting-modal";
 import { PersonalNoteCard } from "@/components/meetings/personal-note-card";
 import { toast } from "sonner";
@@ -182,34 +181,42 @@ export default function MeetingDetailPage({
 
   if (loadError === "forbidden") {
     return (
-      <div className="p-6 space-y-4">
-        <div className="text-sm text-muted-foreground">
-          Você não tem acesso a esta reunião.
+      <PageContainer>
+        <div className="space-y-4">
+          <div className="text-sm text-muted-foreground">
+            Você não tem acesso a esta reunião.
+          </div>
+          <Link href="/meetings">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Voltar para reuniões
+            </Button>
+          </Link>
         </div>
-        <Link href="/meetings">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Voltar para reuniões
-          </Button>
-        </Link>
-      </div>
+      </PageContainer>
     );
   }
 
   if (loadError === "notfound") {
     return (
-      <div className="p-6 space-y-4">
-        <div className="text-sm text-muted-foreground">Reunião não encontrada.</div>
-        <Link href="/meetings">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Voltar para reuniões
-          </Button>
-        </Link>
-      </div>
+      <PageContainer>
+        <div className="space-y-4">
+          <div className="text-sm text-muted-foreground">Reunião não encontrada.</div>
+          <Link href="/meetings">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Voltar para reuniões
+            </Button>
+          </Link>
+        </div>
+      </PageContainer>
     );
   }
 
   if (!meeting) {
-    return <div className="p-6 text-muted-foreground">Carregando...</div>;
+    return (
+      <PageContainer>
+        <div className="text-muted-foreground">Carregando...</div>
+      </PageContainer>
+    );
   }
 
   // ─── Handlers ─────────────────────────────────────────
@@ -458,22 +465,17 @@ export default function MeetingDetailPage({
       });
       const data = (await res.json()) as {
         counts: {
-          tasksProposed: number;
           todosCreated: number;
           skipped: number;
-          unresolvedTasks: number;
           unresolvedTodos: number;
         };
       };
       const { counts } = data;
       const summary: string[] = [];
-      summary.push(`${counts.tasksProposed} Task${counts.tasksProposed === 1 ? "" : "s"} proposta${counts.tasksProposed === 1 ? "" : "s"}`);
       summary.push(`${counts.todosCreated} To-do${counts.todosCreated === 1 ? "" : "s"} criada${counts.todosCreated === 1 ? "" : "s"}`);
       if (counts.skipped > 0) summary.push(`${counts.skipped} descartada${counts.skipped === 1 ? "" : "s"}`);
-      if (counts.unresolvedTasks + counts.unresolvedTodos > 0) {
-        summary.push(
-          `${counts.unresolvedTasks + counts.unresolvedTodos} sem resolver`,
-        );
+      if (counts.unresolvedTodos > 0) {
+        summary.push(`${counts.unresolvedTodos} sem resolver`);
       }
       toast.success(summary.join(" · "), { id: "suggest-actions" });
       await load();
@@ -490,7 +492,8 @@ export default function MeetingDetailPage({
     !!(meeting.notes && meeting.notes.trim());
 
   return (
-    <div className="space-y-6">
+    <PageContainer>
+      <div className="space-y-6">
       <PageTitle title={headerTitle} subtitle={fmtDate(meeting.date)} />
       {/* Header */}
       <div className="flex items-center gap-3 min-w-0">
@@ -537,7 +540,7 @@ export default function MeetingDetailPage({
               disabled={suggesting || !canSuggest}
               title={
                 canSuggest
-                  ? "Analisa transcrição/notas e cria Tasks (Plano de Tasks) e To-dos automaticamente"
+                  ? "Analisa transcrição/notas e cria To-dos automaticamente"
                   : "Importe uma transcrição ou escreva notas antes de sugerir"
               }
             >
@@ -699,32 +702,7 @@ export default function MeetingDetailPage({
         </div>
       )}
 
-      {/* Task Action widgets — 1 por projeto vinculado em daily/super_planning/private */}
-      {(meeting.type === "daily" ||
-        meeting.type === "super_planning" ||
-        meeting.type === "private") &&
-        meeting.projectLinks.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Plano de Tasks</h2>
-            {meeting.type === "private" && (
-              <p className="text-xs text-muted-foreground -mt-2">
-                Alpha propõe Tasks aqui a partir da transcrição. Aprove ou rejeite
-                cada uma — só você vê esse plano.
-              </p>
-            )}
-            {meeting.projectLinks.map((l) =>
-              l.project ? (
-                <TaskActionWidget
-                  key={l.projectId}
-                  meetingId={meeting.id}
-                  project={{ id: l.project.id, name: l.project.name }}
-                />
-              ) : null
-            )}
-          </div>
-        )}
-
-      {/* AI Suggestions — só ToDos source='ai' com decision='pending' */}
+{/* AI Suggestions — só ToDos source='ai' com decision='pending' */}
       {(() => {
         const pending = meeting.actionItems.filter((a) => a.decision === "pending");
         const visible = meeting.actionItems.filter((a) => a.decision !== "pending");
@@ -887,7 +865,8 @@ export default function MeetingDetailPage({
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
-    </div>
+      </div>
+    </PageContainer>
   );
 }
 

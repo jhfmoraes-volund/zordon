@@ -32,10 +32,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl =
+    process.env.APP_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.NEXT_PUBLIC_SITE_URL;
   if (!appUrl) {
     return NextResponse.json(
-      { error: "APP_URL ausente — não dá pra montar callback" },
+      { error: "APP_URL/NEXT_PUBLIC_SITE_URL ausente — não dá pra montar callback" },
       { status: 500 },
     );
   }

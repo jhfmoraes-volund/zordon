@@ -301,9 +301,11 @@ export default function RitualDetailPage({
 
       <ContextSheet
         planningId={id}
+        projectId={planning.projectId}
         open={contextSheetOpen}
         onOpenChange={setContextSheetOpen}
         linkedTranscripts={planning.linkedTranscripts}
+        projectRepo={planning.projectRepo}
         onUnlink={handleUnlinkTranscript}
         onImported={loadPlanning}
       />

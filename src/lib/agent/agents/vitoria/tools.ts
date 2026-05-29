@@ -15,7 +15,15 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
         "Adiciona uma nota de contexto ao briefing da planning. Use para registrar temas, riscos, sinais de capacidade, observações de código ou questões extraídas das transcrições.",
       inputSchema: z.object({
         kind: z
-          .enum(["summary", "theme", "risk", "capacity_signal", "code_observation", "open_question"])
+          .enum([
+            "summary",
+            "theme",
+            "risk",
+            "capacity_signal",
+            "code_observation",
+            "open_question",
+            "scope_creep",
+          ])
           .describe("Tipo da nota"),
         content: z
           .string()
@@ -45,7 +53,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           sourceMeetingIds: sourceMeetingIds ?? [],
           sourceTranscriptIds: sourceTranscriptIds ?? [],
           priority: priority ?? 5,
-          generatedByAgent: "alpha", // Vitoria usa "alpha" como actor até ter entrada própria no DB
+          generatedByAgent: "vitoria",
         });
         return { ok: true, noteId: note.id, kind: note.kind };
       },
