@@ -141,7 +141,7 @@ export function AppSidebar() {
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    isActive={pathname === "/settings"}
+                    isActive={pathname === "/settings" || pathname.startsWith("/settings/")}
                     render={<Link href="/settings" />}
                     tooltip="Configuracoes"
                     onClick={closeOnMobile}

@@ -26,7 +26,9 @@ type RitualItem =
       sortKey: string;
       href: string;
       badges: { linkedCount: number; noteCount: number; pendingCount: number };
+      facilitatorId: string | null;
       facilitatorName: string | null;
+      sprintId: string | null;
       sprintName: string | null;
     }
   | {
@@ -44,6 +46,7 @@ type RitualItem =
         noteByKind: Partial<Record<PMReviewNoteKind, number>>;
         reportGenerated: boolean;
       };
+      facilitatorId: string | null;
       facilitatorName: string | null;
     };
 
@@ -103,7 +106,9 @@ export async function GET(
         noteCount: p.contextNoteCount,
         pendingCount: p.pendingActionCount,
       },
+      facilitatorId: p.facilitatorId,
       facilitatorName: p.facilitatorName,
+      sprintId: p.sprintId,
       sprintName: p.sprintName,
     });
   }
@@ -124,6 +129,7 @@ export async function GET(
         noteByKind: r.noteCountByKind,
         reportGenerated: r.reportGeneratedAt !== null,
       },
+      facilitatorId: r.facilitatorId,
       facilitatorName: r.facilitatorName,
     });
   }

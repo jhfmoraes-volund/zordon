@@ -7,6 +7,8 @@ import {
   AlertTriangle,
   CalendarClock,
   ChartLine,
+  CheckCircle2,
+  FileEdit,
   Link2,
   Play,
   Plus,
@@ -52,7 +54,9 @@ type RitualPlanning = {
   sortKey: string;
   href: string;
   badges: { linkedCount: number; noteCount: number; pendingCount: number };
+  facilitatorId: string | null;
   facilitatorName: string | null;
+  sprintId: string | null;
   sprintName: string | null;
 };
 
@@ -82,6 +86,7 @@ type RitualPMReview = {
     >;
     reportGenerated: boolean;
   };
+  facilitatorId: string | null;
   facilitatorName: string | null;
 };
 
@@ -143,7 +148,6 @@ export function ProjectCeremoniesTab({
   const router = useRouter();
 
   const [items, setItems] = useState<RitualItem[]>([]);
-  const [featured, setFeatured] = useState<RitualPMReview | null>(null);
   const [canCreatePMReview, setCanCreatePMReview] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -152,6 +156,22 @@ export function ProjectCeremoniesTab({
   const [creatingPMReview, setCreatingPMReview] = useState(false);
   const [planningSheetOpen, setPlanningSheetOpen] = useState(false);
   const [pmReviewSheetOpen, setPMReviewSheetOpen] = useState(false);
+  const [editingPlanning, setEditingPlanning] = useState<RitualPlanning | null>(
+    null,
+  );
+  const [editingPMReview, setEditingPMReview] = useState<RitualPMReview | null>(
+    null,
+  );
+
+  const handleEdit = useCallback((item: RitualItem) => {
+    if (item.kind === "planning") {
+      setEditingPlanning(item);
+      setPlanningSheetOpen(true);
+    } else {
+      setEditingPMReview(item);
+      setPMReviewSheetOpen(true);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,13 +179,11 @@ export function ProjectCeremoniesTab({
       const r = await fetch(`/api/projects/${projectId}/rituals`);
       if (!r.ok) {
         setItems([]);
-        setFeatured(null);
         setCanCreatePMReview(false);
         return;
       }
       const data = (await r.json()) as RitualsResponse;
       setItems(data.items ?? []);
-      setFeatured(data.featured ?? null);
       setCanCreatePMReview(data.permissions?.canCreatePMReview ?? false);
     } finally {
       setLoading(false);
@@ -190,6 +208,19 @@ export function ProjectCeremoniesTab({
     if (filter === "all") return items;
     return items.filter((i) => i.kind === filter);
   }, [items, filter]);
+
+  const { published, staging } = useMemo(() => {
+    const pub: RitualItem[] = [];
+    const stg: RitualItem[] = [];
+    for (const it of visible) {
+      const isPublished =
+        it.kind === "planning"
+          ? it.status === "closed" || it.status === "archived"
+          : it.status === "published" || it.status === "archived";
+      (isPublished ? pub : stg).push(it);
+    }
+    return { published: pub, staging: stg };
+  }, [visible]);
 
   async function handleCreatePlanning(sprintId: string | null) {
     if (creatingPlanning) return;
@@ -236,50 +267,6 @@ export function ProjectCeremoniesTab({
 
   return (
     <div className="space-y-3">
-      {/* Zona 1 — Featured PM Review da semana */}
-      {featured && (
-        <Link
-          href={featured.href}
-          className="block rounded-lg border bg-gradient-to-br from-violet-50 to-violet-100/40 p-4 transition-colors hover:bg-violet-100/60 dark:from-violet-950/30 dark:to-violet-900/10 dark:hover:bg-violet-950/50"
-        >
-          <div className="flex items-start gap-3">
-            <ChartLine className="mt-0.5 h-5 w-5 shrink-0 text-violet-600 dark:text-violet-300" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{featured.title}</p>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {featured.badges.reportGenerated
-                  ? "Report disponível"
-                  : "Aguardando síntese"}
-                {featured.badges.noteCount > 0 && (
-                  <>
-                    {" · "}
-                    {featured.badges.noteCount} nota
-                    {featured.badges.noteCount > 1 ? "s" : ""}
-                  </>
-                )}
-                {featured.badges.noteByKind.risk && (
-                  <>
-                    {" · "}
-                    {featured.badges.noteByKind.risk} risco
-                    {(featured.badges.noteByKind.risk ?? 0) > 1 ? "s" : ""}
-                  </>
-                )}
-                {featured.badges.noteByKind.next_step && (
-                  <>
-                    {" · "}
-                    {featured.badges.noteByKind.next_step} próximo passo
-                    {(featured.badges.noteByKind.next_step ?? 0) > 1 ? "s" : ""}
-                  </>
-                )}
-              </p>
-            </div>
-            <Button size="sm" variant="ghost" className="shrink-0">
-              <Sparkles className="size-3.5" /> Abrir report
-            </Button>
-          </div>
-        </Link>
-      )}
-
       {/* Zona 2 — Filtros + ações */}
       <div className="flex flex-wrap items-center gap-2">
         <div
@@ -336,7 +323,7 @@ export function ProjectCeremoniesTab({
         </div>
       </div>
 
-      {/* Zona 3 — Lista */}
+      {/* Zona 3 — Colunas: Publicado vs Em rascunho */}
       {loading ? (
         <p className="px-1 py-8 text-center text-sm text-muted-foreground">
           Carregando…
@@ -350,28 +337,152 @@ export function ProjectCeremoniesTab({
           )}
         </div>
       ) : (
-        <ul className="divide-y rounded-md border bg-card">
-          {visible.map((it) => (
-            <RitualRow key={`${it.kind}:${it.id}`} item={it} />
-          ))}
-        </ul>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <RitualColumn
+            title="Publicado"
+            tone="emerald"
+            count={published.length}
+            items={published}
+            onEdit={handleEdit}
+            emptyLabel="Nada publicado ainda."
+          />
+          <RitualColumn
+            title="Em rascunho"
+            tone="amber"
+            count={staging.length}
+            items={staging}
+            onEdit={handleEdit}
+            emptyLabel="Nenhum rascunho em aberto."
+          />
+        </div>
       )}
 
       <PlanningSheet
         open={planningSheetOpen}
-        onOpenChange={setPlanningSheetOpen}
+        onOpenChange={(open) => {
+          setPlanningSheetOpen(open);
+          if (!open) setEditingPlanning(null);
+        }}
         projectId={projectId}
+        planning={
+          editingPlanning
+            ? {
+                id: editingPlanning.id,
+                sprintId: editingPlanning.sprintId,
+                facilitatorId: editingPlanning.facilitatorId,
+                scheduledFor: editingPlanning.scheduledFor,
+                phase: editingPlanning.status,
+              }
+            : null
+        }
         onCreate={handleCreatePlanning}
+        onUpdated={() => {
+          setEditingPlanning(null);
+          load();
+        }}
+        onDeleted={() => {
+          setEditingPlanning(null);
+          load();
+        }}
         saving={creatingPlanning}
       />
 
       <PMReviewSheet
         open={pmReviewSheetOpen}
-        onOpenChange={setPMReviewSheetOpen}
+        onOpenChange={(open) => {
+          setPMReviewSheetOpen(open);
+          if (!open) setEditingPMReview(null);
+        }}
         projectId={projectId}
+        pmReview={
+          editingPMReview
+            ? {
+                id: editingPMReview.id,
+                facilitatorId: editingPMReview.facilitatorId,
+                scheduledFor: editingPMReview.scheduledFor,
+                referenceWeek: editingPMReview.referenceWeek,
+                status: editingPMReview.status,
+              }
+            : null
+        }
         onCreate={handleCreatePMReview}
+        onUpdated={() => {
+          setEditingPMReview(null);
+          load();
+        }}
+        onDeleted={() => {
+          setEditingPMReview(null);
+          load();
+        }}
         saving={creatingPMReview}
       />
+    </div>
+  );
+}
+
+// ─── Colunas (Publicado / Em rascunho) ─────────────────────────────────
+
+const COLUMN_TONE = {
+  emerald: {
+    Icon: CheckCircle2,
+    header:
+      "text-emerald-700 dark:text-emerald-400",
+    dot: "bg-emerald-500",
+  },
+  amber: {
+    Icon: FileEdit,
+    header: "text-amber-700 dark:text-amber-500",
+    dot: "bg-amber-500",
+  },
+} as const;
+
+function RitualColumn({
+  title,
+  tone,
+  count,
+  items,
+  onEdit,
+  emptyLabel,
+}: {
+  title: string;
+  tone: keyof typeof COLUMN_TONE;
+  count: number;
+  items: RitualItem[];
+  onEdit: (item: RitualItem) => void;
+  emptyLabel: string;
+}) {
+  const t = COLUMN_TONE[tone];
+  const Icon = t.Icon;
+  return (
+    <div className="overflow-hidden rounded-md border bg-card">
+      <div className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2">
+        <span
+          aria-hidden
+          className={cn("size-1.5 rounded-full", t.dot)}
+        />
+        <Icon className={cn("size-3.5", t.header)} />
+        <p className={cn("text-xs font-semibold uppercase tracking-wider", t.header)}>
+          {title}
+        </p>
+        <span className="ml-1 font-mono text-[10px] tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      </div>
+      {items.length === 0 ? (
+        <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+          {emptyLabel}
+        </p>
+      ) : (
+        <ul className="divide-y">
+          {items.map((it) => (
+            <RitualRow
+              key={`${it.kind}:${it.id}`}
+              item={it}
+              onEdit={onEdit}
+            />
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -437,7 +548,13 @@ const STATUS_DOT_BG: Record<ChipTone, string> = {
   brand: "bg-primary",
 };
 
-function RitualRow({ item }: { item: RitualItem }) {
+function RitualRow({
+  item,
+  onEdit,
+}: {
+  item: RitualItem;
+  onEdit: (item: RitualItem) => void;
+}) {
   const tone =
     item.kind === "planning"
       ? planningTone(item.status)
@@ -462,9 +579,11 @@ function RitualRow({ item }: { item: RitualItem }) {
       >
         <Icon className="size-4" />
       </span>
-      <Link
-        href={item.href}
-        className="min-w-0 flex-1 focus-visible:outline-none"
+      <button
+        type="button"
+        onClick={() => onEdit(item)}
+        aria-label={`Editar ${visual.label}: ${title}`}
+        className="min-w-0 flex-1 text-left focus-visible:outline-none"
       >
         <div className="flex items-center gap-2">
           <span
@@ -541,10 +660,10 @@ function RitualRow({ item }: { item: RitualItem }) {
             ? `Facilitador: ${item.facilitatorName}`
             : "Sem facilitador definido"}
         </p>
-      </Link>
+      </button>
       <Link
         href={item.href}
-        aria-label="Abrir"
+        aria-label="Abrir Command Center"
         onClick={(e) => e.stopPropagation()}
         className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >

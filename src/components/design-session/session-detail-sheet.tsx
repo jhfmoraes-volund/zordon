@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, ExternalLink, Eye, EyeOff, Trash2, X } from "lucide-react";
+import {
+  Download,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   ResponsiveSheet,
   ResponsiveSheetBody,
@@ -41,6 +49,7 @@ export type SessionDetailSummary = {
   actualDurationMin?: number | null;
   itemCount: number;
   visibility: "public" | "internal";
+  isMain: boolean;
   projectId: string;
 };
 

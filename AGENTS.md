@@ -225,3 +225,65 @@ Se qualquer item falhar, o PRD não está pronto pra Rito 2. Volte e endereça.
 
 Modelos vivos no repo (referência boa): [docs/prd/ready/prd-opportunities.md](docs/prd/ready/prd-opportunities.md), [docs/prd/in-progress/prd-project-wiki.md](docs/prd/in-progress/prd-project-wiki.md).
 <!-- END:prd-and-ralph -->
+
+<!-- BEGIN:agent-calibration -->
+# Calibração contínua de agentes
+
+Todos os agentes do Volund (Vitoria/Vitor/Alpha/...) entram num **loop de calibração rotineiro**, não eventual. Quando um PM ou auditor vê comportamento torto em prod, esse comportamento vira um `AgentCalibrationCapture` no banco, é categorizado com vocabulary compartilhada, reproduzido via CLI driver, recebe um fix rastreado em `AgentCalibrationFix`, e (quando aplicável) é promovido pra teste permanente em `src/eval/<agente>/cases/`.
+
+## Loop canônico — 6 passos
+
+```
+1. Captura       — bash scripts/calibrate/calibrate.sh <agent> capture
+2. Categoriza    — UMA categoria da vocabulary (modelo-alucina, tool-off-topic, ...)
+3. Reproduz      — bash scripts/calibrate/calibrate.sh <agent> run [args]
+4. Diagnostica   — prompt? schema? tool? modelo? infra?
+5. Fix           — diff cirúrgico, registra em AgentCalibrationFix
+6. Re-valida     — mesmo cmd CLI, scorecard sobe
+7. Promote       — bug recorrente vira case em src/eval/<agent>/cases/ (opcional mas recomendado)
+```
+
+## Entrada de uso
+
+- **Skill**: `/calibrate <agente>` invoca [.claude/skills/calibrate/SKILL.md](.claude/skills/calibrate/SKILL.md). Triggers naturais: "calibra vitoria", "captura bug do <agente>", "reproduz <captureId>", "status calibração".
+- **CLI**: `bash scripts/calibrate/calibrate.sh <agente> {status|run|capture|list|score|reset}`
+
+## Localização
+
+| Coisa | Onde |
+|-------|------|
+| Skill entrypoint | [.claude/skills/calibrate/SKILL.md](.claude/skills/calibrate/SKILL.md) |
+| Registry de agentes plugados | [.claude/skills/calibrate/registry.md](.claude/skills/calibrate/registry.md) |
+| Vocabulary compartilhada (categorias + scorecard) | [docs/runbooks/agent-audits/README.md](docs/runbooks/agent-audits/README.md) |
+| Runbook por agente | `docs/runbooks/agent-audits/<agente>-audit-vN.md` |
+| Driver CLI por agente | `scripts/calibrate/drivers/<agente>-cli.ts` |
+| Dispatcher | [scripts/calibrate/calibrate.sh](scripts/calibrate/calibrate.sh) |
+| Captura interativa | [scripts/calibrate/capture.sh](scripts/calibrate/capture.sh) |
+| Backup local de evidência | `docs/evidence/<agente>/YYYY-MM-DD/HHMMSS-<categoria>.md` |
+| Tabelas | `AgentCalibrationCapture` / `AgentCalibrationFix` / `AgentCalibrationScoreboard` |
+| Storage de screenshots | bucket `calibration-evidence` (privado, 10 MB) |
+
+## Como adicionar agente novo no loop
+
+1. Edite [.claude/skills/calibrate/registry.md](.claude/skills/calibrate/registry.md) adicionando entry.
+2. Crie driver em `scripts/calibrate/drivers/<agente>-cli.ts` (template: `vitoria-cli.ts`).
+3. Crie runbook em `docs/runbooks/agent-audits/<agente>-audit-v1.md` com cenários V0..V_NN.
+4. Edite [scripts/calibrate/calibrate.sh](scripts/calibrate/calibrate.sh) (adicione case branch em `agent_status` e `agent_driver`).
+5. Smoke: `bash scripts/calibrate/calibrate.sh <agente> status` deve mostrar metadata sem erro.
+
+Procedimento detalhado em [docs/runbooks/agent-audits/README.md § Como adicionar agente novo no loop](docs/runbooks/agent-audits/README.md#como-adicionar-agente-novo-no-loop).
+
+## Regras (não-negociáveis)
+
+- **Não modifique prompt/tool/schema sem capture aberto.** Toda mudança rastreia pra um sintoma observado.
+- **Não invente categoria.** Use exatamente uma das listadas na vocabulary canônica.
+- **Schema strictness > prompt strictness > modelo.** Empilhar regras no prompt piora qualidade em modelos 4.6+ (doc Anthropic). Prefira Zod refinements e modelo certo.
+- **Cada `status='fixed'` deve ter `AgentCalibrationFix` row.** Sem registro, telemetria fica off-the-books e regressão volta silenciosa.
+- **Bug recorrente vira case na eval suite** — `promote-to-eval` antes de fechar capture com `severity >= medium`.
+
+## Backlog conhecido
+
+- 🟡 F5 — cron semanal de scorecard (rodar fixture canônica + popular `AgentCalibrationScoreboard` + alertar regressão). Por enquanto, manual.
+- 🟡 F6 — `promote-to-eval.sh` script (closed-loop captura → eval case auto-gerado).
+- 🟡 Bug telemetria: `AgentProposalOutcome.proposalId` FK CASCADE derruba outcome junto com proposta deletada — outcome de delete não persiste.
+<!-- END:agent-calibration -->

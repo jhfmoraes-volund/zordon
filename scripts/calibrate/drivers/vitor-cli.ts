@@ -17,16 +17,16 @@
  */
 import "dotenv/config";
 import { readFileSync } from "node:fs";
-import { runAgent } from "../src/lib/agent/engine";
-import { vitorAgent } from "../src/lib/agent/agents/vitor";
+import { runAgent } from "../../../src/lib/agent/engine";
+import { vitorAgent } from "../../../src/lib/agent/agents/vitor";
 import {
   ensureThread,
   persistUserMessage,
   persistAssistantMessage,
-} from "../src/lib/agent/context";
-import { db } from "../src/lib/db";
-import { getStepsForSession } from "../src/lib/design-session-steps";
-import type { Capabilities } from "../src/lib/agent/types";
+} from "../../../src/lib/agent/context";
+import { db } from "../../../src/lib/db";
+import { getStepsForSession, type StepDef } from "../../../src/lib/design-session-steps";
+import type { Capabilities } from "../../../src/lib/agent/types";
 
 type Args = {
   session: string;
@@ -83,7 +83,7 @@ async function main() {
   console.log(yellow("▸ Sessao:"), session.id);
   console.log(yellow("▸ Tipo:"), session.type);
   console.log(yellow("▸ Step atual:"), `${session.currentStep} → ${currentStepKey} (${currentStepDef.title})`);
-  console.log(yellow("▸ Steps da sessao:"), steps.map((s) => s.key).join(" → "));
+  console.log(yellow("▸ Steps da sessao:"), steps.map((s: StepDef) => s.key).join(" → "));
   console.log(yellow("▸ Mensagem (primeiros 200 chars):"));
   console.log(dim(`  ${message.slice(0, 200).replace(/\n/g, " ")}…`));
   console.log();

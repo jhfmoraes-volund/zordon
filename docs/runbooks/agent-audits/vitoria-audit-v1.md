@@ -95,7 +95,13 @@ WHERE pc.id = :'VITORIA_PLANNING';
 ### Template de comando
 
 ```bash
-npx tsx --tsconfig tsconfig.eval.json scripts/vitoria-cli.ts \
+# Preferido — via dispatcher:
+bash scripts/calibrate/calibrate.sh vitoria run \
+  --planning "$VITORIA_PLANNING" \
+  --message "<PROMPT>"
+
+# Direto no driver:
+npx tsx --tsconfig tsconfig.eval.json scripts/calibrate/drivers/vitoria-cli.ts \
   --planning "$VITORIA_PLANNING" \
   --message "<PROMPT>"
 ```
