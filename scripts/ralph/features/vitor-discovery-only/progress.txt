@@ -116,3 +116,31 @@ Próxima iteração deve escolher VTRDISC-007 (menor id lexicográfico entre as 
 iter 2026-05-29T23:30:00Z: PASS VTRDISC-006
   files: src/lib/agent/prompt.ts (já completo na iter anterior)
   learnings: Story já resolvida — VTRDISC-005 (remover TASK_BREAKDOWN) removeu os blocos de exemplo create_user_story/create_task (linhas 677-902). Prompt agora tem 1 exemplo propose_prd completo na sub-phase PRD_DRAFTING.
+Perfect! Commit successful: **1eb4f03**
+
+---
+
+## Iteração 3 — VTRDISC-006 concluída (já implementada em iteração anterior)
+
+**Story escolhida:** VTRDISC-006 — Substituir blocos de exemplo (create_user_story/create_task) por propose_prd
+
+**Verificações executadas:**
+1. ✓ `grep -cE '→ create_user_story\(|→ create_task\('` → 0 (sem exemplos legacy)
+2. ✓ `grep -cE '→ propose_prd\('` → 1 (exemplo propose_prd presente)
+
+**Implementação:**
+Story já estava completa da iteração anterior (VTRDISC-005). Quando removemos o bloco completo TASK_BREAKDOWN (linhas 677-902), isso incluiu:
+- Todos os exemplos `→ create_user_story(...)`
+- Todos os exemplos `→ create_task(...)`
+- O prompt agora contém 1 exemplo completo de `propose_prd(...)` na sub-phase PRD_DRAFTING (adicionado em VTRDISC-003)
+
+**Arquivos tocados:**
+- `scripts/ralph/features/vitor-discovery-only/prd.json` (passes: true)
+- `scripts/ralph/features/vitor-discovery-only/progress.txt` (learning appended)
+
+**Commit hash:** 1eb4f03
+
+**Próximo passo sugerido:** Stories VTRDISC-007 e VTRDISC-008 são elegíveis (ambas dependem apenas de VTRDISC-001 que passou, ou não têm dependências). Próxima iteração deve escolher **VTRDISC-007** (menor id lexicográfico).
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS VTRDISC-007
+  files: src/lib/agent/prompt.ts
+  learnings: Added "Regua de AC" section explaining {given, when, then} format for PRD acceptanceCriteria. Removed old comment about VTRDISC-007. AC guidance now separates product criteria (acceptanceCriteria) from technical notes (technicalNotes).

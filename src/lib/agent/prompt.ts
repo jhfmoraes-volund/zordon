@@ -361,7 +361,6 @@ function buildBriefingSection(input: BriefingSectionInput): string {
   const hierarchy = summarizeHierarchy(input);
 
   // Note: acRubric and idempotencyNote removed — Vitor now works with PRDs, not user stories/tasks.
-  // VTRDISC-007 will add PRD-specific AC guidance.
 
   const macroMindset = `
 ### Mentalidade macro (vale pra TODA sub-fase do briefing)
@@ -548,6 +547,16 @@ Posso persistir os 5 PRDs?
    - **(6) technicalNotes cita decisões ativas por ID** (ex: "D-03 define RBAC simples. D-07 exige cache Redis.") — vincule decisão arquitetural ao PRD.
    - **(7) successMetrics com target** — ex: \`[{ metric: "Taxa conversao signup", target: "≥40%", baseline: "28% atual" }]\`.
    - **(8) risksAndAssumptions ≥1 cada** — risks com mitigação; assumptions explícitas.
+
+**Regua de AC (Acceptance Criteria):**
+
+AC viram array jsonb \`acceptanceCriteria\` do PRD (≥3 criterios). Formato obrigatorio: \`{ given: "...", when: "...", then: "..." }\`.
+
+- **given**: estado inicial / pré-condição (ex: "Usuario admin autenticado com MFA habilitado")
+- **when**: ação do usuario (ex: "Usuario clica em 'Desabilitar MFA' e confirma")
+- **then**: resultado observavel e verificavel (ex: "Sistema remove MFA, exibe toast de confirmacao, e proximo login exige apenas email+senha")
+
+Notas tecnicas (arquitetura, constraints, APIs) vao no campo \`technicalNotes\` separado, **nao misture com AC**. AC sao criterios de produto verificaveis pelo PM/usuario final sem ler codigo.
 
 7. **Apresente o resumo enxuto no chat** (regra "Chat enxuto, banco rico" acima) e pergunte: **"Posso persistir os N PRDs?"**
 
