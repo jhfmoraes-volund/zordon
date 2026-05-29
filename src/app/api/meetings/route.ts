@@ -7,6 +7,7 @@ import {
   getEffectiveAccessLevel,
 } from "@/lib/dal";
 import { BUILDER, hasMinAccessLevel } from "@/lib/roles";
+import { upsertTranscriptRef } from "@/lib/transcripts/upsert";
 
 const MEETING_SELECT = `
   *,
@@ -21,6 +22,9 @@ const MEETING_SELECT = `
   ),
   projectLinks:MeetingProjectLink(
     *, project:Project(id, name, status, pmId)
+  ),
+  transcriptRefs:TranscriptRef!TranscriptRef_meetingId_fkey(
+    id, source, sourceId, title, fullText, capturedAt
   )
 `;
 
@@ -242,34 +246,43 @@ export async function POST(req: NextRequest) {
     // Stamp createdById so RLS pode permitir UPDATE/DELETE futuro pelo PM autor.
     // RPC roda como service_role e não tem contexto do caller; fazemos o
     // update aqui com o member do request.
-    // Junto, persiste o link Roam/Granola quando a meeting foi criada
-    // a partir do import modal — habilita re-leituras da transcrição.
+    // Stamp metadados pós-RPC. Transcrição não vive mais aqui — vai pra
+    // TranscriptRef (SSOT) logo abaixo via upsertTranscriptRef.
     const memberId = await getMemberId();
     const stamp: {
       createdById?: string;
       visibility?: "private" | "public";
       kind?: string;
-      transcriptSource?: "roam" | "granola";
-      transcriptSourceId?: string;
-      transcript?: string;
     } = {};
     if (memberId) stamp.createdById = memberId;
     // visibility/kind sempre carimbados (RPC não os conhece; default da
     // coluna é 'private', então sem isto reunião pública nasceria privada).
     stamp.visibility = visibility;
     stamp.kind = kind;
-    if (transcriptSource && transcriptSourceId) {
-      stamp.transcriptSource = transcriptSource;
-      stamp.transcriptSourceId = transcriptSourceId;
-    }
-    if (transcript) {
-      stamp.transcript = transcript;
-    }
     if (Object.keys(stamp).length > 0) {
       await supabase
         .from("Meeting")
         .update(stamp)
         .eq("id", meetingId as unknown as string);
+    }
+
+    // Persist transcript link/text no SSOT. Idempotente por (source, sourceId).
+    if (transcriptSource && transcriptSourceId) {
+      await upsertTranscriptRef(supabase, {
+        source: transcriptSource,
+        sourceId: transcriptSourceId,
+        meetingId: meetingId as unknown as string,
+        fullText: transcript ?? null,
+        importedById: memberId ?? null,
+      });
+    } else if (transcript) {
+      // Texto manual sem source externo — vira TranscriptRef source='manual'.
+      await upsertTranscriptRef(supabase, {
+        source: "manual",
+        meetingId: meetingId as unknown as string,
+        fullText: transcript,
+        importedById: memberId ?? null,
+      });
     }
 
     const { data: full } = await supabase

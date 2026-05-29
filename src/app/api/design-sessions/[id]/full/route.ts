@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSessionAccessApi } from "@/lib/dal";
 import { getStepsForSession } from "@/lib/design-session-steps";
 import type { StepKey, StickyNote } from "@/lib/design-session/types";
+import { listSessionTranscripts } from "@/lib/dal/design-session-transcripts";
 
 /**
  * Aggregated read endpoint — returns the session plus every normalized table
@@ -112,7 +113,7 @@ export async function GET(
       ? db().from("DesignSessionResearch").select("*").eq("sessionId", id)
       : Promise.resolve({ data: [], error: null }),
     stepKeys.has("pre_work")
-      ? db().from("DesignSessionTranscript").select("*").eq("sessionId", id)
+      ? listSessionTranscripts(db(), id).then((items) => ({ data: items, error: null }))
       : Promise.resolve({ data: [], error: null }),
     stepKeys.has("pre_work")
       ? db()

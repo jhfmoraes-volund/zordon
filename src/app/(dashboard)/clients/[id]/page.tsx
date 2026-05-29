@@ -29,6 +29,7 @@ import {
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageContainer } from "@/components/app-shell";
 import {
   CsatResponseSheet,
   type CsatFormValues,
@@ -381,23 +382,26 @@ export default function ClientDetailPage({
 
   if (notFound) {
     return (
-      <div className="space-y-4">
-        <Link
-          href="/clients"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Clientes
-        </Link>
-        <div className="surface p-8 text-center text-sm text-muted-foreground">
-          Cliente não encontrado.
+      <PageContainer>
+        <div className="space-y-4">
+          <Link
+            href="/clients"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Clientes
+          </Link>
+          <div className="surface p-8 text-center text-sm text-muted-foreground">
+            Cliente não encontrado.
+          </div>
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <PageContainer>
+      <div className="space-y-6">
       <div>
         <Link
           href="/clients"
@@ -625,6 +629,7 @@ export default function ClientDetailPage({
         state={confirmState}
         onClose={() => setConfirmState(null)}
       />
-    </div>
+      </div>
+    </PageContainer>
   );
 }

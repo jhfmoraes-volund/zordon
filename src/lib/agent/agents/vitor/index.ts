@@ -1,3 +1,4 @@
+import { tool, type ToolSet } from "ai";
 import { buildSystemPrompt } from "../../prompt";
 import { assembleTools } from "../../tools";
 import {
@@ -10,11 +11,26 @@ import {
   getPersonasForProject,
   getRecentStoriesForProject,
 } from "@/lib/dal/story-hierarchy";
+import { listSessionTranscripts } from "@/lib/dal/design-session-transcripts";
 import {
   BRIEFING_SUB_PHASES,
   DEFAULT_BRIEFING_SUB_PHASE,
 } from "@/lib/design-sessions/constants";
 import { getStepsForSession } from "@/lib/design-session-steps";
+import {
+  createPrd,
+  getPrdById,
+  updatePrd,
+  approvePrd,
+  getPrdsForProject,
+} from "@/lib/dal/product-requirements";
+import {
+  ProposePrdInput,
+  UpdatePrdInput,
+  ApprovePrdInput,
+  LinkPrdDependencyInput,
+} from "./prd-schemas";
+import { z } from "zod";
 import type { AgentDefinition, AgentRunRequest } from "../../types";
 
 function pickVerbosity(
@@ -136,13 +152,20 @@ export const vitorAgent: AgentDefinition = {
         .neq("id", sessionId)
         .in("status", ["active", "in_progress"])
         .order("updatedAt", { ascending: false }),
-      db()
-        .from("DesignSessionTranscript")
-        .select(
-          "id, meetingTitle, meetingStart, meetingEnd, participants, summary, actionItems, fullText",
-        )
-        .eq("sessionId", sessionId)
-        .order("meetingStart", { ascending: false }),
+      // Transcripts via SSOT (TranscriptRef + link N:N). Antes lia direto
+      // de DesignSessionTranscript — droppada na Fundação B.
+      listSessionTranscripts(db(), sessionId).then((items) => ({
+        data: items.map((t) => ({
+          id: t.transcriptRefId,
+          meetingTitle: t.meetingTitle ?? "Sem título",
+          meetingStart: t.meetingStart ?? "",
+          meetingEnd: t.meetingEnd ?? t.meetingStart ?? "",
+          participants: t.participants,
+          summary: t.summary,
+          actionItems: t.actionItems,
+          fullText: t.fullText,
+        })),
+      })),
       // Hierarchy context — only loaded on briefing to keep prompt token budget tight.
       isBriefing
         ? getModulesForProject(session.projectId)
@@ -203,11 +226,129 @@ export const vitorAgent: AgentDefinition = {
   },
 
   buildTools({ capabilities, agentContext }) {
-    return assembleTools(agentContext.sessionId as string, {
+    const sessionId = agentContext.sessionId as string;
+    const projectId =
+      (agentContext.projectId as string) ?? capabilities.projectId;
+    const memberId =
+      (agentContext.memberId as string | undefined) ?? capabilities.memberId;
+
+    const baseTools = assembleTools(sessionId, {
       ...capabilities,
-      projectId: (agentContext.projectId as string) ?? capabilities.projectId,
-      memberId: (agentContext.memberId as string | undefined) ?? capabilities.memberId,
+      projectId,
+      memberId,
+      vitorAsPm: true,
     });
+
+    if (!projectId) {
+      return baseTools;
+    }
+
+    const prdTools: ToolSet = {
+      propose_prd: tool({
+        description:
+          "Propoe um PRD (Product Requirement Document) dentro do projeto da sessao. Use 1 PRD por functionality do brainstorm. Requer problem (>=50 chars), goal (>=20 chars), e >=3 acceptance criteria.",
+        inputSchema: ProposePrdInput.omit({
+          projectId: true,
+          designSessionId: true,
+        }),
+        execute: async (args) => {
+          const row = await createPrd({
+            projectId,
+            designSessionId: sessionId,
+            moduleId: args.moduleId ?? null,
+            title: args.title,
+            oneLiner: args.oneLiner,
+            personaIds: args.personaIds,
+            problem: args.problem,
+            goal: args.goal,
+            userJourney: args.userJourney,
+            acceptanceCriteria: args.acceptanceCriteria,
+            successMetrics: args.successMetrics,
+            outOfScope: args.outOfScope,
+            technicalNotes: args.technicalNotes,
+            risksAndAssumptions: args.risksAndAssumptions,
+            sourceCardIds: args.sourceCardIds,
+            actorAgent: "vitor",
+            actorMemberId: memberId ?? null,
+          });
+          return { id: row.id, reference: row.reference, status: row.status };
+        },
+      }),
+
+      update_prd: tool({
+        description:
+          "Edita um PRD draft/review. Nao pode editar PRD approved (proponha uma nova versao ou peca pra mover pra review primeiro).",
+        inputSchema: UpdatePrdInput.omit({
+          projectId: true,
+          designSessionId: true,
+        }),
+        execute: async ({ id, ...patch }) => {
+          const current = await getPrdById(id);
+          if (!current) throw new Error("PRD not found");
+          if (current.status === "approved") {
+            throw new Error("PRD approved — use uma nova versao");
+          }
+          const row = await updatePrd(id, patch, {
+            actorAgent: "vitor",
+            actorMemberId: memberId ?? null,
+          });
+          return { id: row.id, version: row.version, status: row.status };
+        },
+      }),
+
+      approve_prd: tool({
+        description:
+          "Aprova um PRD (status=approved). Valida que o PRD tem problem/goal/AC suficientes. Apos aprovacao, Vitoria pode materializar em Tasks.",
+        inputSchema: ApprovePrdInput,
+        execute: async ({ id }) => {
+          if (!memberId) throw new Error("approve_prd requires memberId");
+          const row = await approvePrd(id, { actorMemberId: memberId });
+          return { id: row.id, status: row.status, approvedAt: row.approvedAt };
+        },
+      }),
+
+      link_prd_dependency: tool({
+        description:
+          "Liga dois PRDs por uma dependencia (blocks/enables/shares-data). Edita o array dependencies do fromPrdId.",
+        inputSchema: LinkPrdDependencyInput,
+        execute: async ({ fromPrdId, toPrdId, kind }) => {
+          const from = await getPrdById(fromPrdId);
+          if (!from) throw new Error("fromPrd not found");
+          const existing = Array.isArray(from.dependencies)
+            ? (from.dependencies as Array<{ prdId: string; kind: string }>)
+            : [];
+          const deps = [...existing, { prdId: toPrdId, kind }];
+          await updatePrd(
+            fromPrdId,
+            { dependencies: deps },
+            { actorAgent: "vitor", actorMemberId: memberId ?? null },
+          );
+          return { ok: true };
+        },
+      }),
+
+      list_prds: tool({
+        description:
+          "Lista PRDs do projeto. Opcional filtro por status. Use pra checar o que ja foi criado antes de duplicar.",
+        inputSchema: z.object({
+          status: z
+            .array(z.enum(["draft", "review", "approved", "superseded"]))
+            .optional(),
+        }),
+        execute: async ({ status }) => {
+          const rows = await getPrdsForProject(projectId, { status });
+          return rows.map((r) => ({
+            id: r.id,
+            reference: r.reference,
+            title: r.title,
+            status: r.status,
+            moduleId: r.moduleId,
+          }));
+        },
+      }),
+    };
+
+    return { ...baseTools, ...prdTools };
   },
 };
 

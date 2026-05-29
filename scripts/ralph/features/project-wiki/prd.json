@@ -1,0 +1,589 @@
+{
+  "feature": "project-wiki",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/prd-project-wiki.md",
+  "phase": 1,
+  "phaseGoal": "Dashboard executivo + narrativa core (objectives/highlights/decisions) + Recursos + suppress válvula",
+  "userStories": [
+    {
+      "id": "WIKI-001",
+      "title": "Migration: ProjectWikiSection audit columns",
+      "description": "Cria migration adicionando colunas generatedAt, generatedBy, schemaVersion, suppressed em ProjectWikiSection, revoga INSERT/UPDATE/DELETE de authenticated.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260530c_project_wiki_section_audit_cols.sql existe com DDL do PRD §7.1",
+        "psql roda sem erro",
+        "\\d \"ProjectWikiSection\" mostra as 4 colunas novas",
+        "authenticated não tem privilégio INSERT/UPDATE/DELETE na tabela"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260530c_project_wiki_section_audit_cols.sql",
+          "expected": "ALTER TABLE / no error"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='ProjectWikiSection' AND column_name IN ('generatedAt','generatedBy','schemaVersion','suppressed');",
+          "expected": "4 rows"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT has_table_privilege('authenticated', '\"ProjectWikiSection\"', 'INSERT');",
+          "expected": "false"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": [
+        "supabase/migrations/20260530c_project_wiki_section_audit_cols.sql"
+      ]
+    },
+    {
+      "id": "WIKI-002",
+      "title": "Migration: ProjectResource table",
+      "description": "Cria tabela ProjectResource com RLS via can_view_project / can_edit_project.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260530d_project_resource_table.sql existe (DDL §7.2)",
+        "Migration roda via psql sem erro",
+        "RLS habilitado, policies pr_select e pr_modify existem",
+        "Índice ix_project_resource_project existe"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260530d_project_resource_table.sql",
+          "expected": "no error"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT polname FROM pg_policy WHERE polrelid = '\"ProjectResource\"'::regclass ORDER BY polname;",
+          "expected": "pr_modify\\npr_select"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "supabase/migrations/20260530d_project_resource_table.sql"
+      ]
+    },
+    {
+      "id": "WIKI-003",
+      "title": "Migration: ProjectWikiSectionSource table",
+      "description": "Cria tabela ProjectWikiSectionSource (FK pra ProjectWikiSection ON DELETE CASCADE) com RLS de SELECT via JOIN.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260530e_project_wiki_section_source_table.sql existe (DDL §7.3)",
+        "Migration roda via psql sem erro",
+        "Índices ix_pwss_section e ix_pwss_source criados",
+        "RLS habilitado, INSERT/UPDATE/DELETE revogados de authenticated"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260530e_project_wiki_section_source_table.sql",
+          "expected": "no error"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT indexname FROM pg_indexes WHERE tablename = 'ProjectWikiSectionSource' ORDER BY indexname;",
+          "expected": "ix_pwss_section, ix_pwss_source"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "supabase/migrations/20260530e_project_wiki_section_source_table.sql"
+      ]
+    },
+    {
+      "id": "WIKI-004",
+      "title": "Regenerate database.types.ts",
+      "description": "Regerar tipos TypeScript do Supabase pós-migrations.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/lib/supabase/database.types.ts atualizado",
+        "Tipo ProjectWikiSection inclui as 4 colunas novas",
+        "Tipos ProjectResource e ProjectWikiSectionSource existem",
+        "pnpm tsc --noEmit passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "manual_browser",
+          "command_or_query": "npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts (ou comando equivalente do projeto)",
+          "expected": "arquivo regenerado sem erro"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["WIKI-001", "WIKI-002", "WIKI-003"],
+      "estimateMinutes": 10,
+      "touches": ["src/lib/supabase/database.types.ts"]
+    },
+    {
+      "id": "WIKI-005",
+      "title": "Zod schemas para output narrativo da Wiki",
+      "description": "Cria src/lib/wiki/schemas.ts com Zod schemas pra objectives, highlights, decisions. Cada bullet tem bulletHash e source {type,id}.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo src/lib/wiki/schemas.ts exporta ObjectivesSchema, HighlightsSchema, DecisionsSchema",
+        "Cada schema valida max items (objectives 1, highlights 5, decisions 10)",
+        "Tipos Objectives/Highlights/Decisions inferidos via z.infer",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm eslint src/lib/wiki/schemas.ts",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["WIKI-004"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/wiki/schemas.ts"]
+    },
+    {
+      "id": "WIKI-006",
+      "title": "Helper bulletHash + suppressed type",
+      "description": "Cria src/lib/wiki/suppressed.ts com computeBulletHash(text, sourceId) (sha256 hex[:8]), tipo SuppressedEntry, isSuppressed(bullet, suppressed[]).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/lib/wiki/suppressed.ts exporta computeBulletHash, isSuppressed, SuppressedEntry",
+        "computeBulletHash determinístico (mesma input = mesmo output)",
+        "tsc + lint passam"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm eslint src/lib/wiki/suppressed.ts",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["WIKI-005"],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/wiki/suppressed.ts"]
+    },
+    {
+      "id": "WIKI-007",
+      "title": "DAL: getWikiMetrics(projectId)",
+      "description": "Cria src/lib/dal/wiki-metrics.ts retornando {hero, metrics, team, roadmap} via queries SQL agregadas. Cache em-memória 5min.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Função getWikiMetrics(projectId): Promise<WikiMetrics> exportada",
+        "Shape inclui hero.sprintNumber, hero.completionPercent, hero.fpDone, hero.fpTotal, hero.nextMilestoneDays",
+        "Query usa só tabelas existentes (Sprint, Task, FunctionPoint, ProjectAccess, Member, DesignSession)",
+        "tsc + lint passam"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm eslint src/lib/dal/wiki-metrics.ts",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["WIKI-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/dal/wiki-metrics.ts"]
+    },
+    {
+      "id": "WIKI-008",
+      "title": "API route GET /api/projects/[id]/wiki/metrics",
+      "description": "Route handler retorna WikiMetrics via getWikiMetrics. Auth canViewProject. Zod do [id].",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/app/api/projects/[id]/wiki/metrics/route.ts exporta GET",
+        "401 sem auth, 403 sem canViewProject, 200 com shape WikiMetrics",
+        "tsc + lint passam"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/projects/<seed-project-id>/wiki/metrics (sem cookie)",
+          "expected": "401"
+        }
+      ],
+      "dependsOn": ["WIKI-007"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/projects/[id]/wiki/metrics/route.ts"]
+    },
+    {
+      "id": "WIKI-009",
+      "title": "Edge Function skeleton: run-wiki-composer",
+      "description": "Cria supabase/functions/run-wiki-composer/index.ts baseado no padrão export-design-session. Aceita {projectId, jobId}, retorna {status, error?}.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo existe, roda via supabase functions serve sem crash",
+        "POST com {projectId, jobId} retorna 200",
+        "Validação Zod do input",
+        "Auth via service role key (header)"
+      ],
+      "verifiable": [
+        {
+          "kind": "manual_browser",
+          "command_or_query": "supabase functions serve run-wiki-composer & curl -X POST http://localhost:54321/functions/v1/run-wiki-composer -H 'Authorization: Bearer <service_role>' -d '{\"projectId\":\"<uuid>\",\"jobId\":\"<uuid>\"}'",
+          "expected": "200 OK"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "deno check supabase/functions/run-wiki-composer/index.ts",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["WIKI-005"],
+      "estimateMinutes": 30,
+      "touches": ["supabase/functions/run-wiki-composer/index.ts"]
+    },
+    {
+      "id": "WIKI-010",
+      "title": "Edge Function: load context (DS + meetings + tasks)",
+      "description": "Implementa loadWikiContext(projectId): DS Inception approved mais recente, meetings 14d (type != private), tasks completed na janela. Trunca transcript a 3000 chars.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Função loadWikiContext exportada",
+        "Filtra meetings type != private",
+        "Trunca transcript a 3000 chars (head+tail)",
+        "Retorna {inceptionDS, meetings, completedTasks}; inceptionDS:null se sem DS"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "deno check supabase/functions/run-wiki-composer/index.ts",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Invocar Edge function com projectId real (seed); inspecionar logs",
+          "expected": "context retornado sem meeting type='private'"
+        }
+      ],
+      "dependsOn": ["WIKI-009"],
+      "estimateMinutes": 30,
+      "touches": ["supabase/functions/run-wiki-composer/index.ts"]
+    },
+    {
+      "id": "WIKI-011",
+      "title": "Edge Function: LLM calls per section",
+      "description": "3 funções composeObjectives, composeHighlights, composeDecisions; OpenRouter call + Zod validate + response_format json_object. Mock via env WIKI_DRY_RUN=1.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "3 funções definidas no arquivo da Edge",
+        "Parse fail → retorna {error: string} sem throw",
+        "WIKI_DRY_RUN=1 → mock retorna shape válido",
+        "tsc/deno-check passam"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "deno check supabase/functions/run-wiki-composer/index.ts",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "WIKI_DRY_RUN=1 supabase functions serve run-wiki-composer & curl ...",
+          "expected": "objectives/highlights/decisions shape válido"
+        }
+      ],
+      "dependsOn": ["WIKI-010"],
+      "estimateMinutes": 30,
+      "touches": ["supabase/functions/run-wiki-composer/index.ts"]
+    },
+    {
+      "id": "WIKI-012",
+      "title": "Edge Function: persist (UPSERT + sources + preserve suppressed)",
+      "description": "Transação: SELECT suppressed atual, DELETE Source rows antigas, UPSERT ProjectWikiSection (preserving suppressed), INSERT new Source rows, AgentUsage log.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Função persistWikiSection numa transação",
+        "suppressed da row anterior preservado",
+        "Sources antigas deletadas antes das novas",
+        "AgentUsage row com agentName='wiki-composer-<section>' + costUsdCents"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "Após invocar compose, SELECT suppressed FROM \"ProjectWikiSection\" WHERE \"projectId\"=<id> AND key='objectives'; (em test fixture com suppressed pré-populado)",
+          "expected": "array original mantido"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM \"AgentUsage\" WHERE \"agentName\" LIKE 'wiki-composer-%' AND \"createdAt\" > now() - interval '1 minute';",
+          "expected": "≥ 1"
+        }
+      ],
+      "dependsOn": ["WIKI-011"],
+      "estimateMinutes": 30,
+      "touches": ["supabase/functions/run-wiki-composer/index.ts"]
+    },
+    {
+      "id": "WIKI-013",
+      "title": "API route POST /api/projects/[id]/wiki/compose (async 202)",
+      "description": "Gera jobId (uuid), invoca Edge Function via fetch interno (não-bloqueante), retorna 202 + {jobId}. Auth canEditProject. Job store em-memória v1.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/app/api/projects/[id]/wiki/compose/route.ts exporta POST",
+        "202 + {jobId: uuid}",
+        "403 sem canEditProject",
+        "Edge Function invocada em background (Promise não-awaited)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -X POST http://localhost:3000/api/projects/<seed-id>/wiki/compose -H 'Cookie: <session>'",
+          "expected": "HTTP 202, body com jobId uuid"
+        }
+      ],
+      "dependsOn": ["WIKI-012"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/api/projects/[id]/wiki/compose/route.ts",
+        "src/lib/wiki/job-store.ts"
+      ]
+    },
+    {
+      "id": "WIKI-014",
+      "title": "API route GET /api/projects/[id]/wiki/jobs/[jobId]",
+      "description": "Retorna status do job (pending|running|done|failed) consultando job-store. Auth canViewProject.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/app/api/projects/[id]/wiki/jobs/[jobId]/route.ts exporta GET",
+        "200 com {status, error?, finishedAt?}",
+        "404 se jobId desconhecido",
+        "403 sem canViewProject"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl http://localhost:3000/api/projects/<seed>/wiki/jobs/<jobId>",
+          "expected": "200 JSON com status"
+        }
+      ],
+      "dependsOn": ["WIKI-013"],
+      "estimateMinutes": 20,
+      "touches": ["src/app/api/projects/[id]/wiki/jobs/[jobId]/route.ts"]
+    },
+    {
+      "id": "WIKI-015",
+      "title": "API route POST/DELETE /api/projects/[id]/wiki/suppress",
+      "description": "POST adiciona {bulletHash, suppressedBy, suppressedAt} no array suppressed; DELETE remove. Auth canEditProject; service role pra escrever.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Route exporta POST e DELETE",
+        "POST idempotente (não duplica bulletHash)",
+        "DELETE remove a entry",
+        "403 sem canEditProject",
+        "Zod do body"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "Após 2x POST com mesmo bulletHash: SELECT jsonb_array_length(suppressed) FROM \"ProjectWikiSection\" WHERE ...;",
+          "expected": "1 (não 2)"
+        }
+      ],
+      "dependsOn": ["WIKI-014"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/projects/[id]/wiki/suppress/route.ts"]
+    },
+    {
+      "id": "WIKI-016",
+      "title": "Component WikiHero (read-only métricas)",
+      "description": "Componente que renderiza linha Hero com sprint/completion/FP/próximo marco. Esconde FP de guest via useCanSeeFunctionPoints.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/components/wiki/wiki-hero.tsx exporta WikiHero",
+        "Recebe metrics: WikiMetrics['hero'] como prop",
+        "Renderiza 'Sprint N · X% · Y/Z FP · marco em Wd'",
+        "useCanSeeFunctionPoints()=false → esconde FP, mostra só %",
+        "src/hooks/use-can-see-function-points.ts criado/exportado"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm eslint src/components/wiki/wiki-hero.tsx src/hooks/use-can-see-function-points.ts",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["WIKI-008"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/components/wiki/wiki-hero.tsx",
+        "src/hooks/use-can-see-function-points.ts"
+      ]
+    },
+    {
+      "id": "WIKI-017",
+      "title": "Component WikiNarrativeSection com suppress menu",
+      "description": "Lista de bullets com ↳ fonte clicável + menu ⋯ com 'Ocultar bullet' (chama suppress API via useOptimisticCollection).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/components/wiki/wiki-narrative-section.tsx exportado",
+        "Recebe section: { key, data: { bullets }, suppressed }",
+        "Filtra suppressed antes de render",
+        "DropdownMenu com 'Ocultar bullet' chama POST /wiki/suppress via useOptimisticCollection.mutate",
+        "Erro via showErrorToast"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm eslint src/components/wiki/wiki-narrative-section.tsx",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["WIKI-015", "WIKI-016"],
+      "estimateMinutes": 30,
+      "touches": ["src/components/wiki/wiki-narrative-section.tsx"]
+    },
+    {
+      "id": "WIKI-018",
+      "title": "Refatorar project-wiki.tsx (novo layout)",
+      "description": "Reescreve src/components/project-wiki.tsx: WikiHero + 3 WikiNarrativeSection (objectives/highlights/decisions) + Team + footer com botão Gerar Wiki + timestamp. Sem Tiptap.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "project-wiki.tsx renderiza Hero + objectives + highlights + decisions + team + footer",
+        "Botão 'Gerar Wiki' chama POST /wiki/compose, polling GET /jobs/[jobId] 1s até done|failed",
+        "Loading skeleton enquanto job roda",
+        "Sem import de Tiptap",
+        "Renderiza num projeto seed sem erro"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm eslint src/components/project-wiki.tsx",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "pnpm dev → abrir /projects/<seed>/wiki → clicar 'Gerar Wiki'",
+          "expected": "polling visível, seções populam"
+        }
+      ],
+      "dependsOn": ["WIKI-017"],
+      "estimateMinutes": 30,
+      "touches": ["src/components/project-wiki.tsx"]
+    },
+    {
+      "id": "WIKI-019",
+      "title": "Tab Recursos: CRUD ProjectResource",
+      "description": "Tab Recursos em /projects/[id] com lista agrupada por kind + ResponsiveSheet de create/edit usando Field + useOptimisticCollection.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/components/wiki/project-resources.tsx lista resources por kind",
+        "Botão '+ Recurso' abre ResponsiveSheet com Field pra title/url/notes/kind",
+        "Create/Update/Delete via useOptimisticCollection",
+        "API routes /api/projects/[id]/resources e /[resourceId] implementadas com canEditProject",
+        "Tab adicionada em src/app/(dashboard)/projects/[id]/page.tsx"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm eslint src/components/wiki/project-resources.tsx 'src/app/api/projects/[id]/resources/**/*.ts'",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -X POST http://localhost:3000/api/projects/<seed>/resources -H 'Cookie: <session>' -d '{\"kind\":\"link\",\"title\":\"x\",\"url\":\"https://...\"}'",
+          "expected": "201 + row in DB"
+        }
+      ],
+      "dependsOn": ["WIKI-002", "WIKI-018"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/wiki/project-resources.tsx",
+        "src/app/api/projects/[id]/resources/route.ts",
+        "src/app/api/projects/[id]/resources/[resourceId]/route.ts",
+        "src/app/(dashboard)/projects/[id]/page.tsx"
+      ]
+    },
+    {
+      "id": "WIKI-020",
+      "title": "Script: migrar conteúdo manual legado para ProjectResource",
+      "description": "Script scripts/migrate-wiki-to-resources.ts com --dry-run. Lê ProjectWikiSection antigos com keys links/sponsors/environments, cria ProjectResource, backup em ProjectWikiSection_legacy.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Script roda com pnpm tsx scripts/migrate-wiki-to-resources.ts --dry-run sem efeito",
+        "Sem flag, cria rows em ProjectResource + tabela ProjectWikiSection_legacy populada",
+        "Idempotente (rodar 2x não duplica, checa por url+title+projectId)",
+        "Logs estruturados {projectId, created, skipped}"
+      ],
+      "verifiable": [
+        {
+          "kind": "manual_browser",
+          "command_or_query": "pnpm tsx scripts/migrate-wiki-to-resources.ts --dry-run",
+          "expected": "log com counts, 0 rows em DB"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "Antes/depois: SELECT count(*) FROM \"ProjectResource\";",
+          "expected": "count aumenta após run sem --dry-run"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "Rodar script 2× sem --dry-run, SELECT count(*) FROM \"ProjectResource\";",
+          "expected": "mesmo count após 2ª run"
+        }
+      ],
+      "dependsOn": ["WIKI-019"],
+      "estimateMinutes": 30,
+      "touches": ["scripts/migrate-wiki-to-resources.ts"]
+    }
+  ]
+}

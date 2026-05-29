@@ -8,6 +8,55 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 
 type MeetingTaskActionUpdate = Database["public"]["Tables"]["MeetingTaskAction"]["Update"];
 
+/**
+ * Valida payload de propose_task_action quando type='create'.
+ * Retornado como issues estruturadas pra superRefine — modelo vê path+message
+ * por campo, sabe exatamente o que faltou. Não é parse Zod separado porque
+ * o payload chega como Record<string,unknown> (jsonb) e queremos type-narrow
+ * via shape, não substituir o campo.
+ */
+function validateCreatePayload(
+  payload: Record<string, unknown>,
+): { path: (string | number)[]; message: string }[] {
+  const issues: { path: (string | number)[]; message: string }[] = [];
+  const title = payload.title;
+  if (typeof title !== "string" || title.trim().length < 3) {
+    issues.push({ path: ["title"], message: "title obrigatório (string ≥3 chars)" });
+  }
+  const description = payload.description;
+  if (typeof description !== "string" || description.trim().length < 60) {
+    issues.push({
+      path: ["description"],
+      message:
+        "description obrigatório com ≥60 chars. Use SDD: '## Problema\\n…\\n## Solução\\n…\\n## Invariantes\\n…'",
+    });
+  }
+  const fp = payload.functionPoints;
+  if (typeof fp !== "number" || !Number.isInteger(fp) || fp < 1 || fp > 13) {
+    issues.push({
+      path: ["functionPoints"],
+      message: "functionPoints obrigatório: inteiro 1-13 (estimativa de tamanho)",
+    });
+  }
+  const ac = payload.acceptanceCriteria;
+  if (!Array.isArray(ac) || ac.length < 3) {
+    issues.push({
+      path: ["acceptanceCriteria"],
+      message: "acceptanceCriteria obrigatório: array de ≥3 strings observáveis pelo PM",
+    });
+  } else {
+    ac.forEach((item, idx) => {
+      if (typeof item !== "string" || item.trim().length < 10) {
+        issues.push({
+          path: ["acceptanceCriteria", idx],
+          message: "cada AC deve ser string ≥10 chars (verificável pelo PM)",
+        });
+      }
+    });
+  }
+  return issues;
+}
+
 export function buildVitoriaTools(planningId: string, projectId: string) {
   return {
     add_context_note: tool({
@@ -15,7 +64,15 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
         "Adiciona uma nota de contexto ao briefing da planning. Use para registrar temas, riscos, sinais de capacidade, observações de código ou questões extraídas das transcrições.",
       inputSchema: z.object({
         kind: z
-          .enum(["summary", "theme", "risk", "capacity_signal", "code_observation", "open_question"])
+          .enum([
+            "summary",
+            "theme",
+            "risk",
+            "capacity_signal",
+            "code_observation",
+            "open_question",
+            "scope_creep",
+          ])
           .describe("Tipo da nota"),
         content: z
           .string()
@@ -45,7 +102,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           sourceMeetingIds: sourceMeetingIds ?? [],
           sourceTranscriptIds: sourceTranscriptIds ?? [],
           priority: priority ?? 5,
-          generatedByAgent: "alpha", // Vitoria usa "alpha" como actor até ter entrada própria no DB
+          generatedByAgent: "vitoria",
         });
         return { ok: true, noteId: note.id, kind: note.kind };
       },
@@ -53,39 +110,86 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
 
     propose_task_action: tool({
       description:
-        "Cria uma proposta de ação no backlog (MeetingTaskAction) para aprovação do PM. Use para propor criar, atualizar, mover ou excluir tasks com base no contexto.",
-      inputSchema: z.object({
-        projectId: z.string().describe("ID do projeto"),
-        type: z
-          .enum(["create", "update", "delete", "move"])
-          .describe("Tipo de ação"),
-        taskId: z
-          .string()
-          .optional()
-          .describe("ID da task alvo (omita em create)"),
-        targetSprintId: z
-          .string()
-          .optional()
-          .describe("Sprint destino para ações move"),
-        payload: z
-          .record(z.string(), z.unknown())
-          .describe(
-            "Dados: create={ title, description?, type?, scope?, priority? }, update=campos a alterar, move/delete={}",
-          ),
-        aiReasoning: z
-          .string()
-          .describe("Explicação de POR QUÊ esta ação é proposta. O PM lê para decidir."),
-        aiConfidence: z
-          .number()
-          .min(0)
-          .max(1)
-          .optional()
-          .describe("Confiança 0-1. Default 0.8."),
-        sourceNoteIds: z
-          .array(z.string())
-          .optional()
-          .describe("IDs de notas que embasam esta proposta"),
-      }),
+        "Cria uma proposta de ação no backlog (MeetingTaskAction) para aprovação do PM. Use para propor criar, atualizar, mover ou excluir tasks com base no contexto. " +
+        "Payload é tipado por `type` — schema rejeita create sem functionPoints/acceptanceCriteria estruturados.",
+      inputSchema: z
+        .object({
+          projectId: z.string().describe("ID do projeto"),
+          type: z
+            .enum(["create", "update", "delete", "move"])
+            .describe("Tipo de ação"),
+          taskId: z
+            .string()
+            .optional()
+            .describe("ID da task alvo. OBRIGATÓRIO em update/delete/move; omita em create"),
+          targetSprintId: z
+            .string()
+            .optional()
+            .describe("Sprint destino. OBRIGATÓRIO em move (resolva via list_project_sprints antes)"),
+          payload: z
+            .record(z.string(), z.unknown())
+            .describe(
+              "Dados da ação. SHAPE POR TYPE:\n" +
+                "• create: { title, description, functionPoints (1-13), acceptanceCriteria (array ≥3), type?, scope?, priority? }\n" +
+                "• update: campos a alterar (qualquer subset dos de create)\n" +
+                "• move: { } (vazio — use targetSprintId top-level)\n" +
+                "• delete: { } (vazio)\n" +
+                "description deve usar template SDD: H2 ## Problema, H2 ## Solução, H2 ## Invariantes (cite path do código quando relevante).",
+            ),
+          aiReasoning: z
+            .string()
+            .min(40)
+            .describe(
+              "Explicação de POR QUÊ esta ação é proposta. PM lê pra decidir. " +
+                "DEVE citar a(s) nota(s) que originaram a proposta — referencie pelo conteúdo curto.",
+            ),
+          aiConfidence: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .describe("Confiança 0-1. Default 0.8."),
+          sourceNoteIds: z
+            .array(z.string().uuid())
+            .min(1, "Cite ≥1 PlanningContextNote.id que embasa esta proposta")
+            .describe(
+              "IDs de PlanningContextNote.id que embasam a proposta. " +
+                "OBRIGATÓRIO ≥1. IDs aparecem em 'Notas de contexto' do system prompt; nunca invente.",
+            ),
+        })
+        .superRefine((data, ctx) => {
+          if (data.type === "create") {
+            const issues = validateCreatePayload(data.payload);
+            for (const i of issues) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["payload", ...i.path],
+                message: i.message,
+              });
+            }
+          }
+          if (data.type === "move") {
+            if (!data.targetSprintId)
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["targetSprintId"],
+                message: "type=move exige targetSprintId (chame list_project_sprints antes)",
+              });
+            if (!data.taskId)
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["taskId"],
+                message: "type=move exige taskId da task a mover",
+              });
+          }
+          if ((data.type === "update" || data.type === "delete") && !data.taskId) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["taskId"],
+              message: `type=${data.type} exige taskId`,
+            });
+          }
+        }),
       execute: async ({
         projectId,
         type,
@@ -255,9 +359,11 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
         }
 
         if (ref.meetingId) {
+          // Sem fullText no TranscriptRef → cai pra notas do Meeting.
+          // (Meeting.transcript foi droppado; fullText vive só em TranscriptRef.)
           const { data: meeting } = await db()
             .from("Meeting")
-            .select("id, title, date, notes, transcript")
+            .select("id, title, date, notes")
             .eq("id", ref.meetingId)
             .single();
           if (meeting) {
@@ -266,7 +372,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
               id: ref.id,
               title: ref.title ?? meeting.title,
               capturedAt: ref.capturedAt,
-              content: meeting.transcript ?? meeting.notes ?? "(sem conteúdo)",
+              content: meeting.notes ?? "(sem conteúdo)",
             };
           }
         }

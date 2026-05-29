@@ -13,6 +13,12 @@ export interface Capabilities {
   webSearch?: boolean;
   /** Whether the agent can create tasks in the backlog */
   createTasks?: boolean;
+  /**
+   * When true, agent runs in "Vitor-as-PM" mode: produces PRDs only, no
+   * UserStory/Task/AC mutations. Module + persona tools remain available.
+   * Set by `vitorAgent.buildTools` — não setar manualmente em outros agentes.
+   */
+  vitorAsPm?: boolean;
   /** Project ID for task creation (required when createTasks is true) */
   projectId?: string;
   /** Member id of the human who triggered the run — credited as task creator. */

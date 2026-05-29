@@ -15,6 +15,7 @@ import { alphaAgent } from "@/lib/agent/agents/alpha";
 import { buildIngestSeed } from "@/lib/agent/alpha-ingest-seed";
 import type { Capabilities } from "@/lib/agent/types";
 import { notifyMember } from "@/lib/dal/notifications";
+import { upsertTranscriptRef } from "@/lib/transcripts/upsert";
 
 /**
  * Granola auto-import: scans a member's Granola notes since their last cursor,
@@ -283,9 +284,12 @@ async function advanceMemberCursor(
 // ─── Per-note import ──────────────────────────────────────
 
 /**
- * Filter out notes that already have a Meeting linked via transcriptSourceId.
- * Single round-trip with an `in()` filter — much cheaper than N existence
- * checks when the window has many notes.
+ * Filter out notes that already have a TranscriptRef. Single round-trip with
+ * an `in()` filter — cheaper than N existence checks per note.
+ *
+ * Lookup é em TranscriptRef (SSOT), não Meeting — Meeting.transcriptSource
+ * foi droppado no sweep da Fundação A. A relação Meeting↔transcrição vive
+ * em TranscriptRef.meetingId (FK opcional).
  */
 async function filterUnimportedNotes(
   admin: Client,
@@ -294,11 +298,11 @@ async function filterUnimportedNotes(
   if (notes.length === 0) return [];
   const ids = notes.map((n) => n.id);
   const { data: existing } = await admin
-    .from("Meeting")
-    .select("transcriptSourceId")
-    .eq("transcriptSource", "granola")
-    .in("transcriptSourceId", ids);
-  const seen = new Set((existing ?? []).map((r) => r.transcriptSourceId as string));
+    .from("TranscriptRef")
+    .select("sourceId")
+    .eq("source", "granola")
+    .in("sourceId", ids);
+  const seen = new Set((existing ?? []).map((r) => r.sourceId as string));
   return notes.filter((n) => !seen.has(n.id));
 }
 
@@ -341,17 +345,26 @@ async function importGranolaNote(
 
   const newMeetingId = meetingId as unknown as string;
 
-  // Stamp createdById + transcript link. The RPC runs as service_role and
-  // doesn't know who created the meeting; private RLS keys off createdById.
+  // Stamp createdById. The RPC runs as service_role and doesn't know who
+  // created the meeting; private RLS keys off createdById.
   const { error: stampError } = await admin
     .from("Meeting")
-    .update({
-      createdById: memberId,
-      transcriptSource: "granola",
-      transcriptSourceId: note.id,
-    })
+    .update({ createdById: memberId })
     .eq("id", newMeetingId);
   if (stampError) throw new Error(`Meeting stamp failed: ${stampError.message}`);
+
+  // Persiste a transcrição no SSOT (TranscriptRef). Idempotente por
+  // (source, sourceId) — re-runs do cron não duplicam. O Alpha headless
+  // hidrata o fullText via tool `get_meeting_transcript` na sequência;
+  // aqui só registramos o stub com o link pro Meeting.
+  await upsertTranscriptRef(admin, {
+    source: "granola",
+    sourceId: note.id,
+    meetingId: newMeetingId,
+    title: title,
+    capturedAt: meetingDate ?? null,
+    importedById: memberId,
+  });
 
   // Hand off to Alpha. The seed prompt for private + granola tells the agent
   // to fetch the transcript, save raw text + summary, and create owner-only

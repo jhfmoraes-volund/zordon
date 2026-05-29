@@ -8,28 +8,24 @@ import {
 import { getMemberIntegrationToken } from "@/lib/member-integrations";
 import { getMeetingDetail, type MeetingSource } from "@/lib/meetings";
 import { buildGranolaClient } from "@/lib/granola";
-import type { Database } from "@/lib/supabase/database.types";
-
-type TranscriptRow =
-  Database["public"]["Tables"]["DesignSessionTranscript"]["Row"];
-type TranscriptInsert =
-  Database["public"]["Tables"]["DesignSessionTranscript"]["Insert"];
+import { upsertTranscriptRef } from "@/lib/transcripts/upsert";
+import {
+  linkTranscriptToSession,
+  listSessionTranscripts,
+} from "@/lib/dal/design-session-transcripts";
 
 /**
  * GET /api/design-sessions/[id]/transcripts
  *
  * Lists every importable meeting (Roam + Granola) for this session plus the
- * transcripts already attached. Replaces the legacy /roam-transcripts route
- * which only knew about Roam.
+ * transcripts already attached. Após Fundação B (2026-05-29) os imported items
+ * vêm via `DesignSessionTranscriptLink` joined a `TranscriptRef` (SSOT).
  *
  * Response shape:
  *   {
  *     sources: { roam: SourceSlice; granola: SourceSlice },
- *     imported: TranscriptRow[],
+ *     imported: ImportedTranscript[],
  *   }
- *
- * Each SourceSlice mirrors the importable-meetings contract, with
- * `alreadyImported` precomputed against the imported set for the UI.
  */
 interface SourceSlice {
   needsAuth: boolean;
@@ -62,35 +58,29 @@ export async function GET(
     return NextResponse.json({ error: "Member not found" }, { status: 403 });
   }
 
-  const [roamToken, granolaToken, importedRes] = await Promise.all([
+  const [roamToken, granolaToken, importedRich] = await Promise.all([
     getMemberIntegrationToken(member.id, "roam"),
     getMemberIntegrationToken(member.id, "granola"),
-    db()
-      .from("DesignSessionTranscript")
-      .select(
-        "id, source, sourceId, meetingTitle, meetingStart, meetingEnd, participants, summary, actionItems, importedAt, importedByMemberId",
-      )
-      .eq("sessionId", sessionId)
-      .order("meetingStart", { ascending: false }),
+    listSessionTranscripts(db(), sessionId),
   ]);
 
-  const imported = (importedRes.data ?? []) as Pick<
-    TranscriptRow,
-    | "id"
-    | "source"
-    | "sourceId"
-    | "meetingTitle"
-    | "meetingStart"
-    | "meetingEnd"
-    | "participants"
-    | "summary"
-    | "actionItems"
-    | "importedAt"
-    | "importedByMemberId"
-  >[];
+  // Forma leve enviada ao client. Inclui meetingStart + summary porque
+  // pre-work-step renderiza chips com título + data + summary no hover.
+  const imported = importedRich.map((t) => ({
+    id: t.id,
+    source: t.source,
+    sourceId: t.sourceId,
+    meetingTitle: t.meetingTitle,
+    meetingStart: t.meetingStart,
+    summary: t.summary,
+  }));
 
   const importedKey = (source: string, id: string) => `${source}::${id}`;
-  const importedSet = new Set(imported.map((t) => importedKey(t.source, t.sourceId)));
+  const importedSet = new Set(
+    importedRich
+      .filter((t) => t.sourceId !== null)
+      .map((t) => importedKey(t.source, t.sourceId as string)),
+  );
 
   const [roamSlice, granolaSlice] = await Promise.all([
     loadRoamSlice(roamToken, importedSet),
@@ -152,8 +142,6 @@ async function loadGranolaSlice(
 
   try {
     const notes = await client.listNotesInRange({ max: 30 });
-    // No participant enrichment here — the DS list view is OK with owner-only.
-    // The detail comes through on import (POST).
     return {
       needsAuth: false,
       available: notes.map((n) => ({
@@ -181,6 +169,12 @@ async function loadGranolaSlice(
 /**
  * POST /api/design-sessions/[id]/transcripts
  * Body: { source: "roam" | "granola", sourceId: string }
+ *
+ * Fluxo (pós Fundação B):
+ *   1) Busca metadata + texto na API do provider.
+ *   2) Upsert idempotente em TranscriptRef (SSOT). Re-import do mesmo
+ *      Roam/Granola em DS+Planning aponta pra MESMA row física.
+ *   3) Cria link `DesignSessionTranscriptLink`. Idempotente.
  */
 export async function POST(
   req: NextRequest,
@@ -257,36 +251,65 @@ export async function POST(
     detail.title?.trim() ||
     `Reunião ${new Date(detail.start).toLocaleString("pt-BR")}`;
 
-  const insertRow: TranscriptInsert = {
-    sessionId,
-    projectId: session.projectId,
-    source,
-    sourceId,
-    meetingTitle,
-    meetingStart: detail.start,
-    meetingEnd: detail.end ?? detail.start,
-    participants: detail.participants as unknown as TranscriptInsert["participants"],
-    summary: detail.summary ?? null,
-    actionItems: detail.actionItems as unknown as TranscriptInsert["actionItems"],
-    fullText: detail.transcriptText,
-    importedByMemberId: member.id,
-  };
+  // 1) Upsert TranscriptRef (SSOT). Idempotente por (source, sourceId).
+  let transcriptRefId: string;
+  try {
+    transcriptRefId = await upsertTranscriptRef(db(), {
+      source,
+      sourceId,
+      title: meetingTitle,
+      fullText: detail.transcriptText,
+      capturedAt: detail.start,
+      importedById: member.id,
+    });
+    // Patch dos campos novos (endedAt + participants + summary + actionItems)
+    // — upsertTranscriptRef cuida do core, mas não conhece os 4 extras de DS.
+    await db()
+      .from("TranscriptRef")
+      .update({
+        endedAt: detail.end ?? detail.start,
+        participants: detail.participants as unknown as never,
+        summary: detail.summary ?? null,
+        actionItems: detail.actionItems as unknown as never,
+      })
+      .eq("id", transcriptRefId);
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Falha ao salvar transcript: ${(err as Error).message}` },
+      { status: 500 },
+    );
+  }
 
-  const { data: inserted, error: insertErr } = await db()
-    .from("DesignSessionTranscript")
-    .insert(insertRow)
-    .select()
-    .single();
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
+  // 2) Linka à sessão (idempotente).
+  let linkId: string;
+  try {
+    const link = await linkTranscriptToSession(db(), {
+      sessionId,
+      transcriptRefId,
+      linkedById: member.id,
+      weight: "primary",
+    });
+    if (!link.created) {
       return NextResponse.json(
         { error: "Essa reunião já foi importada nesta sessão." },
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    linkId = link.id;
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Falha ao linkar transcript à sessão: ${(err as Error).message}` },
+      { status: 500 },
+    );
   }
 
-  return NextResponse.json(inserted);
+  // Forma leve no retorno (mesma que GET imported[]).
+  return NextResponse.json({
+    id: linkId,
+    source,
+    sourceId,
+    meetingTitle,
+    meetingStart: detail.start,
+    summary: detail.summary ?? null,
+  });
 }

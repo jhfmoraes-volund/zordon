@@ -119,7 +119,6 @@ const SPRINT_NONE = "__none__";
 const stop = (e: React.MouseEvent | React.PointerEvent) =>
   e.stopPropagation();
 
-// Sort utilities live in ./sort — shared with MeetingTaskList.
 import { sortTasks, type SortDir, type SortKey } from "./sort";
 
 export function TasksList({

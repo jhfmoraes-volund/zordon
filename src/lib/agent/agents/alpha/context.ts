@@ -773,13 +773,15 @@ async function buildSprintFocus(
   return { block, projectId: sprint.projectId ?? null };
 }
 
-// ─── Meeting block (dispatcher por tipo) ─────────────────────────
+// ─── Meeting block (private + general só) ────────────────────────
+//
+// Daily / super_planning / pm_review viraram Planning Ceremony (no projeto)
+// e Alpha não os trata como Meeting. A aba global de Meetings só tem
+// `private` (owner-only) e `general` (pública). Meetings não criam Tasks —
+// só To-dos. Fluxo de propostas com aprovação vive em Planning Ceremony.
 
 const MEETING_TYPE_LABELS: Record<string, string> = {
-  pm_review: "Reunião com PMs (Weekly PM)",
   general: "Reunião geral",
-  daily: "Daily",
-  super_planning: "Super Planning",
   private: "Reunião privada",
 };
 
@@ -789,7 +791,6 @@ type MeetingRow = {
   type: string | null;
   title: string | null;
   notes: string | null;
-  sprintId: string | null;
   attendees: Array<{
     role: string | null;
     externalName: string | null;
@@ -802,20 +803,6 @@ type MeetingRow = {
   }> | null;
 };
 
-type PendingAction = {
-  id: string;
-  type: string;
-  source: string;
-  taskId: string | null;
-  targetSprintId: string | null;
-  payload: unknown;
-  aiReasoning: string | null;
-  aiConfidence: number | null;
-  project: { name: string } | null;
-  task: { reference: string | null; title: string } | null;
-  targetSprint: { name: string } | null;
-};
-
 async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
   if (!meetingId) return null;
   const supabase = db();
@@ -823,7 +810,7 @@ async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
   const { data: meeting } = await supabase
     .from("Meeting")
     .select(`
-      id, date, type, title, notes, sprintId,
+      id, date, type, title, notes,
       attendees:MeetingAttendee(role, externalName, externalRole, member:Member(id, name)),
       projectLinks:MeetingProjectLink(projectId, project:Project(id, name))
     `)
@@ -832,41 +819,11 @@ async function buildMeetingBlock(meetingId?: string): Promise<string | null> {
   if (!meeting) return null;
 
   const m = meeting as unknown as MeetingRow;
-  const meetingType = m.type ?? "pm_review";
-
-  const { data: pendingRaw } = await supabase
-    .from("MeetingTaskAction")
-    .select(`
-      id, type, source, taskId, targetSprintId, payload,
-      aiReasoning, aiConfidence,
-      project:Project(name),
-      task:Task(reference, title),
-      targetSprint:Sprint!MeetingTaskAction_targetSprintId_fkey(name)
-    `)
-    .eq("meetingId", meetingId)
-    .eq("decision", "pending")
-    .order("createdAt", { ascending: true });
-
-  const pending = ((pendingRaw || []) as unknown) as PendingAction[];
-  const pendingBlock = renderPendingActions(pending);
-
-  switch (meetingType) {
-    case "daily":
-      return await renderDailyMeeting(m, pendingBlock);
-    case "super_planning":
-      return await renderSuperPlanningMeeting(m, pendingBlock);
-    case "general":
-      return renderGeneralMeeting(m, pendingBlock);
-    case "private":
-      return renderPrivateMeeting(m, pendingBlock);
-    case "pm_review":
-    default:
-      return await renderPmReviewMeeting(m, pendingBlock);
-  }
+  return m.type === "private" ? renderPrivateMeeting(m) : renderGeneralMeeting(m);
 }
 
 function renderMeetingHeader(m: MeetingRow): string {
-  const type = m.type ?? "pm_review";
+  const type = m.type ?? "general";
   const label = MEETING_TYPE_LABELS[type] ?? type;
   return [
     `## Reunião ativa: ${label}${m.title ? ` — ${m.title}` : ""}`,
@@ -900,362 +857,35 @@ function renderNotes(m: MeetingRow): string {
   return ["**Notas/transcrição (Meeting.notes):**", trimmed].join("\n");
 }
 
-function renderPendingActions(actions: PendingAction[]): string {
-  if (actions.length === 0) return "_Nenhuma ação proposta pendente._";
-  const lines: string[] = [`### Ações pendentes (${actions.length}) — já propostas, aguardando decisão do PM`];
-  for (const a of actions) {
-    const project = a.project?.name ?? "?";
-    const task = a.task ? `[${a.task.reference ?? "?"}] ${a.task.title}` : "(nova task)";
-    const target = a.targetSprint?.name ? ` → ${a.targetSprint.name}` : "";
-    const src = a.source === "ai" ? "🤖" : "👤";
-    const reason = a.aiReasoning ? ` — ${a.aiReasoning}` : "";
-    lines.push(`- ${src} **${a.type}** · ${task}${target} · projeto: ${project}${reason}`);
-  }
-  return lines.join("\n");
-}
-
-async function renderPmReviewMeeting(m: MeetingRow, pendingBlock: string): Promise<string> {
-  const supabase = db();
-  const { data: reviews } = await supabase
-    .from("MeetingProjectReview")
-    .select("id, nextSteps, sprintHealth, attentionPoints, additionalNotes, order, project:Project(id, name, pmId), member:Member(id, name)")
-    .eq("meetingId", m.id)
-    .order("order", { ascending: true });
-
-  const reviewList = reviews || [];
-  const projectIds = Array.from(
-    new Set(
-      reviewList
-        .map((r) => (r.project as { id: string } | null)?.id)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  );
-
-  // Squad (PM + ProjectMembers) por projeto, em uma query batch
-  const squadByProject = new Map<string, Array<{
-    name: string;
-    role: string;
-    fpAllocation: number | null;
-    isPM: boolean;
-  }>>();
-  if (projectIds.length > 0) {
-    const { data: pmRows } = await supabase
-      .from("ProjectMember")
-      .select("projectId, fpAllocation, member:Member(id, name, role, position)")
-      .in("projectId", projectIds);
-
-    type Mb = { id: string; name: string; role: string; position: string | null };
-    type SquadRow = { name: string; role: string; fpAllocation: number | null; isPM: boolean };
-
-    const pmIdByProject = new Map<string, string | null>();
-    for (const r of reviewList) {
-      const proj = r.project as { id: string; pmId: string | null } | null;
-      if (proj?.id) pmIdByProject.set(proj.id, proj.pmId);
-    }
-
-    for (const projectId of projectIds) {
-      const byMemberId = new Map<string, SquadRow>();
-      const ownerPmId = pmIdByProject.get(projectId) ?? null;
-
-      for (const row of (pmRows || []) as Array<{
-        projectId: string;
-        fpAllocation: number;
-        member: Mb | null;
-      }>) {
-        if (row.projectId !== projectId || !row.member) continue;
-        byMemberId.set(row.member.id, {
-          name: row.member.name,
-          role: row.member.position ?? row.member.role,
-          fpAllocation: row.fpAllocation,
-          isPM: ownerPmId === row.member.id,
-        });
-      }
-
-      // PM órfão (não está em ProjectMember): incluir mesmo assim com fpAllocation=null
-      if (ownerPmId && !byMemberId.has(ownerPmId)) {
-        const review = reviewList.find(
-          (r) => (r.member as Mb | null)?.id === ownerPmId,
-        );
-        const pmMember = review?.member as Mb | null;
-        if (pmMember) {
-          byMemberId.set(pmMember.id, {
-            name: pmMember.name,
-            role: "(PM)",
-            fpAllocation: null,
-            isPM: true,
-          });
-        }
-      }
-
-      const sorted = Array.from(byMemberId.values()).sort((a, b) => {
-        if (a.isPM !== b.isPM) return a.isPM ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-      squadByProject.set(projectId, sorted);
-    }
-  }
-
-  const byPm = new Map<string, { pmName: string; items: typeof reviewList }>();
-  for (const r of reviewList) {
-    const pm = r.member as { id: string; name: string } | null;
-    if (!pm) continue;
-    const bucket = byPm.get(pm.id) || { pmName: pm.name, items: [] };
-    bucket.items.push(r);
-    byPm.set(pm.id, bucket);
-  }
-
-  const reviewLines: string[] = [];
-  if (byPm.size === 0) {
-    reviewLines.push("_Nenhuma revisão cadastrada._");
-  } else {
-    for (const { pmName, items } of byPm.values()) {
-      reviewLines.push(`**${pmName}** — ${items.length} projeto(s):`);
-      for (const r of items) {
-        const proj = r.project as { id: string; name: string } | null;
-        const projName = proj?.name || "?";
-        const filled: string[] = [];
-        if (r.nextSteps) filled.push("nextSteps");
-        if (r.attentionPoints) filled.push("attentionPoints");
-        if (r.additionalNotes) filled.push("additionalNotes");
-        const status = filled.length === 0 ? "vazio" : filled.join(", ");
-        reviewLines.push(`  - ${projName} | health: ${r.sprintHealth} | preenchido: ${status}`);
-
-        // Squad do projeto (info de contexto, NÃO attendees da reunião)
-        const squad = proj?.id ? squadByProject.get(proj.id) : null;
-        if (squad && squad.length > 0) {
-          const tags = squad.map((s) => {
-            const fp = s.fpAllocation === null ? "—" : `${s.fpAllocation}FP`;
-            const pm = s.isPM ? " (PM)" : "";
-            return `${s.name}${pm}: ${fp}`;
-          });
-          reviewLines.push(`    squad: ${tags.join(" · ")}`);
-        }
-      }
-    }
-  }
-
+function renderGeneralMeeting(m: MeetingRow): string {
   return [
     renderMeetingHeader(m),
     "",
     renderAttendees(m),
     renderProjectLinks(m),
     "",
-    "**Fluxo da reunião:** preencher revisões via `update_meeting_review`. Mudanças em Task → `propose_task_action` (NUNCA execução direta dentro de reunião). Ações operacionais → `create_todo`.",
-    "",
-    `### Revisões por PM (${reviewList.length} projeto(s))`,
-    ...reviewLines,
-    "",
-    pendingBlock,
-  ].join("\n");
-}
-
-async function renderDailyMeeting(m: MeetingRow, pendingBlock: string): Promise<string> {
-  const supabase = db();
-  const links = m.projectLinks || [];
-
-  const projectBlocks: string[] = [];
-  for (const link of links) {
-    if (!link.projectId) continue;
-    const projName = link.project?.name ?? "?";
-
-    const { data: sprint } = await supabase
-      .from("Sprint")
-      .select("id, name, status, startDate, endDate")
-      .eq("projectId", link.projectId)
-      .neq("status", "done")
-      .order("startDate", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    projectBlocks.push(`### Projeto: ${projName}`);
-    if (!sprint) {
-      projectBlocks.push("_Sem sprint ativa/planning._");
-      continue;
-    }
-    projectBlocks.push(`Sprint atual: **${sprint.name}** (${sprint.status}) | ${sprint.startDate} → ${sprint.endDate}`);
-
-    const { data: tasks } = await supabase
-      .from("Task")
-      .select("reference, title, status, type, functionPoints, priority, assignments:TaskAssignment(member:Member(name))")
-      .eq("sprintId", sprint.id)
-      .neq("status", "draft")
-      .order("priority", { ascending: false })
-      .limit(30);
-
-    const taskList = tasks || [];
-    if (taskList.length === 0) {
-      projectBlocks.push("_Sem tasks na sprint._");
-    } else {
-      for (const t of taskList) {
-        const assignees = ((t.assignments as Array<{ member: { name: string } | null }> | null) || [])
-          .map((x) => x.member?.name).filter(Boolean).join(", ") || "sem atribuição";
-        projectBlocks.push(`- [${t.reference}] ${t.title} | ${t.status} | ${t.functionPoints ?? "?"}FP | ${assignees}`);
-      }
-    }
-    projectBlocks.push("");
-  }
-
-  return [
-    renderMeetingHeader(m),
-    "",
-    renderAttendees(m),
-    renderProjectLinks(m),
-    "",
-    "**Fluxo da Daily:** ler estado da sprint atual de cada projeto vinculado. Propor mudanças em Task via `propose_task_action` (criar/mover/atualizar/marcar pra review). Ações operacionais → `create_todo`. **NUNCA** chame tools de execução direta de Task (create_task, update_task, bulk_update_tasks) durante a reunião.",
+    "**Fluxo da reunião geral:** registro livre. Use `create_todo` pra ações operacionais e `update_meeting_notes` pra resumir a transcrição. **Meetings NÃO criam Tasks** — propostas de Task vivem em Planning Ceremony (no projeto). Se a conversa pedir mudança em sprint/Task, oriente o user a abrir/levar pra Planning Ceremony.",
     "",
     renderNotes(m),
-    "",
-    "### Estado por projeto",
-    ...projectBlocks,
-    pendingBlock,
   ].join("\n");
 }
 
-async function renderSuperPlanningMeeting(m: MeetingRow, pendingBlock: string): Promise<string> {
-  const supabase = db();
-  const sprintId = m.sprintId;
-  let projectId: string | null = null;
-
-  let sprintBlock = "_Sem sprint-objeto vinculada (Meeting.sprintId está nulo)._";
-  if (sprintId) {
-    const { data: sprint } = await supabase
-      .from("Sprint")
-      .select("id, name, status, startDate, endDate, projectId, project:Project(id, name)")
-      .eq("id", sprintId)
-      .maybeSingle();
-
-    if (sprint) {
-      projectId = sprint.projectId;
-      const projName = (sprint.project as { name: string } | null)?.name ?? "?";
-
-      const { data: tasks } = await supabase
-        .from("Task")
-        .select("reference, title, status, type, scope, complexity, functionPoints, priority, assignments:TaskAssignment(member:Member(name))")
-        .eq("sprintId", sprint.id)
-        .neq("status", "draft")
-        .order("priority", { ascending: false });
-
-      const taskList = tasks || [];
-      const taskLines = taskList.length === 0
-        ? ["_Sem tasks na sprint ainda — vai ser planejada agora._"]
-        : taskList.map((t) => {
-            const assignees = ((t.assignments as Array<{ member: { name: string } | null }> | null) || [])
-              .map((x) => x.member?.name).filter(Boolean).join(", ") || "sem atribuição";
-            return `- [${t.reference}] ${t.title} | ${t.status} | ${t.scope}/${t.complexity} | ${t.functionPoints ?? "?"}FP | ${assignees}`;
-          });
-
-      sprintBlock = [
-        `### Sprint-objeto: ${sprint.name} (Projeto ${projName})`,
-        `- ID: ${sprint.id} | Status: ${sprint.status} | Período: ${sprint.startDate} → ${sprint.endDate}`,
-        "",
-        `**Tasks atualmente na sprint (${taskList.length}):**`,
-        ...taskLines,
-      ].join("\n");
-    }
-  }
-
-  let backlogBlock = "_Backlog não disponível (sem sprint-objeto vinculada)._";
-  let storiesBlock = "_User Stories não disponíveis (sem sprint-objeto vinculada)._";
-  if (projectId) {
-    const { data: backlog } = await supabase
-      .from("Task")
-      .select("reference, title, type, scope, complexity, functionPoints, priority")
-      .eq("projectId", projectId)
-      .is("sprintId", null)
-      .neq("status", "draft")
-      .order("priority", { ascending: false })
-      .limit(40);
-
-    const list = backlog || [];
-    const lines = list.length === 0
-      ? ["_Backlog vazio._"]
-      : list.map((t) => `- [${t.reference}] ${t.title} | ${t.type} | ${t.scope}/${t.complexity} | ${t.functionPoints ?? "?"}FP | prio ${t.priority}`);
-    backlogBlock = [`### Backlog do projeto (top ${list.length})`, ...lines].join("\n");
-
-    // Stories refined/committed pra Alpha vincular tasks novas a US existente
-    // durante propose_task_action. Limit 50 — projetos maiores precisarão
-    // depender de list_stories pra cobrir o restante.
-    const { data: stories } = await supabase
-      .from("UserStory")
-      .select("id, reference, title, refinementStatus, module:Module(name), persona:ProjectPersona(name)")
-      .eq("projectId", projectId)
-      .in("refinementStatus", ["refined", "committed"])
-      .order("reference", { ascending: true })
-      .limit(50);
-
-    const storyList = stories || [];
-    if (storyList.length === 0) {
-      storiesBlock = "### User Stories do projeto\n_Nenhuma story refined/committed. Tasks novas podem ficar isoladas (sem userStoryId)._";
-    } else {
-      const storyLines = storyList.map((s) => {
-        const moduleName = (s.module as { name: string } | null)?.name ?? "—";
-        const personaName = (s.persona as { name: string } | null)?.name ?? "—";
-        return `- ${s.id} [${s.reference}] ${s.title} | ${moduleName} | ${personaName} | ${s.refinementStatus}`;
-      });
-      storiesBlock = [
-        `### User Stories do projeto (${storyList.length} refined/committed)`,
-        "_Use o UUID (1ª coluna) em `propose_task_action.payload.userStoryId` quando a task nova encaixar numa story existente._",
-        ...storyLines,
-      ].join("\n");
-    }
-  }
-
-  return [
-    renderMeetingHeader(m),
-    "",
-    renderAttendees(m),
-    renderProjectLinks(m),
-    "",
-    "**Fluxo da Super Planning:** ler transcrição/notas + estado da sprint-objeto + backlog do projeto. Propor reorganização (criar / mover / atualizar / marcar pra review) via `propose_task_action`. Ações operacionais → `create_todo`. **NUNCA** chame tools de execução direta de Task durante a reunião — toda mudança vira proposta pra o PM aprovar e o sistema aplicar em batch.",
-    "",
-    renderNotes(m),
-    "",
-    sprintBlock,
-    "",
-    backlogBlock,
-    "",
-    storiesBlock,
-    "",
-    pendingBlock,
-  ].join("\n");
-}
-
-function renderGeneralMeeting(m: MeetingRow, pendingBlock: string): string {
-  return [
-    renderMeetingHeader(m),
-    "",
-    renderAttendees(m),
-    renderProjectLinks(m),
-    "",
-    "**Fluxo da reunião geral:** registro livre. Use `create_todo` pra ações operacionais. **Tasks NÃO são tratadas neste tipo de reunião** — não chame tools de Task (nem execução direta nem `propose_task_action`).",
-    "",
-    renderNotes(m),
-    "",
-    pendingBlock,
-  ].join("\n");
-}
-
-function renderPrivateMeeting(m: MeetingRow, pendingBlock: string): string {
-  const hasProjects = (m.projectLinks?.length ?? 0) > 0;
+function renderPrivateMeeting(m: MeetingRow): string {
   return [
     renderMeetingHeader(m),
     "",
     renderProjectLinks(m),
     "",
     "**Fluxo da reunião privada (escopo restrito):**",
-    "- Visibilidade: SÓ o owner desta reunião (criador). NÃO compartilhe conteúdo sensível dela em outros contextos.",
-    "- `notes`: escreva um resumo/conclusões da transcrição no campo notes da Meeting (`update_meeting`/equivalente).",
+    "- Visibilidade: SÓ o owner desta reunião (criador). NÃO compartilhe conteúdo dela em outros contextos.",
+    "- `update_meeting_notes`: escreva um resumo rico em markdown da transcrição.",
     "- `create_todo`: crie To-dos atribuídos AO OWNER (createdById da reunião). Não atribua a outros members.",
-    hasProjects
-      ? "- `propose_task_action`: PERMITIDO **somente** nos projetos vinculados acima. Cada proposta vira pendente pra owner aprovar depois. Use o sub-agente `extract_meeting_actions` se a transcrição for longa."
-      : "- `propose_task_action`: **NÃO permitido** (sem projetos vinculados). Foque em notes + To-dos do owner.",
-    "- **NÃO** chame: `update_meeting_review` (não há reviews), `create_meeting` (estamos dentro de uma), nada que mexa em sprints/tasks fora dos projetos vinculados.",
+    "- **NÃO** chame `create_meeting` (estamos dentro de uma), nem tools que mexam em sprints/Tasks. Mudanças em Task vivem em Planning Ceremony, não aqui.",
     "",
     renderNotes(m),
-    "",
-    pendingBlock,
   ].join("\n");
 }
+
 
 // ─── Renderers ───────────────────────────────────────────────────
 

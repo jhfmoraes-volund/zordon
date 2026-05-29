@@ -20,6 +20,7 @@ import {
   AlphaHistorySheet,
 } from "@/components/alpha-chat";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { ThemeSyncer } from "@/components/theme-syncer";
 import {
   verifySession,
   getRealRole,
@@ -99,6 +100,7 @@ export default async function DashboardLayout({
 
   return (
     <AuthProvider value={auth}>
+      <ThemeSyncer dbTheme={member?.theme} />
       {/* App-shell bounded ao viewport (padrão Linear/Cursor/Notion):
           - flex-col: ShellHeader full-width no topo, row sidebar+main+alpha
             embaixo. Borda do header não quebra no canto (estilo Supabase).

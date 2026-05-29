@@ -42,7 +42,8 @@ export type ContextNoteKind =
   | "risk"
   | "capacity_signal"
   | "code_observation"
-  | "open_question";
+  | "open_question"
+  | "scope_creep";
 
 /** Shape de retorno da lista — leve, pra o tab Cerimônias. */
 export type PlanningSummary = {
@@ -66,6 +67,12 @@ export type PlanningSummary = {
 export type PlanningDetail = PlanningSummary & {
   briefingGeneratedAt: string | null;
   archivedAt: string | null;
+  projectRepo: {
+    owner: string | null;
+    name: string | null;
+    branch: string | null;
+    manifestUpdatedAt: string | null;
+  };
   linkedMeetings: Array<{
     meetingId: string;
     linkedAt: string;
@@ -210,6 +217,7 @@ export async function getPlanningById(
       *,
       sprint:Sprint(name),
       facilitator:Member!PlanningCeremony_facilitatorId_fkey(name),
+      project:Project(githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifestUpdatedAt),
       linkedMeetings:PlanningMeetingLink(
         meetingId, linkedAt, linkedById, note,
         meeting:Meeting(id, title, date, visibility, kind)
@@ -239,6 +247,12 @@ export async function getPlanningById(
   const r = row as Row & {
     sprint: { name: string } | null;
     facilitator: { name: string } | null;
+    project: {
+      githubRepoOwner: string | null;
+      githubRepoName: string | null;
+      githubDefaultBranch: string | null;
+      repoManifestUpdatedAt: string | null;
+    } | null;
     linkedMeetings: PlanningDetail["linkedMeetings"];
     linkedTranscripts: PlanningDetail["linkedTranscripts"];
     notes: PlanningContextNoteRow[];
@@ -266,6 +280,12 @@ export async function getPlanningById(
     linkedMeetings: r.linkedMeetings,
     linkedTranscripts: r.linkedTranscripts,
     notes: r.notes,
+    projectRepo: {
+      owner: r.project?.githubRepoOwner ?? null,
+      name: r.project?.githubRepoName ?? null,
+      branch: r.project?.githubDefaultBranch ?? null,
+      manifestUpdatedAt: r.project?.repoManifestUpdatedAt ?? null,
+    },
   };
 }
 
@@ -609,7 +629,7 @@ export async function addContextNote(input: {
   sourceRepoPath?: string | null;
   priority?: number;
   /** XOR: passar UM dos dois (CHECK constraint no banco enforces). */
-  generatedByAgent?: "alpha" | null;
+  generatedByAgent?: "alpha" | "vitoria" | null;
   generatedByMemberId?: string | null;
 }): Promise<PlanningContextNoteRow> {
   const supabase = db();

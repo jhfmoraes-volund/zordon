@@ -2,6 +2,24 @@ import { db } from "@/lib/db";
 import { buildVitoriaPrompt } from "./prompt";
 import { buildVitoriaTools } from "./tools";
 import { buildProjectProfile } from "./profile";
+import {
+  loadPMReviewContext,
+  buildPMReviewPrompt,
+  buildPMReviewTools,
+} from "./pm-review";
+import { getConnectionStatus, getUserTools } from "@/lib/composio/client";
+
+/**
+ * Slugs Composio v3 (confirmados via REST 2026-05-29). Cap em 4 tools:
+ * read content (serve pra arquivo + diretório), search code, get repo meta,
+ * list branches. Sem essas a Vitória só tem T1 (manifest no prompt).
+ */
+const VITORIA_GITHUB_TOOLS = [
+  "GITHUB_GET_REPOSITORY_CONTENT",
+  "GITHUB_SEARCH_CODE",
+  "GITHUB_GET_A_REPOSITORY",
+  "GITHUB_LIST_BRANCHES",
+];
 import type { AgentDefinition, AgentRunRequest } from "../../types";
 
 /**
@@ -14,6 +32,14 @@ export const vitoriaAgent: AgentDefinition = {
   model: "anthropic/claude-haiku-4-5",
 
   async loadContext(req: AgentRunRequest) {
+    // Dispatch por surface — Vitoria opera Planning E PM Review com mesma
+    // identidade, contextos/prompts/tools diferentes.
+    const surface = (req.params.surface as string | undefined) ?? "planning";
+    if (surface === "pm_review") {
+      const pmReviewId = req.params.pmReviewId as string;
+      return loadPMReviewContext(pmReviewId, req.memberId ?? null);
+    }
+
     const planningId = req.params.planningId as string;
 
     const { data: planning } = await db()
@@ -21,7 +47,7 @@ export const vitoriaAgent: AgentDefinition = {
       .select(
         `
         id, phase, projectId, sprintId,
-        project:Project(id, name, referenceKey, status, client:Client(id, name)),
+        project:Project(id, name, referenceKey, status, repoUrl, githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifest, repoManifestUpdatedAt, client:Client(id, name)),
         sprint:Sprint(name),
         linkedMeetings:PlanningMeetingLink(
           meetingId,
@@ -106,8 +132,29 @@ export const vitoriaAgent: AgentDefinition = {
       planning.phase === "closed" || planning.phase === "archived" ? "closed" : "open";
 
     const projectRow = planning.project as
-      | { id: string; name: string; referenceKey: string | null; status: string; client: { id: string; name: string } | null }
+      | {
+          id: string;
+          name: string;
+          referenceKey: string | null;
+          status: string;
+          repoUrl: string | null;
+          githubRepoOwner: string | null;
+          githubRepoName: string | null;
+          githubDefaultBranch: string | null;
+          repoManifest: string | null;
+          repoManifestUpdatedAt: string | null;
+          client: { id: string; name: string } | null;
+        }
       | null;
+
+    // Composio: detecta se o member que disparou o turno tem GitHub conectado.
+    // Se sim, buildTools vai puxar as tools dele (custom — não vai no loadContext
+    // pra não bloquear). Flag aqui só guia o prompt.
+    let githubConnected = false;
+    if (req.memberId) {
+      const gh = await getConnectionStatus(req.memberId, "github");
+      githubConnected = gh.status === "active";
+    }
 
     return {
       planningId,
@@ -117,6 +164,12 @@ export const vitoriaAgent: AgentDefinition = {
       projectName: projectRow?.name ?? null,
       projectReferenceKey: projectRow?.referenceKey ?? null,
       projectStatus: projectRow?.status ?? null,
+      projectRepoUrl: projectRow?.repoUrl ?? null,
+      projectRepoOwner: projectRow?.githubRepoOwner ?? null,
+      projectRepoName: projectRow?.githubRepoName ?? null,
+      projectRepoBranch: projectRow?.githubDefaultBranch ?? null,
+      projectRepoManifest: projectRow?.repoManifest ?? null,
+      projectRepoManifestUpdatedAt: projectRow?.repoManifestUpdatedAt ?? null,
       clientName: projectRow?.client?.name ?? null,
       sprintId: planning.sprintId,
       sprintName: (planning.sprint as { name: string } | null)?.name ?? null,
@@ -136,16 +189,44 @@ export const vitoriaAgent: AgentDefinition = {
       activeDecisions: activeDecisions.data ?? [],
       openQuestions: openQuestions.data ?? [],
       activeDesignSessions: activeSessions.data ?? [],
+      githubConnected,
     };
   },
 
   buildPrompt(ctx) {
+    if ((ctx.agentContext as { surface?: string }).surface === "pm_review") {
+      return buildPMReviewPrompt(ctx);
+    }
     return buildVitoriaPrompt(ctx);
   },
 
-  buildTools({ agentContext }) {
-    const planningId = agentContext.planningId as string;
+  async buildTools({ agentContext }) {
+    const surface = (agentContext.surface as string | undefined) ?? "planning";
     const projectId = agentContext.projectId as string;
-    return buildVitoriaTools(planningId, projectId);
+    const memberId = agentContext.memberId as string | null;
+
+    if (surface === "pm_review") {
+      const pmReviewId = agentContext.pmReviewId as string;
+      // PM Review NÃO usa Composio/GitHub tools (manifest do projeto está no
+      // prompt; indicadores via get_project_indicators). Mantém prompt enxuto.
+      return buildPMReviewTools(pmReviewId, projectId);
+    }
+
+    const planningId = agentContext.planningId as string;
+    const githubConnected = Boolean(agentContext.githubConnected);
+
+    const nativeTools = buildVitoriaTools(planningId, projectId);
+
+    // Carrega tools do GitHub via Composio se o member tem conexão ativa.
+    // Cap em 4 tools (VITORIA_GITHUB_TOOLS) pra Vitória ter precisão sem
+    // estourar contexto — sem isso a SDK manda todas as 823 tools do GitHub.
+    if (githubConnected && memberId) {
+      const composioTools = await getUserTools(memberId, ["github"], {
+        toolSlugs: VITORIA_GITHUB_TOOLS,
+      });
+      return { ...nativeTools, ...composioTools };
+    }
+
+    return nativeTools;
   },
 };
