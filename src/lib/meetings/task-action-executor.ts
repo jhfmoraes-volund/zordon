@@ -33,7 +33,54 @@ export async function applyApprovedActions(
 
   if (error) throw new Error(`Failed to load actions: ${error.message}`);
 
-  const sorted = (actions ?? []).slice().sort((a, b) => ORDER[a.type] - ORDER[b.type]);
+  return applyActions(supabase, actions ?? []);
+}
+
+/**
+ * Staging-commit: ao Concluir uma planning, todas as MeetingTaskAction
+ * pendentes são auto-aprovadas e aplicadas em cascata. Sem aprovação por
+ * card — discordâncias acontecem via chat (Vitoria apaga a action) antes do
+ * commit.
+ */
+export async function applyPendingActionsForPlanning(
+  supabase: Supabase,
+  planningCeremonyId: string,
+  decidedById: string,
+): Promise<ApplyResult> {
+  const { data: actions, error } = await supabase
+    .from("MeetingTaskAction")
+    .select("*")
+    .eq("planningCeremonyId", planningCeremonyId)
+    .eq("decision", "pending")
+    .eq("execution", "pending");
+
+  if (error) throw new Error(`Failed to load planning actions: ${error.message}`);
+
+  const list = actions ?? [];
+  if (list.length === 0) return { applied: 0, failed: 0, skipped: 0, details: [] };
+
+  // Auto-aprova em batch antes de aplicar — apply* assume action.decision já
+  // resolvido (e usa decidedById em apply create pra carimbar createdById).
+  const nowIso = new Date().toISOString();
+  const { error: approveErr } = await supabase
+    .from("MeetingTaskAction")
+    .update({ decision: "approved", decidedAt: nowIso, decidedById, updatedAt: nowIso })
+    .eq("planningCeremonyId", planningCeremonyId)
+    .eq("decision", "pending");
+  if (approveErr) throw new Error(`Auto-approve failed: ${approveErr.message}`);
+
+  const refreshed = list.map((a) => ({
+    ...a,
+    decision: "approved" as const,
+    decidedAt: nowIso,
+    decidedById,
+  }));
+
+  return applyActions(supabase, refreshed);
+}
+
+async function applyActions(supabase: Supabase, actions: ActionRow[]): Promise<ApplyResult> {
+  const sorted = actions.slice().sort((a, b) => ORDER[a.type] - ORDER[b.type]);
 
   const result: ApplyResult = { applied: 0, failed: 0, skipped: 0, details: [] };
 
@@ -60,6 +107,7 @@ export async function applyApprovedActions(
           continue;
       }
       await markExecuted(supabase, action.id, "applied");
+      await recordProposalOutcome(supabase, action);
       result.applied++;
       result.details.push({ id: action.id, type: action.type, status: "applied" });
     } catch (e) {
@@ -71,6 +119,36 @@ export async function applyApprovedActions(
   }
 
   return result;
+}
+
+/**
+ * Registra AgentProposalOutcome quando uma MeetingTaskAction proposta pela
+ * IA é commitada. Diferencia 'accepted' (sem edição do PM) de 'edited'
+ * (PM mexeu via UI/chat antes do commit). Não registra propostas de origem
+ * humana — outcome só faz sentido pra medir qualidade da IA.
+ *
+ * Heurística de agentName: planningCeremonyId → 'vitoria'; senão → 'alpha'.
+ */
+async function recordProposalOutcome(supabase: Supabase, action: ActionRow): Promise<void> {
+  if (action.source !== "ai") return;
+
+  const agentName = action.planningCeremonyId ? "vitoria" : "alpha";
+  const decision = action.wasEdited ? "edited" : "accepted";
+  const payload = (action.payload ?? {}) as Record<string, unknown>;
+  const fpEstimated =
+    typeof payload.functionPoints === "number" ? payload.functionPoints : null;
+
+  const { error } = await supabase.from("AgentProposalOutcome").insert({
+    proposalId: action.id,
+    agentName,
+    callKind: "turn",
+    decision,
+    fpEstimated,
+  });
+
+  if (error) {
+    console.error("[recordProposalOutcome] insert failed:", error.message);
+  }
 }
 
 // ─── Per-type apply ──────────────────────────────────────

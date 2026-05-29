@@ -14,11 +14,13 @@
 import "server-only";
 import { db } from "@/lib/db";
 import type { Database } from "@/lib/supabase/database.types";
-import type {
-  PlanningPhase,
-  PhaseContext,
-  PhaseStamps,
+import {
+  transition,
+  type PlanningPhase,
+  type PhaseContext,
+  type PhaseStamps,
 } from "@/lib/planning/phase";
+import { applyPendingActionsForPlanning } from "@/lib/meetings/task-action-executor";
 
 type Tables = Database["public"]["Tables"];
 
@@ -322,8 +324,10 @@ export async function getPlanningPhaseContext(
 // ─── Mutations: PlanningCeremony core ─────────────────────────────────────
 
 /**
- * Cria uma planning nova em `phase='idle'`. UNIQUE(projectId, sprintId) é
- * enforced no banco — tentar criar 2× pra mesma sprint falha (caller trata).
+ * Cria uma planning nova em `phase='idle'`. Staging-commit: múltiplas
+ * plannings por sprint são esperadas (cada uma é um commit do "branch"
+ * sprint). UNIQUE(projectId, sprintId) foi removido na migration
+ * 20260528f_planning_staging_model.sql.
  */
 export async function createPlanning(input: {
   projectId: string;
@@ -384,6 +388,19 @@ export async function archivePlanning(id: string): Promise<void> {
 }
 
 /**
+ * Hard-delete planning + dependências (FKs em CASCADE: PlanningContextNote,
+ * PlanningMeetingLink, PlanningTranscriptLink. MeetingTaskAction.planningCeremonyId
+ * vira NULL — actions preservam audit trail).
+ *
+ * ChatThread (channel="planning", agentName=planningId) não tem FK; fica órfã
+ * mas não causa erro — apagar mensagens antigas tornaria histórico inconsistente.
+ */
+export async function deletePlanning(id: string): Promise<void> {
+  const { error } = await db().from("PlanningCeremony").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/**
  * Aplica uma transição de phase já APROVADA pela state machine.
  * O caller passa `to` + `stamps` (vindos de `transition()`).
  *
@@ -408,6 +425,57 @@ export async function updatePlanningPhase(
     .single();
   if (error) throw error;
   return data;
+}
+
+/**
+ * Conclui uma planning (staging-commit). Append-only, irreversível.
+ *
+ * Sequência:
+ *   1. Auto-aprova e aplica todas as MeetingTaskAction(decision=pending) via
+ *      `applyPendingActionsForPlanning` (executor compartilhado).
+ *   2. Roda a state machine `transition(current → closed, actor=pm)` pra
+ *      validar e obter stamps.
+ *   3. UPDATE phase='closed' + closedAt (trigger SQL revalida como fail-safe).
+ *
+ * Não há transação real (Supabase JS não expõe). Se passo 1 falha parcial,
+ * actions ficam com `execution='failed'` e a phase NÃO é avançada — caller
+ * pode reabrir (na verdade, no novo modelo, abrir outra planning).
+ */
+export async function concludePlanning(
+  id: string,
+  decidedById: string,
+): Promise<{
+  planning: PlanningCeremonyRow;
+  applied: { applied: number; failed: number; skipped: number };
+}> {
+  const supabase = db();
+
+  // 1. Carrega phase atual + valida transição.
+  const { data: row, error: readErr } = await supabase
+    .from("PlanningCeremony")
+    .select("phase")
+    .eq("id", id)
+    .single();
+  if (readErr) throw readErr;
+  const current = row.phase as PlanningPhase;
+
+  // 2. Aplica pending actions (auto-approve + execute em ordem).
+  const applied = await applyPendingActionsForPlanning(supabase, id, decidedById);
+
+  // 3. State machine + UPDATE phase.
+  const ctx = await getPlanningPhaseContext(id);
+  const result = transition(current, "closed", ctx, "pm");
+  if (!result.ok) {
+    throw new Error(
+      `concludePlanning: transição ${current} → closed inválida (${result.reason}: ${result.detail})`,
+    );
+  }
+  const planning = await updatePlanningPhase(id, result.to, result.stamps);
+
+  return {
+    planning,
+    applied: { applied: applied.applied, failed: applied.failed, skipped: applied.skipped },
+  };
 }
 
 // ─── Mutations: links (meetings + transcripts) ────────────────────────────

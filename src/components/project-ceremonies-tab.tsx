@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Link2, Plus, StickyNote } from "lucide-react";
+import { CalendarClock, Link2, Play, Plus, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { TONE_DOT, type ChipTone } from "@/lib/status-chips";
@@ -46,19 +47,21 @@ type Planning = {
   pendingActionCount: number;
 };
 
+// Staging-commit: UI mostra só 2 estados ao PM. Fase interna idle/reading/
+// proposing/approving = "Em planejamento"; closed/archived = "Concluída".
 const PHASE_LABEL: Record<Phase, string> = {
-  idle: "Agendada",
-  reading: "Lendo contexto",
-  proposing: "Propondo tasks",
-  approving: "Em aprovação",
+  idle: "Em planejamento",
+  reading: "Em planejamento",
+  proposing: "Em planejamento",
+  approving: "Em planejamento",
   closed: "Concluída",
   archived: "Arquivada",
 };
 
 function phaseTone(p: Phase): ChipTone {
   if (p === "closed") return "green";
-  if (p === "reading" || p === "proposing" || p === "approving") return "amber";
-  return "muted";
+  if (p === "archived") return "muted";
+  return "blue";
 }
 
 type FilterKey = "all" | "planning";
@@ -96,6 +99,12 @@ export function ProjectCeremoniesTab({
   const [filter, setFilter] = useState<FilterKey>("all");
   const [creating, setCreating] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [openPlanningId, setOpenPlanningId] = useState<string | null>(null);
+
+  const openSummary = useMemo(
+    () => plannings.find((p) => p.id === openPlanningId) ?? null,
+    [plannings, openPlanningId],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -274,12 +283,10 @@ export function ProjectCeremoniesTab({
       ) : (
         <ul className="divide-y rounded-md border bg-card">
           {visible.map((p) => (
-            <li key={p.id} className="contents">
-              <button
-                type="button"
-                onClick={() => router.push(`/rituals/${p.id}`)}
-                className="group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none"
-              >
+            <li
+              key={p.id}
+              className="group flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-accent/40 focus-within:bg-accent/40"
+            >
               <span
                 aria-hidden
                 className={cn(
@@ -287,12 +294,31 @@ export function ProjectCeremoniesTab({
                   TONE_DOT[phaseTone(p.phase)],
                 )}
               />
-              <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => setOpenPlanningId(p.id)}
+                className="min-w-0 flex-1 text-left focus-visible:outline-none"
+              >
                 <div className="flex items-center gap-2">
                   <p className="truncate text-sm font-medium">
                     Planning
                     {p.sprintName ? ` · ${p.sprintName}` : ""}
+                    {/* Múltiplas plannings por sprint — data distingue. */}
+                    {(p.scheduledFor || p.startedAt) && (
+                      <span className="ml-1 font-normal text-muted-foreground">
+                        · {fmtShortDate(p.scheduledFor ?? p.startedAt ?? null)}
+                      </span>
+                    )}
                   </p>
+
+                  <Link
+                    href={`/rituals/${p.id}`}
+                    aria-label="Abrir command center"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  >
+                    <Play className="size-3 fill-current" />
+                  </Link>
 
                   {p.linkedMeetingCount + p.linkedTranscriptCount > 0 && (
                     <span
@@ -333,19 +359,14 @@ export function ProjectCeremoniesTab({
                     ? `Facilitador: ${p.facilitatorName}`
                     : "Sem facilitador definido"}
                 </p>
-              </div>
+              </button>
               <span className="hidden w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:inline">
                 {fmtShortDate(p.scheduledFor ?? p.startedAt ?? null)}
               </span>
-              </button>
             </li>
           ))}
         </ul>
       )}
-
-      <p className="px-1 text-[10px] text-muted-foreground">
-        Detalhe da Planning (command center) ainda em construção.
-      </p>
 
       <PlanningSheet
         open={createDialogOpen}
@@ -353,6 +374,30 @@ export function ProjectCeremoniesTab({
         projectId={projectId}
         onCreate={handleConfirmCreate}
         saving={creating}
+      />
+
+      <PlanningSheet
+        open={openPlanningId !== null}
+        onOpenChange={(o) => {
+          if (!o) setOpenPlanningId(null);
+        }}
+        projectId={projectId}
+        planning={openSummary}
+        onUpdated={load}
+        onDelete={async () => {
+          const id = openPlanningId;
+          if (!id) return;
+          await mutate(
+            { type: "delete", id },
+            async (signal) => {
+              await fetchOrThrow(`/api/planning/${id}`, {
+                method: "DELETE",
+                signal,
+              });
+            },
+            { errorLabel: "Falha ao remover planning" },
+          );
+        }}
       />
     </div>
   );

@@ -69,6 +69,14 @@ export async function runAgent(req: AgentRunRequest): Promise<AgentRunResult> {
   ];
 
   const modelId = agent.model ?? DEFAULT_MODEL;
+  const turnStartedAt = Date.now();
+
+  // projectId é opcional — agentes que não rodam num escopo de projeto
+  // (ex Alpha global) podem omitir. Quando presente, agrupa custos no painel.
+  const projectId =
+    typeof agentContext === "object" && agentContext !== null
+      ? ((agentContext as Record<string, unknown>).projectId as string | null | undefined) ?? null
+      : null;
 
   const result = streamText({
     model: getModel(modelId),
@@ -89,6 +97,9 @@ export async function runAgent(req: AgentRunRequest): Promise<AgentRunResult> {
         totalUsage: event.totalUsage,
         steps: event.steps,
         generationId: event.response?.id ?? null,
+        projectId,
+        callKind: "turn",
+        latencyMs: Date.now() - turnStartedAt,
       });
     },
   });

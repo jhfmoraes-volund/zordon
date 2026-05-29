@@ -58,6 +58,7 @@ export function useStoryHierarchy(projectId: string) {
           "*, acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_userStoryId_fkey(*), module:Module(id, name, description, approvedAt), persona:ProjectPersona(id, name, description), designSession:DesignSession!UserStory_designSessionId_fkey(status)",
         )
         .eq("projectId", projectId)
+        .is("dismissedAt", null)
         .order("createdAt", { ascending: false }),
       supabase
         .from("AcceptanceCriterion")

@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { buildVitoriaPrompt } from "./prompt";
 import { buildVitoriaTools } from "./tools";
+import { buildProjectProfile } from "./profile";
 import type { AgentDefinition, AgentRunRequest } from "../../types";
 
 /**
@@ -41,35 +42,51 @@ export const vitoriaAgent: AgentDefinition = {
       .filter((n) => !n.dismissedAt)
       .sort((a, b) => b.priority - a.priority);
 
-    // Conta ações pendentes pra Vitoria saber se tem algo pra revisar
-    const { count: pendingActionCount } = await db()
+    // Propostas pendentes — Vitoria precisa do payload completo pra responder
+    // "edita a proposta X" / "remove a proposta Y" sem adivinhar ID.
+    const { data: pendingRows } = await db()
       .from("MeetingTaskAction")
-      .select("id", { count: "exact", head: true })
+      .select("id, type, taskId, targetSprintId, payload, aiReasoning, aiConfidence, createdAt")
       .eq("planningCeremonyId", planningId)
-      .eq("decision", "pending");
+      .eq("decision", "pending")
+      .eq("execution", "pending")
+      .order("createdAt", { ascending: true });
 
-    // Tasks da sprint — Vitoria usa pra referências de contexto e propostas
-    let sprintTasks: Array<{ id: string; title: string; status: string; priority: number; scope: string }> = [];
-    if (planning.sprintId) {
-      const { data: tasks } = await db()
-        .from("Task")
-        .select("id, title, status, priority, scope")
-        .eq("sprintId", planning.sprintId)
-        .order("priority", { ascending: false });
-      sprintTasks = tasks ?? [];
-    }
+    const pendingActions = (pendingRows ?? []).map((r) => ({
+      id: r.id,
+      type: r.type,
+      taskId: r.taskId,
+      targetSprintId: r.targetSprintId,
+      payload: r.payload,
+      aiReasoning: r.aiReasoning,
+      aiConfidence: r.aiConfidence,
+    }));
+
+    // Project profile (core + sprintScope): cacheado in-memory 5min.
+    // Substitui a query pontual de sprintTasks anterior.
+    const profile = await buildProjectProfile(planning.projectId, {
+      currentSprintId: planning.sprintId,
+    });
+
+    const status: "open" | "closed" =
+      planning.phase === "closed" || planning.phase === "archived" ? "closed" : "open";
 
     return {
       planningId,
       phase: planning.phase,
+      status,
       projectId: planning.projectId,
       sprintId: planning.sprintId,
       sprintName: (planning.sprint as { name: string } | null)?.name ?? null,
       linkedMeetings: planning.linkedMeetings ?? [],
       linkedTranscripts: planning.linkedTranscripts ?? [],
       activeNotes,
-      sprintTasks,
-      pendingActionCount: pendingActionCount ?? 0,
+      pendingActions,
+      upcomingSprints: profile.core.upcomingSprints,
+      activeStories: profile.core.activeStories,
+      squadMembers: profile.core.squadMembers,
+      sprintScopeTasks: profile.sprintScope?.tasks ?? [],
+      sprintBlockers: profile.sprintScope?.blockers ?? [],
       memberId: req.memberId ?? null,
     };
   },
@@ -80,6 +97,7 @@ export const vitoriaAgent: AgentDefinition = {
 
   buildTools({ agentContext }) {
     const planningId = agentContext.planningId as string;
-    return buildVitoriaTools(planningId);
+    const projectId = agentContext.projectId as string;
+    return buildVitoriaTools(planningId, projectId);
   },
 };

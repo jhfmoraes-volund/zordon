@@ -1,7 +1,8 @@
 /**
  * GET  /api/planning/[id] — detalhe completo
  * PATCH /api/planning/[id] — edita sprint/facilitador/scheduledFor
- * DELETE /api/planning/[id] — arquiva (soft-delete)
+ * DELETE /api/planning/[id] — apaga (hard) se ainda em planejamento;
+ *   arquiva (soft) se já concluída/arquivada (preserva audit trail).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireProjectViewApi, requireProjectEditTasksApi } from "@/lib/dal";
@@ -9,6 +10,7 @@ import {
   getPlanningById,
   updatePlanning,
   archivePlanning,
+  deletePlanning,
 } from "@/lib/dal/planning";
 
 export async function GET(
@@ -64,6 +66,20 @@ export async function DELETE(
   const denied = await requireProjectEditTasksApi(planning.projectId);
   if (denied) return denied;
 
+  // Em planejamento (ainda não concluída) → hard delete. CASCADE cuida das
+  // tabelas filhas; actions de meetings ficam com planningCeremonyId=NULL.
+  // Concluída/arquivada → archive (preserva audit trail).
+  const inProgress =
+    planning.phase === "idle" ||
+    planning.phase === "reading" ||
+    planning.phase === "proposing" ||
+    planning.phase === "approving";
+
+  if (inProgress) {
+    await deletePlanning(id);
+    return NextResponse.json({ mode: "deleted" });
+  }
+
   await archivePlanning(id);
-  return new NextResponse(null, { status: 204 });
+  return NextResponse.json({ mode: "archived" });
 }

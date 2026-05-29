@@ -47,6 +47,8 @@ export function assembleAlphaTools(
     routeProjectId?: string;
     routeSprintId?: string;
     currentMemberId?: string;
+    /** Thread atual — usado pra agrupar telemetria de sub-agentes na sessão. */
+    threadId?: string;
     /**
      * Per-project kill switch for hierarchy + planner write tools.
      * When false, only read tools are exposed for this project — writes
@@ -64,6 +66,7 @@ export function assembleAlphaTools(
   const routeProjectId = opts.routeProjectId;
   const routeSprintId = opts.routeSprintId;
   const currentMemberId = opts.currentMemberId;
+  const threadId = opts.threadId;
   const alphaHierarchyEnabled = opts.alphaHierarchyEnabled ?? true;
   const NO_ROAM_TOKEN =
     "Roam nao conectado. Peca ao PM para conectar em Configuracoes > Integracoes.";
@@ -1726,15 +1729,36 @@ export function assembleAlphaTools(
           status: t.status as string,
         }));
 
+        // Budget guard: sub-agentes (extract/enrich/estimate) têm cap por
+        // sessão (default 20). Excedeu → tool retorna erro estruturado e
+        // o modelo decide o que fazer (pedir aprovação, fallback manual).
+        if (threadId) {
+          const { reserveSubAgentCall } = await import("../../budget");
+          const budget = reserveSubAgentCall(threadId);
+          if (!budget.ok) {
+            return { error: budget.reason };
+          }
+        }
+
         try {
-          const result = await extractActions({
-            transcript,
-            meetingType: meeting.type as "pm_review" | "general" | "daily" | "super_planning" | "private",
-            projects: projects.map((p) => ({ id: p.id, name: p.name })),
-            members,
-            userStories,
-            tasks,
-          });
+          const result = await extractActions(
+            {
+              transcript,
+              meetingType: meeting.type as "pm_review" | "general" | "daily" | "super_planning" | "private",
+              projects: projects.map((p) => ({ id: p.id, name: p.name })),
+              members,
+              userStories,
+              tasks,
+            },
+            {
+              agentName: "alpha",
+              threadId: threadId ?? null,
+              memberId: currentMemberId ?? null,
+              // Heurística: se a meeting tem 1 projeto vinculado, usa ele;
+              // senão null (telemetria fica desagrupada).
+              projectId: projects.length === 1 ? projects[0].id : null,
+            },
+          );
 
           return {
             ok: true,

@@ -31,6 +31,8 @@ type ExistingPlanning = {
   sprintId: string | null;
   facilitatorId: string | null;
   scheduledFor: string | null;
+  /** Determina wording do delete: em planejamento = hard delete; concluída/arquivada = arquivar. */
+  phase?: "idle" | "reading" | "proposing" | "approving" | "closed" | "archived";
 };
 
 type Props = {
@@ -42,6 +44,8 @@ type Props = {
   onCreate?: (sprintId: string | null) => Promise<void>;
   onUpdated?: () => void;
   onDeleted?: () => void;
+  /** Quando presente, sobrescreve o DELETE interno — caller controla a chamada (ex: delete otimista numa lista). */
+  onDelete?: () => Promise<void>;
   saving?: boolean;
 };
 
@@ -53,6 +57,7 @@ export function PlanningSheet({
   onCreate,
   onUpdated,
   onDeleted,
+  onDelete,
   saving = false,
 }: Props) {
   const isEdit = !!planning;
@@ -135,14 +140,25 @@ export function PlanningSheet({
     }
   };
 
+  // Em planejamento = hard delete (sumir do banco); concluída/arquivada = archive.
+  // Backend decide; UI só ajusta wording. Phase ausente → assume hard delete
+  // (callers que não passam phase são contextos de criação/edição cedo).
+  const isArchive = planning?.phase === "closed" || planning?.phase === "archived";
+
   const handleDelete = () => {
     setConfirmState({
-      title: "Arquivar Planning?",
-      description: "A planning será arquivada e removida da lista ativa. Essa ação pode ser desfeita manualmente.",
-      confirmLabel: "Arquivar",
+      title: isArchive ? "Arquivar Planning?" : "Excluir Planning?",
+      description: isArchive
+        ? "A planning será arquivada e removida da lista ativa. Histórico preservado pra auditoria."
+        : "A planning será apagada permanentemente, junto com briefing notes, links de meetings e transcripts. Ações já aplicadas a tasks são preservadas. Essa ação é irreversível.",
+      confirmLabel: isArchive ? "Arquivar" : "Excluir",
       destructive: true,
       onConfirm: async () => {
-        await fetchOrThrow(`/api/planning/${planning!.id}`, { method: "DELETE" });
+        if (onDelete) {
+          await onDelete();
+        } else {
+          await fetchOrThrow(`/api/planning/${planning!.id}`, { method: "DELETE" });
+        }
         onOpenChange(false);
         onDeleted?.();
       },
@@ -228,7 +244,7 @@ export function PlanningSheet({
                     disabled={busy}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    Arquivar Planning
+                    {isArchive ? "Arquivar Planning" : "Excluir Planning"}
                   </Button>
                 </div>
               )}
