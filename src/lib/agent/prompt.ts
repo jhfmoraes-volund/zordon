@@ -286,6 +286,7 @@ ${blocks}
 interface BriefingSectionInput {
   subPhase: BriefingSubPhase;
   targetStoryId?: string;
+  targetPrdId?: string;
   existingModules: ExistingModule[];
   existingStories: ExistingStory[];
   existingPersonas: ExistingPersona[];
