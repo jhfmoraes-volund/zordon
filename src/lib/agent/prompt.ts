@@ -640,39 +640,36 @@ ${acRubric}
   }
 
   if (input.subPhase === BRIEFING_SUB_PHASES.PRD_REVIEW) {
-    const targetLine = input.targetStoryId
-      ? `\n**Story alvo:** ${input.targetStoryId}\n`
-      : `\n**ATENCAO:** subPhase="story_detail" mas \`targetStoryId\` nao foi setado. Pergunte ao usuario qual story detalhar antes de tocar tools.\n`;
+    const targetLine = input.targetPrdId
+      ? `\n**PRD alvo:** ${input.targetPrdId}\n`
+      : `\n**ATENCAO:** subPhase="prd_review" mas \`targetPrdId\` nao foi setado. Liste PRDs pendentes e pergunte ao usuario qual revisar.\n`;
 
     return `
-## Modo Briefing — Sub-fase STORY_DETAIL (editar UMA story especifica)
+## Modo Briefing — Sub-fase PRD_REVIEW (revisar e aprovar PRDs)
 ${targetLine}
-Voce esta neste modo porque o **PM pediu explicitamente pra editar uma story** que ja existe — geralmente pra ajustar AC, persona, ou want/soThat sem gerar tasks. Stories ja nascem refinadas no \`story_tree\`, entao este modo e o caminho de **edicao pontual**, nao de refinamento padrao.
+Voce esta revisando PRDs ja criados na sub-fase PRD_DRAFTING. Fluxo: o PM lê os PRDs, pode pedir ajustes (você chama \`update_prd\`), e então aprova via \`approve_prd\`.
 
 ${hierarchy}
 
 ### Sequencia obrigatoria
 
-1. \`list_stories({ scope: "session" })\` pra ler o estado atual da story alvo.
-2. **Proponha em texto** o que vai mudar — seja conciso. Mostre o **delta**: o que a story tem hoje vs. o que voce quer ajustar. NAO repita conteudo que vai ficar igual.
-3. Pergunte: **"Posso aplicar?"**
-4. **Apos confirmacao**, chame \`create_user_story\` (idempotente — atualiza a story existente) com:
-   - \`title\` igual ao atual (a tool dedupa por titulo)
-   - \`want\`, \`soThat\` (so passe se mudou)
-   - \`personaId\` (so passe se mudou)
-   - \`acceptanceCriteriaProduct\` (array completo, ordem importa — substitui a lista atual)
-   - \`refinementStatus: "refined"\`
-   - **Mantenha \`moduleId\`** igual ao atual — nao mude o modulo aqui.
-5. Resumo final curto: "Story <ref> atualizada. PM pode revisar na sheet."
+1. \`list_prds({})\` pra carregar PRDs candidatos (status != approved).
+2. Se PM pediu ajuste em um PRD específico:
+   - **Proponha em texto** o que vai mudar — seja conciso. Mostre o **delta**: campo atual vs. novo valor.
+   - Pergunte: **"Posso aplicar?"**
+   - **Após confirmação**, chame \`update_prd\` com apenas os campos modificados (partial update).
+3. Quando PM aprovar um PRD:
+   - Chame \`approve_prd({ prdId })\`.
+   - Resumo: "PRD <title> aprovado. <N> PRDs restantes."
+4. **Critério de terminação:** Step "briefing" está completo quando **todos os PRDs candidatos estão approved**. Nesse momento, informe: "Todos os PRDs aprovados. Step briefing completo. Pronto pra próximo step da DS."
 
 ### NAO neste modo
-- NAO chame \`create_task\`. Tasks so na sub-fase task_breakdown.
-- NAO sugira aprovar modulo individualmente — aprovacao e atomica via "Concluir sessao" pelo PM (cascata: Module.approvedAt + UserStory.committed + Task.backlog).
-- NAO mude o modulo da story (proposedModuleName/moduleId) sem pedir.
-- NAO repita AC inteiras no chat se nao mudaram — PM ja ve na sheet.
+- NAO crie PRDs novos aqui — criação só em PRD_DRAFTING.
+- NAO delete PRDs sem pedido explícito do PM.
+- NAO repita conteúdo inteiro do PRD no chat se não mudou — PM já vê na UI.
+- NAO sugira mudanças arquiteturais não-solicitadas — seu papel é revisar, não redesenhar.
 
 ${idempotencyNote}
-${acRubric}
 `;
   }
 

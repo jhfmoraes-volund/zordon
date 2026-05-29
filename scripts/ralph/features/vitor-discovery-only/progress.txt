@@ -22,3 +22,32 @@ iter 2026-05-29T23:10:00Z: PASS VTRDISC-002
 iter 2026-05-29T23:16:34Z: PASS VTRDISC-003
   files: src/lib/agent/prompt.ts
   learnings: Reescreveu Sub-fase STORY_TREE→PRD_DRAFTING com checklist 8-bullets, exemplo few-shot propose_prd completo com sourceCardIds≥2 (bs#a7f3k2m, bs#d9p1x8q) e technicalNotes citando D-NN. Tools: list_prds, read_session_memory, propose_prd em lote.
+Excellent! Commit successful: **f0a7a24**
+
+Now let me prepare the final output summary:
+
+---
+
+## Iteração 3 — VTRDISC-003 concluída
+
+**Story escolhida:** VTRDISC-003 — Reescrever Sub-phase STORY_TREE → PRD_DRAFTING (com checklist de qualidade)
+
+**Verificações executadas:**
+1. ✓ `grep -cE 'Sub-phase STORY_TREE|sub-phase story_tree'` → 0 (nenhuma referência legacy)
+2. ✓ PRD_DRAFTING presente (2 ocorrências de "prd_drafting")
+3. ✓ `grep -cE 'sourceCardIds.*NÃO PODE|...'` → 2 (regra de obrigatoriedade presente)
+4. ✓ `grep -cE 'read_session_memory'` → 4 (tool mencionada)
+5. ✓ `grep -cE 'bs#[0-9a-z]+'` → 6 (≥2 exemplos de bs#ids no few-shot)
+
+**Implementação:**
+- Substituiu bloco STORY_TREE (linhas 493-589) por PRD_DRAFTING
+- Fluxo: `list_prds` → `read_session_memory` → `propose_prd` em lote
+- Checklist obrigatório com 8 requisitos duros (sourceCardIds NÃO PODE vazio, problem grounded, personaIds das personas existentes, userJourney reflete brainstorm, AC ≥3 em {given/when/then}, technicalNotes cita D-NN, successMetrics com target, risksAndAssumptions ≥1 cada)
+- Exemplo few-shot completo de `propose_prd` com sourceCardIds=["bs#a7f3k2m", "bs#d9p1x8q"] e technicalNotes citando D-03 e D-07
+
+**Commit hash:** f0a7a24
+
+**Próximo passo sugerido:** Stories VTRDISC-004, -005, -007, -008 agora são elegíveis (todas dependem apenas de VTRDISC-001 que passou). A próxima iteração deve escolher VTRDISC-004 (menor id lexicográfico entre as restantes).
+iter 2026-05-29T23:25:00Z: PASS VTRDISC-004
+  files: src/lib/agent/prompt.ts
+  learnings: Substituído bloco STORY_DETAIL (linhas 648-676) por PRD_REVIEW. Fluxo: list_prds → update_prd/approve_prd. Critério de terminação explícito: "step briefing completo quando todos PRDs aprovados". targetPrdId (não targetStoryId). Sub-phase terminal.
