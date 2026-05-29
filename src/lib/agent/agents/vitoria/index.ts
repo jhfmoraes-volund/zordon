@@ -21,6 +21,7 @@ export const vitoriaAgent: AgentDefinition = {
       .select(
         `
         id, phase, projectId, sprintId,
+        project:Project(id, name, referenceKey, status, client:Client(id, name)),
         sprint:Sprint(name),
         linkedMeetings:PlanningMeetingLink(
           meetingId,
@@ -64,18 +65,59 @@ export const vitoriaAgent: AgentDefinition = {
 
     // Project profile (core + sprintScope): cacheado in-memory 5min.
     // Substitui a query pontual de sprintTasks anterior.
-    const profile = await buildProjectProfile(planning.projectId, {
-      currentSprintId: planning.sprintId,
-    });
+    // Memória do projeto curada pelo Vitor (Design Session agent) — Vitoria lê
+    // o mesmo Project.memoryMd / ProjectBusinessContext / DesignDecision /
+    // DesignOpenQuestion / Active DesignSessions pra ter contexto cross-agent
+    // sem precisar conversar com o Vitor.
+    const [profile, projectMem, businessCtx, activeDecisions, openQuestions, activeSessions] =
+      await Promise.all([
+        buildProjectProfile(planning.projectId, { currentSprintId: planning.sprintId }),
+        db()
+          .from("Project")
+          .select("memoryMd, memoryVersion, memoryUpdatedAt")
+          .eq("id", planning.projectId)
+          .single(),
+        db()
+          .from("ProjectBusinessContext")
+          .select("businessModel, stage, icp, ticketRangeBrl, runwayMonths, competitors, updatedAt")
+          .eq("projectId", planning.projectId)
+          .maybeSingle(),
+        db()
+          .from("DesignDecision")
+          .select("id, statement, rationale, confidence, tags, createdAt")
+          .eq("projectId", planning.projectId)
+          .eq("status", "active")
+          .order("createdAt", { ascending: false }),
+        db()
+          .from("DesignOpenQuestion")
+          .select("id, question, blocksWhat, sessionId, createdAt")
+          .eq("projectId", planning.projectId)
+          .eq("status", "open")
+          .order("createdAt", { ascending: false }),
+        db()
+          .from("DesignSession")
+          .select("id, title, type, status, memoryAbstract, updatedAt")
+          .eq("projectId", planning.projectId)
+          .in("status", ["active", "in_progress"])
+          .order("updatedAt", { ascending: false }),
+      ]);
 
     const status: "open" | "closed" =
       planning.phase === "closed" || planning.phase === "archived" ? "closed" : "open";
+
+    const projectRow = planning.project as
+      | { id: string; name: string; referenceKey: string | null; status: string; client: { id: string; name: string } | null }
+      | null;
 
     return {
       planningId,
       phase: planning.phase,
       status,
       projectId: planning.projectId,
+      projectName: projectRow?.name ?? null,
+      projectReferenceKey: projectRow?.referenceKey ?? null,
+      projectStatus: projectRow?.status ?? null,
+      clientName: projectRow?.client?.name ?? null,
       sprintId: planning.sprintId,
       sprintName: (planning.sprint as { name: string } | null)?.name ?? null,
       linkedMeetings: planning.linkedMeetings ?? [],
@@ -88,6 +130,12 @@ export const vitoriaAgent: AgentDefinition = {
       sprintScopeTasks: profile.sprintScope?.tasks ?? [],
       sprintBlockers: profile.sprintScope?.blockers ?? [],
       memberId: req.memberId ?? null,
+      projectMemoryMd: projectMem.data?.memoryMd ?? null,
+      projectMemoryVersion: projectMem.data?.memoryVersion ?? 0,
+      businessContext: businessCtx.data ?? null,
+      activeDecisions: activeDecisions.data ?? [],
+      openQuestions: openQuestions.data ?? [],
+      activeDesignSessions: activeSessions.data ?? [],
     };
   },
 

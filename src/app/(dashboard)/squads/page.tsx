@@ -1,11 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { SquadsTable } from "@/components/squads/squads-table";
 import {
-  SquadsTable,
   mapSquadRow,
   type Squad,
   type Project,
   type Member,
-} from "@/components/squads/squads-table";
+} from "@/components/squads/squad-types";
 
 export const dynamic = "force-dynamic";
 

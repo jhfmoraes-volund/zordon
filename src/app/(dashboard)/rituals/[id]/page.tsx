@@ -90,7 +90,35 @@ export default function RitualDetailPage({
     [id],
   );
 
-  const { messages, status, sendMessage, stop } = useChat({ transport });
+  const { messages, status, sendMessage, stop, setMessages } = useChat({ transport });
+
+  // Hidrata o histórico do thread no mount — sem isso a conversa parecia
+  // "perdida" a cada reload (mensagens existiam no banco, só não no estado).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/planning/${id}/chat?limit=50`)
+      .then((r) => (r.ok ? r.json() : { threadId: null, messages: [] }))
+      .then((result: {
+        threadId: string | null;
+        messages: Array<{ id: string; role: string; content: string }>;
+      }) => {
+        if (cancelled) return;
+        if (result.threadId) setThreadId(result.threadId);
+        const restored = (result.messages ?? [])
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map<UIMessage>((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            parts: [{ type: "text", text: m.content }],
+          }));
+        if (restored.length > 0) setMessages(restored);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
