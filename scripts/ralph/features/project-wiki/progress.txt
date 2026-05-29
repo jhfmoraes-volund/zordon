@@ -21,3 +21,25 @@ Excelente! Commit realizado com sucesso. Hash: **5278395**
 iter 2026-05-29T21:33:14Z: PASS WIKI-002
   files: supabase/migrations/20260530d_project_resource_table.sql
   learnings: can_edit_project function criada (pattern de can_edit_tasks); policies RLS aplicadas; migration rodada em DB já parcialmente populado (idempotente via CREATE OR REPLACE + IF NOT EXISTS).
+Excelente! Iteração concluída com sucesso.
+
+---
+
+## Resumo da iteração Ralph #2
+
+**Story escolhida:** WIKI-002 — Migration: ProjectResource table
+
+**Verificações executadas:**
+✅ Migration criada em `supabase/migrations/20260530d_project_resource_table.sql`  
+✅ Função `can_edit_project(p_project_id uuid)` criada seguindo pattern de `can_edit_tasks`  
+✅ Tabela `ProjectResource` criada com todas as colunas (id, projectId, kind, title, url, notes, order, createdAt, updatedAt)  
+✅ Índice `ix_project_resource_project` criado  
+✅ RLS habilitado com 2 policies: `pr_select` (via can_view_project) e `pr_modify` (via can_edit_project)  
+✅ Verificado via SQL: `SELECT polname FROM pg_policy WHERE polrelid = '"ProjectResource"'::regclass` retorna `pr_modify` e `pr_select`
+
+**Commit:** `a59c192` — ralph(project-wiki): WIKI-002 Migration ProjectResource table
+
+**Próximo passo sugerido:** WIKI-003 (Migration: ProjectWikiSectionSource table) — sem dependências, elegível para próxima iteração.
+iter 2026-05-29T21:35:44Z: PASS WIKI-003
+  files: supabase/migrations/20260530e_project_wiki_section_source_table.sql
+  learnings: FK ON DELETE CASCADE garante limpeza automática de sources quando seção wiki deletada; RLS via EXISTS + JOIN permite SELECT sem expor sources de projetos inacessíveis.

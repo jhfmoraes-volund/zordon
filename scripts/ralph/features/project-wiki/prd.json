@@ -72,7 +72,7 @@
       "id": "WIKI-003",
       "title": "Migration: ProjectWikiSectionSource table",
       "description": "Cria tabela ProjectWikiSectionSource (FK pra ProjectWikiSection ON DELETE CASCADE) com RLS de SELECT via JOIN.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo supabase/migrations/20260530e_project_wiki_section_source_table.sql existe (DDL §7.3)",
         "Migration roda via psql sem erro",
