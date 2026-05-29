@@ -1,7 +1,7 @@
 {
   "feature": "mobile-layout-pass",
   "branchName": "joao-dev",
-  "prdPath": "docs/prd/backlog/prd-mobile-layout-pass.md",
+  "prdPath": "docs/prd/ready/prd-mobile-layout-pass.md",
   "phase": 1,
   "phaseGoal": "Primitivo <DetailHeader> + <PageHeader> responsivo + migração de 3 headers detail + listas mobile-corrigidas + hint de teclado. UI-only, sem DB/API.",
   "userStories": [
