@@ -16,6 +16,7 @@ import {
   Settings,
   SlidersHorizontal,
   FlaskConical,
+  Coins,
 } from "lucide-react";
 import {
   Sidebar,
@@ -71,6 +72,7 @@ const managerOnlyNav: NavItem[] = [
 // Manager+ (PM, head-ops, CEO) — tuning de agentes.
 const agentsTuningNav: NavItem[] = [
   { title: "Agentes", href: "/agents", icon: SlidersHorizontal },
+  { title: "Custos de agentes", href: "/admin/agent-usage", icon: Coins },
 ];
 
 // Manager+ (PM, head-ops, CEO) — sandbox de UI / mocks de schema.

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/ui/status-chip";
 import { fmtDate } from "@/lib/date-utils";
 import type { PlanningDetail } from "@/lib/dal/planning";
+import { PlanningCostBadge } from "@/components/planning/planning-cost-badge";
 
 type Props = {
   planning: PlanningDetail;
@@ -24,6 +25,8 @@ type Props = {
   onConclude: () => void;
   onOpenContext: () => void;
   onEdit: () => void;
+  /** Thread atual do chat — usado pra exibir custo da sessão (manager+). */
+  threadId?: string | null;
 };
 
 /**
@@ -41,6 +44,7 @@ export function PlanningRibbon({
   onConclude,
   onOpenContext,
   onEdit,
+  threadId,
 }: Props) {
   const isClosed = planning.phase === "closed" || planning.phase === "archived";
 
@@ -70,6 +74,8 @@ export function PlanningRibbon({
           label={isClosed ? "Concluída" : "Em planejamento"}
           dot
         />
+
+        <PlanningCostBadge threadId={threadId ?? null} />
 
         <Button
           size="sm"

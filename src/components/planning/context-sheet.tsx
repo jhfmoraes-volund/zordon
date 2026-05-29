@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Unlink } from "lucide-react";
+import { ChevronDown, FileSpreadsheet, FileText, Unlink } from "lucide-react";
 import {
   ResponsiveSheet,
   ResponsiveSheetContent,
@@ -11,7 +11,14 @@ import {
 import { SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TranscriptModal } from "@/components/design-session/transcript-modal";
+import { SpreadsheetImportModal } from "@/components/planning/spreadsheet-import-modal";
 import { fmtDate } from "@/lib/date-utils";
 
 interface LinkedTranscript {
@@ -23,6 +30,13 @@ interface LinkedTranscript {
     capturedAt: string | null;
   } | null;
   weight: string;
+}
+
+function sourceIcon(source: string | undefined) {
+  if (source === "spreadsheet") {
+    return <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+  }
+  return <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
 }
 
 interface ContextSheetProps {
@@ -43,6 +57,7 @@ export function ContextSheet({
   onImported,
 }: ContextSheetProps) {
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
+  const [spreadsheetModalOpen, setSpreadsheetModalOpen] = useState(false);
 
   return (
     <>
@@ -58,20 +73,23 @@ export function ContextSheet({
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {linkedTranscripts.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Nenhuma transcrição importada ainda.
+                Nenhuma fonte de contexto importada ainda.
               </p>
             ) : (
               <ul className="divide-y">
                 {linkedTranscripts.map((l) => (
                   <li key={l.transcriptRefId} className="flex items-center gap-2 py-3">
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    {sourceIcon(l.transcript?.source)}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm truncate">
-                        {l.transcript?.title ?? "Transcript sem título"}
+                        {l.transcript?.title ?? "Fonte sem título"}
                       </p>
-                      {l.transcript?.capturedAt && (
+                      {(l.transcript?.source || l.transcript?.capturedAt) && (
                         <p className="text-xs text-muted-foreground">
-                          {l.transcript.source} · {fmtDate(l.transcript.capturedAt)}
+                          {l.transcript?.source}
+                          {l.transcript?.capturedAt
+                            ? ` · ${fmtDate(l.transcript.capturedAt)}`
+                            : ""}
                         </p>
                       )}
                     </div>
@@ -85,7 +103,7 @@ export function ContextSheet({
                       onClick={() =>
                         onUnlink(
                           l.transcriptRefId,
-                          l.transcript?.title ?? "este transcript",
+                          l.transcript?.title ?? "esta fonte",
                         )
                       }
                     >
@@ -101,9 +119,22 @@ export function ContextSheet({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Fechar
             </Button>
-            <Button onClick={() => setTranscriptModalOpen(true)}>
-              Importar transcrição
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button />}>
+                Importar
+                <ChevronDown className="h-3.5 w-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setTranscriptModalOpen(true)}>
+                  <FileText className="h-3.5 w-3.5" />
+                  Reunião (Roam/Granola)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setSpreadsheetModalOpen(true)}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  Planilha (XLSX/CSV)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </ResponsiveSheetFooter>
         </ResponsiveSheetContent>
       </ResponsiveSheet>
@@ -117,6 +148,13 @@ export function ContextSheet({
           setTranscriptModalOpen(false);
           onImported();
         }}
+      />
+
+      <SpreadsheetImportModal
+        planningId={planningId}
+        open={spreadsheetModalOpen}
+        onOpenChange={setSpreadsheetModalOpen}
+        onImported={onImported}
       />
     </>
   );

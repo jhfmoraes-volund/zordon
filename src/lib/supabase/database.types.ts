@@ -5596,6 +5596,7 @@ export type Database = {
           meetingId: string | null
           source: string
           sourceId: string | null
+          storagePath: string | null
           title: string | null
         }
         Insert: {
@@ -5608,6 +5609,7 @@ export type Database = {
           meetingId?: string | null
           source: string
           sourceId?: string | null
+          storagePath?: string | null
           title?: string | null
         }
         Update: {
@@ -5620,6 +5622,7 @@ export type Database = {
           meetingId?: string | null
           source?: string
           sourceId?: string | null
+          storagePath?: string | null
           title?: string | null
         }
         Relationships: [

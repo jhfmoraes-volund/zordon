@@ -557,7 +557,7 @@ export async function unlinkTranscriptFromPlanning(
  * Útil quando um agente importa um transcript já visto sem cri ar duplicata.
  */
 export async function findOrCreateTranscriptRef(input: {
-  source: "roam" | "granola" | "manual";
+  source: "roam" | "granola" | "manual" | "spreadsheet";
   sourceId: string;
   fullText?: string | null;
   title?: string | null;
@@ -565,6 +565,7 @@ export async function findOrCreateTranscriptRef(input: {
   capturedAt?: string | null;
   meetingId?: string | null;
   importedById?: string | null;
+  storagePath?: string | null;
 }): Promise<TranscriptRefRow> {
   const supabase = db();
   // Tenta select primeiro (mais cache-friendly que upsert quando já existe).
@@ -588,6 +589,7 @@ export async function findOrCreateTranscriptRef(input: {
       capturedAt: input.capturedAt ?? null,
       meetingId: input.meetingId ?? null,
       importedById: input.importedById ?? null,
+      storagePath: input.storagePath ?? null,
       importedAt: now,
     })
     .select("*")

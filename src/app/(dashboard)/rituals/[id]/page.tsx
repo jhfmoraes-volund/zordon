@@ -244,6 +244,7 @@ export default function RitualDetailPage({
         onConclude={handleConclude}
         onOpenContext={() => setContextSheetOpen(true)}
         onEdit={() => setEditSheetOpen(true)}
+        threadId={threadId}
       />
 
       {/* Command center: árvore Module→Story→Task com ghosts (esquerda) + chat (direita) */}
