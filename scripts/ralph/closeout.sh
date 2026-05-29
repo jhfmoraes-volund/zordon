@@ -25,11 +25,19 @@ DRY_RUN="false"
 [ "${2:-}" = "--dry-run" ] && DRY_RUN="true"
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-FEATURE_DIR="$REPO_ROOT/scripts/ralph/features/$FEATURE"
+RALPH_DIR="$REPO_ROOT/scripts/ralph"
+FEATURE_DIR="$RALPH_DIR/features/$FEATURE"
 PRD_JSON="$FEATURE_DIR/prd.json"
-PRD_MD="$REPO_ROOT/docs/prd/prd-$FEATURE.md"
 PROGRESS="$FEATURE_DIR/progress.txt"
 TODAY="$(date -u +%Y%m%d)"
+
+# shellcheck source=lib/prd-paths.sh
+source "$RALPH_DIR/lib/prd-paths.sh"
+
+PRD_MD="$(prd_find "$FEATURE")" || {
+  echo "❌ PRD markdown not found for feature: $FEATURE" >&2
+  exit 65
+}
 
 cd "$REPO_ROOT"
 
@@ -91,7 +99,7 @@ echo ""
 
 # ─── 4. archive PRD + prd.json ──────────────────────────────────────────────
 
-ARCHIVE_PRD="$REPO_ROOT/docs/archive/prd-$FEATURE-$TODAY.md"
+ARCHIVE_PRD="$REPO_ROOT/docs/prd/archive/prd-$FEATURE-$TODAY.md"
 ARCHIVE_FEATURE="$REPO_ROOT/scripts/ralph/features/_archive/$FEATURE-$TODAY"
 
 echo "── arquivamento ──────────────────────────────────────────────────────"
@@ -117,7 +125,7 @@ PR_BODY=$(mktemp)
   echo ""
   echo "Implementação da feature **$FEATURE** via Ralph loop autônomo."
   echo ""
-  echo "PRD: \`docs/archive/prd-$FEATURE-$TODAY.md\` (anteriormente em \`docs/prd/\`)"
+  echo "PRD: \`docs/prd/archive/prd-$FEATURE-$TODAY.md\`"
   echo ""
   echo "## Stories implementadas"
   echo ""

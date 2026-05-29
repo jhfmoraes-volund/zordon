@@ -374,10 +374,10 @@ Restam **não-bloqueantes pra Fase 2+:**
 
 ## 15. Referências
 
-- Wiki atual: [src/components/project-wiki.tsx](../../src/components/project-wiki.tsx) · [src/hooks/use-wiki-items.ts](../../src/hooks/use-wiki-items.ts)
-- Alpha Insights (padrão): [docs/prd/prd-alpha-project-insights.md](prd-alpha-project-insights.md)
-- DS Inception: [docs/features/design-session/](../features/design-session/)
-- Meetings: [src/lib/meetings.ts](../../src/lib/meetings.ts)
+- Wiki atual: [src/components/project-wiki.tsx](../../../src/components/project-wiki.tsx) · [src/hooks/use-wiki-items.ts](../../../src/hooks/use-wiki-items.ts)
+- Alpha Insights (padrão): [docs/prd/archive/prd-alpha-project-insights-20260529.md](../archive/prd-alpha-project-insights-20260529.md)
+- DS Inception: [docs/features/design-session/](../../features/design-session/)
+- Meetings: [src/lib/meetings.ts](../../../src/lib/meetings.ts)
 - Guest access (constraint de visibilidade): memory `project_guest_access.md`
 - UI patterns: memory `project_ui_patterns.md`
 - Edge Function pattern: [supabase/functions/export-design-session/](../../supabase/functions/export-design-session/)

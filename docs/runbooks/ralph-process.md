@@ -25,7 +25,7 @@ Cada PRD passa por 4 ritos em sequência. Nenhum rito é opcional.
 
 ### Rito 1 — Intake (PRD hardening)
 
-**Trigger:** PRD existe em `docs/prd/prd-<feature>.md`, ainda não foi rodado.
+**Trigger:** PRD existe em `docs/prd/backlog/prd-<feature>.md`, ainda não foi rodado.
 
 **Entrada:** PRD em markdown (prosa, decisões, arquitetura).
 
@@ -44,9 +44,11 @@ Cada PRD passa por 4 ritos em sequência. Nenhum rito é opcional.
 4. Derivar `scripts/ralph/features/<feature>/prd.json` com mesmas stories em JSON, todas com `passes: false`.
 
 **Saída:**
-- `docs/prd/prd-<feature>.md` revisado
+- `docs/prd/ready/prd-<feature>.md` (movido de `backlog/` via `bash scripts/ralph/intake.sh <feature>`)
 - `scripts/ralph/features/<feature>/prd.json` (fila)
 - `scripts/ralph/features/<feature>/progress.txt` (vazio, criado pelo loop)
+
+**Estados via subdir:** PRDs vivem em `docs/prd/{backlog,ready,in-progress,blocked,done,archive}/`. O subdir é o status — mover = mudar status. PRD novo nasce em `backlog/`; Rito 1 promove pra `ready/`.
 
 **Critério de aprovação:**
 - Toda decisão arquitetural fechada (sem TBD)
@@ -55,7 +57,9 @@ Cada PRD passa por 4 ritos em sequência. Nenhum rito é opcional.
 
 ### Rito 2 — Execução (Ralph loop)
 
-**Trigger:** `bash scripts/ralph/ralph.sh <feature> [max_iterations]`
+**Trigger (atalho):** `bash scripts/ralph/next.sh [max_iterations]` — pega 1º PRD em `docs/prd/ready/`, move pra `in-progress/`, dispara o loop, ao fim move pra `blocked/`.
+
+**Trigger (direto, feature específica):** `bash scripts/ralph/ralph.sh <feature> [max_iterations]`
 
 **Processo:** loop bash em [scripts/ralph/ralph.sh](../../scripts/ralph/ralph.sh). Cada iteração:
 1. Verifica `prd.json` — se todas as stories tem `passes: true`, sai com `<promise>COMPLETE</promise>`.
@@ -86,9 +90,10 @@ Cada PRD passa por 4 ritos em sequência. Nenhum rito é opcional.
 **Processo:**
 1. Operador roda `bash scripts/ralph/checkpoint.sh <feature>` (mostra prd.json status, últimos 10 commits, progress.txt tail, diff acumulado vs `main`)
 2. Decide:
-   - **Continuar:** dispara `ralph.sh <feature>` de novo
-   - **Pivotar:** edita prd.json (remove story problemática, adiciona substituta, ajusta dependsOn), commita ajuste, dispara `ralph.sh`
-   - **Abortar:** reverte branch local, arquiva PRD em `docs/archive/`, post-mortem em `docs/runbooks/`
+   - **Continuar:** `bash scripts/ralph/next.sh` (retoma PRD em `blocked/` automaticamente movendo pra `in-progress/`), ou direto `bash scripts/ralph/ralph.sh <feature>`
+   - **Pivotar:** edita prd.json (remove story problemática, adiciona substituta, ajusta dependsOn), commita ajuste, dispara `next.sh`
+   - **Abortar:** `source scripts/ralph/lib/prd-paths.sh && prd_move <feature> archive`, post-mortem em `docs/runbooks/`
+   - **Promover pra done:** se 100% passes, `prd_move <feature> done` + `bash scripts/ralph/closeout.sh <feature>`
 
 **Princípio:** humano sempre no checkpoint. Sem aprovação tácita por loops em série. **Nunca rodar Ralph em background sem revisar entre loops** — código vivo, blast radius alto.
 
@@ -105,7 +110,7 @@ Cada PRD passa por 4 ritos em sequência. Nenhum rito é opcional.
 3. Se verde:
    - Gera PR description (resumo + checklist do PRD + link pro PRD)
    - Cria PR via `gh pr create`
-   - Move PRD pra `docs/archive/prd-<feature>-YYYYMMDD.md` (committa essa mudança)
+   - Move PRD pra `docs/prd/archive/prd-<feature>-YYYYMMDD.md` (committa essa mudança)
    - Append seção "Aprendizados <feature>" em `AGENTS.md` (padrões descobertos durante o loop, gotchas)
    - Limpa `scripts/ralph/features/<feature>/` (move pra `scripts/ralph/features/_archive/`)
 
@@ -116,24 +121,35 @@ Cada PRD passa por 4 ritos em sequência. Nenhum rito é opcional.
 ```
 docs/
 ├── prd/
-│   └── prd-<feature>.md              # PRD revisado (Rito 1)
-├── runbooks/
-│   └── ralph-process.md              # este arquivo (SSOT do processo)
-└── archive/                           # PRDs concluídos (Rito 4)
-    └── prd-<feature>-YYYYMMDD.md
+│   ├── backlog/                       # ideia em rascunho
+│   ├── ready/                         # Rito 1 done, prd.json existe
+│   ├── in-progress/                   # Ralph rodando ou pausado
+│   ├── blocked/                       # checkpoint humano pendente
+│   ├── done/                          # 100% passes, aguardando closeout
+│   └── archive/                       # pós-closeout (filename ganha -YYYYMMDD)
+└── runbooks/
+    └── ralph-process.md               # este arquivo (SSOT do processo)
 
 scripts/ralph/
-├── ralph.sh                          # loop principal (Rito 2)
-├── checkpoint.sh                     # status report (Rito 3)
-├── closeout.sh                       # audit + PR + archive (Rito 4)
-├── CLAUDE.md                         # prompt template lido pelo claude -p
+├── next.sh                            # pega próximo de ready/ e dispara
+├── intake.sh                          # Rito 1: valida PRD + move pra ready/
+├── ralph.sh                           # loop principal (Rito 2)
+├── checkpoint.sh                      # status report (Rito 3)
+├── closeout.sh                        # audit + PR + archive (Rito 4)
+├── CLAUDE.md                          # prompt template lido pelo claude -p
+├── lib/
+│   └── prd-paths.sh                   # helpers prd_find / prd_state / prd_move
 └── features/
     ├── <feature>/
-    │   ├── prd.json                  # fila de stories
-    │   └── progress.txt              # memória append-only
+    │   ├── prd.json                   # fila de stories
+    │   └── progress.txt               # memória append-only
     └── _archive/
-        └── <feature>-YYYYMMDD/       # features concluídas
+        └── <feature>-YYYYMMDD/        # features concluídas
 ```
+
+## Skill `/ralph` (Claude Code)
+
+Em sessão Claude Code, o usuário pode invocar a skill `/ralph` (auto-trigger por frases tipo "quais PRDs em backlog", "executa o próximo") que orquestra: listar fila, propor próximo, disparar `next.sh`, reportar status. Definição em `.claude/skills/ralph/SKILL.md`.
 
 ---
 

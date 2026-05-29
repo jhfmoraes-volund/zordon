@@ -97,6 +97,21 @@ export type PMReviewDetail = PMReviewSummary & {
     } | null;
   }>;
   notes: PMReviewNoteRow[];
+  /**
+   * Status do contexto que a Vitoria precisa pra sintetizar com qualidade.
+   * Usado na UI pra gatear o botão "Sintetizar report" e mostrar o checklist
+   * de "o que falta antes da síntese".
+   */
+  projectContext: {
+    /** ≥1 transcript linkado a este PM Review. Único item user-curated. */
+    hasTranscripts: boolean;
+    /** ≥1 DesignSession ativa no projeto. */
+    hasActiveDS: boolean;
+    /** ≥1 Sprint no projeto (current ou upcoming). */
+    hasSprint: boolean;
+    /** ≥3 notes ativas (matéria-prima alternativa pra síntese). */
+    hasNotesEnough: boolean;
+  };
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -196,7 +211,7 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
   if (error) throw error;
   if (!row) return null;
 
-  const [meetingsRes, transcriptsRes, notesRes] = await Promise.all([
+  const [meetingsRes, transcriptsRes, notesRes, dsRes, sprintRes] = await Promise.all([
     supabase
       .from("PMReviewMeetingLink")
       .select(
@@ -217,6 +232,17 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
       .eq("pmReviewId", id)
       .order("priority", { ascending: false })
       .order("generatedAt", { ascending: true }),
+    // Camada DS — ≥1 sessão ativa basta pra marcar hasActiveDS.
+    supabase
+      .from("DesignSession")
+      .select("id", { count: "exact", head: true })
+      .eq("projectId", row.projectId)
+      .in("status", ["active", "in_progress"]),
+    // Camada Sistema — qualquer Sprint serve (ops info disponível).
+    supabase
+      .from("Sprint")
+      .select("id", { count: "exact", head: true })
+      .eq("projectId", row.projectId),
   ]);
 
   if (meetingsRes.error) throw meetingsRes.error;
@@ -268,6 +294,12 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
       transcript: l.transcript as PMReviewDetail["linkedTranscripts"][number]["transcript"],
     })),
     notes,
+    projectContext: {
+      hasTranscripts: (transcriptsRes.data?.length ?? 0) > 0,
+      hasActiveDS: (dsRes.count ?? 0) > 0,
+      hasSprint: (sprintRes.count ?? 0) > 0,
+      hasNotesEnough: noteTotal >= 3,
+    },
   };
 }
 

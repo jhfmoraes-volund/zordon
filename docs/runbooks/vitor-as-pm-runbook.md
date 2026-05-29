@@ -5,7 +5,7 @@
 > **Operador (humano que rodou o runbook):** após terminar, revise os commits e rode `bash scripts/sync-main.sh -m "feat: ship vitor-as-pm v1"` (ou equivalente) quando estiver confortável em push.
 
 **Owner do runbook:** João Moraes
-**PRD origem:** [`docs/prd/prd-vitor-output-as-prd.md`](../prd/prd-vitor-output-as-prd.md)
+**PRD origem:** [`docs/prd/prd-vitor-output-as-prd.md`](../prd/backlog/prd-vitor-output-as-prd.md)
 **Data:** 2026-05-29
 **Escopo:** Fases 1-3 do PRD (MVP). Fases 4-5 ficam de fora — exigem decisão humana.
 
@@ -16,7 +16,7 @@
 Leia, nesta ordem, e mantenha em memória de trabalho:
 
 1. [`AGENTS.md`](../../AGENTS.md) — convenções do repo (psql obrigatório pra migrations, UI patterns, sync-main.sh).
-2. [`docs/prd/prd-vitor-output-as-prd.md`](../prd/prd-vitor-output-as-prd.md) — o PRD que este runbook materializa. Decisões fixadas na seção 5.
+2. [`docs/prd/prd-vitor-output-as-prd.md`](../prd/backlog/prd-vitor-output-as-prd.md) — o PRD que este runbook materializa. Decisões fixadas na seção 5.
 3. [`src/lib/agent/agents/vitor/index.ts`](../../src/lib/agent/agents/vitor/index.ts) — Vitor atual (`vitorAgent: AgentDefinition`, loadContext, tools). Linhas 61+.
 4. [`src/lib/agent/agents/vitoria/tools.ts`](../../src/lib/agent/agents/vitoria/tools.ts) — padrão de tools (AI SDK ToolSet). Mirror desse estilo nos novos tools.
 5. [`src/lib/dal/story-hierarchy.ts`](../../src/lib/dal/story-hierarchy.ts) — padrão DAL (db client via `db()`, retorno tipado, activity log).

@@ -14,6 +14,7 @@ import {
   listPMReviewsForProject,
   type PMReviewNoteKind,
 } from "@/lib/dal/pm-review";
+import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
 
 type RitualItem =
   | {
@@ -79,9 +80,10 @@ export async function GET(
   const denied = await requireProjectViewApi(projectId);
   if (denied) return denied;
 
-  const [plannings, pmReviews] = await Promise.all([
+  const [plannings, pmReviews, canCreatePMReview] = await Promise.all([
     listPlanningsForProject(projectId),
     listPMReviewsForProject(projectId),
+    canCreatePMReviewForProject(projectId),
   ]);
 
   const items: RitualItem[] = [];
@@ -133,5 +135,9 @@ export async function GET(
   const featured =
     items.find((i) => i.kind === "pm_review" && i.status === "published") ?? null;
 
-  return NextResponse.json({ items, featured });
+  return NextResponse.json({
+    items,
+    featured,
+    permissions: { canCreatePMReview },
+  });
 }

@@ -1,0 +1,261 @@
+{
+  "feature": "mobile-layout-pass",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/backlog/prd-mobile-layout-pass.md",
+  "phase": 1,
+  "phaseGoal": "Primitivo <DetailHeader> + <PageHeader> responsivo + migração de 3 headers detail + listas mobile-corrigidas + hint de teclado. UI-only, sem DB/API.",
+  "userStories": [
+    {
+      "id": "MOBLAY-001",
+      "title": "Criar primitivo <DetailHeader>",
+      "description": "Cria src/components/ui/detail-header.tsx com props backHref, title, subtitle?, chips?: ReactNode, metaRow?: ReactNode, actions?: DetailHeaderAction[]. Tipo DetailHeaderAction = { label, icon?, onClick, variant?: 'default'|'destructive', primary?: boolean }. useIsMobile() alterna layout: mobile = row1(← + título full + kebab) · row2 chips · row3 subtitle · row4 metaRow. Desktop = row1 (← + título + chips + actions inline) · row2 subtitle · row3 metaRow.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo src/components/ui/detail-header.tsx existe e exporta <DetailHeader> + tipo DetailHeaderAction",
+        "Componente respeita breakpoint md (768px) via useIsMobile()",
+        "Em mobile, actions renderiza como DropdownMenu (MoreVertical) — não inline",
+        "Em desktop, actions renderiza como <Button size='sm'> inline na mesma row do título",
+        "Quando actions.length === 0, kebab não aparece em mobile",
+        "Quando variant: 'destructive', item DropdownMenu fica em vermelho (text-destructive)",
+        "Componente não introduz dependências novas"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm lint src/components/ui/detail-header.tsx",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Renderizar <DetailHeader title='...' actions={[...]}/> em uma página de teste e validar em 375px e 1024px",
+          "expected": "Mobile mostra kebab; desktop mostra botões inline"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/ui/detail-header.tsx"
+      ]
+    },
+    {
+      "id": "MOBLAY-002",
+      "title": "Tornar <PageHeader> responsivo",
+      "description": "Modifica src/components/page-header.tsx in-place. Em < md: flex flex-col, description full-width abaixo do h1, botão w-full em row própria. Em ≥ md: layout idêntico ao atual. API (title, description?, onAdd?, addLabel?) inalterada — 7 consumidores funcionam sem mudança.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/components/page-header.tsx modificado in-place",
+        "API (title, description?, onAdd?, addLabel?) inalterada",
+        "Em mobile, h1 ocupa row completa, description ocupa row completa, botão w-full em row própria",
+        "Em desktop, layout idêntico ao commit anterior (visual diff zero)",
+        "Os 7 consumidores (/projects, /clients, /squads, /members, /meetings, /agents, /workflow) continuam typechecking"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm lint",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir /meetings em viewport 375px e 1024px; comparar com snapshot pré-mudança em desktop",
+          "expected": "Mobile: description não corta; botão w-full. Desktop: idêntico ao anterior."
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/components/page-header.tsx"
+      ]
+    },
+    {
+      "id": "MOBLAY-003",
+      "title": "Migrar header de /projects/[id] para <DetailHeader>",
+      "description": "Substitui o bloco JSX em projects/[id]/page.tsx (linhas ~426-471) por <DetailHeader>. Mapping: backHref=/projects, title=project.name, subtitle=project.client?.name ?? '—', chips=<StatusChip>{project.status}</StatusChip>, metaRow=[refKey] · PM, actions condicionais: canEdit ? Editar (Pencil) + (canManageAccess ? Access (Shield) : []) : []. Mantém SprintRibbon e Tabs abaixo.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Header antigo (linhas ~426-471) substituído por <DetailHeader> com props mapeadas",
+        "SprintRibbon e Tabs continuam renderizando após o header",
+        "Em mobile 375px, título nunca trunca (wrap permitido)",
+        "Em desktop, layout visualmente idêntico ao anterior",
+        "viewer/guest (sem canEdit) não vê kebab"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Navegar pra /projects/<id-existente> em 375px e 1024px; testar como manager (vê 2 ações) e como viewer (sem ações)",
+          "expected": "Mobile mostra kebab com Editar/Access; desktop inline; viewer sem kebab"
+        }
+      ],
+      "dependsOn": ["MOBLAY-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/projects/[id]/page.tsx"
+      ]
+    },
+    {
+      "id": "MOBLAY-004",
+      "title": "Migrar header de /clients/[id] para <DetailHeader>",
+      "description": "Substitui bloco em clients/[id]/page.tsx (linhas ~415-464) por <DetailHeader>. Mapping: backHref=/clients, title=client.name, chips=nenhum, subtitle=composição condicional email/phone com <Mail/> e <Phone/>, fallback italic 'Sem contato cadastrado'. actions: canEditClient ? [Editar, Excluir variant='destructive'] : []. Preserva bloco notes e ClientInsightsCard abaixo.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Header (linhas ~415-464) substituído por <DetailHeader>",
+        "Excluir aparece em vermelho no kebab mobile e como variant='destructive' inline em desktop",
+        "Em mobile 375px, nome do cliente nunca trunca",
+        "viewer (sem canEditClient) não vê kebab — ajustar lógica de conditional actions",
+        "Bloco de notes e ClientInsightsCard preservados intactos abaixo do header"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir /clients/<id> em 375px e 1024px; testar com client.notes setado e sem notes; testar com email+phone, só email, e sem nenhum",
+          "expected": "Todas as combinações renderizam sem corte. Excluir sempre em vermelho."
+        }
+      ],
+      "dependsOn": ["MOBLAY-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/clients/[id]/page.tsx"
+      ]
+    },
+    {
+      "id": "MOBLAY-005",
+      "title": "Migrar header de /meetings/[id] para <DetailHeader>",
+      "description": "Substitui bloco em meetings/[id]/page.tsx (linhas ~507-569) por <DetailHeader>. Mapping: backHref=/meetings, title=headerTitle, chips=<StatusChip kind/><StatusChip status dot/>, subtitle=data formatada por extenso, actions: canEdit ? [Importar (Download), Sugerir IA (Sparkles)] : []. Label de Importar muda conforme meeting.type === 'private' ? 'Importar do Granola' : 'Importar reunião'. Não toca em Projetos vinculados nem To-dos.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Header (linhas ~507-569) substituído por <DetailHeader>",
+        "Em mobile 375px, título trunca quebrando linha (não com '…')",
+        "viewer/guest (sem canEdit) não vê kebab",
+        "Importar continua chamando handleImportClick e Sugerir continua chamando handleSuggest",
+        "Sections abaixo (Projetos vinculados, To-dos, Transcript, etc.) preservadas"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir uma /meetings/<id-privada-concluida> em 375px e 1024px; clicar Importar e Sugerir IA do kebab",
+          "expected": "Ambos os handlers disparam; modais abrem normalmente; sections abaixo intactas"
+        }
+      ],
+      "dependsOn": ["MOBLAY-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/meetings/[id]/page.tsx"
+      ]
+    },
+    {
+      "id": "MOBLAY-006",
+      "title": "Item de lista /meetings — kebab sempre-visível em mobile",
+      "description": "Em meetings/page.tsx (~322-406), adiciona <DropdownMenu> com <MoreVertical/> trigger sempre-visível em mobile (opacity-100 em <md, opacity-0 group-hover:opacity-100 em ≥md). Reorganiza conteúdo em mobile: row1 (ícone + título full + kebab), row2 (KIND chip · data dd/MM · pendentes inline), row3 (pills projeto). Traz data de volta em mobile (sem hidden sm:inline).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Em mobile 375px, cada item tem kebab visível com Editar+Remover",
+        "Em mobile, título nunca trunca com '…' — wrap em 2 linhas se necessário",
+        "Em mobile, data dd/MM visível ao lado do KIND chip",
+        "Em mobile, pendentes aparecem inline ('· ⚠ 2 pend.') na row de metadata",
+        "Em desktop ≥ md, comportamento idêntico ao atual (hover, data full, etc)",
+        "Editar/Remover handlers (openEdit, remove) chamados corretamente do kebab mobile"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir /meetings em 375px; tap no kebab de uma linha; verificar que Editar abre sheet e Remover abre ConfirmDialog",
+          "expected": "Ambos funcionam em touch. Desktop mantém hover."
+        }
+      ],
+      "dependsOn": ["MOBLAY-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/meetings/page.tsx"
+      ]
+    },
+    {
+      "id": "MOBLAY-007",
+      "title": "Criar <ClientCardMobile> e wrapper desktop/mobile em /clients",
+      "description": "Cria src/components/clients/client-card-mobile.tsx espelhando ProjectCardMobile: <Link> surface block p-4 space-y-3, kebab DropdownMenu absolute top-2 right-2 com Editar + Excluir, h3 nome truncate + email truncate + phone + 'N projetos'. Em clients-table.tsx wrappa Table atual em hidden md:block + adiciona md:hidden space-y-2 com lista de cards. Reusa handlers do parent.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo src/components/clients/client-card-mobile.tsx criado",
+        "Em mobile 375px, /clients mostra cards (não Table)",
+        "Em desktop ≥ md, /clients mostra Table idêntica à atual",
+        "Tap no kebab do card abre menu com Editar + Excluir (destructive)",
+        "Excluir dispara o mesmo ConfirmDialog do desktop"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir /clients em 375px e 1024px; testar Editar + Excluir via kebab mobile",
+          "expected": "Mobile mostra cards; desktop mostra Table; ambos editam/excluem corretamente"
+        }
+      ],
+      "dependsOn": ["MOBLAY-001"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/clients/client-card-mobile.tsx",
+        "src/components/clients/clients-table.tsx"
+      ]
+    },
+    {
+      "id": "MOBLAY-008",
+      "title": "Esconder hint de teclado em mobile no deck-stage",
+      "description": "Em src/components/deck/deck-stage.tsx (~228), envolve o span '← → para navegar' (e separador adjacente) com hidden md:inline-flex. Contador '01 / 10' permanece visível em todas viewports.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Em mobile 375px (qualquer deck), texto '← → para navegar' não aparece",
+        "Contador (ex: '01 / 10') continua visível em mobile",
+        "Em desktop ≥ md, hint permanece igual ao atual"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir um deck (ex: /workflow/<algum-deck>) em 375px e 1024px",
+          "expected": "Mobile: só contador. Desktop: contador + '← → PARA NAVEGAR'"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 10,
+      "touches": [
+        "src/components/deck/deck-stage.tsx"
+      ]
+    }
+  ]
+}

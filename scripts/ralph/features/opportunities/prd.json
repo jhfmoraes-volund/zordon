@@ -1,7 +1,7 @@
 {
   "feature": "opportunities",
   "branchName": "joao-dev",
-  "prdPath": "docs/prd/prd-opportunities.md",
+  "prdPath": "docs/prd/ready/prd-opportunities.md",
   "phase": 1,
   "phaseGoal": "Backlog manual de oportunidades por cliente — schema + RLS + CRUD + widget (matriz 2x2 + lista) + Promote -> Project com DS Inception linkada.",
   "userStories": [

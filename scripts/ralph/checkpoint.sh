@@ -16,19 +16,24 @@ fi
 
 FEATURE="$1"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-FEATURE_DIR="$REPO_ROOT/scripts/ralph/features/$FEATURE"
+RALPH_DIR="$REPO_ROOT/scripts/ralph"
+FEATURE_DIR="$RALPH_DIR/features/$FEATURE"
 PRD_JSON="$FEATURE_DIR/prd.json"
 PROGRESS="$FEATURE_DIR/progress.txt"
+
+# shellcheck source=lib/prd-paths.sh
+source "$RALPH_DIR/lib/prd-paths.sh"
 
 if [ ! -f "$PRD_JSON" ]; then
   echo "❌ prd.json not found: $PRD_JSON" >&2
   exit 65
 fi
 
+PRD_STATE="$(prd_state "$FEATURE" 2>/dev/null || echo "?")"
 BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
 
 echo "═══════════════════════════════════════════════════════════════════════"
-echo "  Checkpoint — feature: $FEATURE · branch: $BRANCH"
+echo "  Checkpoint — feature: $FEATURE · state: $PRD_STATE · branch: $BRANCH"
 echo "═══════════════════════════════════════════════════════════════════════"
 echo ""
 
@@ -71,11 +76,13 @@ echo ""
 
 echo "─── Próximas ações sugeridas ──────────────────────────────────────────"
 if [ "$DONE" -eq "$TOTAL" ]; then
-  echo "  ✅ Tudo passou — rode closeout:"
+  echo "  ✅ Tudo passou — promova pra done/ e rode closeout:"
+  echo "     source scripts/ralph/lib/prd-paths.sh && prd_move $FEATURE done"
   echo "     bash scripts/ralph/closeout.sh $FEATURE"
 else
-  echo "  ▶ Continuar loop:   bash scripts/ralph/ralph.sh $FEATURE"
+  echo "  ▶ Continuar loop:   bash scripts/ralph/next.sh   # se PRD em ready/"
+  echo "                       bash scripts/ralph/ralph.sh $FEATURE  # retomar direto"
   echo "  🔧 Pivotar:         editar $PRD_JSON, commit, rodar ralph.sh"
-  echo "  ✋ Abortar:         git reset --hard main; mv $PRD_JSON ${PRD_JSON}.aborted"
+  echo "  ✋ Abortar:         source scripts/ralph/lib/prd-paths.sh && prd_move $FEATURE archive"
 fi
 echo ""

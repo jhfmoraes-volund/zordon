@@ -1,7 +1,7 @@
 {
   "feature": "project-wiki",
   "branchName": "joao-dev",
-  "prdPath": "docs/prd/prd-project-wiki.md",
+  "prdPath": "docs/prd/in-progress/prd-project-wiki.md",
   "phase": 1,
   "phaseGoal": "Dashboard executivo + narrativa core (objectives/highlights/decisions) + Recursos + suppress válvula",
   "userStories": [

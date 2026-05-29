@@ -524,32 +524,55 @@ export default function ProjectDetailPage({
 
       {/* Tabs — mobile: só ícones, distribuídos, sem scroll. Desktop: ícone + label + badge. */}
       <div className="flex border-b -mx-3 px-3 md:mx-0 md:px-0 md:gap-1">
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            aria-label={tab.label}
-            className={`flex flex-1 shrink-0 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap md:flex-none md:justify-start md:px-4 md:py-2 ${
-              activeTab === tab.key
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <tab.icon className="size-5 md:size-4" />
-            <span className="hidden md:inline">{tab.label}</span>
-            {tab.key === "stories" ? (
-              <Badge variant="secondary" className="ml-1 hidden h-5 text-xs md:inline-flex">
-                {stories.length}
-              </Badge>
-            ) : null}
-            {tab.key === "sprints" ? (
-              <Badge variant="secondary" className="ml-1 hidden h-5 text-xs md:inline-flex">
-                {sprints.length}
-              </Badge>
-            ) : null}
-          </button>
-        ))}
+        {visibleTabs.map((tab) => {
+          const isStories = tab.key === "stories";
+          const node = (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              aria-label={tab.label}
+              className={`flex flex-1 shrink-0 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap md:flex-none md:justify-start md:px-4 md:py-2 ${
+                activeTab === tab.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <tab.icon className="size-5 md:size-4" />
+              <span className="hidden md:inline">{tab.label}</span>
+              {tab.key === "stories" ? (
+                <Badge variant="secondary" className="ml-1 hidden h-5 text-xs md:inline-flex">
+                  {stories.length}
+                </Badge>
+              ) : null}
+              {tab.key === "sprints" ? (
+                <Badge variant="secondary" className="ml-1 hidden h-5 text-xs md:inline-flex">
+                  {sprints.length}
+                </Badge>
+              ) : null}
+            </button>
+          );
+
+          // Inject "PRDs" Link right after Stories tab. PRDs vivem em /projects/[id]/prds,
+          // route separada — navega via Link em vez de trocar de tab. Visível pra
+          // builder+ (mesma regra dos demais tabs gerenciáveis; guest segue sem ver).
+          if (isStories && !isGuest) {
+            return (
+              <span key="stories-and-prds" className="contents">
+                {node}
+                <Link
+                  href={`/projects/${id}/prds`}
+                  aria-label="PRDs"
+                  className="flex flex-1 shrink-0 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 border-transparent text-muted-foreground transition-colors whitespace-nowrap hover:text-foreground md:flex-none md:justify-start md:px-4 md:py-2"
+                >
+                  <FileText className="size-5 md:size-4" />
+                  <span className="hidden md:inline">PRDs</span>
+                </Link>
+              </span>
+            );
+          }
+          return node;
+        })}
       </div>
 
       {/* Tab content */}

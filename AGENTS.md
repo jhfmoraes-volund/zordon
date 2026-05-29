@@ -26,7 +26,7 @@ Mapa de alto nível. O detalhe vive nos READMEs locais — leia-os antes de cria
 
 | Caminho | Conteúdo | Regra |
 |---------|----------|-------|
-| `docs/` | Planos, runbooks, PRDs — organizados por domínio. | **Doc novo vai na subpasta certa** (`docs/features/<domínio>/`, `docs/agents/<agente>/`, `docs/platform/`, `docs/prd/`, `docs/runbooks/`), nunca solto na raiz de `docs/`. Plano superado → `docs/archive/`. |
+| `docs/` | Planos, runbooks, PRDs — organizados por domínio. | **Doc novo vai na subpasta certa** (`docs/features/<domínio>/`, `docs/agents/<agente>/`, `docs/platform/`, `docs/prd/<estado>/`, `docs/runbooks/`), nunca solto na raiz de `docs/`. PRDs vivem em `docs/prd/{backlog,ready,in-progress,blocked,done,archive}/` — subdir é o status. |
 | `scripts/` | CLIs de agente, ops, automação de git. | One-shot já executado → `scripts/archive/` (não some, só sai da vista). Migration de schema **não** vai aqui (ver Supabase). |
 | `supabase/migrations/` | Migrations de schema (`YYYYMMDD_nome.sql`). | **Toda** mudança de schema vai aqui e roda via `psql` (ver bloco Supabase). |
 | `public/` | Assets servidos estáticos. | Asset usado pela app. Não deixar asset órfão. |
@@ -108,11 +108,44 @@ LLMs podem rodar `bash scripts/sync-main.sh -m "..."` direto sem se preocupar co
 
 Todo PRD no Volund é candidato a rodar via **Ralph** (loop autônomo, ver [docs/runbooks/ralph-process.md](docs/runbooks/ralph-process.md)). Pra não retrabalhar depois, escreva o PRD **já no formato que o Rito 1 (Intake) exige**.
 
-## Onde mora
+## Onde mora — filesystem é estado
 
-- PRD ativo: `docs/prd/prd-<feature>.md`
-- PRD arquivado (pós-closeout): `docs/archive/prd-<feature>-YYYYMMDD.md`
-- Fila de execução: `scripts/ralph/features/<feature>/prd.json` (derivada do PRD)
+PRDs vivem em `docs/prd/<estado>/prd-<feature>.md`. O **subdir é o status**:
+
+| Subdir | Significado |
+|--------|-------------|
+| `backlog/` | Ideia em rascunho. Rito 1 (Intake) não rodou. |
+| `ready/` | Rito 1 done. `prd.json` existe. Pronto pra Ralph. |
+| `in-progress/` | Ralph rodando ou pausado entre loops. |
+| `blocked/` | Loop terminou. Checkpoint humano pendente. |
+| `done/` | Stories 100% passes, aguardando closeout. |
+| `archive/` | Pós-closeout. Filename ganha sufixo `-YYYYMMDD`. |
+
+Fila de execução: `scripts/ralph/features/<feature>/prd.json` (derivada do §16 do PRD).
+
+## Comandos canônicos (skill `/ralph` orquestra)
+
+```bash
+# Ver fila completa:
+for d in backlog ready in-progress blocked done; do echo "── $d ──"; ls docs/prd/$d/ 2>/dev/null; done
+
+# Pegar próximo PRD em ready/ e disparar loop:
+bash scripts/ralph/next.sh
+
+# Validar PRD pronto pra ready/:
+bash scripts/ralph/intake.sh <feature>
+
+# Review pós-loop (PRD em blocked/):
+bash scripts/ralph/checkpoint.sh <feature>
+
+# Arquivar + abrir PR (PRD em done/):
+bash scripts/ralph/closeout.sh <feature>
+
+# Mover PRD entre estados:
+source scripts/ralph/lib/prd-paths.sh && prd_move <feature> <state>
+```
+
+**Regra:** nunca crie PRD direto em `ready/` ou estado posterior — sempre nasce em `backlog/`, passa por Rito 1, então move pra `ready/`.
 
 ## Anatomia obrigatória do PRD
 
@@ -186,9 +219,9 @@ Se qualquer item falhar, o PRD não está pronto pra Rito 2. Volte e endereça.
 
 1. Pergunte o **problema** (não a solução).
 2. Pergunte personas, escopo e o que **não** entra.
-3. Escreva PRD seguindo o schema §1-§16 acima.
+3. Escreva PRD em `docs/prd/backlog/prd-<feature>.md` seguindo o schema §1-§16 acima.
 4. Gere `scripts/ralph/features/<feature>/prd.json` junto.
-5. Rode o auto-checklist. Aponte qualquer item que não está pronto.
+5. Rode o auto-checklist. Se 100% ok, proponha `bash scripts/ralph/intake.sh <feature>` pra promover pra `ready/`.
 
-Modelos vivos no repo (referência boa): [docs/prd/prd-project-wiki.md](docs/prd/prd-project-wiki.md), [docs/prd/prd-alpha-project-insights.md](docs/prd/prd-alpha-project-insights.md).
+Modelos vivos no repo (referência boa): [docs/prd/ready/prd-opportunities.md](docs/prd/ready/prd-opportunities.md), [docs/prd/in-progress/prd-project-wiki.md](docs/prd/in-progress/prd-project-wiki.md).
 <!-- END:prd-and-ralph -->

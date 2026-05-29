@@ -16,9 +16,10 @@ Seu trabalho nesta iteração é **escolher 1 story, implementá-la, validar, co
 - Feature: `$FEATURE`
 - Repo root: `$REPO_ROOT`
 - PRD JSON: `$PRD_JSON`
+- PRD MD:   `$PRD_MD`   ← caminho resolvido (pode estar em docs/prd/in-progress/, docs/prd/ready/, etc.)
 - Progress: `$PROGRESS`
 
-(Os valores acima são substituídos pelo ralph.sh quando disponível. Se não, use as variáveis de ambiente `FEATURE`, `PRD_JSON`, `PROGRESS`, `REPO_ROOT`.)
+(Os valores acima são substituídos pelo ralph.sh quando disponível. Se não, use as variáveis de ambiente `FEATURE`, `PRD_JSON`, `PRD_MD`, `PROGRESS`, `REPO_ROOT`.)
 
 ---
 
@@ -30,7 +31,7 @@ Seu trabalho nesta iteração é **escolher 1 story, implementá-la, validar, co
 cat $REPO_ROOT/AGENTS.md          # convenções do projeto (LEIA INTEIRO)
 cat $PRD_JSON                      # fila + AC
 cat $PROGRESS                      # memória de iters passadas
-cat $REPO_ROOT/docs/prd/prd-$FEATURE.md  # PRD completo
+cat "$PRD_MD"                      # PRD completo (caminho resolvido pelo ralph.sh)
 git log --oneline -10              # contexto recente
 ```
 

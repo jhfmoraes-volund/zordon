@@ -26,12 +26,14 @@ import type { PromptContext, SystemPrompt } from "../../types";
 // ─── Context loader ───────────────────────────────────────────────────────
 
 export async function loadPMReviewContext(pmReviewId: string, memberId?: string | null) {
-  const { data: pm } = await db()
+  const supabase = db();
+
+  const { data: pm } = await supabase
     .from("PMReview")
     .select(
       `
       id, status, projectId, referenceWeek, reportMarkdown, reportGeneratedAt,
-      project:Project(id, name, referenceKey, status),
+      project:Project(id, name, referenceKey, status, repoUrl, githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifest, repoManifestUpdatedAt, memoryMd, memoryVersion, memoryUpdatedAt),
       linkedMeetings:PMReviewMeetingLink(
         meetingId, meeting:Meeting(id, title, date)
       ),
@@ -61,10 +63,68 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
     .filter((n) => !n.dismissedAt)
     .sort((a, b) => b.priority - a.priority);
 
-  const profile = await buildProjectProfile(pm.projectId, { currentSprintId: null });
+  // Resolve sprint atual do projeto (endDate >= hoje, mais próxima de começar).
+  // Necessário pra `buildProjectProfile` carregar tasks da sprint + blockers
+  // (que vão pro contexto da Vitoria).
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const { data: currentSprint } = await supabase
+    .from("Sprint")
+    .select("id")
+    .eq("projectId", pm.projectId)
+    .lte("startDate", todayISO)
+    .gte("endDate", todayISO)
+    .order("startDate", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Camada 2 (Sistema) + Camada 3 (DS) em paralelo. Espelha o que Planning
+  // Vitoria já carrega — sem isso PM Review sintetiza no escuro.
+  const [profile, businessCtx, activeDecisions, openQuestions, activeSessions] =
+    await Promise.all([
+      buildProjectProfile(pm.projectId, {
+        currentSprintId: currentSprint?.id ?? null,
+      }),
+      supabase
+        .from("ProjectBusinessContext")
+        .select("businessModel, stage, icp, ticketRangeBrl, runwayMonths, competitors, updatedAt")
+        .eq("projectId", pm.projectId)
+        .maybeSingle(),
+      supabase
+        .from("DesignDecision")
+        .select("id, statement, rationale, confidence, tags, createdAt")
+        .eq("projectId", pm.projectId)
+        .eq("status", "active")
+        .order("createdAt", { ascending: false }),
+      supabase
+        .from("DesignOpenQuestion")
+        .select("id, question, blocksWhat, sessionId, createdAt")
+        .eq("projectId", pm.projectId)
+        .eq("status", "open")
+        .order("createdAt", { ascending: false }),
+      supabase
+        .from("DesignSession")
+        .select("id, title, type, status, memoryAbstract, updatedAt")
+        .eq("projectId", pm.projectId)
+        .in("status", ["active", "in_progress"])
+        .order("updatedAt", { ascending: false }),
+    ]);
 
   const project = pm.project as
-    | { id: string; name: string; referenceKey: string | null; status: string }
+    | {
+        id: string;
+        name: string;
+        referenceKey: string | null;
+        status: string;
+        repoUrl: string | null;
+        githubRepoOwner: string | null;
+        githubRepoName: string | null;
+        githubDefaultBranch: string | null;
+        repoManifest: string | null;
+        repoManifestUpdatedAt: string | null;
+        memoryMd: string | null;
+        memoryVersion: number | null;
+        memoryUpdatedAt: string | null;
+      }
     | null;
 
   return {
@@ -73,16 +133,33 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
     status: pm.status,
     projectId: pm.projectId,
     projectName: project?.name ?? null,
+    projectReferenceKey: project?.referenceKey ?? null,
     projectStatus: project?.status ?? null,
+    projectRepoUrl: project?.repoUrl ?? null,
+    projectRepoOwner: project?.githubRepoOwner ?? null,
+    projectRepoName: project?.githubRepoName ?? null,
+    projectRepoBranch: project?.githubDefaultBranch ?? null,
+    projectRepoManifest: project?.repoManifest ?? null,
     referenceWeek: pm.referenceWeek,
     reportMarkdown: pm.reportMarkdown,
     reportGeneratedAt: pm.reportGeneratedAt,
     linkedMeetings: pm.linkedMeetings ?? [],
     linkedTranscripts: pm.linkedTranscripts ?? [],
     activeNotes,
+    // Camada 2 — Sistema (sprint atual + tasks + blockers + stories + squad)
+    currentSprintId: currentSprint?.id ?? null,
     upcomingSprints: profile.core.upcomingSprints,
     activeStories: profile.core.activeStories,
     squadMembers: profile.core.squadMembers,
+    sprintScopeTasks: profile.sprintScope?.tasks ?? [],
+    sprintBlockers: profile.sprintScope?.blockers ?? [],
+    // Camada 3 — DS (decisions/questions/business/sessions) + Project memory
+    projectMemoryMd: project?.memoryMd ?? null,
+    projectMemoryVersion: project?.memoryVersion ?? 0,
+    businessContext: businessCtx.data ?? null,
+    activeDecisions: activeDecisions.data ?? [],
+    openQuestions: openQuestions.data ?? [],
+    activeDesignSessions: activeSessions.data ?? [],
     memberId: memberId ?? null,
   };
 }
@@ -146,6 +223,113 @@ export function buildPMReviewPrompt(ctx: PromptContext): SystemPrompt {
           .map((n) => `- [${n.kind}] (p${n.priority}) noteId=${n.id} · ${n.content.slice(0, 180)}`)
           .join("\n");
 
+  // ─── Camada 3 — DS (decisions/open questions/business/active sessions) ───
+  const businessCtx = agentContext.businessContext as
+    | {
+        businessModel: string | null;
+        stage: string | null;
+        icp: string | null;
+        ticketRangeBrl: string | null;
+        runwayMonths: number | null;
+      }
+    | null;
+  const businessBlock = businessCtx
+    ? [
+        `Modelo: ${businessCtx.businessModel ?? "?"}`,
+        `Stage: ${businessCtx.stage ?? "?"}`,
+        `ICP: ${businessCtx.icp ?? "?"}`,
+        `Ticket: ${businessCtx.ticketRangeBrl ?? "?"}`,
+        `Runway: ${businessCtx.runwayMonths ?? "?"} meses`,
+      ].join(" · ")
+    : "(business context não preenchido)";
+
+  const activeDecisions = (agentContext.activeDecisions as Array<{
+    id: string;
+    statement: string;
+    rationale: string;
+    confidence: string;
+    tags: string[] | null;
+  }>) ?? [];
+  const decisionsBlock =
+    activeDecisions.length === 0
+      ? "(nenhuma)"
+      : activeDecisions
+          .slice(0, 12)
+          .map(
+            (d) =>
+              `- [${d.confidence}] ${d.statement}${d.rationale ? ` — ${d.rationale.slice(0, 120)}` : ""}`,
+          )
+          .join("\n");
+
+  const openQuestions = (agentContext.openQuestions as Array<{
+    id: string;
+    question: string;
+    blocksWhat: string | null;
+  }>) ?? [];
+  const openQuestionsBlock =
+    openQuestions.length === 0
+      ? "(nenhuma)"
+      : openQuestions
+          .slice(0, 10)
+          .map(
+            (q) =>
+              `- ${q.question}${q.blocksWhat ? ` (bloqueia: ${q.blocksWhat})` : ""}`,
+          )
+          .join("\n");
+
+  const activeDesignSessions = (agentContext.activeDesignSessions as Array<{
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+    memoryAbstract: string | null;
+  }>) ?? [];
+  const designSessionsBlock =
+    activeDesignSessions.length === 0
+      ? "(nenhuma DS ativa)"
+      : activeDesignSessions
+          .slice(0, 8)
+          .map(
+            (s) =>
+              `- ${s.title} (${s.type}/${s.status})${s.memoryAbstract ? ` — ${s.memoryAbstract.slice(0, 120)}` : ""}`,
+          )
+          .join("\n");
+
+  const projectMemoryMd = agentContext.projectMemoryMd as string | null;
+
+  // ─── Camada 2 — Sistema (sprint atual + tasks + blockers) ─────────────────
+  const sprintScopeTasks = (agentContext.sprintScopeTasks as Array<{
+    id: string;
+    reference: string | null;
+    title: string;
+    status: string;
+    functionPoints: number | null;
+    priority: number;
+    sprintId: string | null;
+  }>) ?? [];
+  const tasksByStatus: Record<string, number> = {};
+  let totalFp = 0;
+  let doneFp = 0;
+  for (const t of sprintScopeTasks) {
+    tasksByStatus[t.status] = (tasksByStatus[t.status] ?? 0) + 1;
+    totalFp += t.functionPoints ?? 0;
+    if (t.status === "done") doneFp += t.functionPoints ?? 0;
+  }
+  const sprintScopeBlock =
+    sprintScopeTasks.length === 0
+      ? "(sem tasks na sprint atual)"
+      : `${sprintScopeTasks.length} tasks · ${doneFp}/${totalFp} FP done · status: ${Object.entries(
+          tasksByStatus,
+        )
+          .map(([s, c]) => `${s}=${c}`)
+          .join(" ")}`;
+
+  const sprintBlockers = (agentContext.sprintBlockers as Array<{
+    taskId: string;
+    dependsOn: string;
+    kind: string;
+  }>) ?? [];
+
   const reportHint = reportGeneratedAt
     ? `Última síntese: ${reportGeneratedAt}.`
     : "Report ainda não foi gerado.";
@@ -171,12 +355,19 @@ REGRAS:
   • Toda observação vai em \`add_pm_review_note\` com kind ∈ {summary,
     project_direction, next_step, risk, need, team_signal, open_decision}.
     Use \`summary\` para um panorama curto que abre o report.
-  • Quando o PM pedir "atualiza o report" / "gera o report" / "sintetiza", chame
-    \`update_pm_review_report\` com markdown direto, organizado nas 6 seções
-    fixas. Cite source IDs (transcriptRefId / meetingId) quando relevante.
-  • Read first, write later: chame \`read_transcript_content\` nos transcriptRefId
-    listados em "Fontes de contexto linkadas" antes de sintetizar.
-  • Use \`get_project_indicators\` pra alimentar a seção "Indicadores do time".
+  • Quando o PM pedir "atualiza o report" / "gera o report" / "sintetiza":
+    1. Chame \`get_project_indicators\` PRIMEIRO — alimenta a seção
+       "Indicadores do time" com velocity das últimas sprints, throughput,
+       blockers ativos. Sem isso a seção fica fraca.
+    2. Se houver \`transcriptRefId\` listado em "Fontes de contexto linkadas"
+       e VOCÊ ainda não leu, chame \`read_transcript_content\` neles antes
+       de sintetizar.
+    3. Aí sim, chame \`update_pm_review_report\` com markdown direto
+       organizado nas 6 seções fixas. Cite source IDs (transcriptRefId /
+       meetingId) e referencie decisões/questões abertas do contexto DS
+       (blocos abaixo) quando relevante.
+  • Read first, write later. NUNCA sintetize report sem antes ter pelo menos:
+    1 transcript lido OU 3 notes ativas OU indicadores buscados.
 
 NÃO use jargão de fase ("vou começar a leitura agora") — fluxo é livre.
 Quando o PM perguntar "em qual projeto estamos?" responda **${projectName ?? "(?)"}**.
@@ -234,16 +425,91 @@ ${notesBlock}
           )
           .join("\n");
 
-  return {
-    stable,
-    volatile: `## Sprints próximas\n${upcomingBlock}\n\n## Squad\n${squadBlock}`,
-  };
+  const volatile = `## Camada Sistema — Sprint atual
+
+### Tasks da sprint
+${sprintScopeBlock}
+
+### Bloqueios detectados
+${sprintBlockers.length === 0 ? "(nenhum)" : `${sprintBlockers.length} dependência(s) ativa(s)`}
+
+### Sprints próximas
+${upcomingBlock}
+
+### Squad
+${squadBlock}
+
+## Camada DS — Decisões, questões e sessões ativas
+
+### Business context
+${businessBlock}
+
+### Decisões ativas (curadas pelo Vitor)
+${decisionsBlock}
+
+### Questões em aberto
+${openQuestionsBlock}
+
+### Design Sessions ativas
+${designSessionsBlock}
+
+${projectMemoryMd ? `### Memória do projeto (curada pelo Vitor)\n${projectMemoryMd.slice(0, 4000)}\n` : ""}`;
+
+  return { stable, volatile };
 }
 
 // ─── Tools ────────────────────────────────────────────────────────────────
 
 export function buildPMReviewTools(pmReviewId: string, projectId: string) {
   return {
+    read_transcript_content: tool({
+      description:
+        "Lê o conteúdo de um transcript linkado. Use para extrair insights antes de criar notas.",
+      inputSchema: z.object({
+        transcriptRefId: z.string().describe("ID do TranscriptRef"),
+      }),
+      execute: async ({ transcriptRefId }) => {
+        const { data: ref } = await db()
+          .from("TranscriptRef")
+          .select("id, title, source, sourceId, capturedAt, meetingId, fullText")
+          .eq("id", transcriptRefId)
+          .single();
+        if (!ref) return { ok: false, error: "TranscriptRef não encontrado" };
+        if (ref.fullText) {
+          return {
+            ok: true,
+            id: ref.id,
+            title: ref.title,
+            capturedAt: ref.capturedAt,
+            content: ref.fullText,
+          };
+        }
+        if (ref.meetingId) {
+          const { data: meeting } = await db()
+            .from("Meeting")
+            .select("id, title, date, notes")
+            .eq("id", ref.meetingId)
+            .single();
+          if (meeting) {
+            return {
+              ok: true,
+              id: ref.id,
+              title: ref.title ?? meeting.title,
+              capturedAt: ref.capturedAt,
+              content: meeting.notes ?? "(sem conteúdo)",
+            };
+          }
+        }
+        return {
+          ok: true,
+          id: ref.id,
+          title: ref.title,
+          capturedAt: ref.capturedAt,
+          content: "(conteúdo não disponível — só metadados)",
+        };
+      },
+    }),
+
     add_pm_review_note: tool({
       description:
         "Adiciona uma nota tipada ao PM Review. Cada nota é fonte pro report final. " +

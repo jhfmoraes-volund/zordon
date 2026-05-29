@@ -29,7 +29,7 @@ import type { AgentDefinition, AgentRunRequest } from "../../types";
  */
 export const vitoriaAgent: AgentDefinition = {
   name: "vitoria",
-  model: "anthropic/claude-haiku-4-5",
+  model: "anthropic/claude-sonnet-4.6",
 
   async loadContext(req: AgentRunRequest) {
     // Dispatch por surface — Vitoria opera Planning E PM Review com mesma

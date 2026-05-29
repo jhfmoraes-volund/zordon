@@ -41,11 +41,20 @@ PRD_JSON="$FEATURE_DIR/prd.json"
 PROGRESS="$FEATURE_DIR/progress.txt"
 PROMPT_FILE="$RALPH_DIR/CLAUDE.md"
 
+# shellcheck source=lib/prd-paths.sh
+source "$RALPH_DIR/lib/prd-paths.sh"
+
 if [ ! -f "$PRD_JSON" ]; then
   echo "❌ prd.json not found: $PRD_JSON" >&2
   echo "   Run Rito 1 (Intake) first — see docs/runbooks/ralph-process.md" >&2
   exit 65
 fi
+
+PRD_MD="$(prd_find "$FEATURE")" || {
+  echo "❌ PRD markdown not found for feature: $FEATURE" >&2
+  echo "   Expected: docs/prd/{in-progress,ready,backlog,blocked,done}/prd-$FEATURE.md" >&2
+  exit 65
+}
 
 if [ ! -f "$PROMPT_FILE" ]; then
   echo "❌ prompt template not found: $PROMPT_FILE" >&2
@@ -126,6 +135,7 @@ while [ "$ITER" -lt "$MAX_ITER" ]; do
   # The prompt expands $FEATURE / paths so the subprocess knows what to do.
   PROMPT="$(FEATURE="$FEATURE" \
             PRD_JSON="$PRD_JSON" \
+            PRD_MD="$PRD_MD" \
             PROGRESS="$PROGRESS" \
             REPO_ROOT="$REPO_ROOT" \
             envsubst <"$PROMPT_FILE" 2>/dev/null || cat "$PROMPT_FILE")"
@@ -133,6 +143,7 @@ while [ "$ITER" -lt "$MAX_ITER" ]; do
   # Pass feature context via header even if envsubst not available
   HEADER="# Ralph iteration $ITER for feature: $FEATURE
 # prd.json: $PRD_JSON
+# prd.md:   $PRD_MD
 # progress.txt: $PROGRESS
 # repo: $REPO_ROOT
 "

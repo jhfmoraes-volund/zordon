@@ -393,7 +393,7 @@ Nada bloqueia fase 1.
 
 ## §15 Referências
 
-- [docs/prd/prd-project-wiki.md](docs/prd/prd-project-wiki.md) — Wiki v2 (futura integração fase 3)
+- [docs/prd/in-progress/prd-project-wiki.md](../in-progress/prd-project-wiki.md) — Wiki v2 (futura integração fase 3)
 - [docs/platform/optimistic-updates-runbook.md](docs/platform/optimistic-updates-runbook.md) — `useOptimisticCollection`
 - [docs/platform/forms-standardization-plan.md](docs/platform/forms-standardization-plan.md) — Field / FormBody
 - [docs/platform/transcript-ssot-runbook.md](docs/platform/transcript-ssot-runbook.md) — refs tipadas (sourceTranscriptRefId)

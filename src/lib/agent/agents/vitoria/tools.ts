@@ -111,7 +111,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
     propose_task_action: tool({
       description:
         "Cria uma proposta de ação no backlog (MeetingTaskAction) para aprovação do PM. Use para propor criar, atualizar, mover ou excluir tasks com base no contexto. " +
-        "Payload é tipado por `type` — schema rejeita create sem functionPoints/acceptanceCriteria estruturados.",
+        "Payload é JSON OBJECT (nunca string stringificada — schema rejeita se você passar `\"{...}\"` em vez de `{...}`) e tipado por `type`: create sem functionPoints/acceptanceCriteria/description SDD é rejeitado.",
       inputSchema: z
         .object({
           projectId: z.string().describe("ID do projeto"),
@@ -227,13 +227,16 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
 
     update_proposed_action: tool({
       description:
-        "Edita uma proposta pendente (MeetingTaskAction) desta planning. Use quando o PM pedir pra ajustar o payload, raciocínio, sprint destino ou confiança de uma proposta antes de concluir. Só funciona em decision=pending e execution=pending.",
+        "Edita uma proposta pendente (MeetingTaskAction) desta planning. Use quando o PM pedir pra ajustar payload, raciocínio, sprint destino ou confiança. Só funciona em decision=pending e execution=pending. " +
+        "payload é JSON OBJECT (nunca string), e usa MERGE shallow no top-level: passe APENAS os campos que mudam — campos não passados ficam preservados. Ex: pra mudar só priority, mande payload={priority: 0}.",
       inputSchema: z.object({
-        actionId: z.string().describe("ID da MeetingTaskAction a editar"),
+        actionId: z.string().uuid().describe("UUID da MeetingTaskAction a editar (do contexto Propostas pendentes)"),
         payload: z
           .record(z.string(), z.unknown())
           .optional()
-          .describe("Novo payload (substitui completamente o anterior)"),
+          .describe(
+            "Patch shallow do payload — só os campos que MUDAM. Campos omitidos preservam valor atual. Ex: {priority: 0} muda só priority; {description: '...', functionPoints: 8} muda 2 campos. NUNCA stringify — é objeto JSON.",
+          ),
         targetSprintId: z
           .string()
           .nullable()
@@ -253,7 +256,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
       execute: async ({ actionId, payload, targetSprintId, aiReasoning, aiConfidence }) => {
         const { data: row } = await db()
           .from("MeetingTaskAction")
-          .select("id, decision, execution, planningCeremonyId")
+          .select("id, decision, execution, planningCeremonyId, payload")
           .eq("id", actionId)
           .eq("planningCeremonyId", planningId)
           .single();
@@ -267,7 +270,13 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
         }
 
         const patch: MeetingTaskActionUpdate = {};
-        if (payload !== undefined) patch.payload = payload as Json;
+        if (payload !== undefined) {
+          // Shallow merge: preserva campos não mencionados no patch.
+          // Modelo costuma mandar só os campos que mudam — replace destruiria
+          // title/description/AC do payload original.
+          const current = (row.payload ?? {}) as Record<string, unknown>;
+          patch.payload = { ...current, ...payload } as Json;
+        }
         if (targetSprintId !== undefined) patch.targetSprintId = targetSprintId;
         if (aiReasoning !== undefined) patch.aiReasoning = aiReasoning;
         if (aiConfidence !== undefined) patch.aiConfidence = aiConfidence;
@@ -281,7 +290,12 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           .update(patch)
           .eq("id", actionId);
         if (error) return { ok: false, error: error.message };
-        return { ok: true, actionId, fieldsUpdated: Object.keys(patch) };
+        return {
+          ok: true,
+          actionId,
+          fieldsUpdated: Object.keys(patch),
+          payloadKeysMerged: payload ? Object.keys(payload) : [],
+        };
       },
     }),
 
