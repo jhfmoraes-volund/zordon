@@ -125,14 +125,17 @@ export const vitorAgent: AgentDefinition = {
         .select("memoryMd, memoryVersion, memoryUpdatedAt")
         .eq("id", session.projectId)
         .single(),
+      // Vitor olha TODAS as design sessions ativas do projeto (não-draft,
+      // não-completed) — não só as 10 últimas. Memória cross-session só vale
+      // se ele enxerga o panorama inteiro do que está em andamento.
+      // Sessions arquivadas/encerradas ficam no histórico via Project.memoryMd.
       db()
         .from("DesignSession")
         .select("id, title, type, status, memoryAbstract, updatedAt")
         .eq("projectId", session.projectId)
         .neq("id", sessionId)
-        .neq("status", "draft")
-        .order("updatedAt", { ascending: false })
-        .limit(10),
+        .in("status", ["active", "in_progress"])
+        .order("updatedAt", { ascending: false }),
       db()
         .from("DesignSessionTranscript")
         .select(

@@ -59,15 +59,43 @@ export function ContextSheet({
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
   const [spreadsheetModalOpen, setSpreadsheetModalOpen] = useState(false);
 
+  // Abre modal de importação fechando o sheet primeiro — sem isso, o backdrop
+  // do sheet captura os cliques do modal e parece que "nada acontece".
+  const openImport = (kind: "transcript" | "spreadsheet") => {
+    onOpenChange(false);
+    // Tick pra animação do sheet começar antes do modal montar — evita
+    // race no focus trap.
+    setTimeout(() => {
+      if (kind === "transcript") setTranscriptModalOpen(true);
+      else setSpreadsheetModalOpen(true);
+    }, 50);
+  };
+
   return (
     <>
       <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
         <ResponsiveSheetContent size="sm" showCloseButton>
-          <ResponsiveSheetHeader>
+          <ResponsiveSheetHeader className="flex flex-row items-center justify-between gap-3">
             <SheetTitle className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
               Contexto da planning
             </SheetTitle>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button size="sm" />}>
+                Importar
+                <ChevronDown className="h-3.5 w-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => openImport("transcript")}>
+                  <FileText className="h-3.5 w-3.5" />
+                  Reunião (Roam/Granola)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openImport("spreadsheet")}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  Planilha (XLSX/CSV)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </ResponsiveSheetHeader>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -119,22 +147,6 @@ export function ContextSheet({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Fechar
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger render={<Button />}>
-                Importar
-                <ChevronDown className="h-3.5 w-3.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setTranscriptModalOpen(true)}>
-                  <FileText className="h-3.5 w-3.5" />
-                  Reunião (Roam/Granola)
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setSpreadsheetModalOpen(true)}>
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  Planilha (XLSX/CSV)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </ResponsiveSheetFooter>
         </ResponsiveSheetContent>
       </ResponsiveSheet>

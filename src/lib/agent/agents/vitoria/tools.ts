@@ -2,6 +2,8 @@ import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { addContextNote } from "@/lib/dal/planning";
+import { getStepData } from "@/lib/agent/context";
+import { applyMarkdownMutation } from "@/lib/agent/tools/_markdown";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 type MeetingTaskActionUpdate = Database["public"]["Tables"]["MeetingTaskAction"]["Update"];
@@ -468,6 +470,127 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
             dependencies: deps ?? [],
           },
         };
+      },
+    }),
+
+    list_active_design_sessions: tool({
+      description:
+        "Lista as design sessions ativas do projeto (status in 'active','in_progress'). Cada item traz id, título, type, status e memoryAbstract — use os IDs em read_design_session_memory / read_design_session_step quando precisar de detalhe.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const { data, error } = await db()
+          .from("DesignSession")
+          .select("id, title, type, status, memoryAbstract, updatedAt")
+          .eq("projectId", projectId)
+          .in("status", ["active", "in_progress"])
+          .order("updatedAt", { ascending: false });
+        if (error) return { ok: false, error: error.message };
+        return { ok: true, sessions: data ?? [] };
+      },
+    }),
+
+    read_design_session_memory: tool({
+      description:
+        "Lê a memória narrativa (markdown) de uma design session específica do projeto. Use quando precisar do 'porquê' detalhado de uma decisão ativa ou de uma persona — o resumo de seções (Hipóteses, Personas, Descartado-e-por-quê) está aí. Valida que a session pertence ao mesmo projeto.",
+      inputSchema: z.object({
+        sessionId: z.string().describe("ID da DesignSession a ler"),
+      }),
+      execute: async ({ sessionId }) => {
+        const { data, error } = await db()
+          .from("DesignSession")
+          .select("id, title, type, status, projectId, memoryMd, memoryVersion, memoryUpdatedAt")
+          .eq("id", sessionId)
+          .maybeSingle();
+        if (error) return { ok: false, error: error.message };
+        if (!data) return { ok: false, error: "design session não encontrada" };
+        if (data.projectId !== projectId) {
+          return { ok: false, error: "design session pertence a outro projeto" };
+        }
+        return {
+          ok: true,
+          session: {
+            id: data.id,
+            title: data.title,
+            type: data.type,
+            status: data.status,
+            memoryMd: data.memoryMd ?? "",
+            memoryVersion: data.memoryVersion ?? 0,
+            memoryUpdatedAt: data.memoryUpdatedAt,
+          },
+        };
+      },
+    }),
+
+    read_design_session_step: tool({
+      description:
+        "Lê o payload bruto de UM step de uma DS (personas_journeys, brainstorm, prioritization, briefing, etc). **Custo alto** — só chame quando a memória narrativa não basta. Steps comuns: 'personas_journeys' (personas + dores), 'brainstorm' (features brutas), 'prioritization' (MoSCoW), 'briefing' (estrutura final).",
+      inputSchema: z.object({
+        sessionId: z.string().describe("ID da DesignSession"),
+        stepKey: z.string().describe("Chave do step (ex: 'personas_journeys', 'brainstorm', 'prioritization', 'briefing')"),
+      }),
+      execute: async ({ sessionId, stepKey }) => {
+        const { data: ds } = await db()
+          .from("DesignSession")
+          .select("id, projectId")
+          .eq("id", sessionId)
+          .maybeSingle();
+        if (!ds) return { ok: false, error: "design session não encontrada" };
+        if (ds.projectId !== projectId) {
+          return { ok: false, error: "design session pertence a outro projeto" };
+        }
+        const data = await getStepData(sessionId, stepKey);
+        return { ok: true, sessionId, stepKey, data };
+      },
+    }),
+
+    append_project_memory: tool({
+      description:
+        "Anexa contexto à memória narrativa do projeto (Project.memoryMd). Use pra registrar info cross-session que veio à tona na planning: mudança de business context, restrição econômica nova, decisão de escopo cross-sprint. Vitor lê esse mesmo markdown na próxima design session. Use optimistic lock: passe `expectedVersion` lido da seção 'Memória do projeto' no prompt — em conflito, devolve o estado atual pra você relê e tentar de novo. NÃO use pra detalhes de task individual ou status report de sprint.",
+      inputSchema: z.object({
+        action: z.enum(["append_section", "edit_section"]).default("append_section"),
+        section: z.string().describe("Nome da seção (ex: 'Aprendizados Cruciais', 'Riscos Conhecidos', 'Visão de Produto'). Sem '## '"),
+        content: z.string().min(10).describe("Conteúdo a anexar. Use bullets; cite data e fonte (ex: 'planning sprint X, 2026-05-29')."),
+        expectedVersion: z.number().int().min(0).describe("Versão atual lida do prompt (Project.memoryVersion). Optimistic lock."),
+      }),
+      execute: async ({ action, section, content, expectedVersion }) => {
+        const { data: current, error: rErr } = await db()
+          .from("Project")
+          .select("memoryMd, memoryVersion")
+          .eq("id", projectId)
+          .single();
+        if (rErr) return { ok: false, error: rErr.message };
+        if ((current.memoryVersion ?? 0) !== expectedVersion) {
+          return {
+            ok: false,
+            conflict: true,
+            currentVersion: current.memoryVersion ?? 0,
+            currentMd: current.memoryMd ?? "",
+          };
+        }
+
+        let updated: string;
+        try {
+          updated = applyMarkdownMutation(
+            current.memoryMd ?? "",
+            action,
+            section,
+            content,
+          );
+        } catch (e) {
+          return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+
+        const newVersion = expectedVersion + 1;
+        const { error: uErr } = await db()
+          .from("Project")
+          .update({
+            memoryMd: updated,
+            memoryVersion: newVersion,
+            memoryUpdatedAt: new Date().toISOString(),
+          })
+          .eq("id", projectId);
+        if (uErr) return { ok: false, error: uErr.message };
+        return { ok: true, newVersion };
       },
     }),
 

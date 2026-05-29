@@ -73,7 +73,7 @@ export function RibbonDrawer({
       aria-label="Detalhes do sprint"
       aria-hidden={!open}
       className={[
-        "overflow-hidden border-b bg-background/40 transition-[max-height,opacity] duration-200 ease-out",
+        "overflow-hidden border-b bg-muted/40 shadow-[inset_0_1px_0_oklch(0_0_0/0.25)] transition-[max-height,opacity] duration-200 ease-out",
         open ? "max-h-[720px] opacity-100" : "max-h-0 opacity-0",
       ].join(" ")}
     >

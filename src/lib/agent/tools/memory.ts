@@ -13,6 +13,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { applyMarkdownMutation } from "./_markdown";
 
 const confidenceEnum = z.enum(["hard_fact", "inferred", "assumption"]);
 const decisionStatusEnum = z.enum(["active", "under_review", "reverted"]);
@@ -289,51 +290,6 @@ export function createReadSessionMemoryTool(sessionId: string, projectId: string
 }
 
 const memoryActionSchema = z.enum(["replace", "append_section", "edit_section"]);
-
-function applyMarkdownMutation(
-  current: string,
-  action: "replace" | "append_section" | "edit_section",
-  section: string | undefined,
-  content: string,
-): string {
-  if (action === "replace") return content;
-  if (!section) {
-    throw new Error("section is required for append_section/edit_section");
-  }
-  const heading = `## ${section}`;
-  const body = current ?? "";
-  if (action === "append_section") {
-    if (body.includes(heading)) {
-      // section already exists — append content after the section header
-      const lines = body.split("\n");
-      const idx = lines.findIndex((l) => l.trim() === heading);
-      const after = lines.slice(idx + 1);
-      const nextHeadingOffset = after.findIndex((l) => /^## /.test(l));
-      const insertAt = idx + 1 + (nextHeadingOffset === -1 ? after.length : nextHeadingOffset);
-      lines.splice(insertAt, 0, content.trim(), "");
-      return lines.join("\n");
-    }
-    return `${body.trim()}\n\n${heading}\n${content.trim()}\n`.trimStart();
-  }
-  if (action === "edit_section") {
-    const lines = body.split("\n");
-    const idx = lines.findIndex((l) => l.trim() === heading);
-    if (idx === -1) {
-      // section doesn't exist yet — fall back to append
-      return `${body.trim()}\n\n${heading}\n${content.trim()}\n`.trimStart();
-    }
-    const after = lines.slice(idx + 1);
-    const nextHeadingOffset = after.findIndex((l) => /^## /.test(l));
-    const replaceUntil = idx + 1 + (nextHeadingOffset === -1 ? after.length : nextHeadingOffset);
-    return [
-      ...lines.slice(0, idx + 1),
-      content.trim(),
-      "",
-      ...lines.slice(replaceUntil),
-    ].join("\n");
-  }
-  return current;
-}
 
 export function createUpdateSessionMemoryTool(sessionId: string, _projectId: string) {
   return tool({
