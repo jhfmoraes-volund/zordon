@@ -218,9 +218,9 @@ fi
 declare -a FAILED
 for t in "${TARGETS[@]}"; do
   gh_ensure_account_for_remote "$t"
-  yellow "▸ push $t $MAIN_BRANCH"
+  yellow "▸ push $t HEAD:$MAIN_BRANCH"
   if [[ $DRY_RUN -eq 0 ]]; then
-    if ! git push "$t" "$MAIN_BRANCH"; then
+    if ! git push "$t" "HEAD:$MAIN_BRANCH"; then
       red "✗ push pra '$t' falhou"
       FAILED+=("$t")
     fi
