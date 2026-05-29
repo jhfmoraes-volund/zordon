@@ -1,3 +1,23 @@
 iter 2026-05-29T21:30:37Z: PASS WIKI-001
   files: supabase/migrations/20260530c_project_wiki_section_audit_cols.sql
   learnings: Migration atômica rodada via psql; REVOKE aplicado sem conflito com policies existentes.
+Excelente! Commit realizado com sucesso. Hash: **5278395**
+
+---
+
+## Resumo da iteração Ralph #1
+
+**Story escolhida:** WIKI-001 — Migration: ProjectWikiSection audit columns
+
+**Verificações executadas:**
+✅ Migration criada em `supabase/migrations/20260530c_project_wiki_section_audit_cols.sql`  
+✅ Executada via `psql "$DIRECT_URL" -f ...` sem erros  
+✅ 4 colunas criadas: `generatedAt`, `generatedBy`, `schemaVersion`, `suppressed`  
+✅ Privilégios INSERT/UPDATE/DELETE revogados de `authenticated` (verificado via `has_table_privilege` = `false`)
+
+**Commit:** `5278395` — ralph(project-wiki): WIKI-001 Migration ProjectWikiSection audit columns
+
+**Próximo passo sugerido:** WIKI-002 ou WIKI-003 (ambas sem dependências, podem ser executadas em paralelo na próxima iteração).
+iter 2026-05-29T21:33:14Z: PASS WIKI-002
+  files: supabase/migrations/20260530d_project_resource_table.sql
+  learnings: can_edit_project function criada (pattern de can_edit_tasks); policies RLS aplicadas; migration rodada em DB já parcialmente populado (idempotente via CREATE OR REPLACE + IF NOT EXISTS).

@@ -43,7 +43,7 @@
       "id": "WIKI-002",
       "title": "Migration: ProjectResource table",
       "description": "Cria tabela ProjectResource com RLS via can_view_project / can_edit_project.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo supabase/migrations/20260530d_project_resource_table.sql existe (DDL §7.2)",
         "Migration roda via psql sem erro",
