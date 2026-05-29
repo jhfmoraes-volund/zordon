@@ -327,18 +327,46 @@ A Fase 1 entrega **mais que o sistema atual**: prompt coerente com toolset, UI a
     - src/lib/agent/agents/vitor/index.ts
 
 - id: VTRDISC-003
-  title: Reescrever seção "Sub-phase STORY_TREE" no prompt → PRD_DRAFTING
+  title: Reescrever seção "Sub-phase STORY_TREE" no prompt → PRD_DRAFTING (com checklist de qualidade)
   description: |
     Em src/lib/agent/prompt.ts, identificar bloco que descreve sub-phase STORY_TREE
-    (linhas ~543-590 hoje). Reescrever pra PRD_DRAFTING:
-    - Fluxo: list_prds (ver duplicatas) → propose_prd em lote (1 por functionality)
-    - Remover toda menção a create_user_story, want/soThat, AC fields de US
-    - Manter regra de "8 linhas máx no chat antes de tools"
-    - Adicionar exemplo curto de propose_prd
+    (linhas ~543-590 hoje). Reescrever pra PRD_DRAFTING com REQUISITOS DUROS de
+    qualidade — cada PRD gerado pelo Vitor deve absorver TUDO que foi levantado
+    no processo da DS:
+
+    Fluxo passo-a-passo (deve estar explícito no prompt):
+    1. `list_prds({})` — checar duplicatas no projeto.
+    2. `read_session_memory({})` — puxar memória estruturada (decisões, research).
+    3. Pra cada functionality identificada no brainstorm:
+       a. Identificar grupo de cards do brainstorm (`bs#ids`) que originam ela.
+       b. Identificar decisões ativas relacionadas (já vêm em activeDecisions do contexto).
+       c. Identificar personas afetadas (já vêm em existingPersonas).
+       d. Compor PRD com todos os campos preenchidos, garantindo grounding nos artefatos.
+    4. `propose_prd(...)` em lote.
+
+    Checklist obrigatório de qualidade (deve estar no prompt como REGRA DURA):
+    - **sourceCardIds[] NÃO PODE ser vazio** — sempre referenciar ≥1 `bs#id` do brainstorm
+    - **problem** deve mencionar a dor concreta levantada nos cards (não abstração)
+    - **personaIds[]** vem das personas existentes da DS (não inventar)
+    - **userJourney** deve refletir a jornada discutida no brainstorm/prioritization
+    - **acceptanceCriteria** ≥3, formato `{given, when, then}` específico (não placeholder)
+    - **technicalNotes** cita decisões ativas relevantes por ID quando aplicável (ex: "Conforme decisão D7: usar Supabase Realtime...")
+    - **successMetrics** com baseline (se conhecido) e target
+    - **risksAndAssumptions** com pelo menos 1 risco e 1 assumption do processo
+
+    Manter regras existentes:
+    - "8 linhas máx no chat antes de tools"
+    - Idempotência: propose_prd com mesmo (projectId, title) atualiza em vez de duplicar (verificar se prd-schemas já garante isso; senão anotar como follow-up)
+
+    Exemplo few-shot completo (1 PRD do Zelar) com todos os campos populados e
+    grounding visível: sourceCardIds com 3 bs#ids, technicalNotes citando D-NN,
+    personaIds não-vazio.
   acceptanceCriteria:
-    - "Bloco existente de STORY_TREE substituído por seção PRD_DRAFTING"
-    - "Seção menciona apenas tools: list_prds, propose_prd (não create_user_story/create_task)"
-    - "Exemplo de propose_prd presente com problem ≥50 chars e ≥3 acceptanceCriteria"
+    - "Bloco STORY_TREE substituído por seção PRD_DRAFTING"
+    - "Seção menciona tools: list_prds, read_session_memory, propose_prd (não create_user_story/create_task)"
+    - "Checklist de qualidade presente com 8 bullets (sourceCardIds, problem grounded, personaIds, userJourney, AC formato dado/quando/então, technicalNotes cita decisões, successMetrics com target, risksAndAssumptions ≥1 cada)"
+    - "Exemplo few-shot completo com sourceCardIds não-vazio (≥2 ids), technicalNotes referenciando decisão por ID"
+    - "Prompt instrui explicitamente: 'sourceCardIds NÃO PODE ser vazio'"
   verifiable:
     - kind: sql
       command_or_query: "grep -cE 'Sub-phase STORY_TREE|sub-phase story_tree' src/lib/agent/prompt.ts"
@@ -346,8 +374,17 @@ A Fase 1 entrega **mais que o sistema atual**: prompt coerente com toolset, UI a
     - kind: sql
       command_or_query: "grep -cE 'Sub-phase PRD_DRAFTING|sub-phase prd_drafting' src/lib/agent/prompt.ts"
       expected: ">=1"
+    - kind: sql
+      command_or_query: "grep -cE 'sourceCardIds.*N[AÃ]O PODE|sourceCardIds.*obrigat[óo]rio|sourceCardIds.*n[aã]o[- ]vazio' src/lib/agent/prompt.ts"
+      expected: ">=1"
+    - kind: sql
+      command_or_query: "grep -cE 'read_session_memory' src/lib/agent/prompt.ts"
+      expected: ">=1"
+    - kind: sql
+      command_or_query: "grep -cE 'bs#[0-9a-z]+' src/lib/agent/prompt.ts"
+      expected: ">=2"
   dependsOn: [VTRDISC-001]
-  estimateMinutes: 25
+  estimateMinutes: 30
   touches:
     - src/lib/agent/prompt.ts
 

@@ -15,13 +15,28 @@
         "Sem STORY_TREE/STORY_DETAIL/TASK_BREAKDOWN em constants.ts"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "grep -cE 'STORY_TREE|STORY_DETAIL|TASK_BREAKDOWN' src/lib/design-sessions/constants.ts", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -cE 'PRD_DRAFTING|PRD_REVIEW' src/lib/design-sessions/constants.ts", "expected": ">=2" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'STORY_TREE|STORY_DETAIL|TASK_BREAKDOWN' src/lib/design-sessions/constants.ts",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'PRD_DRAFTING|PRD_REVIEW' src/lib/design-sessions/constants.ts",
+          "expected": ">=2"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 15,
-      "touches": ["src/lib/design-sessions/constants.ts"]
+      "touches": [
+        "src/lib/design-sessions/constants.ts"
+      ],
+      "passes": true
     },
     {
       "id": "VTRDISC-002",
@@ -33,29 +48,70 @@
         "Sem refs a STORY_TREE/STORY_DETAIL/TASK_BREAKDOWN no switch"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "grep -cE 'BRIEFING_SUB_PHASES.STORY_TREE|BRIEFING_SUB_PHASES.STORY_DETAIL|BRIEFING_SUB_PHASES.TASK_BREAKDOWN' src/lib/agent/agents/vitor/index.ts", "expected": "0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'BRIEFING_SUB_PHASES.STORY_TREE|BRIEFING_SUB_PHASES.STORY_DETAIL|BRIEFING_SUB_PHASES.TASK_BREAKDOWN' src/lib/agent/agents/vitor/index.ts",
+          "expected": "0"
+        }
       ],
-      "dependsOn": ["VTRDISC-001"],
+      "dependsOn": [
+        "VTRDISC-001"
+      ],
       "estimateMinutes": 10,
-      "touches": ["src/lib/agent/agents/vitor/index.ts"]
+      "touches": [
+        "src/lib/agent/agents/vitor/index.ts"
+      ]
     },
     {
       "id": "VTRDISC-003",
-      "title": "Reescrever Sub-phase STORY_TREE no prompt → PRD_DRAFTING",
-      "description": "Bloco STORY_TREE (~linhas 543-590) reescrito pra PRD_DRAFTING. Fluxo: list_prds → propose_prd em lote. Sem refs a create_user_story/want/soThat/AC fields de US. Manter '8 linhas máx no chat'. Incluir 1 exemplo curto propose_prd.",
+      "title": "Reescrever Sub-phase STORY_TREE → PRD_DRAFTING (com checklist de qualidade)",
+      "description": "Reescrever bloco STORY_TREE (~linhas 543-590) pra PRD_DRAFTING com REQUISITOS DUROS. Fluxo: list_prds → read_session_memory → identificar grupos de bs#ids, decisões ativas, personas → propose_prd em lote. Checklist obrigatório: (1) sourceCardIds NÃO PODE ser vazio, (2) problem grounded nos cards (não abstração), (3) personaIds vem das personas existentes, (4) userJourney reflete brainstorm/prioritization, (5) acceptanceCriteria ≥3 em formato given/when/then específico, (6) technicalNotes cita decisões ativas por ID (D-NN), (7) successMetrics com target, (8) risksAndAssumptions ≥1 cada. Exemplo few-shot completo com sourceCardIds populado (≥2 ids) e technicalNotes citando decisão.",
       "acceptanceCriteria": [
         "Bloco STORY_TREE substituído por PRD_DRAFTING",
-        "Seção menciona apenas list_prds e propose_prd",
-        "Exemplo propose_prd presente com problem ≥50 chars e ≥3 acceptanceCriteria"
+        "Tools referenciadas: list_prds, read_session_memory, propose_prd",
+        "Checklist de qualidade com 8 bullets presente",
+        "Exemplo few-shot completo com sourceCardIds ≥2 ids e technicalNotes citando decisão por ID",
+        "Prompt afirma explicitamente sourceCardIds NÃO PODE ser vazio"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase STORY_TREE|sub-phase story_tree' src/lib/agent/prompt.ts", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase PRD_DRAFTING|sub-phase prd_drafting' src/lib/agent/prompt.ts", "expected": ">=1" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'Sub-phase STORY_TREE|sub-phase story_tree' src/lib/agent/prompt.ts",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'Sub-phase PRD_DRAFTING|sub-phase prd_drafting' src/lib/agent/prompt.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'sourceCardIds.*N[AÃ]O PODE|sourceCardIds.*obrigat[óo]rio|sourceCardIds.*n[aã]o[- ]vazio' src/lib/agent/prompt.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'read_session_memory' src/lib/agent/prompt.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'bs#[0-9a-z]+' src/lib/agent/prompt.ts",
+          "expected": ">=2"
+        }
       ],
-      "dependsOn": ["VTRDISC-001"],
-      "estimateMinutes": 25,
-      "touches": ["src/lib/agent/prompt.ts"]
+      "dependsOn": [
+        "VTRDISC-001"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/prompt.ts"
+      ]
     },
     {
       "id": "VTRDISC-004",
@@ -67,12 +123,24 @@
         "Instrução de terminação do step presente"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase STORY_DETAIL|sub-phase story_detail' src/lib/agent/prompt.ts", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase PRD_REVIEW|sub-phase prd_review' src/lib/agent/prompt.ts", "expected": ">=1" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'Sub-phase STORY_DETAIL|sub-phase story_detail' src/lib/agent/prompt.ts",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'Sub-phase PRD_REVIEW|sub-phase prd_review' src/lib/agent/prompt.ts",
+          "expected": ">=1"
+        }
       ],
-      "dependsOn": ["VTRDISC-001"],
+      "dependsOn": [
+        "VTRDISC-001"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/lib/agent/prompt.ts"]
+      "touches": [
+        "src/lib/agent/prompt.ts"
+      ]
     },
     {
       "id": "VTRDISC-005",
@@ -84,12 +152,24 @@
         "Prompt ≥200 linhas menor que estado pré-story"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -cE 'Sub-phase TASK_BREAKDOWN|TASK_BREAKDOWN' src/lib/agent/prompt.ts", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -cE '\\bcreate_task\\b|\\bset_story_refinement\\b' src/lib/agent/prompt.ts", "expected": "0" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'Sub-phase TASK_BREAKDOWN|TASK_BREAKDOWN' src/lib/agent/prompt.ts",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE '\\bcreate_task\\b|\\bset_story_refinement\\b' src/lib/agent/prompt.ts",
+          "expected": "0"
+        }
       ],
-      "dependsOn": ["VTRDISC-001"],
+      "dependsOn": [
+        "VTRDISC-001"
+      ],
       "estimateMinutes": 20,
-      "touches": ["src/lib/agent/prompt.ts"]
+      "touches": [
+        "src/lib/agent/prompt.ts"
+      ]
     },
     {
       "id": "VTRDISC-006",
@@ -100,12 +180,26 @@
         "Pelo menos 1 '→ propose_prd(' com todos campos obrigatórios"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -cE '→ create_user_story\\(|→ create_task\\(' src/lib/agent/prompt.ts", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -cE '→ propose_prd\\(' src/lib/agent/prompt.ts", "expected": ">=1" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE '→ create_user_story\\(|→ create_task\\(' src/lib/agent/prompt.ts",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE '→ propose_prd\\(' src/lib/agent/prompt.ts",
+          "expected": ">=1"
+        }
       ],
-      "dependsOn": ["VTRDISC-003", "VTRDISC-004", "VTRDISC-005"],
+      "dependsOn": [
+        "VTRDISC-003",
+        "VTRDISC-004",
+        "VTRDISC-005"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/lib/agent/prompt.ts"]
+      "touches": [
+        "src/lib/agent/prompt.ts"
+      ]
     },
     {
       "id": "VTRDISC-007",
@@ -117,11 +211,19 @@
         "Menção a acceptanceCriteria (campo PRD) com formato given/when/then"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -cE 'acceptanceCriteriaProduct|AC Tecnico|AC de Produto.*create_user_story' src/lib/agent/prompt.ts", "expected": "0" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'acceptanceCriteriaProduct|AC Tecnico|AC de Produto.*create_user_story' src/lib/agent/prompt.ts",
+          "expected": "0"
+        }
       ],
-      "dependsOn": ["VTRDISC-001"],
+      "dependsOn": [
+        "VTRDISC-001"
+      ],
       "estimateMinutes": 15,
-      "touches": ["src/lib/agent/prompt.ts"]
+      "touches": [
+        "src/lib/agent/prompt.ts"
+      ]
     },
     {
       "id": "VTRDISC-008",
@@ -133,13 +235,27 @@
         "aria-label correto"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -cE 'Story Tree|story tree' src/components/design-session/design-session-tree.tsx", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -cE 'PRD Tree|PRDs' src/components/design-session/design-session-tree.tsx", "expected": ">=1" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'Story Tree|story tree' src/components/design-session/design-session-tree.tsx",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'PRD Tree|PRDs' src/components/design-session/design-session-tree.tsx",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 15,
-      "touches": ["src/components/design-session/design-session-tree.tsx"]
+      "touches": [
+        "src/components/design-session/design-session-tree.tsx"
+      ]
     },
     {
       "id": "VTRDISC-009",
@@ -151,13 +267,33 @@
         "Cobre os 8 tools removidos via regex"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "test -f src/eval/vitor/prompt-tools-coherence.test.ts && echo ok", "expected": "ok" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "pnpm vitest run src/eval/vitor/prompt-tools-coherence.test.ts", "expected": "Tests passed" }
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/eval/vitor/prompt-tools-coherence.test.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "pnpm vitest run src/eval/vitor/prompt-tools-coherence.test.ts",
+          "expected": "Tests passed"
+        }
       ],
-      "dependsOn": ["VTRDISC-003", "VTRDISC-004", "VTRDISC-005", "VTRDISC-006", "VTRDISC-007"],
+      "dependsOn": [
+        "VTRDISC-003",
+        "VTRDISC-004",
+        "VTRDISC-005",
+        "VTRDISC-006",
+        "VTRDISC-007"
+      ],
       "estimateMinutes": 20,
-      "touches": ["src/eval/vitor/prompt-tools-coherence.test.ts"]
+      "touches": [
+        "src/eval/vitor/prompt-tools-coherence.test.ts"
+      ]
     }
   ]
 }

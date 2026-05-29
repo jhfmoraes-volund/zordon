@@ -488,7 +488,7 @@ ${idempotencyNote}
 `;
   }
 
-  if (input.subPhase === BRIEFING_SUB_PHASES.STORY_TREE) {
+  if (input.subPhase === BRIEFING_SUB_PHASES.PRD_DRAFTING) {
     return `
 ## Modo Briefing — Sub-fase STORY_TREE (esqueleto de stories ancorado em modulos + brainstorm)
 
@@ -589,7 +589,7 @@ ${acRubric}
 `;
   }
 
-  if (input.subPhase === BRIEFING_SUB_PHASES.STORY_DETAIL) {
+  if (input.subPhase === BRIEFING_SUB_PHASES.PRD_REVIEW) {
     const targetLine = input.targetStoryId
       ? `\n**Story alvo:** ${input.targetStoryId}\n`
       : `\n**ATENCAO:** subPhase="story_detail" mas \`targetStoryId\` nao foi setado. Pergunte ao usuario qual story detalhar antes de tocar tools.\n`;

@@ -8,14 +8,12 @@
  */
 
 export const BRIEFING_SUB_PHASES = {
-  /** Map product modules from brainstorm. Output: N draft modules (no stories). */
+  /** Map product modules from brainstorm. Output: N draft modules (no PRDs). */
   MODULE_DISCOVERY: "module_discovery",
-  /** Generate skeleton stories grouped by approved/draft modules. No AC, no tasks. */
-  STORY_TREE: "story_tree",
-  /** Refine ONE story: persona, want/soThat, product AC. */
-  STORY_DETAIL: "story_detail",
-  /** Decompose ONE refined story into technical tasks. */
-  TASK_BREAKDOWN: "task_breakdown",
+  /** Draft PRDs for each functionality identified in brainstorm. One PRD per feature/functionality. */
+  PRD_DRAFTING: "prd_drafting",
+  /** Review and approve PRDs. Terminal sub-phase — step completes when all PRDs approved. */
+  PRD_REVIEW: "prd_review",
 } as const;
 
 export type BriefingSubPhase =
@@ -28,17 +26,15 @@ export const BRIEFING_SUB_PHASE_VALUES = Object.values(
 /** Canonical order of sub-phases through the briefing flow. */
 export const BRIEFING_SUB_PHASE_ORDER: readonly BriefingSubPhase[] = [
   BRIEFING_SUB_PHASES.MODULE_DISCOVERY,
-  BRIEFING_SUB_PHASES.STORY_TREE,
-  BRIEFING_SUB_PHASES.STORY_DETAIL,
-  BRIEFING_SUB_PHASES.TASK_BREAKDOWN,
+  BRIEFING_SUB_PHASES.PRD_DRAFTING,
+  BRIEFING_SUB_PHASES.PRD_REVIEW,
 ] as const;
 
 /** PT-BR labels for UI surfaces (badges, placeholders, breadcrumbs). */
 export const BRIEFING_SUB_PHASE_LABEL: Record<BriefingSubPhase, string> = {
   module_discovery: "Mapear módulos",
-  story_tree: "Gerar stories",
-  story_detail: "Refinar story",
-  task_breakdown: "Decompor em tasks",
+  prd_drafting: "Rascunhar PRDs",
+  prd_review: "Revisar PRDs",
 };
 
 /** Default sub-phase when briefing data has nothing persisted yet. */

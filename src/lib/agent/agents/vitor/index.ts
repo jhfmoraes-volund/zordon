@@ -44,13 +44,13 @@ function pickVerbosity(
     switch (phase) {
       case BRIEFING_SUB_PHASES.MODULE_DISCOVERY:
         return "discovery";
-      case BRIEFING_SUB_PHASES.STORY_TREE:
+      case BRIEFING_SUB_PHASES.PRD_DRAFTING:
         return "refinement";
-      case BRIEFING_SUB_PHASES.STORY_DETAIL:
-      case BRIEFING_SUB_PHASES.TASK_BREAKDOWN:
+      case BRIEFING_SUB_PHASES.PRD_REVIEW:
         return "execution";
       default:
-        return "full";
+        // Fallback para DSs antigas com valores legacy (story_tree, story_detail, task_breakdown)
+        return "discovery";
     }
   }
   if (currentStepKey === "brainstorm" || currentStepKey === "prioritization") {
