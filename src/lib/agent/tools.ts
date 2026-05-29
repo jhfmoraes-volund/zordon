@@ -109,25 +109,30 @@ export function assembleTools(sessionId: string, capabilities?: Capabilities): T
   if (capabilities?.createTasks && capabilities?.projectId) {
     tools.propose_modules = proposeModulesTool(capabilities.projectId);
     tools.sync_project_personas = syncProjectPersonasTool(capabilities.projectId);
-    tools.create_user_story = createUserStoryTool(
-      sessionId,
-      capabilities.projectId,
-      capabilities.memberId,
-    );
     tools.list_stories = listStoriesTool(sessionId, capabilities.projectId);
-    // approve_module foi descontinuada na DS — aprovação acontece atomicamente
-    // pelo PM via /complete da sessão. A tool Alpha equivalente continua viva
-    // pra fluxos manuais fora de DS.
-    tools.set_story_refinement = setStoryRefinementTool(capabilities.projectId);
-    tools.update_user_story = updateStoryForOpsTool(capabilities.projectId);
-    tools.manage_story_ac = manageStoryAcForOpsTool(capabilities.projectId);
-    tools.delete_user_story = deleteUserStoryTool(capabilities.projectId);
-    tools.create_task = createTaskTool(sessionId, capabilities.projectId, capabilities.memberId);
     tools.list_project_tags = listProjectTagsTool(capabilities.projectId);
     tools.list_tasks = listSessionTasksTool(sessionId);
     tools.list_project_tasks = listProjectTasksTool(sessionId, capabilities.projectId);
-    tools.update_task = updateTaskTool(sessionId);
-    tools.delete_task = deleteTaskTool(sessionId);
+
+    // Vitor-as-PM mode: PRD becomes the único output do briefing. US/Task/AC
+    // mutations saem do toolset — Vitoria materializa via novo modo "execution-from-prd".
+    if (!capabilities.vitorAsPm) {
+      tools.create_user_story = createUserStoryTool(
+        sessionId,
+        capabilities.projectId,
+        capabilities.memberId,
+      );
+      // approve_module foi descontinuada na DS — aprovação acontece atomicamente
+      // pelo PM via /complete da sessão. A tool Alpha equivalente continua viva
+      // pra fluxos manuais fora de DS.
+      tools.set_story_refinement = setStoryRefinementTool(capabilities.projectId);
+      tools.update_user_story = updateStoryForOpsTool(capabilities.projectId);
+      tools.manage_story_ac = manageStoryAcForOpsTool(capabilities.projectId);
+      tools.delete_user_story = deleteUserStoryTool(capabilities.projectId);
+      tools.create_task = createTaskTool(sessionId, capabilities.projectId, capabilities.memberId);
+      tools.update_task = updateTaskTool(sessionId);
+      tools.delete_task = deleteTaskTool(sessionId);
+    }
   }
 
   // Memory tools (always-on when projectId is known)

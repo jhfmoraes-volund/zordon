@@ -30,6 +30,7 @@ import {
 } from "../../tools/alpha-planner";
 import { ALPHA_AGENT_ID } from "./context";
 import type { Capabilities } from "../../types";
+import { upsertTranscriptRef } from "@/lib/transcripts/upsert";
 
 /**
  * Assembles Alpha's native tools.
@@ -1313,6 +1314,34 @@ export function assembleAlphaTools(
           attendeeCount: attendees.length,
           carryOverCount: carryActions.length,
         };
+      },
+    });
+
+    tools.save_meeting_transcript_text = tool({
+      description:
+        "Persiste o texto BRUTO da transcrição num TranscriptRef (SSOT). Use logo após `get_meeting_transcript` durante ingestão pra cachear o texto — futuras leituras (suggest-actions, page meeting) usam isso sem precisar re-bater na API do provedor. Idempotente: re-chamar só atualiza o texto se vier diferente.",
+      inputSchema: z.object({
+        meetingId: z.string().uuid().optional().describe("UUID da reunião no Volund (opcional — default: reunião do contexto)"),
+        source: z.enum(["roam", "granola"]).describe("Provedor de origem (mesmo source de get_meeting_transcript)"),
+        sourceId: z.string().describe("ID externo da transcrição (mesmo ID usado em get_meeting_transcript)"),
+        fullText: z.string().describe("Texto completo da transcrição (campo `transcript` do retorno de get_meeting_transcript)"),
+      }),
+      execute: async ({ meetingId, source, sourceId, fullText }) => {
+        const targetId = meetingId || activeMeetingId;
+        if (!targetId) return { error: "Nenhuma reunião no contexto. Informe meetingId." };
+
+        try {
+          const id = await upsertTranscriptRef(supabase, {
+            source,
+            sourceId,
+            meetingId: targetId,
+            fullText,
+            importedById: currentMemberId ?? null,
+          });
+          return { saved: true, transcriptRefId: id, length: fullText.length };
+        } catch (err) {
+          return { error: `Erro ao salvar transcript: ${(err as Error).message}` };
+        }
       },
     });
 

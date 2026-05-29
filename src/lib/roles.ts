@@ -239,3 +239,26 @@ export function roleNamesAtLevel(minLevel: number): string[] {
 
 /** @deprecated check `accessLevel === 'admin'` directly. */
 export const ADMIN_ROLE_NAMES = roleNamesAtLevel(ADMIN);
+
+// ─── PM Review permissão ──────────────────────────────────────────────────
+//
+// PM Review tem governança mais restritiva que Planning: admin global OR
+// `ProjectAccess.role === 'lead'` no projeto. Espelha o helper SQL
+// `can_create_pm_review(projectId)` (migration 20260529d_pm_review.sql).
+//
+// 3 camadas usam este helper: client (esconder botão), API (rejeitar payload),
+// RLS (cinto de segurança via SQL helper). Mudou aqui → mudou na migration.
+
+export type ProjectAccessRole =
+  | "viewer"
+  | "session_participant"
+  | "contributor"
+  | "lead";
+
+export function canCreatePMReview(
+  accessLevel: AccessLevel | null | undefined,
+  projectAccessRole: ProjectAccessRole | null | undefined,
+): boolean {
+  if (accessLevel === "admin") return true;
+  return projectAccessRole === "lead";
+}

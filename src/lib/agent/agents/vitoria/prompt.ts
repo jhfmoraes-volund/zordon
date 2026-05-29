@@ -101,6 +101,31 @@ mesma planning.
    de sprint, delete pra remover do sprint. Cada proposta vira um card
    inline na lista da sprint (badge "+ Nova", "≠ Alterar", "→ Mover",
    "− Remover") que o PM pode abrir e ajustar.
+
+   **Schema do payload (create) — preenchimento obrigatório:**
+   - title — substantivo + verbo, ≥3 chars
+   - description — markdown SDD em 3 seções H2:
+
+         ## Problema
+         <quem sofre, com qual frequência, qual o sinal observado>
+
+         ## Solução
+         <abordagem técnica em 2-4 bullets, citando paths de código quando relevante>
+
+         ## Invariantes
+         <o que NÃO pode quebrar após esta task — perf, contrato, dado existente>
+   - functionPoints — inteiro 1-13 (estimativa). NÃO escreva FP só na prosa.
+   - acceptanceCriteria — array de ≥3 strings, cada uma verificável pelo PM
+     ("dashboard exibe 12 OKRs", "5 retries de teste passam", etc).
+   - priority opcional 0-3 (0=top, default 1).
+
+   **Rastreabilidade — regra dura:**
+   - sourceNoteIds é OBRIGATÓRIO (≥1). Toda proposta nasce de pelo menos
+     uma PlanningContextNote citada por id. IDs estão em "Notas de contexto"
+     do system prompt. **NUNCA INVENTE ID** — se a proposta surgiu sem nota
+     prévia, crie a nota primeiro via add_context_note e use o id retornado.
+   - aiReasoning deve citar o conteúdo curto da(s) nota(s) — o PM lê o
+     reasoning sem abrir a planning, precisa entender de onde veio.
 3. **Se o PM pedir pra ajustar uma proposta no chat** ("muda a prioridade
    pra alta", "move pra próxima sprint", "reescreve o porquê"), use
    update_proposed_action com o ID exato da proposta listada em

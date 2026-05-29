@@ -8,6 +8,7 @@ import {
   getActorMemberId,
 } from "@/lib/dal";
 import { BUILDER, hasMinAccessLevel } from "@/lib/roles";
+import { upsertTranscriptRef } from "@/lib/transcripts/upsert";
 
 const MEETING_SELECT = `
   *,
@@ -29,6 +30,9 @@ const MEETING_SELECT = `
   ),
   projectLinks:MeetingProjectLink(
     *, project:Project(id, name, status)
+  ),
+  transcriptRefs:TranscriptRef!TranscriptRef_meetingId_fkey(
+    id, source, sourceId, title, fullText, capturedAt
   )
 `;
 
@@ -216,24 +220,21 @@ export async function PUT(
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const type = existing.type as "pm_review" | "general" | "daily" | "super_planning" | "private";
 
-  // 1. Patch nos campos simples do Meeting
+  // 1. Patch nos campos simples do Meeting (transcript* foi pra TranscriptRef)
   const patch: {
     notes?: string | null;
     title?: string | null;
     date?: string;
-    transcript?: string | null;
     visibility?: "private" | "public";
     kind?: string;
-    transcriptSource?: "roam" | "granola" | null;
-    transcriptSourceId?: string | null;
   } = {};
   if (body.notes !== undefined) patch.notes = body.notes;
   if (body.title !== undefined) patch.title = body.title;
-  if (body.transcript !== undefined) patch.transcript = body.transcript;
   if (body.date !== undefined) patch.date = new Date(body.date).toISOString();
   if (body.visibility !== undefined) patch.visibility = body.visibility;
   if (body.kind !== undefined) patch.kind = body.kind;
 
+  // Validação de pareamento (mantida — payload do cliente ainda manda assim).
   if (body.transcriptSource !== undefined || body.transcriptSourceId !== undefined) {
     const src = body.transcriptSource ?? null;
     const sid = body.transcriptSourceId ?? null;
@@ -243,13 +244,33 @@ export async function PUT(
         { status: 400 },
       );
     }
-    patch.transcriptSource = src;
-    patch.transcriptSourceId = sid;
   }
 
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from("Meeting").update(patch).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // 1.b. Upsert TranscriptRef (SSOT) quando vier transcript / source / sourceId.
+  const importedById = await getActorMemberId();
+  if (body.transcriptSource && body.transcriptSourceId) {
+    await upsertTranscriptRef(supabase, {
+      source: body.transcriptSource,
+      sourceId: body.transcriptSourceId,
+      meetingId: id,
+      fullText: body.transcript ?? null,
+      importedById,
+    });
+  } else if (body.transcript !== undefined && body.transcript !== null) {
+    // Texto manual (sem source externo) → TranscriptRef source='manual'.
+    // Não há sourceId, então não há dedup — cada PATCH grava um novo manual.
+    // OK: PATCH com `transcript` solto é raro (modal cliente sempre manda par).
+    await upsertTranscriptRef(supabase, {
+      source: "manual",
+      meetingId: id,
+      fullText: body.transcript,
+      importedById,
+    });
   }
 
   // 2. pm_review: diff de PMs (A1 — adicionar OK, remover só se review vazio)

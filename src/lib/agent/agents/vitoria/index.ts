@@ -2,6 +2,11 @@ import { db } from "@/lib/db";
 import { buildVitoriaPrompt } from "./prompt";
 import { buildVitoriaTools } from "./tools";
 import { buildProjectProfile } from "./profile";
+import {
+  loadPMReviewContext,
+  buildPMReviewPrompt,
+  buildPMReviewTools,
+} from "./pm-review";
 import { getConnectionStatus, getUserTools } from "@/lib/composio/client";
 
 /**
@@ -27,6 +32,14 @@ export const vitoriaAgent: AgentDefinition = {
   model: "anthropic/claude-haiku-4-5",
 
   async loadContext(req: AgentRunRequest) {
+    // Dispatch por surface — Vitoria opera Planning E PM Review com mesma
+    // identidade, contextos/prompts/tools diferentes.
+    const surface = (req.params.surface as string | undefined) ?? "planning";
+    if (surface === "pm_review") {
+      const pmReviewId = req.params.pmReviewId as string;
+      return loadPMReviewContext(pmReviewId, req.memberId ?? null);
+    }
+
     const planningId = req.params.planningId as string;
 
     const { data: planning } = await db()
@@ -181,13 +194,25 @@ export const vitoriaAgent: AgentDefinition = {
   },
 
   buildPrompt(ctx) {
+    if ((ctx.agentContext as { surface?: string }).surface === "pm_review") {
+      return buildPMReviewPrompt(ctx);
+    }
     return buildVitoriaPrompt(ctx);
   },
 
   async buildTools({ agentContext }) {
-    const planningId = agentContext.planningId as string;
+    const surface = (agentContext.surface as string | undefined) ?? "planning";
     const projectId = agentContext.projectId as string;
     const memberId = agentContext.memberId as string | null;
+
+    if (surface === "pm_review") {
+      const pmReviewId = agentContext.pmReviewId as string;
+      // PM Review NÃO usa Composio/GitHub tools (manifest do projeto está no
+      // prompt; indicadores via get_project_indicators). Mantém prompt enxuto.
+      return buildPMReviewTools(pmReviewId, projectId);
+    }
+
+    const planningId = agentContext.planningId as string;
     const githubConnected = Boolean(agentContext.githubConnected);
 
     const nativeTools = buildVitoriaTools(planningId, projectId);

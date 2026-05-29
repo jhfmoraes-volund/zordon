@@ -102,3 +102,93 @@ O script:
 
 LLMs podem rodar `bash scripts/sync-main.sh -m "..."` direto sem se preocupar com prompts. O default já faz o certo.
 <!-- END:git-agent-rules -->
+
+<!-- BEGIN:prd-and-ralph -->
+# PRDs — escrever pra Ralph desde o dia 1
+
+Todo PRD no Volund é candidato a rodar via **Ralph** (loop autônomo, ver [docs/runbooks/ralph-process.md](docs/runbooks/ralph-process.md)). Pra não retrabalhar depois, escreva o PRD **já no formato que o Rito 1 (Intake) exige**.
+
+## Onde mora
+
+- PRD ativo: `docs/prd/prd-<feature>.md`
+- PRD arquivado (pós-closeout): `docs/archive/prd-<feature>-YYYYMMDD.md`
+- Fila de execução: `scripts/ralph/features/<feature>/prd.json` (derivada do PRD)
+
+## Anatomia obrigatória do PRD
+
+Toda decisão arquitetural **fechada** (sem TBD). Toda métrica com instrumento. Toda story com critério verificável.
+
+| § | Seção | Conteúdo mínimo |
+|---|---|---|
+| 1 | Problema | 2-3 problemas concretos com fonte (não abstrato) |
+| 2 | Solução em uma frase | Uma frase. Se não couber, escopo grande demais |
+| 3 | Não-objetivos | Lista explícita do que **fica de fora** |
+| 4 | Personas e jornada | Citações em 1ª pessoa por persona |
+| 5 | Decisões fixadas | Tabela `Dn` numerada: escolha + por quê. **Sem TBD aqui** |
+| 6 | Arquitetura | Diagrama ASCII + componentes; cada caixa = endpoint/função real |
+| 7 | Schema | DDL completo (CREATE/ALTER + índices + **RLS policies explícitas**); migrations atômicas, uma por arquivo |
+| 8 | APIs | Tabela método/path/contrato; sempre async se envolve LLM ou job |
+| 9 | UX | Wireframe ASCII das telas principais |
+| 10 | Integrações | Como esta feature toca outras (DS, meetings, agentes…) |
+| 11 | Faseamento | 1→2→3→4 limpo. Fase 1 entrega **mais** que o sistema atual, nunca menos |
+| 12 | Riscos | Tabela `Risco | Prob | Impacto | Mitigação`. Mitigação acionável |
+| 13 | Métricas de sucesso | Cada métrica com **instrumento** (query SQL, evento, dashboard). Sem instrumento → remova |
+| 14 | Open questions | Idealmente vazio. Se preencher, marque qual fase resolve |
+| 15 | Referências | Links pra código vivo, memories, PRDs relacionados |
+| **16** | **Stories implementáveis** | **Lista numerada conforme schema abaixo** |
+
+### §16 — Schema das stories (espelha o prd.json)
+
+```yaml
+- id: <FEATURE>-NNN          # WIKI-001, AUTH-007 — sequencial
+  title: <imperativo curto>
+  description: <1 parágrafo>
+  acceptanceCriteria:        # AC objetivos, sem subjetividade
+    - "Arquivo X existe com shape Y"
+    - "Endpoint Z retorna 202 com jobId"
+  verifiable:                # checks AUTOMATIZÁVEIS — sem isso Ralph não roda
+    - kind: typecheck | lint | sql | http | manual_browser
+      command_or_query: "<bash command ou query>"
+      expected: "<output esperado>"
+  dependsOn: [<ids>]         # DAG; vazio se story-raiz
+  estimateMinutes: <int>     # ≤ 30 — não cabe em 1 context window se for maior
+  touches: [<path/file>]     # arquivos previstos (orientativo)
+```
+
+## Regras de redação
+
+- **Decisão antes de prosa.** Se a seção `Decisões fixadas` está vazia, o PRD não está pronto. Cada decisão recebe `Dn` numerada e fica imutável depois do Rito 1.
+- **DDL completo no §7**, nunca "schema TBD" ou "definir índices depois". Inclui RLS policies — `ENABLE ROW LEVEL SECURITY` + `CREATE POLICY` por operação.
+- **Migrations atômicas:** 1 ALTER ou 1 CREATE TABLE por arquivo. Rollback granular > economia de arquivos.
+- **API sempre async se envolve LLM/job/processamento > 1s.** Endpoint retorna `202 + jobId`, cliente faz poll em `GET /jobs/[jobId]`. Não muda contrato entre fases.
+- **Fase 1 ≥ sistema atual.** Se a Fase 1 entrega menos do que existe, ninguém vai chegar na Fase 2. Reescope.
+- **Story ≤ 30min de implementação.** Maior que isso = não cabe em 1 context window do Claude → quebra.
+- **Toda story precisa de ≥ 1 `verifiable` automatizável** (não só `manual_browser`). Sem check automático, a story exige Checkpoint humano e não pode rodar em loop > 1 iter.
+- **`dependsOn` forma DAG, sem ciclos.** Stories paralelas (sem deps comum) podem ser pegas em ordem qualquer.
+- **Refs tipadas.** Conteúdo gerado por LLM (sumários, decisões) sempre vem com referência tipada a meeting/DS/task. Sem ref clicável, não publica.
+
+## Antes de publicar um PRD novo
+
+Auto-checklist (responda mentalmente):
+
+- [ ] §5 tem Decisões fixadas com pelo menos 8 entradas e zero TBD?
+- [ ] §7 tem DDL completo com RLS, separado em migrations atômicas?
+- [ ] §8 tem todos os endpoints com método + path + contrato?
+- [ ] §11 Fase 1 entrega mais que o sistema atual (ou roda em paralelo)?
+- [ ] §13 cada métrica tem query/evento/dashboard nomeado?
+- [ ] §14 está vazio ou só com não-bloqueantes marcados pra Fase ≥ 2?
+- [ ] §16 tem ≥ 5 stories, todas com `verifiable` automatizável, total ≤ 25?
+- [ ] Existe `scripts/ralph/features/<feature>/prd.json` espelhando §16?
+
+Se qualquer item falhar, o PRD não está pronto pra Rito 2. Volte e endereça.
+
+## Quando o usuário pedir "escreva um PRD"
+
+1. Pergunte o **problema** (não a solução).
+2. Pergunte personas, escopo e o que **não** entra.
+3. Escreva PRD seguindo o schema §1-§16 acima.
+4. Gere `scripts/ralph/features/<feature>/prd.json` junto.
+5. Rode o auto-checklist. Aponte qualquer item que não está pronto.
+
+Modelos vivos no repo (referência boa): [docs/prd/prd-project-wiki.md](docs/prd/prd-project-wiki.md), [docs/prd/prd-alpha-project-insights.md](docs/prd/prd-alpha-project-insights.md).
+<!-- END:prd-and-ralph -->

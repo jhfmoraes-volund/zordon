@@ -92,6 +92,15 @@ type ProjectLink = {
   project: { id: string; name: string; status: string } | null;
 };
 
+type TranscriptRefRow = {
+  id: string;
+  source: "roam" | "granola" | "manual" | "spreadsheet";
+  sourceId: string | null;
+  title: string | null;
+  fullText: string | null;
+  capturedAt: string | null;
+};
+
 type Meeting = {
   id: string;
   date: string;
@@ -100,13 +109,11 @@ type Meeting = {
   title: string | null;
   sprintId: string | null;
   createdById: string | null;
-  transcript: string | null;
-  transcriptSource: "roam" | "granola" | null;
-  transcriptSourceId: string | null;
   projectReviews: ProjectReview[];
   actionItems: ActionItem[];
   attendees: Attendee[];
   projectLinks: ProjectLink[];
+  transcriptRefs: TranscriptRefRow[];
 };
 
 // ─── Constants ────────────────────────────────────────────
@@ -486,9 +493,10 @@ export default function MeetingDetailPage({
     }
   };
 
+  const primaryTranscript = meeting.transcriptRefs?.[0] ?? null;
   const canSuggest =
-    !!(meeting.transcript && meeting.transcript.trim()) ||
-    !!(meeting.transcriptSource && meeting.transcriptSourceId) ||
+    !!(primaryTranscript?.fullText && primaryTranscript.fullText.trim()) ||
+    !!(primaryTranscript?.source && primaryTranscript?.sourceId) ||
     !!(meeting.notes && meeting.notes.trim());
 
   return (
@@ -815,18 +823,22 @@ export default function MeetingDetailPage({
       </div>
 
       {/* Transcript bruto (read-only, collapsible) — exibido quando existe. */}
-      {meeting.transcript && (
+      {primaryTranscript?.fullText && (
         <details className="space-y-2">
           <summary className="cursor-pointer text-sm font-semibold text-muted-foreground hover:text-foreground select-none">
             Transcript bruto
-            {meeting.transcriptSource && (
+            {primaryTranscript.source && (
               <span className="ml-2 text-xs font-normal">
-                ({meeting.transcriptSource === "granola" ? "Granola" : "Roam"})
+                ({primaryTranscript.source === "granola"
+                  ? "Granola"
+                  : primaryTranscript.source === "roam"
+                    ? "Roam"
+                    : primaryTranscript.source})
               </span>
             )}
           </summary>
           <div className="surface p-4 mt-2 whitespace-pre-wrap text-xs text-muted-foreground max-h-96 overflow-y-auto">
-            {meeting.transcript}
+            {primaryTranscript.fullText}
           </div>
         </details>
       )}

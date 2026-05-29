@@ -55,9 +55,11 @@ async function handle(params: Promise<{ id: string }>) {
     id: string;
     type: string;
     notes: string | null;
-    transcript: string | null;
-    transcriptSource: string | null;
-    transcriptSourceId: string | null;
+    transcriptRefs: Array<{
+      source: string | null;
+      sourceId: string | null;
+      fullText: string | null;
+    }> | null;
     projectLinks: Array<{
       project: { id: string; name: string } | null;
     }> | null;
@@ -66,7 +68,7 @@ async function handle(params: Promise<{ id: string }>) {
   const { data: meetingRaw, error: meetingErr } = await supabase
     .from("Meeting")
     .select(
-      "id, type, notes, transcript, transcriptSource, transcriptSourceId, projectLinks:MeetingProjectLink(project:Project(id, name))",
+      "id, type, notes, transcriptRefs:TranscriptRef!TranscriptRef_meetingId_fkey(source, sourceId, fullText), projectLinks:MeetingProjectLink(project:Project(id, name))",
     )
     .eq("id", meetingId)
     .maybeSingle();
@@ -84,12 +86,19 @@ async function handle(params: Promise<{ id: string }>) {
     .map((l) => l.project)
     .filter((p): p is { id: string; name: string } => !!p);
 
-  // Resolve transcrição (cached / live API / notes fallback)
-  let transcript = meeting.transcript?.trim() || "";
+  // Resolve transcrição via SSOT (TranscriptRef joined). Fallback chain:
+  // fullText cacheado → live fetch via Roam/Granola → notas do Meeting.
+  const primaryRef = meeting.transcriptRefs?.[0] ?? null;
+  let transcript = primaryRef?.fullText?.trim() || "";
 
-  const transcriptSource = meeting.transcriptSource;
-  const transcriptSourceId = meeting.transcriptSourceId;
-  if (!transcript && transcriptSource && transcriptSourceId) {
+  const transcriptSource = primaryRef?.source ?? null;
+  const transcriptSourceId = primaryRef?.sourceId ?? null;
+  // Live fetch só pra sources externas com API conhecida (Roam / Granola).
+  // Manual / spreadsheet não têm endpoint pra re-fetch — seguem com fullText
+  // cacheado ou nada.
+  const liveFetchable =
+    transcriptSource === "roam" || transcriptSource === "granola";
+  if (!transcript && liveFetchable && transcriptSourceId) {
     try {
       const source = transcriptSource as "roam" | "granola";
       const [roamToken, granolaToken] = await Promise.all([

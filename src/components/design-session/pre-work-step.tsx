@@ -254,7 +254,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
             <div
               key={t.id}
               className="flex items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1 text-xs"
-              title={t.summary || t.meetingTitle}
+              title={t.summary ?? t.meetingTitle ?? undefined}
             >
               <Mic className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="max-w-[180px] truncate font-medium">

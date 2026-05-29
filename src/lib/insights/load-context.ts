@@ -217,13 +217,15 @@ export async function loadInsightContext(
   const { data: meetingsRaw } = meetingIds.length
     ? await client
         .from("Meeting")
-        .select("id, date, type, title, notes, transcript")
+        .select(
+          "id, date, type, title, notes, transcriptRefs:TranscriptRef!TranscriptRef_meetingId_fkey(fullText)",
+        )
         .in("id", meetingIds)
         .neq("type", "private") // hard exclusion; do not relax without PRD revisit.
         .gte("date", cutoff)
         .order("date", { ascending: false })
         .limit(20)
-    : { data: [] as Array<{ id: string; date: string; type: string; title: string | null; notes: string | null; transcript: string | null }> };
+    : { data: [] as Array<{ id: string; date: string; type: string; title: string | null; notes: string | null; transcriptRefs: Array<{ fullText: string | null }> | null }> };
 
   const meetings: MeetingExcerpt[] = (meetingsRaw ?? []).map((m) => ({
     id: m.id,
@@ -231,7 +233,7 @@ export async function loadInsightContext(
     type: m.type,
     title: m.title,
     notes: truncateNotes(m.notes),
-    transcriptExcerpt: truncateTranscript(m.transcript),
+    transcriptExcerpt: truncateTranscript(m.transcriptRefs?.[0]?.fullText ?? null),
   }));
 
   // 6. Sprint alerts: cheap pre-computed strings the LLM can quote verbatim.

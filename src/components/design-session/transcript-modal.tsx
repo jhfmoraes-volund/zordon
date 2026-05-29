@@ -20,10 +20,22 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { Database } from "@/lib/supabase/database.types";
 
-export type ImportedTranscript =
-  Database["public"]["Tables"]["DesignSessionTranscript"]["Row"];
+/**
+ * Shape leve do "transcript importado" devolvido pelos endpoints de listagem
+ * (DS: `/api/design-sessions/[id]/transcripts`, Planning:
+ * `/api/planning/[id]/transcripts/sources`). Após Fundação B (TranscriptRef
+ * = SSOT), ambos retornam a mesma forma — `id` é o link id (estável p/ DELETE).
+ */
+export type ImportedTranscript = {
+  /** Link id (estável p/ DELETE). */
+  id: string;
+  source: string;
+  sourceId: string | null;
+  meetingTitle: string | null;
+  meetingStart: string | null;
+  summary: string | null;
+};
 
 type SourceKey = "roam" | "granola";
 

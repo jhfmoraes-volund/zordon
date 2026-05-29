@@ -2094,103 +2094,82 @@ export type Database = {
           },
         ]
       }
-      DesignSessionTranscript: {
+      DesignSessionTranscriptLink: {
         Row: {
-          actionItems: Json
-          fullText: string
+          designSessionId: string
           id: string
-          importedAt: string
-          importedByMemberId: string | null
-          meetingEnd: string
-          meetingStart: string
-          meetingTitle: string
-          participants: Json
-          projectId: string
-          sessionId: string
-          source: string
-          sourceId: string
-          summary: string | null
+          linkedAt: string
+          linkedById: string | null
+          note: string | null
+          transcriptRefId: string
+          weight: string | null
         }
         Insert: {
-          actionItems?: Json
-          fullText: string
+          designSessionId: string
           id?: string
-          importedAt?: string
-          importedByMemberId?: string | null
-          meetingEnd: string
-          meetingStart: string
-          meetingTitle: string
-          participants?: Json
-          projectId: string
-          sessionId: string
-          source: string
-          sourceId: string
-          summary?: string | null
+          linkedAt?: string
+          linkedById?: string | null
+          note?: string | null
+          transcriptRefId: string
+          weight?: string | null
         }
         Update: {
-          actionItems?: Json
-          fullText?: string
+          designSessionId?: string
           id?: string
-          importedAt?: string
-          importedByMemberId?: string | null
-          meetingEnd?: string
-          meetingStart?: string
-          meetingTitle?: string
-          participants?: Json
-          projectId?: string
-          sessionId?: string
-          source?: string
-          sourceId?: string
-          summary?: string | null
+          linkedAt?: string
+          linkedById?: string | null
+          note?: string | null
+          transcriptRefId?: string
+          weight?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "DesignSessionTranscript_importedByMemberId_fkey"
-            columns: ["importedByMemberId"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscript_importedByMemberId_fkey"
-            columns: ["importedByMemberId"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscript_importedByMemberId_fkey"
-            columns: ["importedByMemberId"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscript_importedByMemberId_fkey"
-            columns: ["importedByMemberId"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscript_projectId_fkey"
-            columns: ["projectId"]
-            isOneToOne: false
-            referencedRelation: "Project"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscript_sessionId_fkey"
-            columns: ["sessionId"]
+            foreignKeyName: "DesignSessionTranscriptLink_designSessionId_fkey"
+            columns: ["designSessionId"]
             isOneToOne: false
             referencedRelation: "design_session_summary"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "DesignSessionTranscript_sessionId_fkey"
-            columns: ["sessionId"]
+            foreignKeyName: "DesignSessionTranscriptLink_designSessionId_fkey"
+            columns: ["designSessionId"]
             isOneToOne: false
             referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscriptLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscriptLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscriptLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscriptLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionTranscriptLink_transcriptRefId_fkey"
+            columns: ["transcriptRefId"]
+            isOneToOne: false
+            referencedRelation: "TranscriptRef"
             referencedColumns: ["id"]
           },
         ]
@@ -2700,9 +2679,6 @@ export type Database = {
           notes: string | null
           sprintId: string | null
           title: string | null
-          transcript: string | null
-          transcriptSource: string | null
-          transcriptSourceId: string | null
           type: string
           updatedAt: string
           visibility: string
@@ -2716,9 +2692,6 @@ export type Database = {
           notes?: string | null
           sprintId?: string | null
           title?: string | null
-          transcript?: string | null
-          transcriptSource?: string | null
-          transcriptSourceId?: string | null
           type?: string
           updatedAt: string
           visibility?: string
@@ -2732,9 +2705,6 @@ export type Database = {
           notes?: string | null
           sprintId?: string | null
           title?: string | null
-          transcript?: string | null
-          transcriptSource?: string | null
-          transcriptSourceId?: string | null
           type?: string
           updatedAt?: string
           visibility?: string
@@ -4100,6 +4070,518 @@ export type Database = {
           },
         ]
       }
+      PMReview: {
+        Row: {
+          archivedAt: string | null
+          createdAt: string
+          facilitatorId: string | null
+          id: string
+          projectId: string
+          publishedAt: string | null
+          referenceWeek: string
+          reportGeneratedAt: string | null
+          reportMarkdown: string | null
+          scheduledFor: string | null
+          status: string
+          updatedAt: string
+        }
+        Insert: {
+          archivedAt?: string | null
+          createdAt?: string
+          facilitatorId?: string | null
+          id?: string
+          projectId: string
+          publishedAt?: string | null
+          referenceWeek: string
+          reportGeneratedAt?: string | null
+          reportMarkdown?: string | null
+          scheduledFor?: string | null
+          status?: string
+          updatedAt?: string
+        }
+        Update: {
+          archivedAt?: string | null
+          createdAt?: string
+          facilitatorId?: string | null
+          id?: string
+          projectId?: string
+          publishedAt?: string | null
+          referenceWeek?: string
+          reportGeneratedAt?: string | null
+          reportMarkdown?: string | null
+          scheduledFor?: string | null
+          status?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PMReview_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReview_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReview_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReview_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReview_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      PMReviewMeetingLink: {
+        Row: {
+          id: string
+          linkedAt: string
+          linkedById: string | null
+          meetingId: string
+          note: string | null
+          pmReviewId: string
+        }
+        Insert: {
+          id?: string
+          linkedAt?: string
+          linkedById?: string | null
+          meetingId: string
+          note?: string | null
+          pmReviewId: string
+        }
+        Update: {
+          id?: string
+          linkedAt?: string
+          linkedById?: string | null
+          meetingId?: string
+          note?: string | null
+          pmReviewId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PMReviewMeetingLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewMeetingLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewMeetingLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewMeetingLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewMeetingLink_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewMeetingLink_pmReviewId_fkey"
+            columns: ["pmReviewId"]
+            isOneToOne: false
+            referencedRelation: "PMReview"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      PMReviewNote: {
+        Row: {
+          content: string
+          dismissedAt: string | null
+          generatedAt: string
+          generatedByAgent: string | null
+          generatedByMemberId: string | null
+          id: string
+          kind: string
+          pmReviewId: string
+          priority: number
+          sourceMeetingIds: string[]
+          sourceTranscriptIds: string[]
+        }
+        Insert: {
+          content: string
+          dismissedAt?: string | null
+          generatedAt?: string
+          generatedByAgent?: string | null
+          generatedByMemberId?: string | null
+          id?: string
+          kind: string
+          pmReviewId: string
+          priority?: number
+          sourceMeetingIds?: string[]
+          sourceTranscriptIds?: string[]
+        }
+        Update: {
+          content?: string
+          dismissedAt?: string | null
+          generatedAt?: string
+          generatedByAgent?: string | null
+          generatedByMemberId?: string | null
+          id?: string
+          kind?: string
+          pmReviewId?: string
+          priority?: number
+          sourceMeetingIds?: string[]
+          sourceTranscriptIds?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PMReviewNote_generatedByMemberId_fkey"
+            columns: ["generatedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewNote_generatedByMemberId_fkey"
+            columns: ["generatedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewNote_generatedByMemberId_fkey"
+            columns: ["generatedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewNote_generatedByMemberId_fkey"
+            columns: ["generatedByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewNote_pmReviewId_fkey"
+            columns: ["pmReviewId"]
+            isOneToOne: false
+            referencedRelation: "PMReview"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      PMReviewTranscriptLink: {
+        Row: {
+          id: string
+          linkedAt: string
+          linkedById: string | null
+          note: string | null
+          pmReviewId: string
+          transcriptRefId: string
+          weight: string | null
+        }
+        Insert: {
+          id?: string
+          linkedAt?: string
+          linkedById?: string | null
+          note?: string | null
+          pmReviewId: string
+          transcriptRefId: string
+          weight?: string | null
+        }
+        Update: {
+          id?: string
+          linkedAt?: string
+          linkedById?: string | null
+          note?: string | null
+          pmReviewId?: string
+          transcriptRefId?: string
+          weight?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PMReviewTranscriptLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewTranscriptLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewTranscriptLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewTranscriptLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewTranscriptLink_pmReviewId_fkey"
+            columns: ["pmReviewId"]
+            isOneToOne: false
+            referencedRelation: "PMReview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewTranscriptLink_transcriptRefId_fkey"
+            columns: ["transcriptRefId"]
+            isOneToOne: false
+            referencedRelation: "TranscriptRef"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProductRequirement: {
+        Row: {
+          acceptanceCriteria: Json
+          approvedAt: string | null
+          approvedBy: string | null
+          createdAt: string
+          dependencies: Json
+          designSessionId: string | null
+          dismissedAt: string | null
+          goal: string
+          id: string
+          markdown: string
+          moduleId: string | null
+          oneLiner: string
+          outOfScope: string[]
+          personaIds: string[]
+          problem: string
+          projectId: string
+          reference: string
+          risksAndAssumptions: Json
+          sourceCardIds: string[]
+          status: string
+          successMetrics: Json
+          technicalNotes: string
+          title: string
+          updatedAt: string
+          userJourney: Json
+          version: number
+        }
+        Insert: {
+          acceptanceCriteria?: Json
+          approvedAt?: string | null
+          approvedBy?: string | null
+          createdAt?: string
+          dependencies?: Json
+          designSessionId?: string | null
+          dismissedAt?: string | null
+          goal?: string
+          id?: string
+          markdown?: string
+          moduleId?: string | null
+          oneLiner?: string
+          outOfScope?: string[]
+          personaIds?: string[]
+          problem?: string
+          projectId: string
+          reference: string
+          risksAndAssumptions?: Json
+          sourceCardIds?: string[]
+          status?: string
+          successMetrics?: Json
+          technicalNotes?: string
+          title: string
+          updatedAt?: string
+          userJourney?: Json
+          version?: number
+        }
+        Update: {
+          acceptanceCriteria?: Json
+          approvedAt?: string | null
+          approvedBy?: string | null
+          createdAt?: string
+          dependencies?: Json
+          designSessionId?: string | null
+          dismissedAt?: string | null
+          goal?: string
+          id?: string
+          markdown?: string
+          moduleId?: string | null
+          oneLiner?: string
+          outOfScope?: string[]
+          personaIds?: string[]
+          problem?: string
+          projectId?: string
+          reference?: string
+          risksAndAssumptions?: Json
+          sourceCardIds?: string[]
+          status?: string
+          successMetrics?: Json
+          technicalNotes?: string
+          title?: string
+          updatedAt?: string
+          userJourney?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProductRequirement_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_moduleId_fkey"
+            columns: ["moduleId"]
+            isOneToOne: false
+            referencedRelation: "Module"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProductRequirementActivity: {
+        Row: {
+          actorAgent: string | null
+          actorMemberId: string | null
+          createdAt: string
+          diff: Json
+          id: string
+          kind: string
+          productRequirementId: string
+        }
+        Insert: {
+          actorAgent?: string | null
+          actorMemberId?: string | null
+          createdAt?: string
+          diff?: Json
+          id?: string
+          kind: string
+          productRequirementId: string
+        }
+        Update: {
+          actorAgent?: string | null
+          actorMemberId?: string | null
+          createdAt?: string
+          diff?: Json
+          id?: string
+          kind?: string
+          productRequirementId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProductRequirementActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirementActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirementActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirementActivity_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirementActivity_productRequirementId_fkey"
+            columns: ["productRequirementId"]
+            isOneToOne: false
+            referencedRelation: "ProductRequirement"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       Project: {
         Row: {
           alphaHierarchyEnabled: boolean
@@ -4918,6 +5400,7 @@ export type Database = {
           notes: string | null
           personaScope: string | null
           priority: number
+          productRequirementId: string | null
           projectId: string
           qualityFlags: string[] | null
           reference: string | null
@@ -4952,6 +5435,7 @@ export type Database = {
           notes?: string | null
           personaScope?: string | null
           priority?: number
+          productRequirementId?: string | null
           projectId: string
           qualityFlags?: string[] | null
           reference?: string | null
@@ -4986,6 +5470,7 @@ export type Database = {
           notes?: string | null
           personaScope?: string | null
           priority?: number
+          productRequirementId?: string | null
           projectId?: string
           qualityFlags?: string[] | null
           reference?: string | null
@@ -5038,6 +5523,13 @@ export type Database = {
             columns: ["designSessionId"]
             isOneToOne: false
             referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Task_productRequirementId_fkey"
+            columns: ["productRequirementId"]
+            isOneToOne: false
+            referencedRelation: "ProductRequirement"
             referencedColumns: ["id"]
           },
           {
@@ -5596,42 +6088,54 @@ export type Database = {
       }
       TranscriptRef: {
         Row: {
+          actionItems: Json
           byline: string | null
           capturedAt: string | null
+          endedAt: string | null
           fullText: string | null
           id: string
           importedAt: string
           importedById: string | null
           meetingId: string | null
+          participants: Json
           source: string
           sourceId: string | null
           storagePath: string | null
+          summary: string | null
           title: string | null
         }
         Insert: {
+          actionItems?: Json
           byline?: string | null
           capturedAt?: string | null
+          endedAt?: string | null
           fullText?: string | null
           id?: string
           importedAt?: string
           importedById?: string | null
           meetingId?: string | null
+          participants?: Json
           source: string
           sourceId?: string | null
           storagePath?: string | null
+          summary?: string | null
           title?: string | null
         }
         Update: {
+          actionItems?: Json
           byline?: string | null
           capturedAt?: string | null
+          endedAt?: string | null
           fullText?: string | null
           id?: string
           importedAt?: string
           importedById?: string | null
           meetingId?: string | null
+          participants?: Json
           source?: string
           sourceId?: string | null
           storagePath?: string | null
+          summary?: string | null
           title?: string | null
         }
         Relationships: [
@@ -6192,6 +6696,7 @@ export type Database = {
         Args: { p_session_id: string }
         Returns: boolean
       }
+      can_create_pm_review: { Args: { p_project_id: string }; Returns: boolean }
       can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_edit_session: { Args: { p_session_id: string }; Returns: boolean }
       can_edit_sessions: { Args: { p_project_id: string }; Returns: boolean }
@@ -6274,6 +6779,10 @@ export type Database = {
       persona_journey_upsert: {
         Args: { p_kind: string; p_persona_id: string; p_step: Json }
         Returns: Json
+      }
+      prd_render_markdown: {
+        Args: { p: Database["public"]["Tables"]["ProductRequirement"]["Row"] }
+        Returns: string
       }
       refresh_agent_usage_hourly_mv: { Args: never; Returns: undefined }
       renumber_sprints_chronologically: {
