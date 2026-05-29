@@ -139,6 +139,306 @@ export type Database = {
         }
         Relationships: []
       }
+      AgentCalibrationCapture: {
+        Row: {
+          agentSlug: string
+          capturedAt: string
+          capturedById: string | null
+          category: string
+          chatDump: string | null
+          createdAt: string
+          designSessionId: string | null
+          duplicateOfId: string | null
+          evalCaseAdded: boolean
+          evalCaseFile: string | null
+          expectedBehavior: string | null
+          id: string
+          meetingId: string | null
+          notes: string | null
+          observedBehavior: string
+          planningCeremonyId: string | null
+          projectId: string | null
+          runbookScenarioRef: string | null
+          screenshotPath: string | null
+          severity: string
+          status: string
+          threadId: string | null
+          updatedAt: string
+          userPrompt: string
+        }
+        Insert: {
+          agentSlug: string
+          capturedAt?: string
+          capturedById?: string | null
+          category: string
+          chatDump?: string | null
+          createdAt?: string
+          designSessionId?: string | null
+          duplicateOfId?: string | null
+          evalCaseAdded?: boolean
+          evalCaseFile?: string | null
+          expectedBehavior?: string | null
+          id?: string
+          meetingId?: string | null
+          notes?: string | null
+          observedBehavior: string
+          planningCeremonyId?: string | null
+          projectId?: string | null
+          runbookScenarioRef?: string | null
+          screenshotPath?: string | null
+          severity?: string
+          status?: string
+          threadId?: string | null
+          updatedAt?: string
+          userPrompt: string
+        }
+        Update: {
+          agentSlug?: string
+          capturedAt?: string
+          capturedById?: string | null
+          category?: string
+          chatDump?: string | null
+          createdAt?: string
+          designSessionId?: string | null
+          duplicateOfId?: string | null
+          evalCaseAdded?: boolean
+          evalCaseFile?: string | null
+          expectedBehavior?: string | null
+          id?: string
+          meetingId?: string | null
+          notes?: string | null
+          observedBehavior?: string
+          planningCeremonyId?: string | null
+          projectId?: string | null
+          runbookScenarioRef?: string | null
+          screenshotPath?: string | null
+          severity?: string
+          status?: string
+          threadId?: string | null
+          updatedAt?: string
+          userPrompt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "AgentCalibrationCapture_capturedById_fkey"
+            columns: ["capturedById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_capturedById_fkey"
+            columns: ["capturedById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_capturedById_fkey"
+            columns: ["capturedById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_capturedById_fkey"
+            columns: ["capturedById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_duplicateOfId_fkey"
+            columns: ["duplicateOfId"]
+            isOneToOne: false
+            referencedRelation: "AgentCalibrationCapture"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_planningCeremonyId_fkey"
+            columns: ["planningCeremonyId"]
+            isOneToOne: false
+            referencedRelation: "PlanningCeremony"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationCapture_threadId_fkey"
+            columns: ["threadId"]
+            isOneToOne: false
+            referencedRelation: "ChatThread"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      AgentCalibrationFix: {
+        Row: {
+          agentSlug: string
+          appliedAt: string
+          appliedById: string | null
+          captureId: string
+          commitHash: string | null
+          description: string
+          filesChanged: string[]
+          fixKind: string
+          id: string
+          scenarioPassedAfter: boolean | null
+          scenarioPassedBefore: boolean | null
+          scoreAfter: Json | null
+          scoreBefore: Json | null
+        }
+        Insert: {
+          agentSlug: string
+          appliedAt?: string
+          appliedById?: string | null
+          captureId: string
+          commitHash?: string | null
+          description: string
+          filesChanged?: string[]
+          fixKind: string
+          id?: string
+          scenarioPassedAfter?: boolean | null
+          scenarioPassedBefore?: boolean | null
+          scoreAfter?: Json | null
+          scoreBefore?: Json | null
+        }
+        Update: {
+          agentSlug?: string
+          appliedAt?: string
+          appliedById?: string | null
+          captureId?: string
+          commitHash?: string | null
+          description?: string
+          filesChanged?: string[]
+          fixKind?: string
+          id?: string
+          scenarioPassedAfter?: boolean | null
+          scenarioPassedBefore?: boolean | null
+          scoreAfter?: Json | null
+          scoreBefore?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "AgentCalibrationFix_appliedById_fkey"
+            columns: ["appliedById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationFix_appliedById_fkey"
+            columns: ["appliedById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationFix_appliedById_fkey"
+            columns: ["appliedById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationFix_appliedById_fkey"
+            columns: ["appliedById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentCalibrationFix_captureId_fkey"
+            columns: ["captureId"]
+            isOneToOne: false
+            referencedRelation: "AgentCalibrationCapture"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      AgentCalibrationScoreboard: {
+        Row: {
+          agentSlug: string
+          costUsd: number | null
+          createdAt: string
+          fixtureRef: string | null
+          id: string
+          maxScore: number
+          passRate: number | null
+          regressionFromPrior: boolean
+          regressionNotes: string | null
+          runDurationMs: number | null
+          scenariosBlocked: number
+          scenariosFailed: number
+          scenariosPassed: number
+          scores: Json
+          snapshotDate: string
+          totalScore: number | null
+        }
+        Insert: {
+          agentSlug: string
+          costUsd?: number | null
+          createdAt?: string
+          fixtureRef?: string | null
+          id?: string
+          maxScore: number
+          passRate?: number | null
+          regressionFromPrior?: boolean
+          regressionNotes?: string | null
+          runDurationMs?: number | null
+          scenariosBlocked?: number
+          scenariosFailed?: number
+          scenariosPassed?: number
+          scores: Json
+          snapshotDate: string
+          totalScore?: number | null
+        }
+        Update: {
+          agentSlug?: string
+          costUsd?: number | null
+          createdAt?: string
+          fixtureRef?: string | null
+          id?: string
+          maxScore?: number
+          passRate?: number | null
+          regressionFromPrior?: boolean
+          regressionNotes?: string | null
+          runDurationMs?: number | null
+          scenariosBlocked?: number
+          scenariosFailed?: number
+          scenariosPassed?: number
+          scores?: Json
+          snapshotDate?: string
+          totalScore?: number | null
+        }
+        Relationships: []
+      }
       AgentConfig: {
         Row: {
           agentId: string
@@ -1026,6 +1326,7 @@ export type Database = {
           currentStep: number
           description: string | null
           id: string
+          isMain: boolean
           memoryAbstract: string | null
           memoryMd: string | null
           memoryUpdatedAt: string | null
@@ -1051,6 +1352,7 @@ export type Database = {
           currentStep?: number
           description?: string | null
           id?: string
+          isMain?: boolean
           memoryAbstract?: string | null
           memoryMd?: string | null
           memoryUpdatedAt?: string | null
@@ -1076,6 +1378,7 @@ export type Database = {
           currentStep?: number
           description?: string | null
           id?: string
+          isMain?: boolean
           memoryAbstract?: string | null
           memoryMd?: string | null
           memoryUpdatedAt?: string | null
@@ -4995,6 +5298,50 @@ export type Database = {
           },
         ]
       }
+      ProjectResource: {
+        Row: {
+          createdAt: string
+          id: string
+          kind: string
+          notes: string | null
+          order: number
+          projectId: string
+          title: string
+          updatedAt: string
+          url: string | null
+        }
+        Insert: {
+          createdAt?: string
+          id?: string
+          kind: string
+          notes?: string | null
+          order?: number
+          projectId: string
+          title: string
+          updatedAt?: string
+          url?: string | null
+        }
+        Update: {
+          createdAt?: string
+          id?: string
+          kind?: string
+          notes?: string | null
+          order?: number
+          projectId?: string
+          title?: string
+          updatedAt?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectResource_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ProjectSquad: {
         Row: {
           id: string
@@ -5032,30 +5379,42 @@ export type Database = {
         Row: {
           createdAt: string
           data: Json
+          generatedAt: string | null
+          generatedBy: string | null
           id: string
           order: number
           projectId: string
+          schemaVersion: number | null
           sectionKey: string
+          suppressed: Json
           title: string
           updatedAt: string
         }
         Insert: {
           createdAt?: string
           data?: Json
+          generatedAt?: string | null
+          generatedBy?: string | null
           id?: string
           order?: number
           projectId: string
+          schemaVersion?: number | null
           sectionKey: string
+          suppressed?: Json
           title: string
           updatedAt: string
         }
         Update: {
           createdAt?: string
           data?: Json
+          generatedAt?: string | null
+          generatedBy?: string | null
           id?: string
           order?: number
           projectId?: string
+          schemaVersion?: number | null
           sectionKey?: string
+          suppressed?: Json
           title?: string
           updatedAt?: string
         }
@@ -5065,6 +5424,41 @@ export type Database = {
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProjectWikiSectionSource: {
+        Row: {
+          bulletHash: string
+          extractedAt: string
+          id: string
+          sourceId: string
+          sourceType: string
+          wikiSectionId: string
+        }
+        Insert: {
+          bulletHash: string
+          extractedAt?: string
+          id?: string
+          sourceId: string
+          sourceType: string
+          wikiSectionId: string
+        }
+        Update: {
+          bulletHash?: string
+          extractedAt?: string
+          id?: string
+          sourceId?: string
+          sourceType?: string
+          wikiSectionId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectWikiSectionSource_wikiSectionId_fkey"
+            columns: ["wikiSectionId"]
+            isOneToOne: false
+            referencedRelation: "ProjectWikiSection"
             referencedColumns: ["id"]
           },
         ]
@@ -6452,6 +6846,7 @@ export type Database = {
           currentStep: number | null
           description: string | null
           id: string | null
+          isMain: boolean | null
           item_count: number | null
           projectId: string | null
           scheduledAt: string | null
@@ -6698,6 +7093,7 @@ export type Database = {
       }
       can_create_pm_review: { Args: { p_project_id: string }; Returns: boolean }
       can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
+      can_edit_project: { Args: { p_project_id: string }; Returns: boolean }
       can_edit_session: { Args: { p_session_id: string }; Returns: boolean }
       can_edit_sessions: { Args: { p_project_id: string }; Returns: boolean }
       can_edit_tasks: { Args: { p_project_id: string }; Returns: boolean }
@@ -6738,10 +7134,14 @@ export type Database = {
         Returns: {
           createdAt: string
           data: Json
+          generatedAt: string | null
+          generatedBy: string | null
           id: string
           order: number
           projectId: string
+          schemaVersion: number | null
           sectionKey: string
+          suppressed: Json
           title: string
           updatedAt: string
         }[]

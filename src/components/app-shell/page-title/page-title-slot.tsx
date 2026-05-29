@@ -18,6 +18,9 @@ const STATIC_FALLBACKS: Record<string, string> = {
   "/profile/skills": "Skills",
   "/profile/pdi": "PDI",
   "/settings": "Configurações",
+  "/settings/account": "Configurações",
+  "/settings/appearance": "Configurações",
+  "/settings/integrations": "Configurações",
   "/workflow": "Workflow",
 };
 

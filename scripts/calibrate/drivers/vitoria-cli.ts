@@ -19,15 +19,15 @@
  */
 import "dotenv/config";
 import { readFileSync } from "node:fs";
-import { runAgent } from "../src/lib/agent/engine";
-import { vitoriaAgent } from "../src/lib/agent/agents/vitoria";
+import { runAgent } from "../../../src/lib/agent/engine";
+import { vitoriaAgent } from "../../../src/lib/agent/agents/vitoria";
 import {
   ensurePlanningThread,
   persistUserMessage,
   persistAssistantMessage,
-} from "../src/lib/agent/context";
-import { db } from "../src/lib/db";
-import type { Capabilities } from "../src/lib/agent/types";
+} from "../../../src/lib/agent/context";
+import { db } from "../../../src/lib/db";
+import type { Capabilities } from "../../../src/lib/agent/types";
 
 type PlanningPhase = "idle" | "reading" | "proposing" | "approving" | "closed" | "archived";
 
