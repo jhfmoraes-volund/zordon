@@ -51,3 +51,30 @@ Now let me prepare the final output summary:
 iter 2026-05-29T23:25:00Z: PASS VTRDISC-004
   files: src/lib/agent/prompt.ts
   learnings: Substituído bloco STORY_DETAIL (linhas 648-676) por PRD_REVIEW. Fluxo: list_prds → update_prd/approve_prd. Critério de terminação explícito: "step briefing completo quando todos PRDs aprovados". targetPrdId (não targetStoryId). Sub-phase terminal.
+Excellent! Type errors fixed and committed.
+
+---
+
+## Iteração 4 — VTRDISC-004 concluída (com fix)
+
+**Story escolhida:** VTRDISC-004 — Reescrever Sub-phase STORY_DETAIL no prompt → PRD_REVIEW
+
+**Verificações executadas:**
+1. ✓ `grep -cE 'Sub-phase STORY_DETAIL|sub-phase story_detail'` → 0 (sem referências a STORY_DETAIL)
+2. ✓ `grep -cE 'Sub-phase PRD_REVIEW|sub-phase prd_review'` → 1 (PRD_REVIEW presente)
+3. ✓ `npx tsc --noEmit` → exit 0 (após fix)
+
+**Implementação:**
+- Substituiu bloco STORY_DETAIL (linhas 648-676) por PRD_REVIEW
+- Fluxo: `list_prds` → `update_prd` (partial updates) → `approve_prd`
+- Critério de terminação: "Step briefing completo quando todos PRDs aprovados"
+- Adicionado `targetPrdId?: string` ao `BriefingSectionInput` interface (type fix)
+
+**Commit hash:** 
+- f269064 (implementação principal)
+- 3bf6a95 (fix de tipos)
+
+**Próximo passo sugerido:** Stories VTRDISC-005, -007, -008 são elegíveis (dependem apenas de VTRDISC-001). Próxima iteração deve escolher VTRDISC-005 (menor id lexicográfico).
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS VTRDISC-005
+  files: src/lib/agent/prompt.ts
+  learnings: Removed entire TASK_BREAKDOWN sub-phase (lines 677-902, ~225 lines). Also removed acRubric and idempotencyNote constants (references to create_user_story/create_task). Prompt reduced from 1536 to 1340 lines (-196). Updated tool references in Nivel 2 confirmation rules and MODULE_DISCOVERY "NAO" section to use propose_prd/update_prd instead of create_user_story/create_task.

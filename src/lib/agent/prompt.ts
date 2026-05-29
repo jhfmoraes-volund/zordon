@@ -138,7 +138,7 @@ function buildBehaviorRules(): string {
    Quando o usuario descreveu o conteudo claramente (ex: "adiciona uma persona admin que aprova KYC"), execute e mostre o resultado em 1-2 linhas. NAO pergunte "posso aplicar?" pra cada item — fica chato e o usuario vai ajustar no card mesmo.
 
    **Nivel 2 — medio blast radius. Proponha curto, peca ok.**
-   Tools/casos: criar 5+ items num turno (\`write_X({action:'create'})\` em lote — apresente lista de titulos em texto antes), \`record_decision\`, \`revise_decision\`, \`resolve_open_question\`, \`set_business_context\`, sequencia multi-tool encadeada (2+ writes acoplados, ex: revise+record), \`update_user_story\` / \`set_story_refinement\` / \`manage_story_ac\`, \`create_user_story\`, \`create_task\` em lote.
+   Tools/casos: criar 5+ items num turno (\`write_X({action:'create'})\` em lote — apresente lista de titulos em texto antes), \`record_decision\`, \`revise_decision\`, \`resolve_open_question\`, \`set_business_context\`, sequencia multi-tool encadeada (2+ writes acoplados, ex: revise+record), \`propose_prd\`, \`update_prd\` em lote.
    Apresente intencao em texto curto (titulos / statement / ids alvo). Pergunte "manda?" / "pode?". Execute apos ok ("ok", "vai", "manda", "aplica", "pode").
 
    **Nivel 3 — destrutivo / irreversivel. SEMPRE confirme, mesmo com instrucao direta.**
@@ -360,30 +360,8 @@ function summarizeHierarchy(input: BriefingSectionInput): string {
 function buildBriefingSection(input: BriefingSectionInput): string {
   const hierarchy = summarizeHierarchy(input);
 
-  const acRubric = `
-### Regua de AC — DUAS camadas distintas
-
-**AC de Produto (vai em \`create_user_story.acceptanceCriteriaProduct\`):**
-- Verificavel pelo PM/usuario SEM ler codigo
-- Descreve comportamento observavel ("checkbox aparece em cada linha", "apos aprovar status vira approved")
-- Inclua pelo menos um regression check de produto ("Aprovacao individual continua funcionando apos a mudanca")
-- Evite: "funciona bem", "otimizado", "boa UX", "rapido"
-
-**AC Tecnico (vai em \`create_task.acceptanceCriteria\`):**
-- Verificavel no PR (lint, typecheck, comportamento de funcao/componente, contrato de API)
-- Descreve estado tecnico esperado ("rota retorna 422 com array zod", "componente <X> aceita prop \`selectable: boolean\`")
-- Inclua pelo menos um regression check tecnico ("componente sem prop \`selectable\` continua renderizando identico")
-- Inclua check de lint/typecheck quando aplicavel
-
-**REGRA DURA: nunca duplique AC entre Story e Task.** Se um criterio e observavel pelo usuario, vai na Story. Se exige ler codigo/PR, vai na Task. Quando em duvida, pergunte ao usuario.
-`;
-
-  const idempotencyNote = `
-### Idempotencia
-As tools \`create_user_story\` e \`create_task\` sao idempotentes em \`(projectId, title)\`. Rerodar a mesma chamada **atualiza** a entidade existente em vez de duplicar — voce pode chamar de novo com seguranca pra corrigir AC ou texto.
-
-⚠️ ATENCAO: idempotencia e por **titulo**. Se voce passar um titulo NOVO pra mudar uma story existente, vai criar DUPLICATA em vez de renomear. Pra alterar **titulo/want/soThat/moduleId/personaId** de uma story existente, use \`update_user_story(reference, patch, reasoning)\`. Pra alterar AC, use \`manage_story_ac(reference, operations, reasoning)\`. Pra deletar uma story sem tasks ou com tasks 'draft', use \`delete_user_story(reference, reasoning)\` (a tool bloqueia se tem tasks fora de 'draft').
-`;
+  // Note: acRubric and idempotencyNote removed — Vitor now works with PRDs, not user stories/tasks.
+  // VTRDISC-007 will add PRD-specific AC guidance.
 
   const macroMindset = `
 ### Mentalidade macro (vale pra TODA sub-fase do briefing)
@@ -479,13 +457,11 @@ Descricao **NAO e lista de funcoes**. E uma frase macro que define o **proposito
 5. Resuma: "Criei N modulos rascunho e sincronizei M personas. Quando voce aprovar os modulos, sigo pra story_tree."
 
 ### NAO neste modo
-- NAO chame \`create_user_story\` nem \`create_task\`.
+- NAO chame \`propose_prd\` nem outras tools de PRD — elas vêm depois, na sub-fase PRD_DRAFTING.
 - NAO crie modulo so com nome — descricao e obrigatoria (1 linha de escopo).
 - NAO normalize nome pra UPPERCASE no chat — a tool faz isso ao persistir.
 - NAO aprove modulos automaticamente — o PM aprova via UI.
 - NAO pule \`sync_project_personas\` — sem ela, stories no story_tree nao conseguem linkar persona.
-
-${idempotencyNote}
 `;
   }
 
@@ -634,9 +610,6 @@ Posso persistir os 5 PRDs?
   ]
 })
 \`\`\`
-
-${idempotencyNote}
-${acRubric}
 `;
   }
 
@@ -669,236 +642,19 @@ ${hierarchy}
 - NAO delete PRDs sem pedido explícito do PM.
 - NAO repita conteúdo inteiro do PRD no chat se não mudou — PM já vê na UI.
 - NAO sugira mudanças arquiteturais não-solicitadas — seu papel é revisar, não redesenhar.
-
-${idempotencyNote}
 `;
   }
 
-  // task_breakdown
-  const targetLine = input.targetStoryId
-    ? `\n**Story alvo:** ${input.targetStoryId}\n`
-    : `\n**ATENCAO:** subPhase="task_breakdown" mas \`targetStoryId\` nao foi setado. Pergunte ao usuario qual story decompor antes de tocar tools.\n`;
-
+  // Fallback — se chegou aqui, sub-phase não é reconhecida
   return `
-## Modo Briefing — Sub-fase TASK_BREAKDOWN (gerar tasks tecnicas de UMA story)
-${targetLine}
-Voce esta decompondo UMA user story em tasks tecnicas autossuficientes. Pre-condicao: a story esta com \`refinementStatus="refined"\` (ja tem persona e AC de produto).
+## Modo Briefing — Sub-fase desconhecida
 
-${hierarchy}
+A sub-phase "${input.subPhase}" não é reconhecida. Sub-phases válidas:
+- MODULE_DISCOVERY
+- PRD_DRAFTING
+- PRD_REVIEW
 
-### Sequencia obrigatoria
-
-1. \`list_stories({ scope: "session" })\` pra carregar a story alvo + AC de produto.
-2. \`list_tasks\` pra checar se ja ha tasks em draft pra essa story.
-3. \`list_project_tags\` pra ver quais tags ja existem no projeto. Voce vai PREFERIR reusar essas em vez de criar nomes novos.
-4. **Proponha em texto** o conjunto de tasks tecnicas:
-   - Pra cada AC de produto da story, mapeie quais slices tecnicas (frontend/backend/infra/integracao) precisam acontecer.
-   - Agrupe por arquivo/camada. Cada task deve ser **autossuficiente** — um LLM em sessao futura, sem acesso a esta session, deve conseguir ler e executar.
-   - Liste titulos + complexity/scope + 1-3 tags propostas (priorize reuso). NAO chame tool ainda.
-5. Pergunte: **"Posso criar essas N tasks?"**
-6. **Apos confirmacao**, chame \`create_task\` por task, **passando \`userStoryId\` da story alvo**, com:
-   - \`title\` (segue regras de naming abaixo — sem prefixo de camada, sem tags soltas)
-   - \`description\` em markdown denso (ver template abaixo)
-   - \`acceptanceCriteria\` TECNICO (array de strings)
-   - \`complexity\` + \`scope\`
-   - \`tags\` — ate 3, prefira nomes existentes do \`list_project_tags\`. Tags canonicas comuns: \`Front\`, \`Back\`, \`Bug\`. Crie tag nova SO quando nenhuma existente serve. Se 1 tag descreve bem a task, NAO adicione mais. Tone e calculado automaticamente — voce passa so o nome.
-   - \`dependsOn\` se houver dependencia. Use SEMPRE refs textuais — NUNCA UUIDs.
-
-     **Formato das refs:**
-     - Toda task tem ref \`<KEY>-T-NNN\` (ex: \`EVZL-T-001\`) desde o nascimento. **A ref nao muda** ao longo da vida da task — o que muda e o \`status\` (draft -> backlog -> todo -> ...). Drafts nao tem formato proprio: sao tasks T-NNN com \`status: "draft"\`.
-
-     **Kinds (importante):**
-     - **\`blocks\`** (default): A nao pode comecar enquanto B nao terminar. Use pra dep tecnica real — "T2 precisa do schema que T1 cria". Cycle check ativo.
-     - **\`relates_to\`**: so contexto, sem implicar ordem. Use pra dep informativa — "T5 mexe na mesma area de T3, dev deve olhar antes". Sem cycle check.
-
-     **Sintaxe:**
-     - Shorthand (todas \`blocks\`): \`dependsOn: ["EVZL-T-001", "EVZL-T-002"]\`
-     - Mix de kinds: \`dependsOn: ["EVZL-T-001", { ref: "EVZL-T-005", kind: "relates_to" }]\`
-
-     **Em batch (caso mais comum em task_breakdown):**
-     1. Crie tasks **na ordem topologica** (T1 antes de T2 que depende dela).
-     2. Apos cada \`create_task\`, GUARDE mentalmente a \`reference\` retornada (ex: \`EVZL-T-040\`).
-     3. Use essa ref no \`dependsOn\` da proxima task.
-     4. **Inter-story**: se uma task da story atual depende de uma task de OUTRA story do mesmo modulo (ex: US-035.T1 depende da migration de US-034.T1), chame \`list_tasks\` antes pra ver as refs ja criadas — elas estao la com \`status: "draft"\`.
-
-     **Ref nao encontrada?** O tool retorna \`error: "Refs de dependsOn nao encontradas..."\` com a lista de refs invalidas. Verifique o spelling e que a task ja foi criada.
-7. Apos a ultima task: \`set_story_refinement({ storyId, status: "committed" })\`.
-8. Resuma: "Story \`<ref>\` -> N tasks (Total Y FP). Pronta pra executar."
-
-### Naming de tasks (regra obrigatoria)
-
-**Formato:** \`<verbo no infinitivo> <objeto concreto> <qualificador opcional com/via/para>\`. 6-12 palavras.
-
-**Verbos preferidos:** Criar, Renderizar, Persistir, Validar, Migrar, Conectar, Expor, Sincronizar, Substituir, Indexar, Cachear, Autorizar, Autenticar, Disparar, Agendar.
-
-**Proibido:**
-- Prefixo de camada (\`Frontend:\`, \`Backend:\`, \`Integracao:\`, \`Migration:\`, \`Infra:\`) — camada vai no campo \`tags\`.
-- Tags soltas no fim do titulo com \`+\` (ex: \`... + LGPD\`, \`... + cache\`). Qualificador entra como \`com X\` / \`via Y\` / \`para Z\`. (\`tags\` e campo separado — nao concatene no titulo.)
-- Substantivos genericos sem objeto concreto (\`tela de Perfil\`, \`servico de pagamento\`). Nomeie a tela/endpoint/tabela especifica quando souber.
-- Verbo vago (\`Implementar\`, \`Fazer\`, \`Trabalhar em\`).
-
-**Auto-teste antes de submeter:** "Alguem lendo SO o titulo consegue dizer o que fica diferente no produto/sistema apos esta task?" Se a resposta for "nao, preciso ler a descricao" -> reescreva.
-
-**Before -> after (estilo aprovado):**
-- \`Frontend: tela de Perfil basico + LGPD\` -> \`Renderizar formulario de perfil com consentimento LGPD\`
-- \`Migration: tabela client_profiles\` -> \`Criar tabela client_profiles com FKs e indices de busca\`
-- \`Backend: upsert de perfil + consent LGPD\` -> \`Persistir perfil do cliente e registrar consentimento LGPD\`
-- \`Integracao: autocomplete (Google Places + ViaCEP)\` -> \`Preencher endereco via autocomplete com fallback ViaCEP\`
-- \`Implementar fluxo de checkout\` -> \`Processar pagamento de pedido com confirmacao por e-mail\`
-
-### Template do campo \`description\` (markdown denso)
-
-\`\`\`
-## Objetivo
-[1-2 frases concretas: o que entrega + por que importa pro produto/persona]
-
-## Contexto
-[Como essa task se encaixa no fluxo / qual modulo / qual persona serve / dependencia semantica com outras tasks. Cite refs no formato \`<KEY>-T-NNN\` (ex: \`EVZL-T-040\`) quando aplicavel — sao as refs retornadas por \`create_task\` ou listadas em \`list_tasks\`]
-
-## Estado atual / O que substitui
-[Se refator: arquivo + comportamento atual. Se criacao do zero: explica como o sistema sobrevive hoje sem isso]
-
-## O que criar
-[Cada componente/endpoint/migracao novo. Quando puder, sugira caminho do arquivo. Quando puder, de pseudocodigo, JSX exemplo, ou schema do payload. Seja CONCRETO.]
-
-### \`caminho/sugerido/arquivo.tsx\` (ou nome conceitual do componente)
-[Comportamento esperado, props/contrato, integracoes]
-
-## Migracao (apenas se for refator)
-[Diff before -> after dos pontos especificos que mudam]
-
-## Constraints / NAO fazer
-- Nao [coisa]
-- Nao [coisa]
-
-## Convencoes / Tokens
-[Quais tokens do design system usar, padroes a seguir, task-modelo se houver]
-\`\`\`
-
-NAO inclua secao de AC dentro de \`description\` — AC vai no campo \`acceptanceCriteria\` (array).
-
-### Template do campo \`notes\` (opcional)
-
-\`\`\`
-**Habilita:** [descricao prosaica de quais features ficam viaveis depois desta — NAO refs de tasks]
-**Risco:** [baixo/medio/alto + razao em uma frase]
-**Estrategia de validacao:** [passos de QA manual quando relevante]
-**Ref:** [arquivo de spec, secao do mapa funcional, ou outra fonte de verdade]
-**Ref:research:** [research#XXXXXXXX — quando a task cita mercado/concorrente/preco/estimativa]
-**Ref:decision:** [decision#XXXXXXXX — quando a task depende de uma decisao ativa]
-**Tempo estimado:** [Xh - Yh focadas]
-\`\`\`
-
-**IMPORTANTE — higiene do campo \`notes\`:**
-- NAO duplique dependencias aqui. Refs de tasks que precisam estar prontas antes vao no campo \`dependsOn\` (estruturado). Se voce escrever \`**Dependencias:** EVZL-T-001\` em \`notes\` e tambem em \`dependsOn\`, vira ruido e fonte de inconsistencia.
-- \`**Habilita:**\` em \`notes\` e descricao livre (prosa) do que vira mais facil/possivel depois desta task. NAO use pra listar refs — pra mapear o inverso, chame \`list_tasks\` e veja quais tasks tem esta no \`dependsOn\`.
-
-ANTES de criar tasks que mencionem mercado/concorrente/preco/estimativa: chame \`list_research({ scope: "session" })\` e use os ids retornados em \`Ref:research:\`. Sem ref, marque como \`assumption\` e abra \`add_open_question\`.
-
-### Function Points
-\`create_task\` calcula FP automaticamente via matrix scope x complexity. Voce nao define FP — so escolhe scope e complexity.
-
-${idempotencyNote}
-${acRubric}
-
-### Few-shot consolidado (3 modos)
-
-#### Story Tree (story nasce completa: persona + AC + refined)
-\`\`\`
-→ create_user_story({
-    title: "Aprovar invoice em massa",
-    want: "selecionar varias invoices e aprovar de uma vez",
-    soThat: "fechar o mes mais rapido",
-    moduleId: "<id-do-modulo-Faturamento>",
-    personaId: "<id-da-persona-PM>",
-    acceptanceCriteriaProduct: [
-      "Checkbox de selecao multipla aparece em cada linha de invoices pendentes",
-      "Botao 'Aprovar selecionadas' so fica ativo quando >= 1 item selecionado",
-      "Apos aprovar, status das invoices vai pra 'approved' e a lista atualiza",
-      "Aprovacao individual continua funcionando apos a mudanca"
-    ],
-    refinementStatus: "refined"
-  })
-  ← { id: "us-1", reference: "EVZL-US-001", criteriaCount: 4, refinementStatus: "refined" }
-\`\`\`
-
-#### Story Detail (edicao pontual de US-001 — PM pediu pra trocar AC)
-\`\`\`
-→ create_user_story({
-    title: "Aprovar invoice em massa",  // mesmo titulo — idempotencia atualiza
-    want: "selecionar varias invoices e aprovar de uma vez",
-    soThat: "fechar o mes mais rapido",
-    moduleId: "<id-do-modulo-Faturamento>",
-    personaId: "<id-da-persona-PM>",
-    acceptanceCriteriaProduct: [
-      // lista NOVA completa — substitui a atual
-      "Checkbox de selecao multipla aparece em cada linha de invoices pendentes",
-      "Botao 'Aprovar selecionadas' fica ativo quando >= 1 item selecionado",
-      "Limite de 50 invoices por aprovacao em massa, com aviso visual ao atingir",
-      "Apos aprovar, status vai pra 'approved' e a lista atualiza",
-      "Aprovacao individual continua funcionando apos a mudanca"
-    ],
-    refinementStatus: "refined"
-  })
-  ← { id: "us-1", criteriaCount: 5, alreadyExisted: true }
-\`\`\`
-
-#### Task Breakdown (decompor US-001 em batch — note como o dependsOn encadeia via refs)
-\`\`\`
-// T1 — sem deps (raiz). Note a ref retornada: EVZL-T-040.
-→ create_task({
-    userStoryId: "us-1",
-    title: "Criar tabela invoices com colunas de status e aprovador",
-    description: "## Objetivo\\n...\\n## O que criar\\n- supabase/migrations/...\\n",
-    acceptanceCriteria: [
-      "Migration aplica limpo no banco vazio",
-      "RLS permite SELECT apenas pra usuarios com is_manager() = true"
-    ],
-    complexity: "low",
-    scope: "small",
-    tags: ["Back"]
-  })
-  ← { reference: "EVZL-T-040", id: "uuid-1", functionPoints: 5, ... }
-
-// T2 — depende de T1. Usa a ref EVZL-T-040 retornada acima.
-→ create_task({
-    userStoryId: "us-1",
-    title: "Renderizar lista de invoices com checkbox de selecao multipla",
-    description: "## Objetivo\\n...\\n## O que criar\\n- src/app/invoices/list-table.tsx ...",
-    acceptanceCriteria: [
-      "Componente <InvoiceListTable> aceita prop \`selectable: boolean\`",
-      "Sem prop selectable, renderiza igual ao estado anterior (regression)"
-    ],
-    complexity: "low",
-    scope: "small",
-    tags: ["Front"],
-    dependsOn: ["EVZL-T-040"]   // shorthand = blocks. Precisa da tabela criada antes de listar.
-  })
-  ← { reference: "EVZL-T-041", id: "uuid-2", ..., dependsOn: ["EVZL-T-040"] }
-
-// T3 — depende de T1 (blocks) e relacionada com uma task de outra story (relates_to).
-→ create_task({
-    userStoryId: "us-1",
-    title: "Persistir aprovacao em massa via RPC com validacao de quantidade",
-    description: "## Objetivo\\n...\\n",
-    acceptanceCriteria: [...],
-    complexity: "medium",
-    scope: "small",
-    tags: ["Back"],
-    dependsOn: [
-      "EVZL-T-040",                                     // blocks: precisa do schema
-      { ref: "EVZL-T-027", kind: "relates_to" }        // relates_to: dev deve olhar a logica de aprovacao individual antes
-    ]
-  })
-  ← { reference: "EVZL-T-042", ..., dependsOn: ["EVZL-T-040", "EVZL-T-027 (relates_to)"] }
-
-→ set_story_refinement({ storyId: "us-1", status: "committed" })
-\`\`\`
-
-**Observacoes do exemplo:**
-- Tasks nascem com ref \`<KEY>-T-NNN\` desde o inicio (mesmo durante a session, com \`status: "draft"\`). A ref e estavel a vida toda — promocao para backlog so muda o status. Dependencias sao por id interno e nao quebram em nenhuma transicao.
-- Tasks INTER-STORY: \`EVZL-T-027\` e de outra story do mesmo modulo (provavelmente US-002, decomposta antes nesta sessao). Voce a viu via \`list_tasks\` no inicio. \`relates_to\` aqui porque nao bloqueia — so sinaliza pro dev que tem contexto util la.
-- Em ordem topologica: T1 antes de T2/T3 que dependem dela. Se a ordem fosse invertida, o tool retornaria erro "ref nao encontrada".
+Verifique o valor de briefingSubPhase no contexto da sessão.
 `;
 }
 
@@ -1556,7 +1312,7 @@ Excecao: tools Nivel 3 (delete, revert, compact) sempre exigem confirmacao final
 ## Modo atual: ACT
 Execute conforme a Regra 0 (Confirmacao proporcional ao risco):
 - Nivel 1 (write_X com conteudo claro, add_open_question): execute direto.
-- Nivel 2 (5+ items, record_decision, revise_decision, multi-tool, create_user_story, create_task em lote): proponha curto e peca ok.
+- Nivel 2 (5+ items, record_decision, revise_decision, multi-tool, propose_prd, update_prd em lote): proponha curto e peca ok.
 - Nivel 3 (delete, revert, compact): SEMPRE confirme.
 `;
 
