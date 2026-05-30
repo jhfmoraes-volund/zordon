@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { createReadTranscriptContentTool } from "../../tools/read-transcript-content";
+import { createReadContextSourceTool } from "../../tools/read-context-source";
 
 /**
  * Vitor-specific tools.
@@ -7,6 +7,6 @@ import { createReadTranscriptContentTool } from "../../tools/read-transcript-con
  */
 export function buildVitorTools(): ToolSet {
   return {
-    read_transcript_content: createReadTranscriptContentTool(),
+    read_context_source: createReadContextSourceTool(),
   };
 }

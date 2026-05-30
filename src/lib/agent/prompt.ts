@@ -237,7 +237,7 @@ function buildBehaviorRules(): string {
 function buildTranscriptsBlock(transcripts: TranscriptContextItem[]): string {
   if (!transcripts?.length) return "";
 
-  // CTXIMP-008: lista transcripts linkados SEM fullText; instrui uso de read_transcript_content.
+  // CTXSRC-013: lista context sources linkados SEM fullText; instrui uso de read_context_source.
   const blocks = transcripts
     .map((t) => {
       const start = new Date(t.meetingStart);
@@ -249,7 +249,7 @@ function buildTranscriptsBlock(transcripts: TranscriptContextItem[]): string {
           .join("\n") || "(nenhum)";
 
       return `### ${t.meetingTitle} — ${date}
-**transcriptRefId**: \`${t.id}\`
+**contextSourceId**: \`${t.id}\`
 Participantes: ${people}
 Resumo: ${t.summary ?? "(sem resumo)"}
 Action items:
@@ -258,14 +258,14 @@ ${actions}`;
     .join("\n\n---\n\n");
 
   return `
-## Fontes de contexto linkadas (transcripts)
+## Fontes de contexto linkadas
 
-Voce tem ${transcripts.length} transcript(s) linkado(s) a esta Design Session.
-**Para ler o conteudo completo de qualquer transcript**, use a tool:
+Voce tem ${transcripts.length} fonte(s) de contexto linkada(s) a esta Design Session (transcripts, planilhas, repositorios GitHub).
+**Para ler o conteudo completo de qualquer fonte**, use a tool:
 
-  read_transcript_content({ transcriptRefId: "<id>" })
+  read_context_source({ sourceId: "<id>" })
 
-Ela retorna o fullText extraido + metadados. Use quando o usuario perguntar sobre o que foi discutido, ou quando precisar de detalhe alem do resumo.
+Ela retorna o fullText extraido + metadados + kind (transcript | meeting | spreadsheet_csv | spreadsheet_gsheets | github_repo | github_pr | github_issue). Use quando o usuario perguntar sobre o que foi discutido/documentado, ou quando precisar de detalhe alem do resumo.
 
 ${blocks}
 `;

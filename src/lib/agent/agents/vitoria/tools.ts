@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { addContextNote } from "@/lib/dal/planning";
 import { getStepData } from "@/lib/agent/context";
 import { applyMarkdownMutation } from "@/lib/agent/tools/_markdown";
-import { createReadTranscriptContentTool } from "@/lib/agent/tools/read-transcript-content";
+import { createReadContextSourceTool } from "@/lib/agent/tools/read-context-source";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 type MeetingTaskActionUpdate = Database["public"]["Tables"]["MeetingTaskAction"]["Update"];
@@ -348,7 +348,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
       },
     }),
 
-    read_transcript_content: createReadTranscriptContentTool(),
+    read_context_source: createReadContextSourceTool(),
 
     list_project_sprints: tool({
       description:

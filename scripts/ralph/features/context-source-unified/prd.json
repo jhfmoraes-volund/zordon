@@ -487,7 +487,8 @@
         "src/lib/agent/agents/vitoria/prompt.ts",
         "src/components/design-session/pre-work-step.tsx",
         "src/components/pm-review/pm-review-insumos-sheet.tsx"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-015",

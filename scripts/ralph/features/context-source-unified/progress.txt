@@ -352,3 +352,40 @@ iter 2026-05-30T12:00:00Z: PASS CTXSRC-011
 iter 2026-05-30T13:30:00Z: PASS CTXSRC-012
   files: src/components/agent/context-import/spreadsheet-modal.tsx, src/components/agent/context-import/github-source-modal.tsx, src/components/agent/context-import/context-insumos-sheet.tsx, src/components/agent/context-import/context-link-list.tsx, src/components/ui/tabs.tsx
   learnings: UI tabs via shadcn (npx shadcn add tabs). ContextInsumosSheet agora com Tabs (Tudo/Transcripts/Planilhas/GitHub) + DropdownMenu "Importar novo" com 3 opções. ContextLinkList aceita kind opcional, exibe badge por tipo (Transcrição/CSV/GSheets/PR/Issue/Repo). Modais (spreadsheet-modal + github-source-modal) vivem em agent/context-import/ (não em pm-review ou design-session, regra D15 de paridade). GitBranch (não Github) de lucide-react. DropdownMenuTrigger não aceita asChild (Base UI), usar className direto.
+Perfeito! Commit `b46d4c3` criado e pushado para origin e staging.
+
+---
+
+## Ralph Iteration 12 — Summary
+
+**Story escolhida:** CTXSRC-012 — UI: ContextInsumosSheet com tabs por kind + modais import
+
+**Verificações executadas:**
+- ✅ `spreadsheet-modal.tsx` e `github-source-modal.tsx` criados em `agent/context-import/`
+- ✅ Zero modais em `src/components/{pm-review,design-session}/` (regra D15 de paridade)
+- ✅ `ContextInsumosSheet` renderiza Tabs com 19 ocorrências (`Tabs|TabsList`)
+- ✅ TypeScript compilation passes (`npx tsc --noEmit` exit 0)
+
+**Implementação:**
+- **shadcn tabs:** Instalado via `npx shadcn add tabs`
+- **ContextInsumosSheet:** Refatorado com `<Tabs>` (4 tabs: Tudo/Transcripts/Planilhas/GitHub)
+  - `filterByKind()` filtra items por `context_source_kind`
+  - `renderPoolSection()` e `renderImportSection()` helpers
+  - `DropdownMenu` com 3 opções de import (Transcrição/Planilha/GitHub) quando `onImportSpreadsheet` ou `onImportGitHub` fornecidos
+- **ContextLinkList:** Atualizado para aceitar `kind?: context_source_kind`
+  - `sourceIcon()` despacha por kind (Mic/FileSpreadsheet/GitBranch)
+  - `KIND_BADGE` exibe badge por tipo (Transcrição/CSV/GSheets/PR/Issue/Repo)
+- **SpreadsheetModal:** Toggle CSV/GSheets, upload base64 para CSV, URL para GSheets
+- **GitHubSourceModal:** Parser de URL detecta kind (repo/pr/issue) + preview
+
+**Ajustes técnicos:**
+- **lucide-react:** `Github` icon não existe → usamos `GitBranch`
+- **DropdownMenuTrigger:** Não aceita `asChild` prop (Base UI wrapper) → usamos `className` direto com estilos de Button
+- **Lint:** Corrigido aspas escapadas (`&ldquo;` / `&rdquo;`) e imports não-usados
+
+**Commit:** `b46d4c3` — pushed to both origin and staging remotes (branch joao-dev via --force-branch)
+
+**Próximo passo sugerido:** CTXSRC-013 (Wiring Vitor + Vitoria com read_context_source) e CTXSRC-014 (Migration H — drop legacy tables) são agora elegíveis. CTXSRC-013 depende de [CTXSRC-011, CTXSRC-012] (ambos passes: true). CTXSRC-014 depende apenas de CTXSRC-013. CTXSRC-013 tem menor id lexicográfico.
+iter 2026-05-30T03:38:51Z: PASS CTXSRC-013
+  files: src/lib/agent/agents/vitor/tools.ts, src/lib/agent/agents/vitoria/tools.ts, src/lib/agent/prompt.ts, src/lib/agent/agents/vitoria/prompt.ts
+  learnings: Vitor e Vitoria agora usam read_context_source (não read_transcript_content). Prompts atualizados pra mencionar sourceId + kind. pre-work-step.tsx já estava correto (usa StepActions portal, não <ContextRibbon direto). AC menciona useProvideStepActions mas implementação real usa StepActions component diretamente (padrão portal-based).
