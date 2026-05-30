@@ -14,6 +14,15 @@ import {
 import { Field, FormBody } from "@/components/ui/field";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { useAuth } from "@/contexts/auth-context";
+
+function todayISO(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 type SprintOption = {
   id: string;
@@ -41,7 +50,11 @@ type Props = {
   projectId: string;
   /** Quando presente, sheet opera em modo edição. */
   planning?: ExistingPlanning | null;
-  onCreate?: (sprintId: string | null) => Promise<void>;
+  onCreate?: (input: {
+    sprintId: string | null;
+    facilitatorId: string | null;
+    scheduledFor: string | null;
+  }) => Promise<void>;
   onUpdated?: () => void;
   onDeleted?: () => void;
   /** Quando presente, sobrescreve o DELETE interno — caller controla a chamada (ex: delete otimista numa lista). */
@@ -61,6 +74,7 @@ export function PlanningSheet({
   saving = false,
 }: Props) {
   const isEdit = !!planning;
+  const { member: currentMember } = useAuth();
 
   const [sprints, setSprints] = useState<SprintOption[]>([]);
   const [members, setMembers] = useState<MemberOption[]>([]);
@@ -102,10 +116,10 @@ export function PlanningSheet({
       );
     } else {
       setSprintId("");
-      setFacilitatorId("");
-      setScheduledFor("");
+      setFacilitatorId(currentMember?.id ?? "");
+      setScheduledFor(todayISO());
     }
-  }, [open, planning, fetchOptions]);
+  }, [open, planning, fetchOptions, currentMember?.id]);
 
   const handleClose = () => {
     if (busy || saving) return;
@@ -136,7 +150,11 @@ export function PlanningSheet({
         setBusy(false);
       }
     } else {
-      await onCreate?.(sprintId || null);
+      await onCreate?.({
+        sprintId: sprintId || null,
+        facilitatorId: facilitatorId || null,
+        scheduledFor: scheduledFor || null,
+      });
     }
   };
 

@@ -301,7 +301,8 @@
         "src/lib/agent/agents/vitor/tools.ts",
         "src/lib/agent/agents/vitor/index.ts",
         "src/lib/agent/agents/vitor/prompt.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXIMP-009",

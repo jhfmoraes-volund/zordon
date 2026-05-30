@@ -222,14 +222,18 @@ export function ProjectCeremoniesTab({
     return { published: pub, staging: stg };
   }, [visible]);
 
-  async function handleCreatePlanning(sprintId: string | null) {
+  async function handleCreatePlanning(input: {
+    sprintId: string | null;
+    facilitatorId: string | null;
+    scheduledFor: string | null;
+  }) {
     if (creatingPlanning) return;
     setCreatingPlanning(true);
     try {
       const res = await fetchOrThrow("/api/planning", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, sprintId }),
+        body: JSON.stringify({ projectId, ...input }),
       });
       const created = (await res.json()) as { id: string };
       setPlanningSheetOpen(false);

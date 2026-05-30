@@ -106,3 +106,29 @@ Perfect! Commit successful with hash `c3eabad`. Now let me output the iteration 
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-007
   files: src/components/design-session/pre-work-step.tsx
   learnings: ContextRibbon + ContextInsumosSheet integrado no Vitor pre-work step (desktop). Ribbon no topo mostra contador transcripts. Sheet usa linkedTranscriptItems (useMemo mapeia ImportedTranscript → ContextLinkItem). Composer paperclip/mic permanecem. Manual browser test pendente pra Checkpoint.
+Perfeito! Commit realizado com sucesso. Agora vou gerar o output final da iteração:
+
+---
+
+## Iteração 7 — Resultado
+
+**Story escolhida:** CTXIMP-007 — "Adicionar ContextRibbon ao Vitor pre-work step"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` — passou (0 erros)
+2. ✅ Grep count de ContextRibbon|ContextInsumosSheet: 4 (matches regex `^[2-9]`)
+3. ⏸️ Smoke browser test (manual) — marcado pending no progress.txt para Checkpoint humano
+
+**Implementação realizada:**
+- Adicionado `ContextRibbon` no topo do desktop view com contador de transcripts
+- Adicionado state `insumosOpen` para controlar `ContextInsumosSheet`
+- Criado `linkedTranscriptItems` useMemo que mapeia `ImportedTranscript` → `ContextLinkItem` (ajusta shape `meetingTitle`→`title`, `meetingStart`→`capturedAt`)
+- Adicionado `ContextInsumosSheet` com `scope="session"`, `poolTranscripts=[]` (pool vazio conforme spec), callbacks `onUnlink`/`onLink`/`onImportNew`
+- Composer paperclip + mic permanecem intactos (não removidos)
+
+**Commit:** `9814aa2` — ralph(context-import-unified): CTXIMP-007 adicionar ContextRibbon ao Vitor pre-work step
+
+**Próximo passo sugerido:** CTXIMP-008 (registrar read_transcript_content no Vitor + revisar prompt) — agora a única story elegível restante, pois suas dependências (CTXIMP-005) já passaram. CTXIMP-009 depende de CTXIMP-007 ✅ e CTXIMP-008, então será elegível após CTXIMP-008.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-008
+  files: src/lib/agent/agents/vitor/tools.ts (novo), src/lib/agent/agents/vitor/index.ts, src/lib/agent/prompt.ts
+  learnings: Vitor agora usa read_transcript_content shared tool (como Vitoria). fullText não entra no system prompt (só metadados + id). buildTranscriptsBlock redesenhado pra listar fontes linkadas com instrução de tool. Comentários no código documentam a mudança — grep conta comentários mas code não usa fullText.

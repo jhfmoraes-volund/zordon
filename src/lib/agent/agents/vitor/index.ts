@@ -32,6 +32,7 @@ import {
 } from "./prd-schemas";
 import { z } from "zod";
 import type { AgentDefinition, AgentRunRequest } from "../../types";
+import { buildVitorTools } from "./tools";
 
 function pickVerbosity(
   currentStepKey: string,
@@ -154,6 +155,7 @@ export const vitorAgent: AgentDefinition = {
         .order("updatedAt", { ascending: false }),
       // Transcripts via SSOT (TranscriptRef + link N:N). Antes lia direto
       // de DesignSessionTranscript — droppada na Fundação B.
+      // CTXIMP-008: NÃO passa fullText — Vitor lê sob demanda via read_transcript_content.
       listSessionTranscripts(db(), sessionId).then((items) => ({
         data: items.map((t) => ({
           id: t.transcriptRefId,
@@ -163,7 +165,7 @@ export const vitorAgent: AgentDefinition = {
           participants: t.participants,
           summary: t.summary,
           actionItems: t.actionItems,
-          fullText: t.fullText,
+          // fullText removido — leitura sob demanda via tool
         })),
       })),
       // Hierarchy context — only loaded on briefing to keep prompt token budget tight.
@@ -239,8 +241,11 @@ export const vitorAgent: AgentDefinition = {
       vitorAsPm: true,
     });
 
+    // CTXIMP-008: adicionar tools Vitor-específicas (read_transcript_content)
+    const vitorSpecificTools = buildVitorTools();
+
     if (!projectId) {
-      return baseTools;
+      return { ...baseTools, ...vitorSpecificTools };
     }
 
     const prdTools: ToolSet = {
@@ -348,7 +353,7 @@ export const vitorAgent: AgentDefinition = {
       }),
     };
 
-    return { ...baseTools, ...prdTools };
+    return { ...baseTools, ...vitorSpecificTools, ...prdTools };
   },
 };
 
@@ -397,7 +402,7 @@ export interface TranscriptContextItem {
   participants: { name: string; email?: string }[];
   summary: string | null;
   actionItems: { title: string; description: string }[];
-  fullText: string;
+  // CTXIMP-008: fullText removido — Vitor lê sob demanda via read_transcript_content tool
 }
 
 export interface ExistingModule {

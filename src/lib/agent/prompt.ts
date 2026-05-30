@@ -237,6 +237,7 @@ function buildBehaviorRules(): string {
 function buildTranscriptsBlock(transcripts: TranscriptContextItem[]): string {
   if (!transcripts?.length) return "";
 
+  // CTXIMP-008: lista transcripts linkados SEM fullText; instrui uso de read_transcript_content.
   const blocks = transcripts
     .map((t) => {
       const start = new Date(t.meetingStart);
@@ -248,20 +249,23 @@ function buildTranscriptsBlock(transcripts: TranscriptContextItem[]): string {
           .join("\n") || "(nenhum)";
 
       return `### ${t.meetingTitle} — ${date}
+**transcriptRefId**: \`${t.id}\`
 Participantes: ${people}
 Resumo: ${t.summary ?? "(sem resumo)"}
 Action items:
-${actions}
-
-<transcript id="${t.id}">
-${t.fullText}
-</transcript>`;
+${actions}`;
     })
     .join("\n\n---\n\n");
 
   return `
-## Transcricoes de reunioes importadas
-Voce tem acesso a ${transcripts.length} transcricao(oes) de reuniao(oes) reais sobre este projeto. Use como contexto adicional quando o usuario perguntar algo factual sobre o que foi discutido.
+## Fontes de contexto linkadas (transcripts)
+
+Voce tem ${transcripts.length} transcript(s) linkado(s) a esta Design Session.
+**Para ler o conteudo completo de qualquer transcript**, use a tool:
+
+  read_transcript_content({ transcriptRefId: "<id>" })
+
+Ela retorna o fullText extraido + metadados. Use quando o usuario perguntar sobre o que foi discutido, ou quando precisar de detalhe alem do resumo.
 
 ${blocks}
 `;

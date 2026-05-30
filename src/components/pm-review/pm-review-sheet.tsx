@@ -52,6 +52,14 @@ function mondayOfLocal(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function todayISO(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export function PMReviewSheet({
   open,
   onOpenChange,
@@ -64,6 +72,7 @@ export function PMReviewSheet({
   saving = false,
 }: Props) {
   const isEdit = !!pmReview;
+  const { member: currentMember } = useAuth();
 
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -99,10 +108,10 @@ export function PMReviewSheet({
       setReferenceWeek(pmReview.referenceWeek);
       setFacilitatorId(pmReview.facilitatorId ?? "");
     } else {
-      setReferenceWeek(mondayOfLocal(new Date()));
-      setFacilitatorId("");
+      setReferenceWeek(todayISO());
+      setFacilitatorId(currentMember?.id ?? "");
     }
-  }, [open, pmReview, fetchOptions]);
+  }, [open, pmReview, fetchOptions, currentMember?.id]);
 
   function handleWeekChange(raw: string) {
     if (!raw) {
