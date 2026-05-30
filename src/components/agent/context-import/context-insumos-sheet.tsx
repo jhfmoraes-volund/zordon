@@ -32,6 +32,10 @@ type Props = {
   onImportNew: () => void;
   showWeight?: boolean;
   scopeLabel?: ScopeLabels;
+  /** Conteúdo extra renderizado dentro da seção "Linkados", após a lista de transcripts. */
+  linkedExtras?: React.ReactNode;
+  /** Conteúdo extra renderizado após a seção "Pool". */
+  poolExtras?: React.ReactNode;
 };
 
 const DEFAULT_LABELS: Record<Props["scope"], ScopeLabels> = {
@@ -59,6 +63,8 @@ export default function ContextInsumosSheet({
   onImportNew,
   showWeight = false,
   scopeLabel,
+  linkedExtras,
+  poolExtras,
 }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -105,6 +111,7 @@ export default function ContextInsumosSheet({
                 emptyLabel={labels.empty ?? "Nenhum item linkado."}
                 busyId={busy}
               />
+              {linkedExtras}
             </section>
 
             {/* Section 2 — Pool (conditional) */}
@@ -159,6 +166,8 @@ export default function ContextInsumosSheet({
                 )}
               </section>
             )}
+
+            {poolExtras}
 
             {/* Section 3 — Importar novo */}
             <section>

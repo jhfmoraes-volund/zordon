@@ -69,3 +69,20 @@ iter 2026-05-30T01:04:40Z: PASS CTXIMP-004
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-005
   files: src/lib/agent/tools/read-transcript-content.ts, src/lib/agent/agents/vitoria/tools.ts
   learnings: Tool read_transcript_content extraída pra shared como factory — Vitoria importa, comportamento idêntico. Proxima iter: Vitor adota a mesma tool.
+---
+
+## Iteração 5 — Resultado
+
+**Story escolhida:** CTXIMP-005 — "Extrair read_transcript_content tool pra shared"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` — passou (0 erros)
+2. ✅ Arquivo `src/lib/agent/tools/read-transcript-content.ts` existe
+3. ✅ `vitoria/tools.ts` importa do shared (count: 1)
+
+**Commit:** `2a782d3` — ralph(context-import-unified): CTXIMP-005 extrair read_transcript_content tool pra shared
+
+**Próximo passo sugerido:** CTXIMP-006 (refatorar PM Review insumos sheet) ou CTXIMP-008 (registrar read_transcript_content no Vitor) — ambos elegíveis agora que CTXIMP-005 passou. CTXIMP-006 é menor lexicograficamente.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-006
+  files: src/components/pm-review/pm-review-insumos-sheet.tsx
+  learnings: Refactored PMReviewInsumosSheet to use ContextInsumosSheet primitive (199 lines, was 423). Used linkedExtras/poolExtras slots pra meetings (primitivo não suporta nativamente). Compact helper pra render meetings inline.
