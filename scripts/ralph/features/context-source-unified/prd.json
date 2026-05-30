@@ -148,7 +148,8 @@
       "estimateMinutes": 30,
       "touches": [
         "supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-005",

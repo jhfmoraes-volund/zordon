@@ -49,3 +49,28 @@ iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXSRC-002
 iter 2026-05-30T02:26:20Z: PASS CTXSRC-003
   files: supabase/migrations/20260530c_create_pm_review_context_link.sql, src/lib/supabase/database.types.ts
   learnings: RLS usa can_create_pm_review (helper existente) + can_view_project. Padrão espelhado de DesignSessionContextLink. source <(...) falhou com psql, necessário DIRECT_URL hardcoded.
+---
+
+## Ralph Iteration 3 — Summary
+
+**Story escolhida:** CTXSRC-003 — Migration C: PMReviewContextLink + RLS + helpers can_view/edit_pm_review
+
+**Verificações executadas:**
+- ✅ Migration file `20260530c_create_pm_review_context_link.sql` criado
+- ✅ Tabela `PMReviewContextLink` criada no DB com FK, unique constraint
+- ✅ RLS habilitada com 4 policies (select, insert, update, delete)
+- ✅ Helpers `can_create_pm_review` e `can_view_project` já existiam (reutilizados)
+- ✅ `database.types.ts` atualizado (7 ocorrências de PMReviewContextLink)
+- ✅ TypeScript compilation passes
+
+**Ajustes técnicos:**
+- Helper `can_create_pm_review` já existia desde migration 20260529d_pm_review.sql (não foi necessário criar)
+- Padrão RLS espelhado de `DesignSessionContextLink` (4 policies com lógica similar)
+- Workaround: `source <(grep...)` falhou com psql; necessário usar `DIRECT_URL` hardcoded
+
+**Commit:** `33495ca` — pushed to origin and staging remotes
+
+**Próximo passo sugerido:** CTXSRC-004 (Migration D — backfill TranscriptRef → ContextSource) e CTXSRC-005 (Migration E — backfill Meetings) são agora elegíveis, ambas dependem apenas de CTXSRC-001 (passes: true). CTXSRC-004 tem menor id lexicográfico.
+iter 2026-05-30T02:29:48Z: PASS CTXSRC-004
+  files: supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql, scripts/ralph/features/context-source-unified/prd.json
+  learnings: Backfill idempotente preserva id via ON CONFLICT (id) DO NOTHING. 18 TranscriptRef migrados. payload jsonb carrega source/sourceId/byline/meetingId. fullText preservado, summary=NULL (não existe em TranscriptRef). Workaround psql: DIRECT_URL hardcoded funciona, source <(...) falha com socket local.
