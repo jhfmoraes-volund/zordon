@@ -6994,6 +6994,145 @@ export type Database = {
           },
         ]
       }
+      PlanningSession: {
+        Row: {
+          id: string
+          projectId: string
+          status: "draft" | "orchestrating" | "in-review" | "approved" | "aborted" | "error"
+          title: string
+          facilitatorId: string | null
+          sprintCount: number
+          codebaseIndexSha: string | null
+          prdIndexSha: string | null
+          draftRoadmapJsonb: Json | null
+          agentOutputsJsonb: Json | null
+          orchestrateJobId: string | null
+          tokensUsed: number
+          costUsd: number
+          errorMessage: string | null
+          approvedAt: string | null
+          approvedBy: string | null
+          createdAt: string
+          updatedAt: string
+        }
+        Insert: {
+          id?: string
+          projectId: string
+          status?: "draft" | "orchestrating" | "in-review" | "approved" | "aborted" | "error"
+          title: string
+          facilitatorId?: string | null
+          sprintCount?: number
+          codebaseIndexSha?: string | null
+          prdIndexSha?: string | null
+          draftRoadmapJsonb?: Json | null
+          agentOutputsJsonb?: Json | null
+          orchestrateJobId?: string | null
+          tokensUsed?: number
+          costUsd?: number
+          errorMessage?: string | null
+          approvedAt?: string | null
+          approvedBy?: string | null
+          createdAt?: string
+          updatedAt?: string
+        }
+        Update: {
+          id?: string
+          projectId?: string
+          status?: "draft" | "orchestrating" | "in-review" | "approved" | "aborted" | "error"
+          title?: string
+          facilitatorId?: string | null
+          sprintCount?: number
+          codebaseIndexSha?: string | null
+          prdIndexSha?: string | null
+          draftRoadmapJsonb?: Json | null
+          agentOutputsJsonb?: Json | null
+          orchestrateJobId?: string | null
+          tokensUsed?: number
+          costUsd?: number
+          errorMessage?: string | null
+          approvedAt?: string | null
+          approvedBy?: string | null
+          createdAt?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PlanningSession_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      PlanningSessionPRD: {
+        Row: {
+          id: string
+          planningSessionId: string
+          prdSlug: string
+          sprintStart: number
+          sprintCount: number
+          order: number
+          assignedSquadId: string | null
+          agentJustification: string | null
+          ownerOverride: string | null
+          createdAt: string
+        }
+        Insert: {
+          id?: string
+          planningSessionId: string
+          prdSlug: string
+          sprintStart: number
+          sprintCount?: number
+          order: number
+          assignedSquadId?: string | null
+          agentJustification?: string | null
+          ownerOverride?: string | null
+          createdAt?: string
+        }
+        Update: {
+          id?: string
+          planningSessionId?: string
+          prdSlug?: string
+          sprintStart?: number
+          sprintCount?: number
+          order?: number
+          assignedSquadId?: string | null
+          agentJustification?: string | null
+          ownerOverride?: string | null
+          createdAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PlanningSessionPRD_planningSessionId_fkey"
+            columns: ["planningSessionId"]
+            isOneToOne: false
+            referencedRelation: "PlanningSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSessionPRD_assignedSquadId_fkey"
+            columns: ["assignedSquadId"]
+            isOneToOne: false
+            referencedRelation: "Squad"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       agent_quality_metrics: {

@@ -67,7 +67,8 @@
       "touches": [
         "src/lib/supabase/database.types.ts",
         "src/lib/dal/planning-session.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-003",
