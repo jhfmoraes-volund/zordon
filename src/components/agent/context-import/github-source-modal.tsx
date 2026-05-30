@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Github, Loader2, CheckCircle2 } from "lucide-react";
+import { GitBranch, Loader2, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -114,7 +114,7 @@ export function GitHubSourceModal({ open, onOpenChange, onImported, apiUrl, proj
 
         <div className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
           <SheetTitle className="flex items-center gap-2">
-            <Github className="h-4 w-4" />
+            <GitBranch className="h-4 w-4" />
             Importar do GitHub
           </SheetTitle>
           <p className="mt-1 text-xs text-muted-foreground">

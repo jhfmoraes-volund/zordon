@@ -6,14 +6,16 @@
   "userStories": [
     {
       "id": "FE-001",
-      "title": "Spec.md schema + parser + validator",
-      "description": "Define schema canônico do spec.md (5 seções) em Zod. Parser TS que lê .md → AST. Validator com erros úteis (linha + coluna). CLI `forge spec validate <path>`.",
+      "title": "Spec.md schema + parser + validator (cintura do duplo diamante)",
+      "description": "Define schema canônico do spec.md (5 seções obrigatórias + 1 opcional upstream) em Zod. Spec.md é a cintura imutável entre Diamond 1 (Entender) e Diamond 2 (Construir). Parser + validator + CLI.",
       "acceptanceCriteria": [
-        "src/lib/forge/spec/schema.ts exporta SpecSchema (Zod) e parseSpec(path: string): Spec",
+        "src/lib/forge/spec/schema.ts exporta SpecSchema (Zod) com 5 seções obrigatórias + 1 opcional (upstream)",
+        "parseSpec(path: string): Spec lê .md → AST",
         "src/lib/forge/spec/validator.ts: validateSpec(path) retorna { ok, errors[], spec? }",
         "scripts/forge/cli.ts ganha subcomando 'spec validate <path>' que exit 0 se ok, 1 se errors",
         "Erros incluem line:col da seção que falhou",
-        "Spec exemplo em docs/specs/example.md passa validação"
+        "Spec exemplo em docs/specs/example.md passa validação",
+        "Spec com seção upstream apontando pra DS/PRD/meeting é aceita (refs tipadas)"
       ],
       "verifiable": [
         { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },

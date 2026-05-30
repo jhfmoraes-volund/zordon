@@ -14,6 +14,56 @@
 
 ---
 
+## 0 · Filosofia FORGE — Duplo Diamante Agêntico
+
+> **A FORGE opera em dois diamantes consecutivos. Entender, depois Construir.**
+> **Não há atalho. Não há um sem o outro. Spec.md é a cintura.**
+
+```
+        ENTENDER                                     CONSTRUIR
+       ══════════                                    ══════════
+
+     discover      define                        develop       deliver
+        ◆◆◆◆◆     ◆◆◆◆◆                          ◆◆◆◆◆     ◆◆◆◆◆
+         \\\\\\   //////                            \\\\\\   //////
+          \\\\\ //////                               \\\\\ //////
+           \\\\Y/////                                 \\\\Y/////
+            \\\Y////                                   \\\Y////
+             \\Y///                                     \\Y///
+              \Y//                                       \Y//
+               Y/                                         Y/
+                ◆ ─────────► SPEC.MD ◄───────────────────► ◆
+              gate              │                           gate
+            humano               │                         humano
+                           imutável após
+                              aprovação
+
+
+   Diamond 1: ENTENDER                          Diamond 2: CONSTRUIR
+   ──────────────────                           ───────────────────
+   diverge → explorar problema                  diverge → planejar stories
+   converge → spec consolidado                  converge → commits + PR
+
+   Agentes (existem hoje):                      Agentes (este PRD constrói):
+   ● Vitor   — DS Inception                     ● Planner    — iter-0 plan mode
+   ● Vitoria — PM Review                        ● Orchestrator (TS local)
+   ● Alpha   — Ops scan                         ● Workers (db/api/ui/wiring/test/doc)
+
+   Artefato de saída:                           Artefato de saída:
+   docs/specs/active/<slug>.md                  ForgeRun status=done + PR aberto
+```
+
+**Regras do Duplo Diamante (não-negociáveis):**
+
+1. **Spec.md é imutável** após aprovação. Mudança = nova spec, nova run. (Equivalente ao "definition lock" do double diamond clássico.)
+2. **Humano sempre nos extremos**: aprova entrada no Diamond 1, aprova saída do Diamond 1 (Spec.md), aprova entrada do Diamond 2 (plan/DAG), aprova saída do Diamond 2 (PR merge). 4 gates totais.
+3. **Diamantes não se misturam**: Vitor não pode opinar sobre como Construir; Workers não voltam pra rediscutir o problema. Se a Spec.md está errada, o Diamond 2 falha — não a corrige.
+4. **A FORGE é a força que unifica os dois diamantes** sob uma marca, um sistema, um produto. Hoje Diamond 1 existe (Vitor/Vitoria/Alpha) e Diamond 2 é proto (Ralph). Este PRD constrói o Diamond 2 maduro. A unificação total é Phase ∞.
+
+**Escopo deste PRD**: exclusivamente o **Diamond 2 (Construir)**. Diamond 1 já existe e é orgânico ao app; tocar nele aqui dilui o foco. A interface entre os diamantes (Spec.md) é definida em FE-001.
+
+---
+
 ## 1 · Problema
 
 Hoje o Volund tem **dois sistemas de "agent factory" que não se conversam**:
@@ -31,7 +81,7 @@ A pirâmide de abstrações pra entregar uma feature é alta demais: **Ideia →
 
 ## 2 · Solução em uma frase
 
-**Forge ganha motor real (Ralph) e Ralph ganha face (Forge UI), unificados num único pipeline `Spec.md → Stories geradas → ForgeTask paralela em worktrees → ForgeEvent realtime → commit + UI live`.**
+**A FORGE absorve o Ralph como motor do seu Diamond 2 (Construir), executando `Spec.md → Stories geradas em plan-mode → ForgeTask paralela em worktrees → ForgeEvent realtime → commit + UI live`, fechando o duplo diamante agêntico num produto localhost-first.**
 
 ## 3 · Não-objetivos
 
@@ -74,6 +124,8 @@ A pirâmide de abstrações pra entregar uma feature é alta demais: **Ideia →
 | D13 | **Cost tracking via `claude -p --output-format=stream-json`**. Hook parser extrai usage + cost por iter. | Claude Code já retorna isso; só precisamos consumir. |
 | D14 | **Iter-0 (planner) usa modelo barato (Haiku 4.5)**; iter de execução usa profile-default (Opus 4.7 pra ui/api; Sonnet 4.6 pra db/test). | Plan é leitura + DAG; execução é raciocínio + edição. Custo otimizado. |
 | D15 | **Spec.md vive em `docs/specs/<slug>.md`**, NÃO em `docs/prd/`. Estados em filesystem: `specs/{draft,active,done,archive}/`. | Não polui o pipeline PRD legado. |
+| D16 | **Duplo Diamante Agêntico é a filosofia máxima da FORGE.** Spec.md é a cintura imutável entre Entender e Construir. Este PRD constrói apenas o Diamond 2; Diamond 1 já existe via Vitor/Vitoria/Alpha. | Sem essa separação clara, agentes upstream (discovery) contaminam decisões downstream (execução), gerando retrabalho. Ver §0. |
+| D17 | **Spec.md tem 5 seções obrigatórias** (goal, anchors, constraints, success-signals, non-goals) — mais a 6ª opcional (`upstream`) que aponta pra DS/PRD/conversa de origem (rastreabilidade Diamond 1 → Diamond 2 sem acoplamento). | Refs tipadas (memory `feedback_ambitious_features`). Spec sem origem é spec órfã. |
 
 ## 6 · Arquitetura
 
@@ -354,15 +406,21 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
 
 ## 11 · Faseamento
 
-**Fase 1 — Engine core (FE-001 a FE-008)**: spec parser, planner, orchestrator, worker, hooks, cost tracking. CLI mínima. Forge UI continua em mock. **Entrega: rodar uma spec inteira no terminal, fim a fim, paridade funcional com Ralph atual.**
+**Contexto do duplo diamante** (ver §0): este PRD constrói exclusivamente o **Diamond 2 (Construir)**. Diamond 1 (Entender) já existe — Vitor (DS Inception), Vitoria (PM Review), Alpha (Ops). A unificação total dos diamantes sob a marca FORGE é Phase ∞.
 
-**Fase 2 — UI plugada (FE-009 a FE-012)**: Forge UI consome dados reais (não mock). TaskSheet ganha aba Diff. CLI ganha comando `done` que abre PR. **Entrega: demo visual de uma spec rodando em paralelo no laptop.**
+**Fase 1 — Engine core (FE-001 a FE-008)** · *fecha o Diamond 2 no terminal*: spec parser (cintura), planner (iter-0, diverge), orchestrator (converge), worker, hooks, cost tracking. CLI mínima. Forge UI continua em mock. **Entrega: rodar uma spec inteira no terminal, fim a fim, paridade funcional com Ralph atual + paralelismo + profile specialization + cost telemetry.**
 
-**Fase 3 — Migração soft (post-merge, não neste PRD)**: documentar Ralph atual como deprecated, atualizar `AGENTS.md`, mover skill `/ralph` pra `/forge`. Apagar `scripts/ralph/*.sh`.
+**Fase 2 — UI plugada (FE-009 a FE-012)** · *Diamond 2 ganha rosto*: Forge UI consome dados reais (não mock). TaskSheet ganha aba Diff. CLI ganha comando `done` que abre PR. **Entrega: demo visual do Diamond 2 acontecendo em paralelo no laptop.**
 
-**Fase ∞ — Ambição futura**: DS → Spec auto-trigger, Vitor produz specs, multi-projeto paralelo, cloud runner.
+**Fase 3 — Migração soft (post-merge, não neste PRD)**: documentar Ralph atual como deprecated, atualizar `AGENTS.md` com a filosofia do duplo diamante, mover skill `/ralph` pra `/forge`. Apagar `scripts/ralph/*.sh`.
 
-**Fase 1 entrega mais que o sistema atual** porque (a) paralelismo real via worktree (Ralph atual é serial), (b) cost telemetry (Ralph atual não tem), (c) profile specialization (Ralph atual é genérico). Fase 2 entrega visibilidade que nem Ralph nem Forge tinham.
+**Fase ∞ — Unificação total dos diamantes**:
+- DS completion (Vitor/Vitoria) emite Spec.md diretamente (Diamond 1 → cintura)
+- Forge UI ganha tela `/forge/discover` que mostra DS em curso, candidatas a virarem Spec
+- Alpha rola scan periódico, propõe Specs (Diamond 1 autônomo)
+- Multi-projeto paralelo, cloud runner
+
+**Fase 1 entrega mais que o sistema atual** porque (a) paralelismo real via worktree (Ralph atual é serial), (b) cost telemetry (Ralph atual não tem), (c) profile specialization (Ralph atual é genérico), (d) cintura formalizada (hoje PRD inflado mistura Entender + Construir; Spec.md separa). Fase 2 entrega visibilidade que nem Ralph nem Forge tinham.
 
 ## 12 · Riscos
 
@@ -414,17 +472,22 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
 
 ```yaml
 - id: FE-001
-  title: Spec.md schema + parser + validator
+  title: Spec.md schema + parser + validator (cintura do duplo diamante)
   description: |
-    Define schema canônico do spec.md (5 seções: goal, anchors, constraints,
-    success-signals, non-goals) em Zod. Parser TS que lê .md → AST. Validator
-    com erros úteis (linha + coluna). CLI `forge spec validate <path>`.
+    Define schema canônico do spec.md em Zod — 5 seções obrigatórias (goal,
+    anchors, constraints, success-signals, non-goals) + 1 opcional `upstream`
+    (refs tipadas pra DS/PRD/meeting de origem, conforme D17). Spec.md é a
+    cintura imutável entre Diamond 1 (Entender) e Diamond 2 (Construir).
+    Parser TS lê .md → AST. Validator com erros úteis (linha + coluna). CLI
+    `forge spec validate <path>`.
   acceptanceCriteria:
-    - "src/lib/forge/spec/schema.ts exporta SpecSchema (Zod) e parseSpec(path: string): Spec"
+    - "src/lib/forge/spec/schema.ts exporta SpecSchema (Zod) com 5 seções obrigatórias + 1 opcional (upstream)"
+    - "parseSpec(path: string): Spec lê .md → AST"
     - "src/lib/forge/spec/validator.ts: validateSpec(path) retorna { ok, errors[], spec? }"
     - "scripts/forge/cli.ts ganha subcomando 'spec validate <path>' que exit 0 se ok, 1 se errors"
     - "Erros incluem line:col da seção que falhou"
     - "Spec exemplo em docs/specs/example.md passa validação"
+    - "Spec com seção upstream apontando pra DS/PRD/meeting é aceita (refs tipadas)"
   verifiable:
     - kind: typecheck
       command_or_query: "npx tsc --noEmit"

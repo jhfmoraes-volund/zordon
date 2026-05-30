@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Mic, Unlink, FileSpreadsheet, Github } from "lucide-react";
+import { FileText, Mic, Unlink, FileSpreadsheet, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { fmtDate as fmtShortDate } from "@/lib/date-utils";
@@ -31,7 +31,7 @@ function sourceIcon(source: string, kind?: Database["public"]["Enums"]["context_
     return <FileSpreadsheet className="size-3.5 shrink-0 text-muted-foreground" />;
   }
   if (kind === "github_repo" || kind === "github_pr" || kind === "github_issue") {
-    return <Github className="size-3.5 shrink-0 text-muted-foreground" />;
+    return <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />;
   }
   return <FileText className="size-3.5 shrink-0 text-muted-foreground" />;
 }
