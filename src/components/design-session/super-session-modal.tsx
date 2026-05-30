@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/contexts/auth-context";
 import {
   STEP_CATALOG,
   ALWAYS_FIRST,
@@ -54,10 +55,24 @@ export function SuperSessionModal({
 }) {
   const router = useRouter();
   const isMobile = useIsMobile();
+  const { member: currentMember } = useAuth();
   const [title, setTitle] = useState(`Inception ${projectName}`);
   const [selected, setSelected] = useState<string[]>(PRESETS.completa.keys);
+  const [facilitatorId, setFacilitatorId] = useState<string>("");
+  const [members, setMembers] = useState<Array<{ id: string; name: string }>>(
+    [],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setFacilitatorId(currentMember?.id ?? "");
+    fetch(`/api/projects/${projectId}/members`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ id: string; name: string }>) => setMembers(rows))
+      .catch(() => setMembers([]));
+  }, [open, projectId, currentMember?.id]);
 
   const applyPreset = (preset: Preset) => {
     setSelected(PRESETS[preset].keys);
@@ -102,6 +117,7 @@ export function SuperSessionModal({
           type: "super",
           title: title.trim(),
           selectedSteps: finalSteps,
+          facilitatorId: facilitatorId || null,
         }),
       });
       const json = await res.json();
@@ -155,6 +171,23 @@ export function SuperSessionModal({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Discovery rapido — modulo X"
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="super-facilitator">Facilitador</Label>
+            <select
+              id="super-facilitator"
+              value={facilitatorId}
+              onChange={(e) => setFacilitatorId(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="">— sem facilitador —</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid gap-2">

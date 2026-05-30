@@ -1325,6 +1325,7 @@ export type Database = {
           createdBy: string | null
           currentStep: number
           description: string | null
+          facilitatorId: string | null
           id: string
           isMain: boolean
           memoryAbstract: string | null
@@ -1351,6 +1352,7 @@ export type Database = {
           createdBy?: string | null
           currentStep?: number
           description?: string | null
+          facilitatorId?: string | null
           id?: string
           isMain?: boolean
           memoryAbstract?: string | null
@@ -1377,6 +1379,7 @@ export type Database = {
           createdBy?: string | null
           currentStep?: number
           description?: string | null
+          facilitatorId?: string | null
           id?: string
           isMain?: boolean
           memoryAbstract?: string | null
@@ -1432,6 +1435,34 @@ export type Database = {
           {
             foreignKeyName: "DesignSession_createdBy_fkey"
             columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
             isOneToOne: false
             referencedRelation: "member_summary"
             referencedColumns: ["id"]

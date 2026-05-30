@@ -14,7 +14,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { StickyNoteBoard } from "./sticky-note";
 import { useStepNotes } from "@/hooks/design-session/use-step-notes";
 import { isStepKey, type StepKey } from "@/lib/design-session/types";
-import { DSRibbon, StepSubHeader } from "./ribbon";
+import {
+  DSRibbon,
+  StepSubHeader,
+  StepActionsProvider,
+  useStepActionsSlot,
+} from "./ribbon";
 
 export function WizardLayout({
   sessionId,
@@ -98,76 +103,90 @@ export function WizardLayout({
   ) : null;
 
   return (
-    <div
-      className="flex flex-col h-full min-h-0"
-      aria-label={`Design Session: ${sessionTitle}`}
-      data-session-type={sessionType}
-    >
-      <DSRibbon
-        steps={steps}
-        currentStep={currentStep}
-        onStepClick={onStepClick}
-        leftSlot={ribbonLeft}
-        rightSlot={ribbonRight}
-      />
-
-      {step ? (
-        <StepSubHeader
-          step={step}
-          totalSteps={steps.length}
-          onPrevious={onPrevious}
-          onNext={onNext}
-          isFirst={isFirst}
-          isLast={isLast}
+    <StepActionsProvider>
+      <div
+        className="flex flex-col h-full min-h-0"
+        aria-label={`Design Session: ${sessionTitle}`}
+        data-session-type={sessionType}
+      >
+        <DSRibbon
+          steps={steps}
+          currentStep={currentStep}
+          onStepClick={onStepClick}
+          leftSlot={ribbonLeft}
+          rightSlot={ribbonRight}
         />
-      ) : null}
 
-      <div className={`flex-1 p-6 ${chat.isOpen ? "overflow-hidden" : "overflow-auto"}`}>
-        <div className="flex gap-6 h-full">
-          <main className={`flex-1 min-w-0 ${chat.isOpen ? "overflow-y-auto" : ""}`}>{children}</main>
-          {!hideSidePanels && (
-            chat.isOpen && !isMobile ? (
-              <aside className="hidden lg:flex shrink-0 w-[420px] h-full">
-                <ConversationPanel
-                  {...sharedChatProps}
-                  variant="desktop"
-                  onClose={chat.close}
-                />
-              </aside>
-            ) : (
-              <aside className="hidden lg:block shrink-0">
-                {step && isStepKey(step.key) ? (
-                  <StepNotesPanel sessionId={sessionId} stepKey={step.key} />
-                ) : null}
-              </aside>
-            )
-          )}
-        </div>
-      </div>
-
-      {!hideSidePanels && (
-        <>
-          <ConversationFab
-            agent="vitor"
-            isOpen={chat.isOpen}
-            isStreaming={chatStreaming}
-            onClick={chat.toggle}
+        {step ? (
+          <SubHeaderWithStepActions
+            step={step}
+            totalSteps={steps.length}
+            onPrevious={onPrevious}
+            onNext={onNext}
+            isFirst={isFirst}
+            isLast={isLast}
           />
-          {isMobile && (
-            <ConversationPanel
-              {...sharedChatProps}
-              variant="mobile"
+        ) : null}
+
+        <div className={`flex-1 p-6 ${chat.isOpen ? "overflow-hidden" : "overflow-auto"}`}>
+          <div className="flex gap-6 h-full">
+            <main className={`flex-1 min-w-0 ${chat.isOpen ? "overflow-y-auto" : ""}`}>{children}</main>
+            {!hideSidePanels && (
+              chat.isOpen && !isMobile ? (
+                <aside className="hidden lg:flex shrink-0 w-[420px] h-full">
+                  <ConversationPanel
+                    {...sharedChatProps}
+                    variant="desktop"
+                    onClose={chat.close}
+                  />
+                </aside>
+              ) : (
+                <aside className="hidden lg:block shrink-0">
+                  {step && isStepKey(step.key) ? (
+                    <StepNotesPanel sessionId={sessionId} stepKey={step.key} />
+                  ) : null}
+                </aside>
+              )
+            )}
+          </div>
+        </div>
+
+        {!hideSidePanels && (
+          <>
+            <ConversationFab
+              agent="vitor"
               isOpen={chat.isOpen}
-              onOpenChange={(open) => {
-                if (open !== chat.isOpen) chat.toggle();
-              }}
-              onClose={chat.close}
+              isStreaming={chatStreaming}
+              onClick={chat.toggle}
             />
-          )}
-        </>
-      )}
-    </div>
+            {isMobile && (
+              <ConversationPanel
+                {...sharedChatProps}
+                variant="mobile"
+                isOpen={chat.isOpen}
+                onOpenChange={(open) => {
+                  if (open !== chat.isOpen) chat.toggle();
+                }}
+                onClose={chat.close}
+              />
+            )}
+          </>
+        )}
+      </div>
+    </StepActionsProvider>
   );
+}
+
+function SubHeaderWithStepActions(props: {
+  step: StepDef;
+  totalSteps: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  isFirst: boolean;
+  isLast: boolean;
+}) {
+  const actions = useStepActionsSlot();
+  return <StepSubHeader {...props} actions={actions} />;
 }
 
 function StepNotesPanel({

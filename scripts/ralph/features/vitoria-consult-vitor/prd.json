@@ -1,0 +1,186 @@
+{
+  "feature": "vitoria-consult-vitor",
+  "title": "Vitoria consulta Vitor (MVP — assimétrico, sem arbiter)",
+  "prd_path": "docs/prd/backlog/prd-vitoria-consult-vitor.md",
+  "userStories": [
+    {
+      "id": "CSULT-001",
+      "title": "Migration AgentConsultation com RLS e CHECK terminal-imutável",
+      "description": "Criar supabase/migrations/20260601a_agent_consultation.sql conforme §7.1: tabela AgentConsultation, indexes, RLS (read=can_view_project, insert=manager+can_lead, update só permitido em status='in-progress'), trigger updatedAt, CHECK constraint forçando response fields populados quando status='completed'. Rodar via psql $DIRECT_URL.",
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260601a_agent_consultation.sql existe",
+        "psql roda sem erro",
+        "Tabela AgentConsultation existe com RLS habilitada",
+        "Policy update_in_progress condicionada a status='in-progress'",
+        "Indexes em (contextType, contextId), (projectId, createdAt), partial in-progress"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260601a_agent_consultation.sql && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "psql \"$DIRECT_URL\" -tAc \"SELECT count(*) FROM pg_tables WHERE tablename='AgentConsultation';\"", "expected": "1" },
+        { "kind": "sql", "command_or_query": "psql \"$DIRECT_URL\" -tAc \"SELECT count(*) FROM pg_policies WHERE tablename='AgentConsultation';\"", "expected": ">=3" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/20260601a_agent_consultation.sql"]
+    },
+    {
+      "id": "CSULT-002",
+      "title": "Regenerar database.types.ts + interface ConsultantProfile em AgentDefinition + popular em Vitor",
+      "description": "Atualizar database.types.ts pra incluir AgentConsultation. Em src/lib/agent/types.ts adicionar interface ConsultantProfile (domain, must, cant, recommendedModel?, examples?) + campo opcional consultantProfile?: ConsultantProfile em AgentDefinition. Em src/lib/agent/agents/vitor/index.ts adicionar consultantProfile com domain='produto/discovery/persona', must (focar persona/dor/journey/AC criticality), cant (não falar capacity/sprint/squad/FP), recommendedModel='haiku', 2 examples realistas.",
+      "acceptanceCriteria": [
+        "database.types.ts contém type AgentConsultation",
+        "src/lib/agent/types.ts exporta ConsultantProfile",
+        "AgentDefinition tem consultantProfile?: ConsultantProfile",
+        "vitorAgent.consultantProfile populado com domain/must/cant",
+        "tsc passes"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'AgentConsultation' src/lib/supabase/database.types.ts", "expected": ">=1" },
+        { "kind": "sql", "command_or_query": "grep -cE 'interface ConsultantProfile|consultantProfile\\??:' src/lib/agent/types.ts", "expected": ">=2" },
+        { "kind": "sql", "command_or_query": "grep -cE 'consultantProfile\\s*:' src/lib/agent/agents/vitor/index.ts", "expected": ">=1" }
+      ],
+      "dependsOn": ["CSULT-001"],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/lib/supabase/database.types.ts",
+        "src/lib/agent/types.ts",
+        "src/lib/agent/agents/vitor/index.ts"
+      ]
+    },
+    {
+      "id": "CSULT-003",
+      "title": "Zod schemas ConsultationResponse e CreateConsultationInput",
+      "description": "Criar src/lib/agent/consultation/schemas.ts com ConsultationResponse (position min 20 max 500, rationale min 50 max 2000, confidence 0-1) usado em generateObject + CreateConsultationInput (contextType enum, contextId? uuid, projectId, consultedAgent enum ['vitor'], topic min 20 max 300, contextPrdRefs array min 1, yourCurrentThinking min 20 max 1000). Type exports.",
+      "acceptanceCriteria": [
+        "Arquivo src/lib/agent/consultation/schemas.ts existe",
+        "Exporta ConsultationResponse e CreateConsultationInput como Zod schemas",
+        "tsc passes"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'export const (ConsultationResponse|CreateConsultationInput)' src/lib/agent/consultation/schemas.ts", "expected": "2" },
+        { "kind": "sql", "command_or_query": "grep -cE 'z\\.object|z\\.string|z\\.number|z\\.enum' src/lib/agent/consultation/schemas.ts", "expected": ">=6" }
+      ],
+      "dependsOn": ["CSULT-002"],
+      "estimateMinutes": 15,
+      "touches": ["src/lib/agent/consultation/schemas.ts"]
+    },
+    {
+      "id": "CSULT-004",
+      "title": "invokeConsultation + buildConsultantPrompt (LLM call isolated, sem tools)",
+      "description": "src/lib/agent/consultation/prompt.ts: fn buildConsultantPrompt(consultantProfile, topic, prdContext, yourCurrentThinking) que monta system prompt rigoroso ('você é Vitor em modo consultor. Foque PRODUTO. Não fale capacity. Output JSON.') + user prompt com topic + PRD content. src/lib/agent/consultation/invoke.ts: fn invokeConsultation que carrega PRDs (getPrdById), chama generateObject com schema ConsultationResponse, modelo claude-haiku-4-5 (D6), retorna {position, rationale, confidence, tokensUsed, costUsd, model}. SEM tools — pure opinion.",
+      "acceptanceCriteria": [
+        "Arquivos prompt.ts e invoke.ts em src/lib/agent/consultation/ existem",
+        "invokeConsultation retorna Promise<ConsultationResponse & meta>",
+        "Sem chamada a runAgent ou tools (só generateObject puro)",
+        "Modelo é claude-haiku-4-5",
+        "tsc passes"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "test -f src/lib/agent/consultation/prompt.ts && test -f src/lib/agent/consultation/invoke.ts && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "grep -cE 'generateObject' src/lib/agent/consultation/invoke.ts", "expected": ">=1" },
+        { "kind": "sql", "command_or_query": "grep -cE 'haiku|claude-haiku' src/lib/agent/consultation/invoke.ts", "expected": ">=1" }
+      ],
+      "dependsOn": ["CSULT-003"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/consultation/prompt.ts",
+        "src/lib/agent/consultation/invoke.ts"
+      ]
+    },
+    {
+      "id": "CSULT-005",
+      "title": "DAL agent-consultation (6 fns: create/get/complete/fail/listByContext/listInProgress)",
+      "description": "src/lib/dal/agent-consultation.ts com createConsultation (insere status='in-progress'), getConsultation (retorna row), completeConsultation (update status='completed' + response fields), failConsultation (status='error' + errorMessage), listByContext (audit page), listInProgress (polling do UI da Vitoria). Tudo respeitando RLS, sem service_role bypass.",
+      "acceptanceCriteria": [
+        "src/lib/dal/agent-consultation.ts exporta as 6 fns",
+        "Sem uso de service_role bypass",
+        "tsc passes"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "grep -cE 'export (async )?function (createConsultation|getConsultation|completeConsultation|failConsultation|listByContext|listInProgress)' src/lib/dal/agent-consultation.ts", "expected": "6" },
+        { "kind": "sql", "command_or_query": "grep -cE 'service_role|SERVICE_ROLE' src/lib/dal/agent-consultation.ts", "expected": "0" }
+      ],
+      "dependsOn": ["CSULT-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/dal/agent-consultation.ts"]
+    },
+    {
+      "id": "CSULT-006",
+      "title": "Tool consult_vitor no toolset da Vitoria + integração no buildTools",
+      "description": "src/lib/agent/agents/vitoria/tools/consult-vitor.ts: AI SDK tool com inputSchema (topic 20-300, contextPrdRefs min 1, yourCurrentThinking 20-1000). Execute: cost cap pre-check (estimar tokens, abort se >$0.10), createConsultation → invokeConsultation('vitor', ...) → completeConsultation → return {consultationId, position, rationale, confidence}. Em vitoria/index.ts: adicionar consult_vitor ao return de buildTools quando projectId presente. Description rigorosa: USAR quando dúvida produto/AC criticality, NÃO USAR pra capacity/sprint/squad.",
+      "acceptanceCriteria": [
+        "Arquivo src/lib/agent/agents/vitoria/tools/consult-vitor.ts existe",
+        "Tool tem inputSchema Zod + execute function",
+        "Vitoria buildTools inclui consult_vitor",
+        "Description menciona quando NÃO usar (capacity/sprint)",
+        "tsc passes"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "test -f src/lib/agent/agents/vitoria/tools/consult-vitor.ts && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "grep -cE 'consult_vitor' src/lib/agent/agents/vitoria/index.ts", "expected": ">=1" },
+        { "kind": "sql", "command_or_query": "grep -cE 'NÃO USE|NÃO use|capacity|sprint' src/lib/agent/agents/vitoria/tools/consult-vitor.ts", "expected": ">=2" }
+      ],
+      "dependsOn": ["CSULT-004", "CSULT-005"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools/consult-vitor.ts",
+        "src/lib/agent/agents/vitoria/index.ts"
+      ]
+    },
+    {
+      "id": "CSULT-007",
+      "title": "API routes (POST create async + GET single + GET list + POST abort) + job worker",
+      "description": "Routes em src/app/api/consultations/: route.ts (POST cria + dispara job 202+jobId, GET list por ?projectId&status&contextType&contextId), [id]/route.ts (GET hidrata), [id]/abort/route.ts (POST status=aborted). Validation Zod. Auth proxy.ts. Job worker em src/lib/jobs/consultation-job.ts (invoca runConsultation helper = invokeConsultation + completeConsultation).",
+      "acceptanceCriteria": [
+        "3 arquivos route.ts criados",
+        "POST /api/consultations retorna 202 com consultationId e jobId",
+        "GET /api/consultations?projectId=...&status=in-progress retorna lista",
+        "src/lib/jobs/consultation-job.ts existe",
+        "tsc passes"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "ls src/app/api/consultations/route.ts src/app/api/consultations/[id]/route.ts src/app/api/consultations/[id]/abort/route.ts 2>&1 | grep -c 'route.ts'", "expected": "3" },
+        { "kind": "sql", "command_or_query": "test -f src/lib/jobs/consultation-job.ts && echo ok", "expected": "ok" }
+      ],
+      "dependsOn": ["CSULT-006"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/api/consultations/route.ts",
+        "src/app/api/consultations/[id]/route.ts",
+        "src/app/api/consultations/[id]/abort/route.ts",
+        "src/lib/jobs/consultation-job.ts"
+      ]
+    },
+    {
+      "id": "CSULT-008",
+      "title": "UI ConsultationSheet (ResponsiveSheet + pulse + polling auto-open)",
+      "description": "src/components/agent/consultation/consultation-sheet.tsx: ResponsiveSheet size='md' (D7+D8). Header com PulseDot + título. Body: 3 seções (Tópico, Raciocínio Vitoria, Resposta Vitor com spinner→card). Cost meter visível. Footer: [Ver detalhes][Fechar] ou [Abortar]. Polling setInterval 2s GET /api/consultations/:id até status terminal. pulse-dot.tsx: CSS keyframe respeita motion-reduce. Hook src/hooks/use-in-progress-consultations.ts polla list endpoint, Vitoria's chat usa pra auto-open sheet.",
+      "acceptanceCriteria": [
+        "Arquivo consultation-sheet.tsx existe e usa ResponsiveSheet",
+        "Arquivo pulse-dot.tsx existe e respeita motion-reduce",
+        "Hook use-in-progress-consultations.ts existe",
+        "Polling implementado via setInterval + cleanup",
+        "tsc passes"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "ls src/components/agent/consultation/consultation-sheet.tsx src/components/agent/consultation/pulse-dot.tsx src/hooks/use-in-progress-consultations.ts 2>&1 | grep -cE '\\.(tsx|ts)$'", "expected": "3" },
+        { "kind": "sql", "command_or_query": "grep -cE 'ResponsiveSheet' src/components/agent/consultation/consultation-sheet.tsx", "expected": ">=1" },
+        { "kind": "sql", "command_or_query": "grep -cE 'motion-reduce|prefers-reduced-motion' src/components/agent/consultation/pulse-dot.tsx", "expected": ">=1" }
+      ],
+      "dependsOn": ["CSULT-007"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/agent/consultation/consultation-sheet.tsx",
+        "src/components/agent/consultation/pulse-dot.tsx",
+        "src/hooks/use-in-progress-consultations.ts"
+      ]
+    }
+  ]
+}

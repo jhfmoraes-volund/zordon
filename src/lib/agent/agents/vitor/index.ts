@@ -153,9 +153,6 @@ export const vitorAgent: AgentDefinition = {
         .neq("id", sessionId)
         .in("status", ["active", "in_progress"])
         .order("updatedAt", { ascending: false }),
-      // Transcripts via SSOT (TranscriptRef + link N:N). Antes lia direto
-      // de DesignSessionTranscript — droppada na Fundação B.
-      // CTXIMP-008: NÃO passa fullText — Vitor lê sob demanda via read_transcript_content.
       listSessionTranscripts(db(), sessionId).then((items) => ({
         data: items.map((t) => ({
           id: t.transcriptRefId,
@@ -165,7 +162,6 @@ export const vitorAgent: AgentDefinition = {
           participants: t.participants,
           summary: t.summary,
           actionItems: t.actionItems,
-          // fullText removido — leitura sob demanda via tool
         })),
       })),
       // Hierarchy context — only loaded on briefing to keep prompt token budget tight.
@@ -402,7 +398,6 @@ export interface TranscriptContextItem {
   participants: { name: string; email?: string }[];
   summary: string | null;
   actionItems: { title: string; description: string }[];
-  // CTXIMP-008: fullText removido — Vitor lê sob demanda via read_transcript_content tool
 }
 
 export interface ExistingModule {

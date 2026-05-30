@@ -52,6 +52,7 @@ export type SessionDetailSummary = {
   visibility: "public" | "internal";
   isMain: boolean;
   projectId: string;
+  facilitatorId?: string | null;
 };
 
 type Participant = {
@@ -145,6 +146,7 @@ function Inner({
   const [participants, setParticipants] = useState<Participant[] | null>(null);
   const [steps, setSteps] = useState<StepDef[] | null>(null);
   const [prds, setPrds] = useState<Prd[] | null>(null);
+  const [facilitator, setFacilitator] = useState<{ name: string } | null>(null);
   const [visibility, setVisibility] = useState(session.visibility);
   const [savingVisibility, setSavingVisibility] = useState(false);
   const [isMain, setIsMain] = useState(session.isMain);
@@ -239,7 +241,7 @@ function Inner({
           .eq("sessionId", session.id),
         supabase
           .from("DesignSession")
-          .select("type, selectedSteps")
+          .select("type, selectedSteps, facilitator:Member!DesignSession_facilitatorId_fkey(name)")
           .eq("id", session.id)
           .maybeSingle(),
         supabase
@@ -274,6 +276,11 @@ function Inner({
             selectedSteps: sessRes.data.selectedSteps,
           }),
         );
+        const fac = sessRes.data.facilitator as
+          | { name: string }
+          | { name: string }[]
+          | null;
+        setFacilitator(Array.isArray(fac) ? (fac[0] ?? null) : fac);
       } else {
         setSteps(getStepsForSession({ type: session.type }));
       }
@@ -541,6 +548,9 @@ function Inner({
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
             <Row label="Criada" value={fmtDate(session.createdAt)} />
+            {facilitator?.name && (
+              <Row label="Facilitador" value={facilitator.name} />
+            )}
             {session.scheduledAt && (
               <Row label="Agendada" value={fmtDate(session.scheduledAt)} />
             )}

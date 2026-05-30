@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getAccessibleProjectIds,
   getAccessLevel,
+  getActorMemberId,
   getUser,
   requireProjectEditSessionsApi,
 } from "@/lib/dal";
@@ -36,8 +37,10 @@ export async function GET() {
   if (sessionsRes.error) return NextResponse.json({ error: sessionsRes.error.message }, { status: 500 });
 
   // Merge item_count from view into sessions
-  const countMap = new Map((countsRes.data ?? []).map((c: any) => [c.id, c.item_count]));
-  const result = (sessionsRes.data ?? []).map((s: any) => ({
+  const countMap = new Map(
+    (countsRes.data ?? []).map((c) => [c.id as string, c.item_count as number]),
+  );
+  const result = (sessionsRes.data ?? []).map((s) => ({
     ...s,
     _count: { items: countMap.get(s.id) ?? 0 },
   }));
@@ -68,12 +71,18 @@ export async function POST(req: NextRequest) {
     totalSteps = body.type === "inception" ? 10 : 5;
   }
 
+  const actorMemberId = await getActorMemberId();
+
   const { data: session, error } = await db()
     .from("DesignSession")
     .insert({
       id: crypto.randomUUID(),
       updatedAt: new Date().toISOString(),
       ...body,
+      // Server-side: createdBy sempre o usuário autenticado; facilitator
+      // default = creator (cliente pode sobrescrever passando facilitatorId).
+      createdBy: actorMemberId,
+      facilitatorId: body.facilitatorId ?? actorMemberId,
       totalSteps,
       selectedSteps,
     })

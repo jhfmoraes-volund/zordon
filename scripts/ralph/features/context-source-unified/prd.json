@@ -1,0 +1,323 @@
+{
+  "feature": "context-source-unified",
+  "title": "ContextSource Unificada — transcripts + planilhas + GitHub compartilhados Vitor/Vitoria",
+  "prd_path": "docs/prd/backlog/prd-context-source-unified.md",
+  "parent_prd": "prd-context-import-unified",
+  "userStories": [
+    {
+      "id": "CTXSRC-001",
+      "title": "Migration A — criar tabela ContextSource + enum + RLS",
+      "description": "Criar supabase/migrations/20260530a_create_context_source.sql com CREATE TYPE context_source_kind, CREATE TABLE ContextSource com colunas/índices/RLS conforme §7-A. Rodar via psql DIRECT_URL. Atualizar src/lib/supabase/database.types.ts.",
+      "acceptanceCriteria": [
+        "Migration file existe",
+        "Tabela ContextSource criada no DB",
+        "Enum context_source_kind com 7 valores",
+        "4 policies RLS",
+        "database.types.ts contém ContextSource"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530a_create_context_source.sql && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"ContextSource\\\"')::text\"", "expected": "regex:ContextSource" },
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT count(*) FROM pg_policies WHERE tablename='ContextSource'\"", "expected": "regex:^\\s*4" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": [
+        "supabase/migrations/20260530a_create_context_source.sql",
+        "src/lib/supabase/database.types.ts"
+      ]
+    },
+    {
+      "id": "CTXSRC-002",
+      "title": "Migration B — DesignSessionContextLink + RLS",
+      "description": "Criar 20260530b_create_design_session_context_link.sql conforme §7-B. Rodar via psql. Atualizar database.types.ts.",
+      "acceptanceCriteria": [
+        "Tabela criada com FK + unique constraint",
+        "RLS habilitada com 4 policies"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530b_create_design_session_context_link.sql && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"DesignSessionContextLink\\\"')::text\"", "expected": "regex:DesignSessionContextLink" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["CTXSRC-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "supabase/migrations/20260530b_create_design_session_context_link.sql",
+        "src/lib/supabase/database.types.ts"
+      ]
+    },
+    {
+      "id": "CTXSRC-003",
+      "title": "Migration C — PMReviewContextLink + RLS + helpers can_view/edit_pm_review",
+      "description": "Criar 20260530c_create_pm_review_context_link.sql análogo ao B, com helpers can_view_pm_review/can_edit_pm_review se não existirem.",
+      "acceptanceCriteria": [
+        "Tabela criada",
+        "RLS habilitada com 4 policies",
+        "Helpers existem"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530c_create_pm_review_context_link.sql && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"PMReviewContextLink\\\"')::text\"", "expected": "regex:PMReviewContextLink" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["CTXSRC-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "supabase/migrations/20260530c_create_pm_review_context_link.sql",
+        "src/lib/supabase/database.types.ts"
+      ]
+    },
+    {
+      "id": "CTXSRC-004",
+      "title": "Migration D — backfill TranscriptRef → ContextSource",
+      "description": "20260530d_backfill_transcripts_into_context_source.sql idempotente (INSERT ON CONFLICT DO NOTHING). Preservar id. kind='transcript', payload com source/roamId, fullText, summary, capturedAt.",
+      "acceptanceCriteria": [
+        "Count TranscriptRef == count ContextSource kind='transcript'",
+        "ID preservation: cada TranscriptRef.id existe em ContextSource com mesmo id",
+        "Idempotente"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"TranscriptRef\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" WHERE kind='transcript')\"", "expected": "regex:t" },
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"TranscriptRef\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" cs JOIN \\\"TranscriptRef\\\" t ON cs.id = t.id WHERE cs.kind = 'transcript')\"", "expected": "regex:t" }
+      ],
+      "dependsOn": ["CTXSRC-001"],
+      "estimateMinutes": 30,
+      "touches": ["supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql"]
+    },
+    {
+      "id": "CTXSRC-005",
+      "title": "Migration E — backfill Meetings linkados → ContextSource",
+      "description": "20260530e_backfill_meetings_into_context_source.sql. ContextSource kind='meeting' por Meeting referenciado em PMReviewMeetingLink. externalId=meetingId, title, capturedAt=startsAt, summary, projectId. Idempotente.",
+      "acceptanceCriteria": [
+        "Count: distinct meetingId em PMReviewMeetingLink == count ContextSource kind='meeting'",
+        "Idempotente"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530e_backfill_meetings_into_context_source.sql && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(DISTINCT \\\"meetingId\\\") FROM \\\"PMReviewMeetingLink\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" WHERE kind='meeting')\"", "expected": "regex:t" }
+      ],
+      "dependsOn": ["CTXSRC-001"],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/20260530e_backfill_meetings_into_context_source.sql"]
+    },
+    {
+      "id": "CTXSRC-006",
+      "title": "Migration F — backfill DS transcript links",
+      "description": "20260530f_backfill_ds_transcript_links.sql. INSERT em DesignSessionContextLink SELECT FROM DesignSessionTranscriptLink. Idempotente.",
+      "acceptanceCriteria": ["Count: DesignSessionTranscriptLink == DesignSessionContextLink"],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"DesignSessionTranscriptLink\\\") = (SELECT count(*) FROM \\\"DesignSessionContextLink\\\")\"", "expected": "regex:t" }
+      ],
+      "dependsOn": ["CTXSRC-002", "CTXSRC-004"],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/20260530f_backfill_ds_transcript_links.sql"]
+    },
+    {
+      "id": "CTXSRC-007",
+      "title": "Migration G — backfill PM Review links (transcript + meeting → context)",
+      "description": "20260530g_backfill_pm_review_links.sql. Dois INSERTs no mesmo arquivo (atomic batch): transcript links → PMReviewContextLink direto; meeting links resolvem meetingId → contextSourceId via JOIN com ContextSource kind='meeting'. Idempotente.",
+      "acceptanceCriteria": ["Count: (PMReviewTranscriptLink + PMReviewMeetingLink) == PMReviewContextLink"],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT ((SELECT count(*) FROM \\\"PMReviewTranscriptLink\\\") + (SELECT count(*) FROM \\\"PMReviewMeetingLink\\\")) = (SELECT count(*) FROM \\\"PMReviewContextLink\\\")\"", "expected": "regex:t" }
+      ],
+      "dependsOn": ["CTXSRC-003", "CTXSRC-004", "CTXSRC-005"],
+      "estimateMinutes": 30,
+      "touches": ["supabase/migrations/20260530g_backfill_pm_review_links.sql"]
+    },
+    {
+      "id": "CTXSRC-008",
+      "title": "Adapters base + read_context_source tool (factory)",
+      "description": "Criar src/lib/context-sources/adapters/{transcript,meeting,csv,gsheets,github}.ts. Cada exporta resolveContent(supabase, source). Csv/gsheets/github stub aqui. Criar src/lib/agent/tools/read-context-source.ts com factory createReadContextSourceTool, valida Zod, dispatcha. read-transcript-content vira wrapper.",
+      "acceptanceCriteria": [
+        "Adapters existem (≥5 arquivos)",
+        "tool factory exportada",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f src/lib/agent/tools/read-context-source.ts && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "ls src/lib/context-sources/adapters/ | grep -c '\\.ts$'", "expected": "regex:^[5-9]" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["CTXSRC-001"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/context-sources/adapters/transcript.ts",
+        "src/lib/context-sources/adapters/meeting.ts",
+        "src/lib/context-sources/adapters/csv.ts",
+        "src/lib/context-sources/adapters/gsheets.ts",
+        "src/lib/context-sources/adapters/github.ts",
+        "src/lib/agent/tools/read-context-source.ts"
+      ]
+    },
+    {
+      "id": "CTXSRC-009",
+      "title": "GitHub adapter via Composio (reuse)",
+      "description": "src/lib/context-sources/adapters/github.ts: parser de URL (regex github.com/{owner}/{repo}, .../pull/{n}, .../issues/{n}), dispatch por kind. Chama GITHUB_GET_REPOSITORY_CONTENT/GET_PULL_REQUEST/GET_AN_ISSUE via cliente Composio do member. fullText em markdown. Sem conexão → lança ComposioConnectionMissing('github') → endpoint retorna 412 + connectUrl. NÃO mexer em src/lib/github.ts (legacy, sem uso).",
+      "acceptanceCriteria": [
+        "adapter importa de @/lib/composio",
+        "Suporta 3 kinds (repo/pr/issue)",
+        "Lança ComposioConnectionMissing quando ausente",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -c 'from \"@/lib/composio' src/lib/context-sources/adapters/github.ts", "expected": "regex:^[1-9]" },
+        { "kind": "sql", "command_or_query": "grep -cE 'github_(repo|pr|issue)' src/lib/context-sources/adapters/github.ts", "expected": "regex:^[3-9]" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["CTXSRC-008"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/context-sources/adapters/github.ts"]
+    },
+    {
+      "id": "CTXSRC-010",
+      "title": "CSV adapter + GSheets via Composio (opt-in)",
+      "description": "CSV: csv-parse + bucket 'context-source-files' (migration j). Snapshot, sem refresh. GSheets: expandir tipo toolkit em composio/client.ts pra aceitar 'googlesheets'. Adapter chama GOOGLESHEETS_GET_SPREADSHEET_VALUES via Composio. Sem COMPOSIO_GSHEETS_AUTH_CONFIG_ID OU member sem conexão → ComposioConnectionMissing. NÃO instalar googleapis SDK.",
+      "acceptanceCriteria": [
+        "csv-parse em package.json",
+        "Bucket existe",
+        "composio/client.ts aceita 'googlesheets' como toolkit",
+        "adapter gsheets lança ComposioConnectionMissing",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -c '\"csv-parse\"' package.json", "expected": "regex:^[1-9]" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT count(*) FROM storage.buckets WHERE id='context-source-files'\"", "expected": "regex:^\\s*1" },
+        { "kind": "sql", "command_or_query": "grep -c 'googlesheets' src/lib/composio/client.ts", "expected": "regex:^[2-9]" }
+      ],
+      "dependsOn": ["CTXSRC-008"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/context-sources/adapters/csv.ts",
+        "src/lib/context-sources/adapters/gsheets.ts",
+        "src/lib/composio/client.ts",
+        "package.json",
+        "supabase/migrations/20260530j_create_context_source_files_bucket.sql"
+      ]
+    },
+    {
+      "id": "CTXSRC-011",
+      "title": "API endpoints unificados de ContextSource",
+      "description": "POST/GET/refresh em /api/context-sources/*. GET/POST/DELETE link em /api/design-sessions/[id]/context/* e /api/pm-reviews/[id]/context/*. Zod validation. RLS via supabase client. Multipart pra CSV.",
+      "acceptanceCriteria": [
+        "≥5 route.ts criados",
+        "Validação Zod presente",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "find src/app/api/context-sources src/app/api/design-sessions/*/context src/app/api/pm-reviews/*/context -name 'route.ts' 2>/dev/null | wc -l | tr -d ' '", "expected": "regex:^[5-9]" }
+      ],
+      "dependsOn": ["CTXSRC-008", "CTXSRC-002", "CTXSRC-003"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/api/context-sources/route.ts",
+        "src/app/api/context-sources/[id]/route.ts",
+        "src/app/api/context-sources/[id]/content/route.ts",
+        "src/app/api/context-sources/[id]/refresh/route.ts",
+        "src/app/api/design-sessions/[id]/context/route.ts",
+        "src/app/api/design-sessions/[id]/context/link/route.ts",
+        "src/app/api/design-sessions/[id]/context/[linkId]/route.ts",
+        "src/app/api/pm-reviews/[id]/context/route.ts",
+        "src/app/api/pm-reviews/[id]/context/link/route.ts",
+        "src/app/api/pm-reviews/[id]/context/[linkId]/route.ts"
+      ]
+    },
+    {
+      "id": "CTXSRC-012",
+      "title": "UI — ContextInsumosSheet com tabs por kind + modais import",
+      "description": "ContextLinkList aceita kind no item (badge). ContextInsumosSheet ganha Tabs (shadcn): Tudo/Transcripts/Planilhas/GitHub. Botão 'Importar novo' vira DropdownMenu (3 itens, abre modal). spreadsheet-modal (CSV toggle | GSheets URL) e github-source-modal (URL + detect kind + preview). PROIBIDO criar modais ou wrapper de sheet em src/components/{pm-review,design-session}/ — tudo mora em src/components/agent/context-import/ pra Vitor e Vitoria reusarem identicamente.",
+      "acceptanceCriteria": [
+        "spreadsheet-modal.tsx + github-source-modal.tsx existem em agent/context-import/",
+        "ContextInsumosSheet renderiza Tabs",
+        "Zero *-modal.tsx em src/components/{pm-review,design-session}/",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "test -f src/components/agent/context-import/spreadsheet-modal.tsx && test -f src/components/agent/context-import/github-source-modal.tsx && echo ok", "expected": "ok" },
+        { "kind": "sql", "command_or_query": "find src/components/pm-review src/components/design-session -name 'spreadsheet-modal*' -o -name 'github-source-modal*' 2>/dev/null | wc -l | tr -d ' '", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -c 'Tabs\\|TabsList' src/components/agent/context-import/context-insumos-sheet.tsx", "expected": "regex:^[1-9]" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["CTXSRC-011"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/agent/context-import/context-link-list.tsx",
+        "src/components/agent/context-import/context-insumos-sheet.tsx",
+        "src/components/agent/context-import/spreadsheet-modal.tsx",
+        "src/components/agent/context-import/github-source-modal.tsx"
+      ]
+    },
+    {
+      "id": "CTXSRC-013",
+      "title": "Wiring Vitor + Vitoria com read_context_source + endpoints novos",
+      "description": "Vitor (tools/index/prompt): substitui read_transcript_content por read_context_source; lista 'Fontes linkadas' por kind. Vitoria idem. UI Vitor pre-work: trocar fetcher pra /api/design-sessions/[id]/context. CRÍTICO: NÃO reintroduzir ContextRibbon como linha separada — chip de insumos é injetado no StepSubHeader via useProvideStepActions (padrão já implementado em src/components/design-session/ribbon/step-actions-context.tsx). UI Vitoria PM Review: trocar fetcher pra /api/pm-reviews/[id]/context; manter botão Insumos na ribbon na posição atual.",
+      "acceptanceCriteria": [
+        "vitor/tools.ts + vitoria/tools.ts registram read_context_source",
+        "Prompts contêm 'read_context_source'",
+        "pre-work-step.tsx NÃO contém <ContextRibbon (regra D15 + paridade visual com Vitoria)",
+        "pre-work-step.tsx usa useProvideStepActions pra injetar chip",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "grep -c 'read_context_source' src/lib/agent/agents/vitor/tools.ts src/lib/agent/agents/vitoria/tools.ts | awk -F: '{s+=$2} END {print s}'", "expected": "regex:^[2-9]" },
+        { "kind": "sql", "command_or_query": "grep -c 'read_context_source' src/lib/agent/agents/vitor/prompt.ts src/lib/agent/agents/vitoria/prompt.ts | awk -F: '{s+=$2} END {print s}'", "expected": "regex:^[2-9]" },
+        { "kind": "sql", "command_or_query": "grep -cE '<ContextRibbon\\b' src/components/design-session/pre-work-step.tsx", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -c 'useProvideStepActions' src/components/design-session/pre-work-step.tsx", "expected": "regex:^[1-9]" }
+      ],
+      "dependsOn": ["CTXSRC-011", "CTXSRC-012"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitor/tools.ts",
+        "src/lib/agent/agents/vitor/index.ts",
+        "src/lib/agent/agents/vitor/prompt.ts",
+        "src/lib/agent/agents/vitoria/tools.ts",
+        "src/lib/agent/agents/vitoria/prompt.ts",
+        "src/components/design-session/pre-work-step.tsx",
+        "src/components/pm-review/pm-review-insumos-sheet.tsx"
+      ]
+    },
+    {
+      "id": "CTXSRC-015",
+      "title": "Parity check — Vitor e Vitoria consomem os MESMOS primitivos",
+      "description": "Verificação automatizada da regra D15. Garante que pre-work-step (Vitor) e pm-review-insumos-sheet (Vitoria) importam ContextInsumosSheet do mesmo path (@/components/agent/context-import/) e que não há cópias em pastas por agente. Smoke browser confirma estrutura idêntica do sheet (mesmas tabs, mesmo dropdown 'Importar novo', mesmos modais).",
+      "acceptanceCriteria": [
+        "Ambos importam de @/components/agent/context-import",
+        "Zero arquivos *-modal.tsx em src/components/{pm-review,design-session}/",
+        "Smoke browser: estrutura visual idêntica entre Vitor e Vitoria"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "grep -c 'from \"@/components/agent/context-import' src/components/design-session/pre-work-step.tsx src/components/pm-review/pm-review-insumos-sheet.tsx | awk -F: '{s+=$2} END {print s}'", "expected": "regex:^[2-9]" },
+        { "kind": "sql", "command_or_query": "find src/components/pm-review src/components/design-session -name '*-modal.tsx' | wc -l | tr -d ' '", "expected": "0" },
+        { "kind": "sql", "command_or_query": "grep -c 'ContextInsumosSheet' src/components/design-session/pre-work-step.tsx", "expected": "regex:^[1-9]" },
+        { "kind": "sql", "command_or_query": "grep -c 'ContextInsumosSheet' src/components/pm-review/pm-review-insumos-sheet.tsx", "expected": "regex:^[1-9]" },
+        { "kind": "manual_browser", "command_or_query": "Abrir Vitor pre-work (DS qualquer) → chip 'Insumos' no header → comparar com PM Review → botão Insumos. Estrutura idêntica.", "expected": "Mesmas tabs, mesmo dropdown 'Importar novo', mesmos modais ao clicar em cada kind" }
+      ],
+      "dependsOn": ["CTXSRC-013"],
+      "estimateMinutes": 15,
+      "touches": []
+    },
+    {
+      "id": "CTXSRC-014",
+      "title": "Migration H — drop link tables legados",
+      "description": "20260530h_drop_legacy_link_tables.sql. DROP TABLE PMReviewTranscriptLink, PMReviewMeetingLink, DesignSessionTranscriptLink CASCADE. Só depois de CTXSRC-013. TranscriptRef fica.",
+      "acceptanceCriteria": [
+        "Tabelas legacy droppadas",
+        "tsc passa",
+        "Smoke: linkar/deslinkar transcript em DS continua funcionando"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"DesignSessionTranscriptLink\\\"') IS NULL AND to_regclass('public.\\\"PMReviewTranscriptLink\\\"') IS NULL\"", "expected": "regex:t" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "Linkar e deslinkar 1 transcript via UI Vitor e PM Review", "expected": "Funciona sem erro" }
+      ],
+      "dependsOn": ["CTXSRC-013"],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/20260530h_drop_legacy_link_tables.sql"]
+    }
+  ]
+}

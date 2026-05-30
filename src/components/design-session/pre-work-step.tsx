@@ -5,7 +5,7 @@ import { fmtDateNumeric } from "@/lib/date-utils";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
-import { File, Loader2, Mic, Paperclip, X } from "lucide-react";
+import { File, Link2, Loader2, Mic, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ConversationFab,
@@ -15,10 +15,10 @@ import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   TranscriptModal,
-  ContextRibbon,
   ContextInsumosSheet,
   type ImportedTranscript,
 } from "@/components/agent/context-import";
+import { useProvideStepActions } from "./ribbon";
 import {
   useSessionFiles,
   type SessionFileRow,
@@ -35,7 +35,6 @@ const WELCOME_TEXT =
 
 export function PreWorkStep({ sessionId }: { sessionId: string }) {
   const {
-    files,
     uploading,
     uploadFiles: uploadFilesHook,
     deleteFile,
@@ -57,6 +56,19 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
   const isMobile = useIsMobile();
   const { planMode, setPlanMode } = useChatPlanMode("vitor");
 
+  useProvideStepActions(
+    <button
+      type="button"
+      onClick={() => setInsumosOpen(true)}
+      className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs hover:bg-accent"
+      title="Insumos da DS (transcripts linkados)"
+    >
+      <Link2 className="size-3" />
+      <span className="font-mono tabular-nums">{transcripts.length}</span>
+      <span className="hidden text-muted-foreground sm:inline">insumos</span>
+    </button>,
+  );
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -75,11 +87,14 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
     [sessionId],
   );
 
-  const initialMsg = {
-    id: "initial",
-    role: "assistant" as const,
-    parts: [{ type: "text" as const, text: WELCOME_TEXT }],
-  } as UIMessage;
+  const initialMsg = useMemo<UIMessage>(
+    () => ({
+      id: "initial",
+      role: "assistant" as const,
+      parts: [{ type: "text" as const, text: WELCOME_TEXT }],
+    }) as UIMessage,
+    [],
+  );
 
   const { messages, status, sendMessage, stop, setMessages } = useChat({
     transport,
@@ -119,7 +134,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, setMessages]);
+  }, [sessionId, setMessages, initialMsg]);
 
   useEffect(() => {
     let cancelled = false;
@@ -383,10 +398,6 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="mx-auto flex h-[calc(100vh-200px)] max-w-2xl flex-col">
-      <ContextRibbon
-        counts={{ transcripts: transcripts.length }}
-        onOpenInsumos={() => setInsumosOpen(true)}
-      />
       <div
         className="surface relative flex flex-1 flex-col overflow-hidden"
         onDragOver={(e) => {
