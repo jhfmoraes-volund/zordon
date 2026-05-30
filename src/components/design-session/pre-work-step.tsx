@@ -15,6 +15,8 @@ import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   TranscriptModal,
+  ContextRibbon,
+  ContextInsumosSheet,
   type ImportedTranscript,
 } from "@/components/agent/context-import";
 import {
@@ -46,6 +48,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
   const [roamModalOpen, setRoamModalOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<ImportedTranscript[]>([]);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [insumosOpen, setInsumosOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const threadIdRef = useRef<string | null>(threadId);
@@ -143,6 +146,31 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
       if (!res.ok) setTranscripts(prev);
     },
     [sessionId, transcripts],
+  );
+
+  const handleLinkTranscript = useCallback(
+    async (transcriptId: string) => {
+      // Pool is empty for scope='session', so this would only be called
+      // if we implement pool fetching in the future. For now, no-op.
+      console.log("Link transcript:", transcriptId);
+    },
+    [],
+  );
+
+  const handleOpenImportNew = useCallback(() => {
+    setInsumosOpen(false);
+    setRoamModalOpen(true);
+  }, []);
+
+  const linkedTranscriptItems = useMemo(
+    () =>
+      transcripts.map((t) => ({
+        id: t.id,
+        title: t.meetingTitle,
+        source: t.source,
+        capturedAt: t.meetingStart,
+      })),
+    [transcripts],
   );
 
   const uploadFiles = useCallback(
@@ -355,6 +383,10 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="mx-auto flex h-[calc(100vh-200px)] max-w-2xl flex-col">
+      <ContextRibbon
+        counts={{ transcripts: transcripts.length }}
+        onOpenInsumos={() => setInsumosOpen(true)}
+      />
       <div
         className="surface relative flex flex-1 flex-col overflow-hidden"
         onDragOver={(e) => {
@@ -390,6 +422,18 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
         open={roamModalOpen}
         onOpenChange={setRoamModalOpen}
         onImported={(t) => setTranscripts((cur) => [t, ...cur])}
+      />
+
+      <ContextInsumosSheet
+        open={insumosOpen}
+        onOpenChange={setInsumosOpen}
+        title="Insumos de contexto"
+        scope="session"
+        linkedTranscripts={linkedTranscriptItems}
+        poolTranscripts={[]}
+        onUnlink={handleRemoveTranscript}
+        onLink={handleLinkTranscript}
+        onImportNew={handleOpenImportNew}
       />
     </div>
   );

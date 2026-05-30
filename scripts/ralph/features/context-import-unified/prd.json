@@ -258,7 +258,8 @@
       "estimateMinutes": 30,
       "touches": [
         "src/components/design-session/pre-work-step.tsx"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXIMP-008",

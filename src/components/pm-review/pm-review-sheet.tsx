@@ -14,6 +14,7 @@ import {
 import { Field, FormBody } from "@/components/ui/field";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { useAuth } from "@/contexts/auth-context";
 
 type MemberOption = { id: string; name: string };
 
