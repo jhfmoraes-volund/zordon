@@ -99,8 +99,8 @@
     },
     {
       "id": "FE-005",
-      "title": "Worker spawn via Agent + isolation worktree",
-      "description": "spawnWorker(task) usa Claude Code Agent tool com isolation='worktree' e subagent_type baseado em agentProfile. Worktree path: .forge/<run-id>/tasks/<task-id>/worktree. Branch: forge/<run-id>/<task-id>.",
+      "title": "Worker spawn via Agent + isolation worktree (detached process)",
+      "description": "spawnWorker(task) usa Claude Code Agent tool com isolation='worktree' e subagent_type por agentProfile. Worktree: .forge/<run-id>/tasks/<task-id>/worktree. Branch: forge/<run-id>/<task-id>. Spawn detached + unref pra sobreviver page reload (D27).",
       "acceptanceCriteria": [
         "src/lib/forge/worker.ts exporta spawnWorker(task: ForgeTask): Promise<WorkerResult>",
         "Worktree criado em .forge/<run-id>/tasks/<task-id>/worktree antes do spawn",
@@ -144,12 +144,14 @@
     },
     {
       "id": "FE-007",
-      "title": "Hooks emitem ForgeEvent (PostToolUse + Stop)",
-      "description": "Hook .claude/hooks/forge-event-emit.ts intercepta PostToolUse/Stop/SubagentStop. Lê env vars FORGE_RUN_ID + FORGE_TASK_ID. Append em events.jsonl. Watcher faz upload pro Supabase.",
+      "title": "Hooks emitem ForgeEvent dual-track (SSE local + Supabase upload)",
+      "description": "Hook escreve em .forge/<run>/events.jsonl (Track 1 SSE local) + watcher faz upload batch pro Supabase ForgeEvent (Track 2 audit). Route /api/forge/runs/[id]/stream serve SSE via fs.watch.",
       "acceptanceCriteria": [
         ".claude/hooks/forge-event-emit.ts existe e registrado em .claude/settings.json",
-        "Hook escreve linha jsonl com { runId, taskId, ts, kind, payload }",
-        "src/lib/forge/event-uploader.ts: watcher chokidar batch upload (10 evs ou 200ms)",
+        "Hook escreve linha jsonl com { runId, taskId, ts, kind, payload } em .forge/<runId>/events.jsonl",
+        "src/lib/forge/event-uploader.ts: watcher chokidar batch upload (10 evs ou 200ms) pro Supabase",
+        "src/app/api/forge/runs/[id]/stream/route.ts implementa SSE via fs.watch no events.jsonl local",
+        "SSE response chunks formato 'data: {jsonEvent}\\n\\n'",
         "Idempotência: re-upload no-op via UNIQUE constraint",
         "Sem run ativo: hook é no-op (não falha)"
       ],
@@ -207,14 +209,17 @@
     },
     {
       "id": "FE-010",
-      "title": "Forge UI consome ForgeEvent real (não mock)",
-      "description": "Implementa RealtimeForgeSource. Toggle no provider: useForgeSource('mock'|'realtime'). Backfill + live subscribe. Reconcile gap. Reconnect retoma do lastSeq.",
+      "title": "Forge UI dual-source (SSE local + Supabase fallback) em /projects/[id]/forge",
+      "description": "SSESource via EventSource API + SupabaseRealtimeSource + auto-detect. UI tenta SSE primeiro, fallback Supabase se SSE 404. Forge mora em /projects/[id]/forge (aba do projeto, D30). Privacy ownerId (D24).",
       "acceptanceCriteria": [
-        "src/lib/forge/sources/realtime.ts implementa ForgeSource interface",
-        "Backfill ≤ 500ms pra runs com ≤ 1000 eventos",
-        "Wifi off por 5s reconnect sem duplicar seq",
-        "2 abas no mesmo run: estado idêntico após 30s",
-        "Toggle ?source=mock ainda funciona pra demo"
+        "src/lib/forge/sources/sse.ts implementa ForgeSource via EventSource",
+        "src/lib/forge/sources/supabase.ts implementa ForgeSource via realtime postgres_changes",
+        "src/lib/forge/sources/index.ts auto-detect: tenta SSE primeiro, fallback Supabase",
+        "Backfill SSE: leitura .forge/<run>/events.jsonl direto ≤ 100ms",
+        "Backfill Supabase ≤ 500ms pra runs com ≤ 1000 eventos",
+        "Wifi off por 5s (modo Supabase) reconnect sem duplicar seq",
+        "Toggle manual ?source=mock|sse|supabase funciona pra debug",
+        "Rota /projects/[id]/forge (aba do projeto) usa o source automático e respeita RLS ownerId"
       ],
       "verifiable": [
         { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
@@ -245,6 +250,28 @@
       "estimateMinutes": 25,
       "touches": ["src/app/(dashboard)/forge/_components/task-sheet/diff-tab.tsx", "src/app/api/forge/tasks/[id]/diff/route.ts"],
       "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "FE-014",
+      "title": "Next.js dispatch routes (ping + run) + UI run button",
+      "description": "Conecta UI à execução local (D27): GET /api/forge/ping (200 em dev, 404 em prod) + POST /api/forge/runs (spawn detached). Botão 'Run with Forge' no sprint board só renderiza se ping=200. Badge 🟢/🔵 no header.",
+      "acceptanceCriteria": [
+        "src/app/api/forge/ping/route.ts retorna 200 + { dev: true } em dev mode",
+        "src/app/api/forge/ping/route.ts retorna 404 em prod (NODE_ENV check)",
+        "src/app/api/forge/runs/route.ts POST recebe { taskId }, valida ownership, spawna detached, retorna { runId }",
+        "Orchestrator detached sobrevive a pnpm dev restart (smoke: ps -p após reload)",
+        "Botão 'Run with Forge' no sprint board só renderiza se /api/forge/ping = 200",
+        "Header global mostra badge 🟢/🔵 baseado em ping (polling 5s)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3000/api/forge/runs -d '{\"taskId\":\"test\"}' -H 'Content-Type: application/json'", "expected": "200 with runId field" }
+      ],
+      "dependsOn": ["FE-004", "FE-005"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/forge/ping/route.ts", "src/app/api/forge/runs/route.ts", "src/components/sprint/task-row.tsx", "src/components/layout/forge-badge.tsx", "scripts/forge/exec.ts"],
+      "agentProfile": "wiring",
       "passes": false
     },
     {

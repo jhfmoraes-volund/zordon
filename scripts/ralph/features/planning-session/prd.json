@@ -15,15 +15,24 @@
         "EXCLUDE constraint bloqueia 2 sessions ativas mesmo projeto"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "ls supabase/migrations/20260601a_planning_session.sql supabase/migrations/20260601b_planning_session_prd.sql 2>&1 | grep -c 'planning'", "expected": "2" },
-        { "kind": "sql", "command_or_query": "psql \"$DIRECT_URL\" -tAc \"SELECT count(*) FROM pg_tables WHERE tablename IN ('PlanningSession','PlanningSessionPRD');\"", "expected": "2" }
+        {
+          "kind": "sql",
+          "command_or_query": "ls supabase/migrations/20260601a_planning_session.sql supabase/migrations/20260601b_planning_session_prd.sql 2>&1 | grep -c 'planning'",
+          "expected": "2"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "psql \"$DIRECT_URL\" -tAc \"SELECT count(*) FROM pg_tables WHERE tablename IN ('PlanningSession','PlanningSessionPRD');\"",
+          "expected": "2"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 25,
       "touches": [
         "supabase/migrations/20260601a_planning_session.sql",
         "supabase/migrations/20260601b_planning_session_prd.sql"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-002",
@@ -35,11 +44,25 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "grep -cE 'PlanningSession|PlanningSessionPRD' src/lib/supabase/database.types.ts", "expected": ">=2" },
-        { "kind": "sql", "command_or_query": "grep -cE 'export (async )?function (createSession|getSession|listForProject|updateStatus|updatePrdAssignment|listPrds)' src/lib/dal/planning-session.ts", "expected": "6" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'PlanningSession|PlanningSessionPRD' src/lib/supabase/database.types.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'export (async )?function (createSession|getSession|listForProject|updateStatus|updatePrdAssignment|listPrds)' src/lib/dal/planning-session.ts",
+          "expected": "6"
+        }
       ],
-      "dependsOn": ["PLAN-001"],
+      "dependsOn": [
+        "PLAN-001"
+      ],
       "estimateMinutes": 25,
       "touches": [
         "src/lib/supabase/database.types.ts",
@@ -57,9 +80,21 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "test -f src/lib/agent/planning/codebase-index.ts && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "grep -cE 'tree-sitter' package.json", "expected": ">=1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/lib/agent/planning/codebase-index.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'tree-sitter' package.json",
+          "expected": ">=1"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 30,
@@ -79,13 +114,27 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "test -f src/lib/agent/planning/prd-index.ts && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "grep -cE 'export (async )?function buildPrdIndex' src/lib/agent/planning/prd-index.ts", "expected": ">=1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/lib/agent/planning/prd-index.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'export (async )?function buildPrdIndex' src/lib/agent/planning/prd-index.ts",
+          "expected": ">=1"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 25,
-      "touches": ["src/lib/agent/planning/prd-index.ts"]
+      "touches": [
+        "src/lib/agent/planning/prd-index.ts"
+      ]
     },
     {
       "id": "PLAN-005",
@@ -98,12 +147,31 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "ls src/lib/agent/planning/subagents/codebase-auditor.ts src/lib/agent/planning/subagents/dep-resolver.ts 2>&1 | grep -c subagents", "expected": "2" },
-        { "kind": "sql", "command_or_query": "grep -cE 'claude-sonnet|sonnet' src/lib/agent/planning/subagents/codebase-auditor.ts", "expected": ">=1" },
-        { "kind": "sql", "command_or_query": "grep -cE 'claude-haiku|haiku' src/lib/agent/planning/subagents/dep-resolver.ts", "expected": ">=1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "ls src/lib/agent/planning/subagents/codebase-auditor.ts src/lib/agent/planning/subagents/dep-resolver.ts 2>&1 | grep -c subagents",
+          "expected": "2"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'claude-sonnet|sonnet' src/lib/agent/planning/subagents/codebase-auditor.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'claude-haiku|haiku' src/lib/agent/planning/subagents/dep-resolver.ts",
+          "expected": ">=1"
+        }
       ],
-      "dependsOn": ["PLAN-003", "PLAN-004"],
+      "dependsOn": [
+        "PLAN-003",
+        "PLAN-004"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/agent/planning/subagents/codebase-auditor.ts",
@@ -121,10 +189,20 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "ls src/lib/agent/planning/subagents/story-decomposer.ts src/lib/agent/planning/subagents/capacity.ts src/lib/agent/planning/subagents/consolidator.ts 2>&1 | grep -c .ts", "expected": "3" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "ls src/lib/agent/planning/subagents/story-decomposer.ts src/lib/agent/planning/subagents/capacity.ts src/lib/agent/planning/subagents/consolidator.ts 2>&1 | grep -c .ts",
+          "expected": "3"
+        }
       ],
-      "dependsOn": ["PLAN-005"],
+      "dependsOn": [
+        "PLAN-005"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/agent/planning/subagents/story-decomposer.ts",
@@ -143,11 +221,25 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "test -f src/lib/agent/planning/cascade.ts && test -f src/lib/jobs/planning-orchestrate-job.ts && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "grep -cE 'export (async )?function runCascade' src/lib/agent/planning/cascade.ts", "expected": ">=1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/lib/agent/planning/cascade.ts && test -f src/lib/jobs/planning-orchestrate-job.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'export (async )?function runCascade' src/lib/agent/planning/cascade.ts",
+          "expected": ">=1"
+        }
       ],
-      "dependsOn": ["PLAN-006"],
+      "dependsOn": [
+        "PLAN-006"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/agent/planning/cascade.ts",
@@ -165,10 +257,20 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "find src/app/api/planning-sessions -name 'route.ts' | wc -l | tr -d ' '", "expected": ">=5" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "find src/app/api/planning-sessions -name 'route.ts' | wc -l | tr -d ' '",
+          "expected": ">=5"
+        }
       ],
-      "dependsOn": ["PLAN-007"],
+      "dependsOn": [
+        "PLAN-007"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/app/api/planning-sessions/route.ts",
@@ -189,11 +291,25 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "test -f src/components/planning-session/board.tsx && test -f 'src/app/(dashboard)/projects/[id]/planning/page.tsx' && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "grep -cE 'useOptimisticCollection' src/components/planning-session/board.tsx", "expected": ">=1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/components/planning-session/board.tsx && test -f 'src/app/(dashboard)/projects/[id]/planning/page.tsx' && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'useOptimisticCollection' src/components/planning-session/board.tsx",
+          "expected": ">=1"
+        }
       ],
-      "dependsOn": ["PLAN-008"],
+      "dependsOn": [
+        "PLAN-008"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/components/planning-session/board.tsx",
@@ -212,11 +328,25 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "test -f 'src/app/api/planning-sessions/[id]/approve/route.ts' && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "grep -cE 'fs\\.(rename|promises\\.rename)' 'src/app/api/planning-sessions/[id]/approve/route.ts'", "expected": ">=1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f 'src/app/api/planning-sessions/[id]/approve/route.ts' && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'fs\\.(rename|promises\\.rename)' 'src/app/api/planning-sessions/[id]/approve/route.ts'",
+          "expected": ">=1"
+        }
       ],
-      "dependsOn": ["PLAN-009"],
+      "dependsOn": [
+        "PLAN-009"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/app/api/planning-sessions/[id]/approve/route.ts",
@@ -234,13 +364,29 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "test -f src/lib/agent/planning/subagents/task-gen.ts && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "grep -cE 'task-gen-story|TaskGen' src/lib/agent/planning/subagents/task-gen.ts", "expected": ">=1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/lib/agent/planning/subagents/task-gen.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'task-gen-story|TaskGen' src/lib/agent/planning/subagents/task-gen.ts",
+          "expected": ">=1"
+        }
       ],
-      "dependsOn": ["PLAN-007"],
+      "dependsOn": [
+        "PLAN-007"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/agent/planning/subagents/task-gen.ts"]
+      "touches": [
+        "src/lib/agent/planning/subagents/task-gen.ts"
+      ]
     },
     {
       "id": "PLAN-012",
@@ -253,11 +399,26 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "grep -cE 'callTaskGen' src/lib/agent/planning/cascade.ts", "expected": ">=1" },
-        { "kind": "sql", "command_or_query": "grep -cE 'UserStory|Task|AcceptanceCriterion' 'src/app/api/planning-sessions/[id]/approve/route.ts'", "expected": ">=3" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'callTaskGen' src/lib/agent/planning/cascade.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'UserStory|Task|AcceptanceCriterion' 'src/app/api/planning-sessions/[id]/approve/route.ts'",
+          "expected": ">=3"
+        }
       ],
-      "dependsOn": ["PLAN-010", "PLAN-011"],
+      "dependsOn": [
+        "PLAN-010",
+        "PLAN-011"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/agent/planning/cascade.ts",
@@ -275,11 +436,25 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260601c_task_sdd_spec.sql && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "psql \"$DIRECT_URL\" -tAc \"SELECT count(*) FROM information_schema.columns WHERE table_name='Task' AND column_name='sddSpec';\"", "expected": "1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f supabase/migrations/20260601c_task_sdd_spec.sql && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "psql \"$DIRECT_URL\" -tAc \"SELECT count(*) FROM information_schema.columns WHERE table_name='Task' AND column_name='sddSpec';\"",
+          "expected": "1"
+        }
       ],
-      "dependsOn": ["PLAN-012"],
+      "dependsOn": [
+        "PLAN-012"
+      ],
       "estimateMinutes": 15,
       "touches": [
         "supabase/migrations/20260601c_task_sdd_spec.sql",
@@ -297,12 +472,30 @@
         "tsc passes"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "test -f src/lib/agent/planning/subagents/sdd-polish.ts && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "grep -cE 'sddSpec|SDD' src/components/hierarchy-tree/task-row.tsx", "expected": ">=1" },
-        { "kind": "sql", "command_or_query": "grep -cE 'callSDDPolish' src/lib/agent/planning/cascade.ts", "expected": ">=1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/lib/agent/planning/subagents/sdd-polish.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'sddSpec|SDD' src/components/hierarchy-tree/task-row.tsx",
+          "expected": ">=1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'callSDDPolish' src/lib/agent/planning/cascade.ts",
+          "expected": ">=1"
+        }
       ],
-      "dependsOn": ["PLAN-013"],
+      "dependsOn": [
+        "PLAN-013"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/agent/planning/subagents/sdd-polish.ts",
