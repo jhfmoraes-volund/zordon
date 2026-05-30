@@ -321,7 +321,8 @@
       "touches": [
         "src/components/planning-session/board.tsx",
         "src/app/(dashboard)/projects/[id]/planning/page.tsx"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-010",

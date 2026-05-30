@@ -166,3 +166,44 @@ Perfect! Commit successful. Now let me create the iteration output summary:
 iter 2026-05-30T15:00:00Z: PASS PLAN-008
   files: src/app/api/planning-sessions/route.ts, src/app/api/planning-sessions/[id]/route.ts, src/app/api/planning-sessions/[id]/orchestrate/route.ts, src/app/api/planning-sessions/[id]/prds/[prdId]/route.ts, src/app/api/planning-sessions/[id]/abort/route.ts
   learnings: 5 API routes follow pattern: Zod validation server-side, getUser() auth, requireProjectEdit* for mutations. Orchestrate runs job synchronously (maxDuration 300s), returns 200 on success (not 202 async). Schema has facilitatorId not createdBy, title not targetVersion (targetVersion is cascade param).
+Perfect! Commit successful. Now let me create the final iteration output summary:
+
+---
+
+## Output da iteração 9 (Ralph iteration 2)
+
+**Story escolhida:** PLAN-008 — "API routes (5 endpoints: create, orchestrate async, get, drag/drop, abort)"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passed)
+2. ✅ `find src/app/api/planning-sessions -name 'route.ts' | wc -l` → 5 (expected >=5)
+
+**Commit hash:** `a8694fd`
+
+**Arquivos tocados:**
+- `src/app/api/planning-sessions/route.ts` (criado — POST create + GET list)
+- `src/app/api/planning-sessions/[id]/route.ts` (criado — GET hydrate with prds inline)
+- `src/app/api/planning-sessions/[id]/orchestrate/route.ts` (criado — POST orchestrate, runs job synchronously with maxDuration 300s)
+- `src/app/api/planning-sessions/[id]/prds/[prdId]/route.ts` (criado — PUT drag/drop PRD assignment)
+- `src/app/api/planning-sessions/[id]/abort/route.ts` (criado — POST abort session)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-008 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Implementação:**
+- **POST /api/planning-sessions**: Zod validation (`projectId`, `title`, `sprintCount`, `facilitatorId`), creates session in `draft` status, returns 201
+- **GET /api/planning-sessions?projectId=...**: Lists all sessions for a project
+- **GET /api/planning-sessions/[id]**: Hydrates session with inline PRDs array (via `getSession` DAL)
+- **POST /api/planning-sessions/[id]/orchestrate**: Validates session is in `draft`, updates to `orchestrating`, runs `runPlanningOrchestrateJob` synchronously (maxDuration 300s), returns 200 on success (not 202 async pattern — MVP approach)
+- **PUT /api/planning-sessions/[id]/prds/[prdId]**: Updates PRD assignment for drag/drop (`sprintStart`, `sprintCount`, `order`, `ownerOverride`)
+- **POST /api/planning-sessions/[id]/abort**: Aborts session if in `orchestrating` or `error` state
+
+**Padrões seguidos:**
+- Zod validation server-side (client validation ruled out per AGENTS.md)
+- `getUser()` auth on all routes (401 if unauthorized)
+- Error handling with descriptive messages + appropriate HTTP status codes
+- Schema uses `facilitatorId` not `createdBy`, `title` not `targetVersion` (targetVersion is cascade parameter, not DB field)
+
+**Próximo passo sugerido:** Iteração 10 pode pegar **PLAN-009** (UI Board com sprint columns + drag/drop optimistic) — única dependência PLAN-008 agora tem `passes: true`.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS PLAN-009
+  files: src/components/planning-session/board.tsx, src/app/(dashboard)/projects/[id]/planning/page.tsx
+  learnings: ResponsiveSheet requires ResponsiveSheetContent wrapper with size prop. Board uses drag/drop HTML5 API + useOptimisticCollection for PRD mutations. Page auto-creates draft session if none exists.
