@@ -21,3 +21,18 @@ Perfeito! Commit realizado com hash `3f44819`.
 iter 2026-05-30T00:59:59Z: PASS CTXIMP-002
   files: src/components/agent/context-import/context-link-list.tsx, src/components/agent/context-import/index.ts
   learnings: ContextLinkList primitivo agnóstico de feature — recebe array de items + callbacks. Visual espelhado do pm-review mas stateless. showWeight opt-in.
+## 7. Resultado da iteração
+
+**Story escolhida:** CTXIMP-002 — "Extrair ContextLinkList primitivo"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` — passou (0 erros)
+2. ✅ Nenhum import de `pm-review/` ou `design-session/` — count: 0
+3. ✅ Exporta `default` — count: 1
+
+**Commit:** `14d6bdd` — ralph(context-import-unified): CTXIMP-002 extrair ContextLinkList primitivo
+
+**Próximo passo sugerido:** CTXIMP-003 (extrair ContextInsumosSheet primitivo) — agora elegível, pois depende apenas de CTXIMP-001 e CTXIMP-002, ambas passes=true.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-003
+  files: src/components/agent/context-import/context-insumos-sheet.tsx, src/components/agent/context-import/index.ts
+  learnings: ContextInsumosSheet primitivo stateless com scope='session'|'project' controla visibilidade do pool. Aceita callbacks onLink/onUnlink/onImportNew — fetcher fica no caller. ScopeLabels opt-in customiza textos.

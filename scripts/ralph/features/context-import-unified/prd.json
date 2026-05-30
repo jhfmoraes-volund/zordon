@@ -115,7 +115,8 @@
       "estimateMinutes": 30,
       "touches": [
         "src/components/agent/context-import/context-insumos-sheet.tsx"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXIMP-004",
