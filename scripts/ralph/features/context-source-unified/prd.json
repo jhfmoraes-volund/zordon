@@ -77,7 +77,8 @@
       "touches": [
         "supabase/migrations/20260530b_create_design_session_context_link.sql",
         "src/lib/supabase/database.types.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-003",

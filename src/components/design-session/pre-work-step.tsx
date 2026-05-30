@@ -18,7 +18,7 @@ import {
   ContextInsumosSheet,
   type ImportedTranscript,
 } from "@/components/agent/context-import";
-import { useProvideStepActions } from "./ribbon";
+import { StepActions } from "./ribbon";
 import {
   useSessionFiles,
   type SessionFileRow,
@@ -56,7 +56,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
   const isMobile = useIsMobile();
   const { planMode, setPlanMode } = useChatPlanMode("vitor");
 
-  useProvideStepActions(
+  const stepActionNode = (
     <button
       type="button"
       onClick={() => setInsumosOpen(true)}
@@ -66,7 +66,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
       <Link2 className="size-3" />
       <span className="font-mono tabular-nums">{transcripts.length}</span>
       <span className="hidden text-muted-foreground sm:inline">insumos</span>
-    </button>,
+    </button>
   );
 
   const transport = useMemo(
@@ -373,6 +373,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
   if (isMobile) {
     return (
       <>
+        <StepActions>{stepActionNode}</StepActions>
         <ConversationFab
           agent="vitor"
           isOpen={mobileOpen}
@@ -398,6 +399,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="mx-auto flex h-[calc(100vh-200px)] max-w-2xl flex-col">
+      <StepActions>{stepActionNode}</StepActions>
       <div
         className="surface relative flex flex-1 flex-col overflow-hidden"
         onDragOver={(e) => {

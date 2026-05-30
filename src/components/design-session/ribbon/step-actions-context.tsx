@@ -1,39 +1,90 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useMemo } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 
-type StepActionsContextValue = {
-  actions: React.ReactNode;
-  setActions: (node: React.ReactNode) => void;
+// Portal-based slot for step-contributed actions in the SubHeader.
+//
+// Why a portal and not setState(node):
+// Consumers pass inline JSX (`<StepActions><button .../></StepActions>`),
+// which is a new React element every render. Storing that element in
+// provider state caused setState→render→setState loops ("Maximum update
+// depth exceeded") that froze the whole DS page. With a portal, the
+// provider only tracks the host DOM node; children re-render in place.
+
+type Listener = (host: HTMLElement | null) => void;
+
+type Ctx = {
+  readonly hostRef: { current: HTMLElement | null };
+  subscribe: (l: Listener) => () => void;
+  setHost: (el: HTMLElement | null) => void;
 };
 
-const StepActionsContext = createContext<StepActionsContextValue | null>(null);
+const StepActionsContext = createContext<Ctx | null>(null);
+
+function createCtx(): Ctx {
+  const listeners = new Set<Listener>();
+  const hostRef: { current: HTMLElement | null } = { current: null };
+  return {
+    hostRef,
+    subscribe(l) {
+      // Emit current host immediately so late subscribers don't miss it.
+      l(hostRef.current);
+      listeners.add(l);
+      return () => {
+        listeners.delete(l);
+      };
+    },
+    setHost(el) {
+      if (hostRef.current === el) return;
+      hostRef.current = el;
+      listeners.forEach((l) => l(el));
+    },
+  };
+}
 
 export function StepActionsProvider({ children }: { children: React.ReactNode }) {
-  const [actions, setActions] = useState<React.ReactNode>(null);
-  const value = useMemo(() => ({ actions, setActions }), [actions]);
+  const [ctx] = useState(createCtx);
   return (
-    <StepActionsContext.Provider value={value}>
+    <StepActionsContext.Provider value={ctx}>
       {children}
     </StepActionsContext.Provider>
   );
 }
 
-export function useStepActionsSlot(): React.ReactNode {
+/**
+ * Render where step-contributed actions should appear (typically inside
+ * StepSubHeader's actions slot). Registers itself as the portal host.
+ */
+export function StepActionsSlot({ className }: { className?: string }) {
   const ctx = useContext(StepActionsContext);
-  return ctx?.actions ?? null;
+  const ref = useCallback(
+    (el: HTMLSpanElement | null) => {
+      ctx?.setHost(el);
+    },
+    [ctx],
+  );
+  return <span ref={ref} className={className} />;
 }
 
 /**
- * Step content uses this to inject contextual chips/buttons into the
- * StepSubHeader's right-side `actions` slot. The slot resets to null on
- * unmount, so navigating to another step clears it automatically.
+ * Step content uses this to render JSX into the SubHeader slot. Children
+ * portal into the registered host; identity changes are fine — no provider
+ * state is written on every render.
  */
-export function useProvideStepActions(node: React.ReactNode) {
+export function StepActions({ children }: { children: React.ReactNode }) {
   const ctx = useContext(StepActionsContext);
+  const [host, setHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     if (!ctx) return;
-    ctx.setActions(node);
-    return () => ctx.setActions(null);
-  }, [ctx, node]);
+    return ctx.subscribe(setHost);
+  }, [ctx]);
+  if (!host) return null;
+  return createPortal(children, host);
 }

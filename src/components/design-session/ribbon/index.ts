@@ -1,7 +1,7 @@
 export { DSRibbon } from "./ds-ribbon";
 export { StepSubHeader } from "./step-sub-header";
 export {
+  StepActions,
   StepActionsProvider,
-  useProvideStepActions,
-  useStepActionsSlot,
+  StepActionsSlot,
 } from "./step-actions-context";

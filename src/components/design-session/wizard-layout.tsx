@@ -18,7 +18,7 @@ import {
   DSRibbon,
   StepSubHeader,
   StepActionsProvider,
-  useStepActionsSlot,
+  StepActionsSlot,
 } from "./ribbon";
 
 export function WizardLayout({
@@ -118,13 +118,14 @@ export function WizardLayout({
         />
 
         {step ? (
-          <SubHeaderWithStepActions
+          <StepSubHeader
             step={step}
             totalSteps={steps.length}
             onPrevious={onPrevious}
             onNext={onNext}
             isFirst={isFirst}
             isLast={isLast}
+            actions={<StepActionsSlot className="contents" />}
           />
         ) : null}
 
@@ -175,18 +176,6 @@ export function WizardLayout({
       </div>
     </StepActionsProvider>
   );
-}
-
-function SubHeaderWithStepActions(props: {
-  step: StepDef;
-  totalSteps: number;
-  onPrevious: () => void;
-  onNext: () => void;
-  isFirst: boolean;
-  isLast: boolean;
-}) {
-  const actions = useStepActionsSlot();
-  return <StepSubHeader {...props} actions={actions} />;
 }
 
 function StepNotesPanel({

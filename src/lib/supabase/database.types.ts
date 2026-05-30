@@ -1629,6 +1629,83 @@ export type Database = {
           },
         ]
       }
+      DesignSessionContextLink: {
+        Row: {
+          addedat: string
+          addedby: string | null
+          contextsourceid: string
+          designsessionid: string
+          id: string
+          weight: string | null
+        }
+        Insert: {
+          addedat?: string
+          addedby?: string | null
+          contextsourceid: string
+          designsessionid: string
+          id?: string
+          weight?: string | null
+        }
+        Update: {
+          addedat?: string
+          addedby?: string | null
+          contextsourceid?: string
+          designsessionid?: string
+          id?: string
+          weight?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "DesignSessionContextLink_addedby_fkey"
+            columns: ["addedby"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionContextLink_addedby_fkey"
+            columns: ["addedby"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionContextLink_addedby_fkey"
+            columns: ["addedby"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionContextLink_addedby_fkey"
+            columns: ["addedby"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionContextLink_contextsourceid_fkey"
+            columns: ["contextsourceid"]
+            isOneToOne: false
+            referencedRelation: "ContextSource"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionContextLink_designsessionid_fkey"
+            columns: ["designsessionid"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "DesignSessionContextLink_designsessionid_fkey"
+            columns: ["designsessionid"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       DesignSessionExportLog: {
         Row: {
           byteSize: number

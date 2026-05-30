@@ -1,3 +1,26 @@
 iter 2026-05-29T00:00:00Z: PASS CTXSRC-001
   files: supabase/migrations/20260530a_create_context_source.sql, src/lib/supabase/database.types.ts
   learnings: Migration executada via psql DIRECT_URL. Enum context_source_kind com 7 valores. 4 RLS policies (select/insert/update/delete). Types regenerados via npm run db:types (necessita project-id, não db-url).
+Perfect! Commit successful: `fc2f0c3`
+
+---
+
+## Ralph Iteration 1 — Summary
+
+**Story:** CTXSRC-001 — Migration A: criar tabela ContextSource + enum + RLS
+
+**Verificações executadas:**
+- ✅ Migration file exists
+- ✅ Table `ContextSource` created in DB
+- ✅ Enum `context_source_kind` with 7 values
+- ✅ 4 RLS policies (select, insert, update, delete)
+- ✅ `database.types.ts` updated with ContextSource type
+- ✅ TypeScript compilation passes
+
+**Commit:** `fc2f0c3` — pushed to both origin and staging remotes
+
+**Próximo passo sugerido:** CTXSRC-002 (Migration B — DesignSessionContextLink + RLS) is now eligible, as its only dependency (CTXSRC-001) has `passes: true`.
+
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXSRC-002
+  files: supabase/migrations/20260530b_create_design_session_context_link.sql, src/lib/supabase/database.types.ts
+  learnings: RLS usa can_view_design_session (não can_view_session). Ribbon refactor pré-existente não bloqueou migration. db:types via project-id funciona mesmo com psql tendo falha de socket local.
