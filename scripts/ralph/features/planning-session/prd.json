@@ -179,7 +179,8 @@
       "touches": [
         "src/lib/agent/planning/subagents/codebase-auditor.ts",
         "src/lib/agent/planning/subagents/dep-resolver.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-006",

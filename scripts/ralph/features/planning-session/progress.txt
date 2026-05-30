@@ -56,3 +56,27 @@ iter 2026-05-30T04:34:55Z: PASS PLAN-003
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS PLAN-004
   files: src/lib/agent/planning/prd-index.ts, package.json
   learnings: gray-matter for frontmatter parsing. Cache by SHA of concatenated PRD files. Extract §1 problem, §2 oneLiner, §4 personas, §12 risk level, §16 metadata (dependsOn, estimateMinutes).
+---
+
+## Output da iteração 5
+
+**Story escolhida:** PLAN-004 — "buildPrdIndex (parse frontmatter + §1-§3 summary + §16 metadata)"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passou)
+2. ✅ `test -f src/lib/agent/planning/prd-index.ts` → ok (arquivo existe)
+3. ✅ `grep -cE 'export (async )?function buildPrdIndex' src/lib/agent/planning/prd-index.ts` → 1 (expected >=1)
+
+**Commit hash:** `3e07140`
+
+**Arquivos tocados:**
+- `package.json` (adicionada dependência `gray-matter: ^4.0.3`)
+- `pnpm-lock.yaml` (atualizado pela instalação)
+- `src/lib/agent/planning/prd-index.ts` (criado com função `buildPrdIndex` completa)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-004 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Próximo passo sugerido:** Iteração 6 pode pegar **PLAN-005** (Subagents CodebaseAuditor + DependencyResolver) — todas as dependências (PLAN-003 e PLAN-004) agora têm `passes: true`.
+iter 2026-05-30T08:19:51Z: PASS PLAN-005
+  files: src/lib/agent/planning/subagents/codebase-auditor.ts, src/lib/agent/planning/subagents/dep-resolver.ts
+  learnings: callOpenRouterJson pattern from insights/llm.ts. Auditor uses sonnet-4.6, Resolver uses haiku-4-5. Zod schemas validated via safeParse before return.
