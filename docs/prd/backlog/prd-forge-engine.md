@@ -100,10 +100,10 @@ A pirâmide de abstrações pra entregar uma feature é alta demais: **Ideia →
 > "Tenho uma ideia de feature. Hoje eu gasto 60min escrevendo PRD com DDL e RLS que provavelmente está errado. Quero gastar 5min descrevendo a intenção e deixar o sistema descobrir o resto."
 
 **Builder dev (executa runs no laptop dele):**
-> "Cloneio o Zordon, rodo `pnpm dev` e `forge run <slug>`. Vejo no `localhost:3000/projects/X/forge` os meus runs e os runs dos outros builders no mesmo projeto (RLS por ProjectAccess). Quando algo trava, mato o run sem afetar os outros. Pago meu Claude e a org reembolsa."
+> "Cloneio o Zordon, rodo `pnpm dev`. Abro `localhost:3000/projects/X/forge` — aba do projeto, vejo SÓ meus runs. Sprint board → click Task → 'Run with Forge' → modal mostra plan iter-0 → Approve → workers spawnam, eu vejo em tempo real (latência ~1ms via SSE local). Pago meu Claude, org reembolsa."
 
-**Designer/PM (observa sem disparar):**
-> "Não tenho Claude Code instalado. Abro `volund.com/projects/X/forge` (deploy prod) e vejo em tempo real o que os builders estão construindo. Não consigo disparar runs novos — disparar é privilégio de quem está codando."
+**Designer/PM (sem Claude Code, sem dispatch):**
+> "Abro `localhost:3000/projects/X/forge` ou `volund.com/projects/X/forge`. Vejo VAZIO (porque nenhum run é meu — privacy by default). O que os builders estão fazendo só vejo quando o PR é mergeado e a Task fecha no sprint board. Forge é WIP do builder; PR é o canal público."
 
 **Vitor (agente upstream, futuro):**
 > "Termino uma Design Session com 3 stories aprovadas. Devo emitir uma `Spec.md` pra cada story (não uma só pra todas) e jogar no Forge — daí o Forge cuida do resto."
@@ -125,7 +125,11 @@ A pirâmide de abstrações pra entregar uma feature é alta demais: **Ideia →
 | D9 | **Humano nos extremos** preservado: aprova Spec antes do plan; aprova plan antes do run; aprova merge final. Loop autônomo só entre esses gates. | Confiança no autônomo cresce com gates explícitos, não com supervisão contínua. |
 | D10 | **Forge engine é a única peça do Zordon que roda local no laptop do builder.** Tudo o resto (Vitor, Vitoria, Auth, UI hosting, Cron, Webhooks) continua na infra deployed do Volund. Supabase é compartilhada — estado é shared, execução é per-builder. Setup: `git clone volund && pnpm install && pnpm dev` + `claude login`. Phase ∞: binário standalone `@volund/forge` distribuído sem clonar repo. | Builders são técnicos em Claude Code; complexidade de setup local é aceita. Distribuir execução remove orquestrador central. |
 | D23 | **Cada builder paga o próprio Claude** (reembolso org). Sem chave centralizada, sem proxy. Worker usa `claude` CLI autenticado na máquina do builder. | Autonomia + auditoria fiscal individual. Risco de vazamento de key centralizada eliminado. |
-| D24 | **Forge runs são visíveis cross-builder** via RLS `ProjectAccess`. Quem tem acesso ao projeto vê todos os runs do projeto, independente de quem disparou. Colaboração > privacidade WIP. | Forge é ferramenta de time. PRs já são públicos pelo git; runs intermediários sendo públicos pro time não é regressão. |
+| D24 | **Forge runs são PRIVADOS por ownerId.** Cada builder só vê os runs que ele disparou (`ForgeRun.ownerId = auth.uid()`). PM/Designer/outros builders veem `/projects/[id]/forge` vazio (ou só os próprios). Compartilhamento acontece via PR mergeado (canal público pelo git). | Privacy WIP > colaboração ao vivo. Builder em exploração arriscada não quer audiência. Compartilhar é opt-in via PR. |
+| D27 | **Forge dispatch via Next.js API route** (sem daemon separado). UI clica "Run" → `POST /api/forge/runs` → `child_process.spawn('forge exec ...', { detached: true })` → orchestrator sobrevive a page reload via `unref()`. Detecção: `GET /api/forge/ping` retorna 200 em dev, 404 em prod. UI esconde botão Run em prod. | Sem daemon long-running pra instalar/debugar. Same-origin sempre. Setup builder = `pnpm dev` é suficiente. |
+| D28 | **Setup builder em 5 passos**: `git clone` → `pnpm install` → `claude login` → `cp .env.example .env` (preencher) → `pnpm dev`. Browser em `localhost:3000` mostra `🟢 Forge ready` no header. Sem Docker, sem Supabase local, sem API key centralizada. | YAGNI no setup. Time todo técnico em Claude Code — mais passos = mais atrito sem ROI. |
+| D29 | **Realtime via dual-track SSE local + Supabase audit**: Track 1 (rápido) = hook escreve `.forge/<run>/events.jsonl`; `/api/forge/runs/[id]/stream` SSE watch arquivo; UI EventSource consome (~1ms latência). Track 2 (durável) = uploader Node batch pra Supabase ForgeEvent (~500ms). UI tenta SSE primeiro, fallback automático pra Supabase realtime se SSE indisponível. | Performance da UI não pode depender de network. Histórico/audit não pode depender de máquina do builder estar ligada. Dual-track resolve ambos. |
+| D30 | **Forge mora em `/projects/[id]/forge`** como aba do projeto (não rota top-level). Sidebar do projeto ganha "Forge" entre as abas existentes. Hub cross-project (`/forge`) sai do PRD e vira Phase ∞. | Foco em "um projeto que chegou" (memória `feedback_project_focus`). Cross-project dilui. |
 | D11 | **CLI + UI vivem em paralelo**, mesmo state model. CLI = `forge {init\|plan\|run\|ps\|kill\|done}`. UI = `/forge` existente. | Power user no terminal; demo + observability na UI. |
 | D12 | **Commit convention**: `ZRD-JM-NN: forge — <task-id> — <slug>`. Memory `feedback_commit_convention.md` respeitada. | Acabar com a dupla língua (`ralph(...)` vs `ZRD-JM-NN`) no git log. |
 | D13 | **Cost tracking via `claude -p --output-format=stream-json`**. Hook parser extrai usage + cost por iter. | Claude Code já retorna isso; só precisamos consumir. |
@@ -313,6 +317,50 @@ END$$;
 CREATE TRIGGER "ForgeTask_cost_propagate"
 AFTER INSERT OR UPDATE OF "costUsd","tokensIn","tokensOut" ON "ForgeTask"
 FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
+```
+
+**Migration 5 — Atualizar RLS de `ForgeRun`/`ForgeTask`/`ForgeAgent`/`ForgeEvent` pra privacy ownerId (D24):**
+
+```sql
+-- supabase/migrations/20260530f_forge_privacy_rls.sql
+-- Revoga policies antigas que usavam can_view_project; nova policy: ownerId match.
+
+DROP POLICY IF EXISTS "ForgeRun_select" ON "ForgeRun";
+CREATE POLICY "ForgeRun_select" ON "ForgeRun"
+  FOR SELECT USING (public.is_manager() OR "ownerId" = (auth.jwt() ->> 'sub')::uuid);
+
+DROP POLICY IF EXISTS "ForgeTask_select" ON "ForgeTask";
+CREATE POLICY "ForgeTask_select" ON "ForgeTask"
+  FOR SELECT USING (
+    public.is_manager()
+    OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeTask"."runId"
+        AND r."ownerId" = (auth.jwt() ->> 'sub')::uuid
+    )
+  );
+
+DROP POLICY IF EXISTS "ForgeAgent_select" ON "ForgeAgent";
+CREATE POLICY "ForgeAgent_select" ON "ForgeAgent"
+  FOR SELECT USING (
+    public.is_manager()
+    OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeAgent"."runId"
+        AND r."ownerId" = (auth.jwt() ->> 'sub')::uuid
+    )
+  );
+
+DROP POLICY IF EXISTS "ForgeEvent_select" ON "ForgeEvent";
+CREATE POLICY "ForgeEvent_select" ON "ForgeEvent"
+  FOR SELECT USING (
+    public.is_manager()
+    OR EXISTS (
+      SELECT 1 FROM "ForgeRun" r
+      WHERE r.id = "ForgeEvent"."runId"
+        AND r."ownerId" = (auth.jwt() ->> 'sub')::uuid
+    )
+  );
 ```
 
 **Pós-migration**: regenerar `src/lib/supabase/database.types.ts` via `npm run db:types`.
@@ -565,8 +613,9 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
     - "supabase/migrations/20260530b_forge_task_engine_fields.sql adicionou specId, agentProfile, worktreePath, dependsOn, verifiable, passes em ForgeTask"
     - "supabase/migrations/20260530c_forge_run_cost_agg.sql adicionou costUsdTotal, tokensInTotal, tokensOutTotal, specId em ForgeRun"
     - "supabase/migrations/20260530d_forge_cost_aggregate_trigger.sql criou trigger funcional"
+    - "supabase/migrations/20260530f_forge_privacy_rls.sql aplicado, RLS de Forge* tables agora usa ownerId match (D24)"
     - "src/lib/supabase/database.types.ts contém ForgeSpec + novos campos"
-    - "RLS smoke: usuário sem ProjectAccess não consegue SELECT em ForgeSpec do projeto X"
+    - "RLS smoke: usuário A não consegue SELECT em ForgeRun de usuário B (privacy ownerId)"
   verifiable:
     - kind: sql
       command_or_query: "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeSpec'"
@@ -616,12 +665,14 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
   agentProfile: wiring
 
 - id: FE-005
-  title: Worker spawn via Agent + isolation worktree
+  title: Worker spawn via Agent + isolation worktree (detached process tree)
   description: |
     Função spawnWorker(task) que usa Claude Code Agent tool com isolation='worktree'
     e subagent_type baseado em task.agentProfile. Worktree path padrão:
     .forge/<run-id>/tasks/<task-id>/worktree. Branch: forge/<run-id>/<task-id>.
-    Worker recebe prompt customizado por profile (FE-006). Output: { commitSha, diffPath, cost }.
+    Worker recebe prompt customizado por profile (FE-006). Spawn via child_process
+    com `{ detached: true, stdio: 'ignore' }` + `child.unref()` pra sobreviver
+    a page reload do Next.js dev server (D27). Output: { commitSha, diffPath, cost }.
   acceptanceCriteria:
     - "src/lib/forge/worker.ts exporta spawnWorker(task: ForgeTask): Promise<WorkerResult>"
     - "Worktree é criado em .forge/<run-id>/tasks/<task-id>/worktree antes do spawn"
@@ -670,16 +721,20 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
   agentProfile: wiring
 
 - id: FE-007
-  title: Hooks emitem ForgeEvent (PostToolUse + Stop)
+  title: Hooks emitem ForgeEvent (dual-track SSE local + Supabase upload)
   description: |
     Hook script .claude/hooks/forge-event-emit.ts intercepta PostToolUse, Stop,
     SubagentStop. Lê env var FORGE_RUN_ID + FORGE_TASK_ID injetadas pelo worker
-    (FE-005). Append em .forge/<run-id>/events.jsonl. Watcher (chokidar) faz
-    upload pro Supabase ForgeEvent.
+    (FE-005). Append em .forge/<run-id>/events.jsonl (Track 1 — SSE local).
+    Watcher (chokidar) faz upload batch pro Supabase ForgeEvent (Track 2 — audit).
+    Next.js route /api/forge/runs/[id]/stream serve SSE consumindo events.jsonl
+    via fs.watch (resposta ~1ms).
   acceptanceCriteria:
     - ".claude/hooks/forge-event-emit.ts existe e é registrado em .claude/settings.json"
-    - "Hook escreve linha jsonl com { runId, taskId, ts, kind, payload } por evento"
-    - "src/lib/forge/event-uploader.ts: watcher Node faz upload batch (10 evs ou 200ms)"
+    - "Hook escreve linha jsonl com { runId, taskId, ts, kind, payload } por evento em .forge/<runId>/events.jsonl"
+    - "src/lib/forge/event-uploader.ts: watcher chokidar faz upload batch (10 evs ou 200ms) pro Supabase"
+    - "src/app/api/forge/runs/[id]/stream/route.ts implementa SSE via fs.watch no events.jsonl local"
+    - "SSE response chunks formato 'data: {jsonEvent}\\n\\n'"
     - "Idempotência: re-upload de evento existente é no-op (UNIQUE constraint runId+seq)"
     - "Sem run ativo: hook é no-op (não falha)"
   verifiable:
@@ -749,18 +804,22 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
   agentProfile: wiring
 
 - id: FE-010
-  title: Forge UI consome ForgeEvent real (não mock)
+  title: Forge UI consome ForgeEvent via dual-track (SSE local + Supabase fallback)
   description: |
-    Implementa RealtimeForgeSource (Fase 11 do runbook Forge antigo). Toggle no
-    provider: useForgeSource('mock'|'realtime'). Default em prod: realtime.
-    Backfill inicial (SELECT events ORDER BY seq) + live subscribe. Reconcile
-    gap. Reconnect retoma do lastSeq.
+    Implementa duas sources e o switch automático. SSESource conecta em
+    /api/forge/runs/[id]/stream via EventSource API (Track 1, ~1ms). Se falha
+    em conectar (404 = dev não rodando), cai pra SupabaseRealtimeSource
+    (Track 2, ~500ms) automaticamente. Toggle manual ?source=mock|sse|supabase
+    pra debug. Forge mora em /projects/[id]/forge (aba do projeto, D30).
   acceptanceCriteria:
-    - "src/lib/forge/sources/realtime.ts implementa ForgeSource interface"
-    - "Backfill ≤ 500ms pra runs com ≤ 1000 eventos"
-    - "Wifi off por 5s reconnect sem duplicar seq"
-    - "2 abas no mesmo run: estado idêntico após 30s"
-    - "Toggle ?source=mock ainda funciona pra demo"
+    - "src/lib/forge/sources/sse.ts implementa ForgeSource via EventSource"
+    - "src/lib/forge/sources/supabase.ts implementa ForgeSource via realtime postgres_changes"
+    - "src/lib/forge/sources/index.ts auto-detect: tenta SSE primeiro, fallback Supabase"
+    - "Backfill SSE: leitura .forge/<run>/events.jsonl direto ≤ 100ms"
+    - "Backfill Supabase ≤ 500ms pra runs com ≤ 1000 eventos"
+    - "Wifi off por 5s (modo Supabase) reconnect sem duplicar seq"
+    - "Toggle manual ?source=mock|sse|supabase funciona pra debug"
+    - "Rota /projects/[id]/forge (aba do projeto) usa o source automático"
   verifiable:
     - kind: typecheck
       command_or_query: "npx tsc --noEmit"
@@ -797,6 +856,37 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
   estimateMinutes: 25
   touches: [src/app/(dashboard)/forge/_components/task-sheet/diff-tab.tsx, src/app/api/forge/tasks/[id]/diff/route.ts]
   agentProfile: ui
+
+- id: FE-014
+  title: Next.js dispatch routes (ping + run dispatch) + UI run button
+  description: |
+    Implementa as 2 rotas que conectam UI à execução local (D27).
+    1. `GET /api/forge/ping` retorna 200 em dev (`pnpm dev`), 404 ou 503 em prod.
+       UI consulta a cada 5s pra mostrar badge no header (🟢 ready / 🔵 read-only).
+    2. `POST /api/forge/runs` valida ownerId, cria ForgeRun row, spawna
+       orchestrator via `child_process.spawn('node', ['scripts/forge/exec.js',
+       taskId], { detached: true, stdio: 'ignore' }) ; child.unref()`.
+       Responde { runId } em ≤ 200ms.
+    3. Botão "Run with Forge" no sprint board (Task row): só aparece se ping=200,
+       click chama POST /runs, redireciona pra /projects/[id]/forge/[runId].
+  acceptanceCriteria:
+    - "src/app/api/forge/ping/route.ts retorna 200 + { dev: true } em dev mode"
+    - "src/app/api/forge/ping/route.ts retorna 404 em prod (verificar via NODE_ENV ou ausência de FORGE_DAEMON env)"
+    - "src/app/api/forge/runs/route.ts POST recebe { taskId }, valida ownership, spawna detached, retorna { runId }"
+    - "Orchestrator detached sobrevive a `pnpm dev` restart (smoke: trigger run, reload Next, confirma processo vivo via ps)"
+    - "Botão 'Run with Forge' no sprint board só renderiza se /api/forge/ping = 200"
+    - "Header global mostra badge 🟢/🔵 baseado em ping (polling 5s)"
+  verifiable:
+    - kind: typecheck
+      command_or_query: "npx tsc --noEmit"
+      expected: "exit 0"
+    - kind: http
+      command_or_query: "curl -X POST http://localhost:3000/api/forge/runs -d '{\"taskId\":\"test\"}' -H 'Content-Type: application/json'"
+      expected: "200 with runId field (or 4xx with auth error if not logged in)"
+  dependsOn: [FE-004, FE-005]
+  estimateMinutes: 25
+  touches: [src/app/api/forge/ping/route.ts, src/app/api/forge/runs/route.ts, src/components/sprint/task-row.tsx, src/components/layout/forge-badge.tsx, scripts/forge/exec.ts]
+  agentProfile: wiring
 
 - id: FE-013
   title: ForgeLearning — persistência de aprendizados cross-spec
