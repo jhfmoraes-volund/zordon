@@ -1,8 +1,10 @@
 "use client";
 
-import { FileText, Mic, Unlink } from "lucide-react";
+import { FileText, Mic, Unlink, FileSpreadsheet, Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { fmtDate as fmtShortDate } from "@/lib/date-utils";
+import type { Database } from "@/lib/supabase/database.types";
 
 export type ContextLinkItem = {
   id: string;
@@ -10,6 +12,7 @@ export type ContextLinkItem = {
   source: string;
   capturedAt: string | null;
   weight?: "primary" | "supporting" | "background" | null;
+  kind?: Database["public"]["Enums"]["context_source_kind"];
 };
 
 type Props = {
@@ -20,13 +23,28 @@ type Props = {
   busyId?: string | null;
 };
 
-function sourceIcon(source: string) {
-  return source === "granola" || source === "roam" ? (
-    <Mic className="size-3.5 shrink-0 text-muted-foreground" />
-  ) : (
-    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-  );
+function sourceIcon(source: string, kind?: Database["public"]["Enums"]["context_source_kind"]) {
+  if (kind === "transcript" || source === "granola" || source === "roam") {
+    return <Mic className="size-3.5 shrink-0 text-muted-foreground" />;
+  }
+  if (kind === "spreadsheet_csv" || kind === "spreadsheet_gsheets") {
+    return <FileSpreadsheet className="size-3.5 shrink-0 text-muted-foreground" />;
+  }
+  if (kind === "github_repo" || kind === "github_pr" || kind === "github_issue") {
+    return <Github className="size-3.5 shrink-0 text-muted-foreground" />;
+  }
+  return <FileText className="size-3.5 shrink-0 text-muted-foreground" />;
 }
+
+const KIND_BADGE: Record<Database["public"]["Enums"]["context_source_kind"], string> = {
+  transcript: "Transcrição",
+  meeting: "Reunião",
+  spreadsheet_csv: "CSV",
+  spreadsheet_gsheets: "GSheets",
+  github_repo: "GitHub Repo",
+  github_pr: "PR",
+  github_issue: "Issue",
+};
 
 export default function ContextLinkList({
   items,
@@ -52,11 +70,18 @@ export default function ContextLinkList({
             key={item.id}
             className="flex items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-xs"
           >
-            {sourceIcon(item.source)}
+            {sourceIcon(item.source, item.kind)}
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">
-                {item.title ?? "Transcript sem título"}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate font-medium">
+                  {item.title ?? "Transcript sem título"}
+                </p>
+                {item.kind && (
+                  <Badge variant="secondary" className="h-4 px-1.5 text-[9px] leading-none shrink-0">
+                    {KIND_BADGE[item.kind]}
+                  </Badge>
+                )}
+              </div>
               <p className="truncate text-[10px] text-muted-foreground">
                 {item.source}
                 {item.capturedAt && ` · ${fmtShortDate(item.capturedAt)}`}

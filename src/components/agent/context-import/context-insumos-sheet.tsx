@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, ChevronDown, Mic, FileSpreadsheet, Github } from "lucide-react";
 import {
   ResponsiveSheet,
   ResponsiveSheetContent,
@@ -11,8 +11,16 @@ import {
   ResponsiveSheetFooter,
 } from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ContextLinkList, { type ContextLinkItem } from "./context-link-list";
 import { cn } from "@/lib/utils";
+import type { Database } from "@/lib/supabase/database.types";
 
 export type ScopeLabels = {
   linked?: string;
@@ -30,6 +38,8 @@ type Props = {
   onLink: (transcriptRefId: string) => Promise<void>;
   onUnlink: (transcriptRefId: string) => Promise<void>;
   onImportNew: () => void;
+  onImportSpreadsheet?: () => void;
+  onImportGitHub?: () => void;
   showWeight?: boolean;
   scopeLabel?: ScopeLabels;
   /** Conteúdo extra renderizado dentro da seção "Linkados", após a lista de transcripts. */

@@ -312,3 +312,40 @@ iter 2026-05-30T03:00:00Z: PASS CTXSRC-010
 iter 2026-05-30T12:00:00Z: PASS CTXSRC-011
   files: src/app/api/context-sources/route.ts, src/app/api/context-sources/[id]/route.ts, src/app/api/context-sources/[id]/content/route.ts, src/app/api/context-sources/[id]/refresh/route.ts, src/app/api/design-sessions/[id]/context/route.ts, src/app/api/design-sessions/[id]/context/link/route.ts, src/app/api/design-sessions/[id]/context/[linkId]/route.ts, src/app/api/pm-reviews/[id]/context/route.ts, src/app/api/pm-reviews/[id]/context/link/route.ts, src/app/api/pm-reviews/[id]/context/[linkId]/route.ts
   learnings: 10 endpoints criados (context-sources base + design-sessions + pm-reviews). Zod validation nos POSTs (CreateContextSourceSchema discriminatedUnion + LinkContextSchema). CSV upload via base64 + storage bucket. RLS via supabase client automático. PM Review usa canCreatePMReviewForProject helper (não requirePMReviewEditApi). Design Session usa requireSessionAccessApi/requireSessionEditApi. Adapters dispatched por kind em /content e /refresh endpoints.
+---
+
+## Ralph Iteration 11 — Summary
+
+**Story escolhida:** CTXSRC-011 — API endpoints unificados de ContextSource
+
+**Verificações executadas:**
+- ✅ `npx tsc --noEmit` → exit 0
+- ✅ `find src/app/api/context-sources src/app/api/design-sessions/*/context src/app/api/pm-reviews/*/context -name 'route.ts' | wc -l` → 10 (esperado: regex:^[5-9])
+- ✅ Validação Zod presente em 3 endpoints POST (CreateContextSourceSchema, LinkContextSchema)
+
+**Implementação:**
+- **10 endpoints criados** (todos os `touches` do prd.json):
+  1. `POST /api/context-sources` — criar CSV/GSheets/GitHub source
+  2. `GET /api/context-sources/[id]` — metadata
+  3. `GET /api/context-sources/[id]/content` — fullText via adapters
+  4. `POST /api/context-sources/[id]/refresh` — re-fetch GSheets/GitHub
+  5. `GET /api/design-sessions/[id]/context` — listar links
+  6. `POST /api/design-sessions/[id]/context/link` — criar link
+  7. `DELETE /api/design-sessions/[id]/context/[linkId]` — remover link
+  8. `GET /api/pm-reviews/[id]/context` — listar links
+  9. `POST /api/pm-reviews/[id]/context/link` — criar link
+  10. `DELETE /api/pm-reviews/[id]/context/[linkId]` — remover link
+
+**Padrões implementados:**
+- **Zod validation:** `CreateContextSourceSchema` (discriminatedUnion por kind) em POST /api/context-sources; `LinkContextSchema` em POST .../context/link (ambos DS e PM Review)
+- **CSV upload:** base64-encoded file → decode → storage bucket `context-source-files` → rollback em caso de falha
+- **RLS automático:** via supabase client (RLS policies criadas em migrations anteriores)
+- **Autorização:**
+  - Design Session: `requireSessionAccessApi` (GET) / `requireSessionEditApi` (POST/DELETE)
+  - PM Review: `canCreatePMReviewForProject` helper (GET/POST/DELETE)
+- **Adapters dispatch:** /content e /refresh endpoints despacham por `source.kind` para os adapters corretos (transcript, meeting, csv, gsheets, github)
+- **Safety WHERE clause:** DELETE operations pin both linkId AND parentId (sessionId/pmReviewId) para prevenir cross-delete acidental
+
+**Commit:** `d8932a0` — pushed to both origin and staging remotes (branch joao-dev via --force-branch)
+
+**Próximo passo sugerido:** CTXSRC-012 (UI — ContextInsumosSheet com tabs por kind + modais import) é agora elegível, depende apenas de CTXSRC-011 (passes: true). É a próxima story com menor id lexicográfico entre as elegíveis.

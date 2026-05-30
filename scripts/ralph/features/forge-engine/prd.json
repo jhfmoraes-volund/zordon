@@ -1,0 +1,263 @@
+{
+  "feature": "forge-engine",
+  "prdPath": "docs/prd/backlog/prd-forge-engine.md",
+  "createdAt": "2026-05-30",
+  "owner": "joao",
+  "userStories": [
+    {
+      "id": "FE-001",
+      "title": "Spec.md schema + parser + validator",
+      "description": "Define schema canônico do spec.md (5 seções) em Zod. Parser TS que lê .md → AST. Validator com erros úteis (linha + coluna). CLI `forge spec validate <path>`.",
+      "acceptanceCriteria": [
+        "src/lib/forge/spec/schema.ts exporta SpecSchema (Zod) e parseSpec(path: string): Spec",
+        "src/lib/forge/spec/validator.ts: validateSpec(path) retorna { ok, errors[], spec? }",
+        "scripts/forge/cli.ts ganha subcomando 'spec validate <path>' que exit 0 se ok, 1 se errors",
+        "Erros incluem line:col da seção que falhou",
+        "Spec exemplo em docs/specs/example.md passa validação"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js spec validate docs/specs/example.md", "expected": "exit 0, prints ✓" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/forge/spec/schema.ts", "src/lib/forge/spec/validator.ts", "scripts/forge/cli.ts", "docs/specs/example.md"],
+      "agentProfile": "doc",
+      "passes": false
+    },
+    {
+      "id": "FE-002",
+      "title": "Iter-0 planner (spec → stories.jsonl via plan-mode)",
+      "description": "Função planner(spec): spawns claude -p com prompt que lê spec + scaneia repo via anchors e produz stories.jsonl válido. Detecta ciclo no dependsOn. Rejeita story > 30min.",
+      "acceptanceCriteria": [
+        "src/lib/forge/planner.ts exporta plan(specPath): Promise<{stories, dag}>",
+        "Stories válidas conforme StorySchema",
+        "Detecta ciclo no dependsOn e retorna erro com lista de ids no ciclo",
+        "Estimate > 30 vira erro com nome da story",
+        "CLI 'forge plan <slug>' invoca e grava em .forge/<slug>/plan.jsonl"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js plan example && cat .forge/example/plan.jsonl | jq '.[0].id'", "expected": "string non-empty" }
+      ],
+      "dependsOn": ["FE-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/forge/planner.ts", "scripts/forge/cli.ts"],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FE-003",
+      "title": "Migration — ForgeSpec table + ForgeTask new fields + cost agg",
+      "description": "4 migrations atômicas conforme §7. Roda via psql DIRECT_URL. Regenera database.types.ts.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260530a_create_forge_spec.sql aplicado, tabela ForgeSpec existe",
+        "supabase/migrations/20260530b_forge_task_engine_fields.sql adicionou specId, agentProfile, worktreePath, dependsOn, verifiable, passes em ForgeTask",
+        "supabase/migrations/20260530c_forge_run_cost_agg.sql adicionou costUsdTotal, tokensInTotal, tokensOutTotal, specId em ForgeRun",
+        "supabase/migrations/20260530d_forge_cost_aggregate_trigger.sql criou trigger funcional",
+        "src/lib/supabase/database.types.ts contém ForgeSpec + novos campos",
+        "RLS smoke: usuário sem ProjectAccess não consegue SELECT em ForgeSpec do projeto X"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeSpec'", "expected": "1" },
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='ForgeTask' AND column_name IN ('specId','agentProfile','worktreePath','dependsOn','verifiable','passes')", "expected": "6" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/20260530a_create_forge_spec.sql", "supabase/migrations/20260530b_forge_task_engine_fields.sql", "supabase/migrations/20260530c_forge_run_cost_agg.sql", "supabase/migrations/20260530d_forge_cost_aggregate_trigger.sql", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "FE-004",
+      "title": "Orchestrator TS local (substitui ralph.sh)",
+      "description": "Node CLI service local. Lê plan.jsonl, pega tasks ready, spawn workers paralelos (até maxConcurrency=3), merge serializado, atualiza Supabase via DAL. Lock via pid file.",
+      "acceptanceCriteria": [
+        "src/lib/forge/orchestrator.ts exporta runOrchestrator({specId, maxConcurrency=3})",
+        "Lock pid em .forge/<run-id>/orchestrator.pid impede 2 instâncias",
+        "Pick task: ready (passes=false, deps todos passes=true) + lex order como tiebreak",
+        "Merge serializado: enquanto worktree A faz merge, worktree B espera",
+        "Falha de task não derruba o run; conta como error e segue próximas ready",
+        "SIGINT graceful: termina workers ativos, marca status='aborted'"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js run example --dry-run", "expected": "lista de tasks a executar, sem spawnar" }
+      ],
+      "dependsOn": ["FE-002", "FE-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/forge/orchestrator.ts", "src/lib/forge/dal/run.ts", "scripts/forge/cli.ts"],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FE-005",
+      "title": "Worker spawn via Agent + isolation worktree",
+      "description": "spawnWorker(task) usa Claude Code Agent tool com isolation='worktree' e subagent_type baseado em agentProfile. Worktree path: .forge/<run-id>/tasks/<task-id>/worktree. Branch: forge/<run-id>/<task-id>.",
+      "acceptanceCriteria": [
+        "src/lib/forge/worker.ts exporta spawnWorker(task: ForgeTask): Promise<WorkerResult>",
+        "Worktree criado em .forge/<run-id>/tasks/<task-id>/worktree antes do spawn",
+        "Branch nomeado forge/<run-id>/<task-id> criado limpo de joao-dev",
+        "Após commit no worktree, é mergeable em joao-dev sem conflito interno",
+        "Falha de worker remove worktree mas preserva log em error.log"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "git worktree list | grep .forge", "expected": "list contains worktree paths after a test run" }
+      ],
+      "dependsOn": ["FE-004"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/forge/worker.ts"],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FE-006",
+      "title": "Subagent profiles (db/api/ui/wiring/test/doc) com prompts injetados",
+      "description": "Cada profile (src/lib/forge/profiles/<name>.ts) injeta: memories relevantes (ui→project_ui_patterns, db→Supabase rules), skills, tom, constraints.",
+      "acceptanceCriteria": [
+        "src/lib/forge/profiles/index.ts exporta getProfile(name): Profile",
+        "Cada profile tem: systemPrompt, allowedTools[], requiredMemories[], maxRetries",
+        "UI profile prompt menciona explicitamente: ResponsiveSheet, Field, useOptimisticCollection",
+        "DB profile prompt menciona: psql DIRECT_URL, atomic migrations, RLS via helpers",
+        "Cada systemPrompt > 500 chars"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "node -e \"console.log(require('./src/lib/forge/profiles/index.ts').getProfile('ui').systemPrompt.length)\"", "expected": "number > 500" }
+      ],
+      "dependsOn": ["FE-005"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/forge/profiles/index.ts", "src/lib/forge/profiles/db.ts", "src/lib/forge/profiles/api.ts", "src/lib/forge/profiles/ui.ts", "src/lib/forge/profiles/wiring.ts", "src/lib/forge/profiles/test.ts", "src/lib/forge/profiles/doc.ts"],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FE-007",
+      "title": "Hooks emitem ForgeEvent (PostToolUse + Stop)",
+      "description": "Hook .claude/hooks/forge-event-emit.ts intercepta PostToolUse/Stop/SubagentStop. Lê env vars FORGE_RUN_ID + FORGE_TASK_ID. Append em events.jsonl. Watcher faz upload pro Supabase.",
+      "acceptanceCriteria": [
+        ".claude/hooks/forge-event-emit.ts existe e registrado em .claude/settings.json",
+        "Hook escreve linha jsonl com { runId, taskId, ts, kind, payload }",
+        "src/lib/forge/event-uploader.ts: watcher chokidar batch upload (10 evs ou 200ms)",
+        "Idempotência: re-upload no-op via UNIQUE constraint",
+        "Sem run ativo: hook é no-op (não falha)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"ForgeEvent\" WHERE \"runId\" = (SELECT id FROM \"ForgeRun\" ORDER BY \"createdAt\" DESC LIMIT 1)", "expected": "> 0 after a run completes" }
+      ],
+      "dependsOn": ["FE-005", "FE-003"],
+      "estimateMinutes": 25,
+      "touches": [".claude/hooks/forge-event-emit.ts", ".claude/settings.json", "src/lib/forge/event-uploader.ts"],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FE-008",
+      "title": "Cost tracking via stream-json output",
+      "description": "Worker invoca claude -p com --output-format=stream-json. Parser extrai tokens + calcula USD via pricing table. Persistido em ForgeTask, agregado em ForgeRun via trigger.",
+      "acceptanceCriteria": [
+        "src/lib/forge/cost-parser.ts exporta parseCost(stream): Promise<CostSummary>",
+        "Pricing table em src/lib/forge/pricing.ts com Opus/Sonnet/Haiku 4.x",
+        "Worker resultado inclui { cost: { tokensIn, tokensOut, usd } }",
+        "Após cada task, ForgeTask.costUsd persistido via DAL",
+        "Trigger SQL agregou ForgeRun.costUsdTotal corretamente"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "SELECT \"costUsdTotal\" FROM \"ForgeRun\" WHERE id=(SELECT \"runId\" FROM \"ForgeTask\" WHERE \"costUsd\">0 LIMIT 1)", "expected": "value > 0" }
+      ],
+      "dependsOn": ["FE-005", "FE-003"],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/forge/cost-parser.ts", "src/lib/forge/pricing.ts", "src/lib/forge/worker.ts"],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FE-009",
+      "title": "CLI surface (forge init/plan/run/ps/kill/done)",
+      "description": "scripts/forge/cli.ts com subcomandos via commander.js: init, plan, run, ps, kill, done.",
+      "acceptanceCriteria": [
+        "scripts/forge/cli.ts compila via tsc",
+        "package.json bin: { forge: 'scripts/forge/cli.js' }",
+        "Cada subcomando responde a --help",
+        "`forge ps` mostra tabela com run id, slug, progress, cost, eta",
+        "`forge done` invoca gh pr create com título correto"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js --help", "expected": "lista todos os subcomandos" }
+      ],
+      "dependsOn": ["FE-004", "FE-007", "FE-008"],
+      "estimateMinutes": 30,
+      "touches": ["scripts/forge/cli.ts", "package.json"],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FE-010",
+      "title": "Forge UI consome ForgeEvent real (não mock)",
+      "description": "Implementa RealtimeForgeSource. Toggle no provider: useForgeSource('mock'|'realtime'). Backfill + live subscribe. Reconcile gap. Reconnect retoma do lastSeq.",
+      "acceptanceCriteria": [
+        "src/lib/forge/sources/realtime.ts implementa ForgeSource interface",
+        "Backfill ≤ 500ms pra runs com ≤ 1000 eventos",
+        "Wifi off por 5s reconnect sem duplicar seq",
+        "2 abas no mesmo run: estado idêntico após 30s",
+        "Toggle ?source=mock ainda funciona pra demo"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "http", "command_or_query": "curl -I http://localhost:3000/forge", "expected": "200" }
+      ],
+      "dependsOn": ["FE-007"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/forge/sources/realtime.ts", "src/lib/forge/sources/index.ts", "src/hooks/use-forge-store.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "FE-011",
+      "title": "TaskSheet ganha aba Diff",
+      "description": "4ª aba na TaskSheet. Mostra git diff acumulado da worktree. Fetch via GET /api/forge/tasks/:id/diff que lê do worktree (running) ou do commit (done).",
+      "acceptanceCriteria": [
+        "src/app/(dashboard)/forge/_components/task-sheet/diff-tab.tsx existe",
+        "GET /api/forge/tasks/[id]/diff retorna { patch: string, files: string[] }",
+        "Para task running: 'git -C <worktreePath> diff joao-dev...HEAD'",
+        "Para task done: 'git show <commitSha>'",
+        "Aba só aparece se task.status != 'queued'"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "http", "command_or_query": "curl -I http://localhost:3000/api/forge/tasks/test-id/diff", "expected": "200 or 404 (route exists)" }
+      ],
+      "dependsOn": ["FE-010"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/(dashboard)/forge/_components/task-sheet/diff-tab.tsx", "src/app/api/forge/tasks/[id]/diff/route.ts"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "FE-012",
+      "title": "Closeout — branch merge + gh pr create + spec move",
+      "description": "`forge done <run-id>` implementa rito 4: valida passes=true em todas, merge branches em ordem topológica, move spec, push 2 remotes, gh pr create, marca run done.",
+      "acceptanceCriteria": [
+        "Função closeout(runId): Promise<{prUrl, mergedTasks[]}>",
+        "Erro se alguma task passes=false (lista quais)",
+        "Após sucesso, spec move pra done/ com timestamp",
+        "PR URL retornado é acessível via gh api",
+        "CLI 'forge done <id>' executa todos os steps com confirmação"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js done --dry-run <test-run-id>", "expected": "lista ações sem executar" }
+      ],
+      "dependsOn": ["FE-009", "FE-011"],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/forge/closeout.ts", "scripts/forge/cli.ts"],
+      "agentProfile": "wiring",
+      "passes": false
+    }
+  ]
+}
