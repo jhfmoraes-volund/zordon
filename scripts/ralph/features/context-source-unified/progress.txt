@@ -1,0 +1,3 @@
+iter 2026-05-29T00:00:00Z: PASS CTXSRC-001
+  files: supabase/migrations/20260530a_create_context_source.sql, src/lib/supabase/database.types.ts
+  learnings: Migration executada via psql DIRECT_URL. Enum context_source_kind com 7 valores. 4 RLS policies (select/insert/update/delete). Types regenerados via npm run db:types (necessita project-id, não db-url).

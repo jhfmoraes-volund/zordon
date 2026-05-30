@@ -16,17 +16,34 @@
         "database.types.ts contém ContextSource"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530a_create_context_source.sql && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"ContextSource\\\"')::text\"", "expected": "regex:ContextSource" },
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT count(*) FROM pg_policies WHERE tablename='ContextSource'\"", "expected": "regex:^\\s*4" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "test -f supabase/migrations/20260530a_create_context_source.sql && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"ContextSource\\\"')::text\"",
+          "expected": "regex:ContextSource"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT count(*) FROM pg_policies WHERE tablename='ContextSource'\"",
+          "expected": "regex:^\\s*4"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 30,
       "touches": [
         "supabase/migrations/20260530a_create_context_source.sql",
         "src/lib/supabase/database.types.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-002",
@@ -37,11 +54,25 @@
         "RLS habilitada com 4 policies"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530b_create_design_session_context_link.sql && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"DesignSessionContextLink\\\"')::text\"", "expected": "regex:DesignSessionContextLink" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "test -f supabase/migrations/20260530b_create_design_session_context_link.sql && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"DesignSessionContextLink\\\"')::text\"",
+          "expected": "regex:DesignSessionContextLink"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["CTXSRC-001"],
+      "dependsOn": [
+        "CTXSRC-001"
+      ],
       "estimateMinutes": 25,
       "touches": [
         "supabase/migrations/20260530b_create_design_session_context_link.sql",
@@ -58,11 +89,25 @@
         "Helpers existem"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530c_create_pm_review_context_link.sql && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"PMReviewContextLink\\\"')::text\"", "expected": "regex:PMReviewContextLink" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "test -f supabase/migrations/20260530c_create_pm_review_context_link.sql && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"PMReviewContextLink\\\"')::text\"",
+          "expected": "regex:PMReviewContextLink"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["CTXSRC-001"],
+      "dependsOn": [
+        "CTXSRC-001"
+      ],
       "estimateMinutes": 25,
       "touches": [
         "supabase/migrations/20260530c_create_pm_review_context_link.sql",
@@ -79,13 +124,29 @@
         "Idempotente"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"TranscriptRef\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" WHERE kind='transcript')\"", "expected": "regex:t" },
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"TranscriptRef\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" cs JOIN \\\"TranscriptRef\\\" t ON cs.id = t.id WHERE cs.kind = 'transcript')\"", "expected": "regex:t" }
+        {
+          "kind": "sql",
+          "command_or_query": "test -f supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"TranscriptRef\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" WHERE kind='transcript')\"",
+          "expected": "regex:t"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"TranscriptRef\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" cs JOIN \\\"TranscriptRef\\\" t ON cs.id = t.id WHERE cs.kind = 'transcript')\"",
+          "expected": "regex:t"
+        }
       ],
-      "dependsOn": ["CTXSRC-001"],
+      "dependsOn": [
+        "CTXSRC-001"
+      ],
       "estimateMinutes": 30,
-      "touches": ["supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql"]
+      "touches": [
+        "supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql"
+      ]
     },
     {
       "id": "CTXSRC-005",
@@ -96,36 +157,71 @@
         "Idempotente"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "test -f supabase/migrations/20260530e_backfill_meetings_into_context_source.sql && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(DISTINCT \\\"meetingId\\\") FROM \\\"PMReviewMeetingLink\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" WHERE kind='meeting')\"", "expected": "regex:t" }
+        {
+          "kind": "sql",
+          "command_or_query": "test -f supabase/migrations/20260530e_backfill_meetings_into_context_source.sql && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(DISTINCT \\\"meetingId\\\") FROM \\\"PMReviewMeetingLink\\\") = (SELECT count(*) FROM \\\"ContextSource\\\" WHERE kind='meeting')\"",
+          "expected": "regex:t"
+        }
       ],
-      "dependsOn": ["CTXSRC-001"],
+      "dependsOn": [
+        "CTXSRC-001"
+      ],
       "estimateMinutes": 25,
-      "touches": ["supabase/migrations/20260530e_backfill_meetings_into_context_source.sql"]
+      "touches": [
+        "supabase/migrations/20260530e_backfill_meetings_into_context_source.sql"
+      ]
     },
     {
       "id": "CTXSRC-006",
       "title": "Migration F — backfill DS transcript links",
       "description": "20260530f_backfill_ds_transcript_links.sql. INSERT em DesignSessionContextLink SELECT FROM DesignSessionTranscriptLink. Idempotente.",
-      "acceptanceCriteria": ["Count: DesignSessionTranscriptLink == DesignSessionContextLink"],
-      "verifiable": [
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"DesignSessionTranscriptLink\\\") = (SELECT count(*) FROM \\\"DesignSessionContextLink\\\")\"", "expected": "regex:t" }
+      "acceptanceCriteria": [
+        "Count: DesignSessionTranscriptLink == DesignSessionContextLink"
       ],
-      "dependsOn": ["CTXSRC-002", "CTXSRC-004"],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT (SELECT count(*) FROM \\\"DesignSessionTranscriptLink\\\") = (SELECT count(*) FROM \\\"DesignSessionContextLink\\\")\"",
+          "expected": "regex:t"
+        }
+      ],
+      "dependsOn": [
+        "CTXSRC-002",
+        "CTXSRC-004"
+      ],
       "estimateMinutes": 20,
-      "touches": ["supabase/migrations/20260530f_backfill_ds_transcript_links.sql"]
+      "touches": [
+        "supabase/migrations/20260530f_backfill_ds_transcript_links.sql"
+      ]
     },
     {
       "id": "CTXSRC-007",
       "title": "Migration G — backfill PM Review links (transcript + meeting → context)",
       "description": "20260530g_backfill_pm_review_links.sql. Dois INSERTs no mesmo arquivo (atomic batch): transcript links → PMReviewContextLink direto; meeting links resolvem meetingId → contextSourceId via JOIN com ContextSource kind='meeting'. Idempotente.",
-      "acceptanceCriteria": ["Count: (PMReviewTranscriptLink + PMReviewMeetingLink) == PMReviewContextLink"],
-      "verifiable": [
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT ((SELECT count(*) FROM \\\"PMReviewTranscriptLink\\\") + (SELECT count(*) FROM \\\"PMReviewMeetingLink\\\")) = (SELECT count(*) FROM \\\"PMReviewContextLink\\\")\"", "expected": "regex:t" }
+      "acceptanceCriteria": [
+        "Count: (PMReviewTranscriptLink + PMReviewMeetingLink) == PMReviewContextLink"
       ],
-      "dependsOn": ["CTXSRC-003", "CTXSRC-004", "CTXSRC-005"],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT ((SELECT count(*) FROM \\\"PMReviewTranscriptLink\\\") + (SELECT count(*) FROM \\\"PMReviewMeetingLink\\\")) = (SELECT count(*) FROM \\\"PMReviewContextLink\\\")\"",
+          "expected": "regex:t"
+        }
+      ],
+      "dependsOn": [
+        "CTXSRC-003",
+        "CTXSRC-004",
+        "CTXSRC-005"
+      ],
       "estimateMinutes": 30,
-      "touches": ["supabase/migrations/20260530g_backfill_pm_review_links.sql"]
+      "touches": [
+        "supabase/migrations/20260530g_backfill_pm_review_links.sql"
+      ]
     },
     {
       "id": "CTXSRC-008",
@@ -137,11 +233,25 @@
         "tsc passa"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "test -f src/lib/agent/tools/read-context-source.ts && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "ls src/lib/context-sources/adapters/ | grep -c '\\.ts$'", "expected": "regex:^[5-9]" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/lib/agent/tools/read-context-source.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "ls src/lib/context-sources/adapters/ | grep -c '\\.ts$'",
+          "expected": "regex:^[5-9]"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["CTXSRC-001"],
+      "dependsOn": [
+        "CTXSRC-001"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/context-sources/adapters/transcript.ts",
@@ -163,13 +273,29 @@
         "tsc passa"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -c 'from \"@/lib/composio' src/lib/context-sources/adapters/github.ts", "expected": "regex:^[1-9]" },
-        { "kind": "sql", "command_or_query": "grep -cE 'github_(repo|pr|issue)' src/lib/context-sources/adapters/github.ts", "expected": "regex:^[3-9]" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'from \"@/lib/composio' src/lib/context-sources/adapters/github.ts",
+          "expected": "regex:^[1-9]"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE 'github_(repo|pr|issue)' src/lib/context-sources/adapters/github.ts",
+          "expected": "regex:^[3-9]"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["CTXSRC-008"],
+      "dependsOn": [
+        "CTXSRC-008"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/lib/context-sources/adapters/github.ts"]
+      "touches": [
+        "src/lib/context-sources/adapters/github.ts"
+      ]
     },
     {
       "id": "CTXSRC-010",
@@ -183,12 +309,30 @@
         "tsc passa"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -c '\"csv-parse\"' package.json", "expected": "regex:^[1-9]" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT count(*) FROM storage.buckets WHERE id='context-source-files'\"", "expected": "regex:^\\s*1" },
-        { "kind": "sql", "command_or_query": "grep -c 'googlesheets' src/lib/composio/client.ts", "expected": "regex:^[2-9]" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c '\"csv-parse\"' package.json",
+          "expected": "regex:^[1-9]"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT count(*) FROM storage.buckets WHERE id='context-source-files'\"",
+          "expected": "regex:^\\s*1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'googlesheets' src/lib/composio/client.ts",
+          "expected": "regex:^[2-9]"
+        }
       ],
-      "dependsOn": ["CTXSRC-008"],
+      "dependsOn": [
+        "CTXSRC-008"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/context-sources/adapters/csv.ts",
@@ -208,10 +352,22 @@
         "tsc passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "find src/app/api/context-sources src/app/api/design-sessions/*/context src/app/api/pm-reviews/*/context -name 'route.ts' 2>/dev/null | wc -l | tr -d ' '", "expected": "regex:^[5-9]" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "find src/app/api/context-sources src/app/api/design-sessions/*/context src/app/api/pm-reviews/*/context -name 'route.ts' 2>/dev/null | wc -l | tr -d ' '",
+          "expected": "regex:^[5-9]"
+        }
       ],
-      "dependsOn": ["CTXSRC-008", "CTXSRC-002", "CTXSRC-003"],
+      "dependsOn": [
+        "CTXSRC-008",
+        "CTXSRC-002",
+        "CTXSRC-003"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/app/api/context-sources/route.ts",
@@ -237,12 +393,30 @@
         "tsc passa"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "test -f src/components/agent/context-import/spreadsheet-modal.tsx && test -f src/components/agent/context-import/github-source-modal.tsx && echo ok", "expected": "ok" },
-        { "kind": "sql", "command_or_query": "find src/components/pm-review src/components/design-session -name 'spreadsheet-modal*' -o -name 'github-source-modal*' 2>/dev/null | wc -l | tr -d ' '", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -c 'Tabs\\|TabsList' src/components/agent/context-import/context-insumos-sheet.tsx", "expected": "regex:^[1-9]" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/components/agent/context-import/spreadsheet-modal.tsx && test -f src/components/agent/context-import/github-source-modal.tsx && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "find src/components/pm-review src/components/design-session -name 'spreadsheet-modal*' -o -name 'github-source-modal*' 2>/dev/null | wc -l | tr -d ' '",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'Tabs\\|TabsList' src/components/agent/context-import/context-insumos-sheet.tsx",
+          "expected": "regex:^[1-9]"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["CTXSRC-011"],
+      "dependsOn": [
+        "CTXSRC-011"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/components/agent/context-import/context-link-list.tsx",
@@ -263,13 +437,36 @@
         "tsc passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "grep -c 'read_context_source' src/lib/agent/agents/vitor/tools.ts src/lib/agent/agents/vitoria/tools.ts | awk -F: '{s+=$2} END {print s}'", "expected": "regex:^[2-9]" },
-        { "kind": "sql", "command_or_query": "grep -c 'read_context_source' src/lib/agent/agents/vitor/prompt.ts src/lib/agent/agents/vitoria/prompt.ts | awk -F: '{s+=$2} END {print s}'", "expected": "regex:^[2-9]" },
-        { "kind": "sql", "command_or_query": "grep -cE '<ContextRibbon\\b' src/components/design-session/pre-work-step.tsx", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -c 'useProvideStepActions' src/components/design-session/pre-work-step.tsx", "expected": "regex:^[1-9]" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'read_context_source' src/lib/agent/agents/vitor/tools.ts src/lib/agent/agents/vitoria/tools.ts | awk -F: '{s+=$2} END {print s}'",
+          "expected": "regex:^[2-9]"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'read_context_source' src/lib/agent/agents/vitor/prompt.ts src/lib/agent/agents/vitoria/prompt.ts | awk -F: '{s+=$2} END {print s}'",
+          "expected": "regex:^[2-9]"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE '<ContextRibbon\\b' src/components/design-session/pre-work-step.tsx",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'useProvideStepActions' src/components/design-session/pre-work-step.tsx",
+          "expected": "regex:^[1-9]"
+        }
       ],
-      "dependsOn": ["CTXSRC-011", "CTXSRC-012"],
+      "dependsOn": [
+        "CTXSRC-011",
+        "CTXSRC-012"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/agent/agents/vitor/tools.ts",
@@ -291,13 +488,35 @@
         "Smoke browser: estrutura visual idêntica entre Vitor e Vitoria"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "grep -c 'from \"@/components/agent/context-import' src/components/design-session/pre-work-step.tsx src/components/pm-review/pm-review-insumos-sheet.tsx | awk -F: '{s+=$2} END {print s}'", "expected": "regex:^[2-9]" },
-        { "kind": "sql", "command_or_query": "find src/components/pm-review src/components/design-session -name '*-modal.tsx' | wc -l | tr -d ' '", "expected": "0" },
-        { "kind": "sql", "command_or_query": "grep -c 'ContextInsumosSheet' src/components/design-session/pre-work-step.tsx", "expected": "regex:^[1-9]" },
-        { "kind": "sql", "command_or_query": "grep -c 'ContextInsumosSheet' src/components/pm-review/pm-review-insumos-sheet.tsx", "expected": "regex:^[1-9]" },
-        { "kind": "manual_browser", "command_or_query": "Abrir Vitor pre-work (DS qualquer) → chip 'Insumos' no header → comparar com PM Review → botão Insumos. Estrutura idêntica.", "expected": "Mesmas tabs, mesmo dropdown 'Importar novo', mesmos modais ao clicar em cada kind" }
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'from \"@/components/agent/context-import' src/components/design-session/pre-work-step.tsx src/components/pm-review/pm-review-insumos-sheet.tsx | awk -F: '{s+=$2} END {print s}'",
+          "expected": "regex:^[2-9]"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "find src/components/pm-review src/components/design-session -name '*-modal.tsx' | wc -l | tr -d ' '",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'ContextInsumosSheet' src/components/design-session/pre-work-step.tsx",
+          "expected": "regex:^[1-9]"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'ContextInsumosSheet' src/components/pm-review/pm-review-insumos-sheet.tsx",
+          "expected": "regex:^[1-9]"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir Vitor pre-work (DS qualquer) → chip 'Insumos' no header → comparar com PM Review → botão Insumos. Estrutura idêntica.",
+          "expected": "Mesmas tabs, mesmo dropdown 'Importar novo', mesmos modais ao clicar em cada kind"
+        }
       ],
-      "dependsOn": ["CTXSRC-013"],
+      "dependsOn": [
+        "CTXSRC-013"
+      ],
       "estimateMinutes": 15,
       "touches": []
     },
@@ -311,13 +530,29 @@
         "Smoke: linkar/deslinkar transcript em DS continua funcionando"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"DesignSessionTranscriptLink\\\"') IS NULL AND to_regclass('public.\\\"PMReviewTranscriptLink\\\"') IS NULL\"", "expected": "regex:t" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "Linkar e deslinkar 1 transcript via UI Vitor e PM Review", "expected": "Funciona sem erro" }
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -t -c \"SELECT to_regclass('public.\\\"DesignSessionTranscriptLink\\\"') IS NULL AND to_regclass('public.\\\"PMReviewTranscriptLink\\\"') IS NULL\"",
+          "expected": "regex:t"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Linkar e deslinkar 1 transcript via UI Vitor e PM Review",
+          "expected": "Funciona sem erro"
+        }
       ],
-      "dependsOn": ["CTXSRC-013"],
+      "dependsOn": [
+        "CTXSRC-013"
+      ],
       "estimateMinutes": 20,
-      "touches": ["supabase/migrations/20260530h_drop_legacy_link_tables.sql"]
+      "touches": [
+        "supabase/migrations/20260530h_drop_legacy_link_tables.sql"
+      ]
     }
   ]
 }

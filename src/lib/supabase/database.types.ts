@@ -1091,6 +1091,90 @@ export type Database = {
           },
         ]
       }
+      ContextSource: {
+        Row: {
+          capturedAt: string | null
+          createdAt: string
+          createdBy: string | null
+          externalId: string | null
+          externalUrl: string | null
+          fullText: string | null
+          id: string
+          kind: Database["public"]["Enums"]["context_source_kind"]
+          payload: Json
+          projectId: string | null
+          summary: string | null
+          title: string
+          updatedAt: string
+        }
+        Insert: {
+          capturedAt?: string | null
+          createdAt?: string
+          createdBy?: string | null
+          externalId?: string | null
+          externalUrl?: string | null
+          fullText?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["context_source_kind"]
+          payload?: Json
+          projectId?: string | null
+          summary?: string | null
+          title: string
+          updatedAt?: string
+        }
+        Update: {
+          capturedAt?: string | null
+          createdAt?: string
+          createdBy?: string | null
+          externalId?: string | null
+          externalUrl?: string | null
+          fullText?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["context_source_kind"]
+          payload?: Json
+          projectId?: string | null
+          summary?: string | null
+          title?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ContextSource_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ContextSource_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ContextSource_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ContextSource_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ContextSource_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       CsatResponse: {
         Row: {
           clientId: string
@@ -7325,6 +7409,14 @@ export type Database = {
       unassigned_active_task_count: { Args: never; Returns: number }
     }
     Enums: {
+      context_source_kind:
+        | "transcript"
+        | "meeting"
+        | "spreadsheet_csv"
+        | "spreadsheet_gsheets"
+        | "github_repo"
+        | "github_pr"
+        | "github_issue"
       TaskLayer: "DATA" | "API" | "REALTIME" | "UI" | "OPS"
     }
     CompositeTypes: {
@@ -7453,6 +7545,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      context_source_kind: [
+        "transcript",
+        "meeting",
+        "spreadsheet_csv",
+        "spreadsheet_gsheets",
+        "github_repo",
+        "github_pr",
+        "github_issue",
+      ],
       TaskLayer: ["DATA", "API", "REALTIME", "UI", "OPS"],
     },
   },
