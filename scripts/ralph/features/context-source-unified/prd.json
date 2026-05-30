@@ -201,7 +201,8 @@
       "estimateMinutes": 20,
       "touches": [
         "supabase/migrations/20260530f_backfill_ds_transcript_links.sql"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-007",

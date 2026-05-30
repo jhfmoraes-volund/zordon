@@ -108,3 +108,36 @@ iter 2026-05-30T02:29:48Z: PASS CTXSRC-004
 iter 2026-05-30T02:32:50Z: PASS CTXSRC-005
   files: supabase/migrations/20260530e_backfill_meetings_into_context_source.sql
   learnings: Meeting schema difere do PRD (date não startsAt, notes não summary). JOIN via PMReviewMeetingLink→PMReview pra obter projectId. 1 meeting backfilled. Idempotência via NOT EXISTS (não há unique constraint kind+externalId).
+Perfect! Commit successful. Let me provide the iteration summary:
+
+---
+
+## Ralph Iteration 5 — Summary
+
+**Story escolhida:** CTXSRC-005 — Migration E: backfill Meetings linkados → ContextSource
+
+**Verificações executadas:**
+- ✅ Migration file `20260530e_backfill_meetings_into_context_source.sql` criado
+- ✅ Migration executada via psql (1 meeting backfilled)
+- ✅ Count verificado: `SELECT count(DISTINCT "meetingId") FROM "PMReviewMeetingLink"` == `SELECT count(*) FROM "ContextSource" WHERE kind='meeting'` (ambos retornam 1)
+- ✅ Idempotência garantida via `NOT EXISTS` check
+
+**Implementação:**
+- Migration backfilla Meetings referenciados em PMReviewMeetingLink → ContextSource
+- Schema real difere do PRD: Meeting tem `date` (não `startsAt`), `notes` (não `summary`), sem `projectId` direto
+- JOIN via `PMReviewMeetingLink → PMReview` para obter `projectId`
+- Mapeia: `kind='meeting'`, `externalId=meetingId`, `summary=notes`, `capturedAt=date`, `createdBy=createdById`
+- Payload jsonb preserva `{meetingId, date, type, kind}` para referência
+- Idempotência via `NOT EXISTS` subquery (não há unique constraint em `kind+externalId`)
+
+**Ajustes técnicos:**
+- Descoberta: Meeting schema é diferente do especificado no PRD (campos reais: date, notes, createdById vs esperados: startsAt, summary)
+- Solução: JOIN com PMReview para obter projectId (Meeting não tem projectId direto)
+- 1 meeting backfilled com sucesso
+
+**Commit:** `7a6b366` — pushed to origin and staging remotes
+
+**Próximo passo sugerido:** CTXSRC-006 (Migration F — backfill DS transcript links) e CTXSRC-008 (Adapters base) são agora elegíveis. CTXSRC-006 depende de [CTXSRC-002, CTXSRC-004] (ambos passes: true). CTXSRC-008 depende apenas de CTXSRC-001 (passes: true). CTXSRC-006 tem menor id lexicográfico.
+iter 2026-05-29T17:30:00Z: PASS CTXSRC-006
+  files: supabase/migrations/20260530f_backfill_ds_transcript_links.sql
+  learnings: Postgres lowercase conversion: schema usa camelCase mas INSERT precisa lowercase (designsessionid não designSessionId). DesignSessionTranscriptLink tem 0 rows, migration idempotente executou sem erro. Mapeamento: transcriptRefId→contextsourceid, linkedById→addedby, linkedAt→addedat.
