@@ -74,3 +74,37 @@ iter 2026-05-30T02:26:20Z: PASS CTXSRC-003
 iter 2026-05-30T02:29:48Z: PASS CTXSRC-004
   files: supabase/migrations/20260530d_backfill_transcripts_into_context_source.sql, scripts/ralph/features/context-source-unified/prd.json
   learnings: Backfill idempotente preserva id via ON CONFLICT (id) DO NOTHING. 18 TranscriptRef migrados. payload jsonb carrega source/sourceId/byline/meetingId. fullText preservado, summary=NULL (não existe em TranscriptRef). Workaround psql: DIRECT_URL hardcoded funciona, source <(...) falha com socket local.
+---
+
+## Ralph Iteration 4 — Summary
+
+**Story escolhida:** CTXSRC-004 — Migration D: backfill TranscriptRef → ContextSource
+
+**Verificações executadas:**
+- ✅ Migration file `20260530d_backfill_transcripts_into_context_source.sql` criado
+- ✅ Migration executada via psql (18 TranscriptRef rows backfilled)
+- ✅ Count verificado: TranscriptRef == ContextSource WHERE kind='transcript' (ambos retornam 18)
+- ✅ ID preservation verificado: todos os ids de TranscriptRef existem em ContextSource com mesmo id e kind='transcript'
+- ✅ Idempotência garantida via `ON CONFLICT (id) DO NOTHING`
+
+**Implementação:**
+- Migration preserva id via INSERT ... ON CONFLICT (id) DO NOTHING para manter FKs externas válidas
+- Mapeia TranscriptRef → ContextSource:
+  - kind = 'transcript'
+  - title = COALESCE(title, byline, 'Transcript sem título')
+  - externalId = sourceId (roamId/granolaId)
+  - payload jsonb = {source, sourceId, byline, meetingId}
+  - fullText preservado
+  - summary = NULL (não existe em TranscriptRef)
+  - createdBy/createdAt mapeados de importedById/importedAt
+
+**Ajustes técnicos:**
+- Workaround psql: `source <(grep...)` falha com socket local; necessário usar DIRECT_URL hardcoded
+- 18 TranscriptRef rows migrados com sucesso
+
+**Commit:** `c11c33e` — pushed to origin and staging remotes
+
+**Próximo passo sugerido:** CTXSRC-005 (Migration E — backfill Meetings) e CTXSRC-008 (Adapters base) são agora elegíveis, ambas dependem apenas de CTXSRC-001 (passes: true). CTXSRC-005 tem menor id lexicográfico.
+iter 2026-05-30T02:32:50Z: PASS CTXSRC-005
+  files: supabase/migrations/20260530e_backfill_meetings_into_context_source.sql
+  learnings: Meeting schema difere do PRD (date não startsAt, notes não summary). JOIN via PMReviewMeetingLink→PMReview pra obter projectId. 1 meeting backfilled. Idempotência via NOT EXISTS (não há unique constraint kind+externalId).
