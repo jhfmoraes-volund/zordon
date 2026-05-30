@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { StepDef } from "@/lib/design-session-steps";
+import { VitorIcon } from "@/components/icons/vitor-icon";
 
 type Props = {
   steps: StepDef[];
@@ -76,6 +77,7 @@ export function DSRibbon({
           {steps.map((step) => (
             <DSRibbonTab
               key={step.key}
+              stepKey={step.key}
               number={step.index + 1}
               name={step.title}
               description={step.description}
@@ -130,7 +132,7 @@ function DSStepSelect({
         <SelectValue>
           {active ? (
             <span className="flex min-w-0 items-center gap-1.5">
-              <StatusDot status="active" />
+              <StepGlyph stepKey={active.key} status="active" />
               <span className="tabular-nums">{currentStep + 1}</span>
               <span className="truncate font-medium">· {active.title}</span>
               <span className="shrink-0 text-muted-foreground tabular-nums">
@@ -143,7 +145,7 @@ function DSStepSelect({
       <SelectContent>
         {steps.map((step) => (
           <SelectItem key={step.key} value={String(step.index)}>
-            <StatusDot status={stepStatus(step.index, currentStep)} />
+            <StepGlyph stepKey={step.key} status={stepStatus(step.index, currentStep)} />
             <span className="tabular-nums">{step.index + 1}</span>
             <span className="truncate">{step.title}</span>
           </SelectItem>
@@ -156,12 +158,14 @@ function DSStepSelect({
 type TabStatus = "done" | "active" | "pending";
 
 function DSRibbonTab({
+  stepKey,
   number,
   name,
   description,
   status,
   onClick,
 }: {
+  stepKey: string;
   number: number;
   name: string;
   description: string;
@@ -205,7 +209,7 @@ function DSRibbonTab({
               status === "pending" && "text-muted-foreground/70",
             )}
           >
-            <StatusDot status={status} />
+            <StepGlyph stepKey={stepKey} status={status} />
             <span className="tabular-nums">{number}</span>
             {/* Name is always shown ≥md; on mobile only the active step expands
                 to show its name, keeping the row scannable. */}
@@ -242,4 +246,32 @@ function StatusDot({ status }: { status: TabStatus }) {
       )}
     />
   );
+}
+
+/**
+ * Per-step glyph. The `pre_work` step is Vitor's territory — show the
+ * VitorIcon mini glyph instead of the generic status dot, tinted by status.
+ */
+function StepGlyph({
+  stepKey,
+  status,
+}: {
+  stepKey: string;
+  status: TabStatus;
+}) {
+  if (stepKey === "pre_work") {
+    return (
+      <VitorIcon
+        size={14}
+        strokeWidth={2.2}
+        className={cn(
+          "shrink-0",
+          status === "done" && "text-emerald-500",
+          status === "active" && "text-primary",
+          status === "pending" && "text-muted-foreground/60",
+        )}
+      />
+    );
+  }
+  return <StatusDot status={status} />;
 }

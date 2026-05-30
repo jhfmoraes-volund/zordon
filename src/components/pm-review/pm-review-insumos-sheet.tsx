@@ -19,7 +19,7 @@ import {
   ResponsiveSheetFooter,
 } from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
-import { TranscriptModal } from "@/components/design-session/transcript-modal";
+import { TranscriptModal } from "@/components/agent/context-import";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { fmtDate as fmtShortDate } from "@/lib/date-utils";

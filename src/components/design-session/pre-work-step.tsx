@@ -16,7 +16,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import {
   TranscriptModal,
   type ImportedTranscript,
-} from "./transcript-modal";
+} from "@/components/agent/context-import";
 import {
   useSessionFiles,
   type SessionFileRow,

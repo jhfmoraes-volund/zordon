@@ -1,0 +1,182 @@
+{
+  "feature": "planning-session",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/backlog/prd-planning-session.md",
+  "phase": 1,
+  "phaseGoal": "Schema + read-only display de ProjectRoadmap. Manual SQL pode preencher; UI mostra current roadmap se existe, ou empty state. Approve funciona + share token. Entrega mais que o sistema atual (zero release planning hoje).",
+  "userStories": [
+    {
+      "id": "PLANNING-001",
+      "title": "Criar 6 migrations atômicas do schema PlanningSession",
+      "description": "Cria 6 migrations em supabase/migrations/ (20260601a..20260601f) conforme §7 do PRD. Cada migration tem 1 CREATE TABLE ou 1 trigger. Inclui CHECK constraints, RLS policies, índices, e trigger de auto-supersede.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "6 arquivos em supabase/migrations/20260601*.sql existem",
+        "psql roda todas em ordem sem erro",
+        "RLS habilitada em todas 5 tabelas",
+        "Trigger trg_supersede_previous_planning_sessions criado",
+        "Índice parcial idx_planning_session_one_approved garante 1 approved por projeto"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260601a_planning_session.sql && psql \"$DIRECT_URL\" -f supabase/migrations/20260601b_project_roadmap.sql && psql \"$DIRECT_URL\" -f supabase/migrations/20260601c_roadmap_phase.sql && psql \"$DIRECT_URL\" -f supabase/migrations/20260601d_roadmap_phase_prd.sql && psql \"$DIRECT_URL\" -f supabase/migrations/20260601e_roadmap_milestone.sql && psql \"$DIRECT_URL\" -f supabase/migrations/20260601f_planning_session_auto_supersede.sql",
+          "expected": "CREATE TABLE / CREATE INDEX / CREATE POLICY / CREATE TRIGGER (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM pg_tables WHERE tablename IN ('PlanningSession','ProjectRoadmap','RoadmapPhase','RoadmapPhasePRD','RoadmapMilestone');",
+          "expected": "5"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename IN ('PlanningSession','ProjectRoadmap','RoadmapPhase','RoadmapPhasePRD','RoadmapMilestone');",
+          "expected": ">= 10"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT tgname FROM pg_trigger WHERE tgname='trg_supersede_previous_planning_sessions';",
+          "expected": "trg_supersede_previous_planning_sessions"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": [
+        "supabase/migrations/20260601a_planning_session.sql",
+        "supabase/migrations/20260601b_project_roadmap.sql",
+        "supabase/migrations/20260601c_roadmap_phase.sql",
+        "supabase/migrations/20260601d_roadmap_phase_prd.sql",
+        "supabase/migrations/20260601e_roadmap_milestone.sql",
+        "supabase/migrations/20260601f_planning_session_auto_supersede.sql"
+      ]
+    },
+    {
+      "id": "PLANNING-002",
+      "title": "Regenerar database.types.ts",
+      "description": "Após rodar migrations, regenerar src/lib/supabase/database.types.ts via supabase gen types ou ferramenta equivalente do projeto. Verificar que as 5 tabelas aparecem como TypeScript interfaces.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Types pra PlanningSession, ProjectRoadmap, RoadmapPhase, RoadmapPhasePRD, RoadmapMilestone existem",
+        "tsc não quebra"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -E 'PlanningSession|ProjectRoadmap|RoadmapPhase|RoadmapPhasePRD|RoadmapMilestone' src/lib/supabase/database.types.ts | wc -l",
+          "expected": ">= 5"
+        }
+      ],
+      "dependsOn": ["PLANNING-001"],
+      "estimateMinutes": 10,
+      "touches": [
+        "src/lib/supabase/database.types.ts"
+      ]
+    },
+    {
+      "id": "PLANNING-003",
+      "title": "DAL de PlanningSession (read + create básico)",
+      "description": "Criar src/lib/dal/planning-session.ts exportando: getCurrentRoadmap(projectId), listSessions(projectId), getSession(sessionId), createSession(projectId, title, parentSessionId?). Hidrata joins de phases/PRDs/milestones quando relevante. Respeita RLS — não usa service role.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/lib/dal/planning-session.ts exporta as 4 funções",
+        "Cada fn respeita RLS (não faz bypass via service role)",
+        "getCurrentRoadmap retorna null se não há approved version"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -E '^export (async )?function (getCurrentRoadmap|listSessions|getSession|createSession)' src/lib/dal/planning-session.ts | wc -l",
+          "expected": "4"
+        }
+      ],
+      "dependsOn": ["PLANNING-002"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/dal/planning-session.ts"
+      ]
+    },
+    {
+      "id": "PLANNING-004",
+      "title": "API routes básicas (POST session, GET roadmap, GET session)",
+      "description": "3 routes: POST /api/projects/[id]/planning-sessions, GET /api/projects/[id]/roadmap/current, GET /api/planning-sessions/[id]. Validação via Zod. Auth via proxy.ts existente. Lead+ é exigido para POST.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "POST /api/projects/:id/planning-sessions retorna 201 com sessionId quando lead+",
+        "GET /api/projects/:projectId/roadmap/current retorna roadmap atual ou 404 quando none",
+        "GET /api/planning-sessions/:id retorna session com phases/PRDs/milestones inline",
+        "Lead+ exigido para POST (testado com viewer recebe 403)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Smoke test via curl + cookie sessão lead",
+          "expected": "201 em POST; 200 em GET com session válida"
+        }
+      ],
+      "dependsOn": ["PLANNING-003"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/api/projects/[id]/planning-sessions/route.ts",
+        "src/app/api/projects/[id]/roadmap/current/route.ts",
+        "src/app/api/planning-sessions/[id]/route.ts"
+      ]
+    },
+    {
+      "id": "PLANNING-005",
+      "title": "Página /projects/[id]/planning (read-only listing)",
+      "description": "Server component renderizando current roadmap se existe (phases/PRDs/milestones em layout vertical), ou empty state 'Nenhum roadmap aprovado ainda. [Criar PlanningSession]'. Lista histórico de versions abaixo. Reusa primitives existentes (Card, Badge).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Página /projects/[id]/planning renderiza sem 500",
+        "Mostra current roadmap se existe (com phases + PRDs + milestones)",
+        "Mostra empty state se não existe",
+        "Lista histórico de versions com data de approval"
+      ],
+      "verifiable": [
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Visit /projects/[test-id]/planning em browser",
+          "expected": "renders sem 500; empty state ou roadmap"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "no errors"
+        }
+      ],
+      "dependsOn": ["PLANNING-004"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/projects/[id]/planning/page.tsx"
+      ]
+    }
+  ],
+  "phaseExit": "Owner pode criar PlanningSession manual (sem agentes ainda), preencher phases/PRDs/milestones via API ou SQL direto, approve funciona, share token é gerado, página /projects/[id]/planning mostra roadmap atual. Phase 2 começa quando Fase 1 verifiable AC todos passam.",
+  "nextPhase": {
+    "phase": 2,
+    "phaseGoal": "Editor UI com drag/drop, milestones CRUD, conflict detection, approve flow com closeout (move PRDs filesystem).",
+    "stories": [
+      "PLANNING-006: Board primitive — phases as columns",
+      "PLANNING-007: Drag/drop entre phases com useOptimisticCollection",
+      "PLANNING-008: PRD detail sheet (ResponsiveSheet)",
+      "PLANNING-009: Milestones CRUD",
+      "PLANNING-010: Conflict detection on approve (D15)",
+      "PLANNING-011: Approve flow + closeout (move PRDs filesystem)"
+    ]
+  }
+}

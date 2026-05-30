@@ -6,7 +6,7 @@ export type StepDef = {
 };
 
 export const STEP_CATALOG: Record<string, Omit<StepDef, "index">> = {
-  pre_work: { key: "pre_work", title: "Pré-Trabalho", description: "Upload de documentos e pré-preenchimento com IA" },
+  pre_work: { key: "pre_work", title: "Vitor", description: "Conversa inicial com Vitor para mapear o produto e propor um ponto de partida" },
   product_vision: { key: "product_vision", title: "Visão", description: "Por que existe? Qual problema resolve? Como é o sucesso?" },
   scope_definition: { key: "scope_definition", title: "Escopo do Produto", description: "Alinhar identidade e fronteiras do produto (é / não é / faz / não faz) antes de explorar personas" },
   personas_journeys: { key: "personas_journeys", title: "Personas", description: "Quem sofre com o problema? Como vive hoje? Como será com a solução?" },

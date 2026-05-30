@@ -1,0 +1,324 @@
+{
+  "feature": "context-import-unified",
+  "title": "Context Import Unificado — extrair primitivo Vitoria + adoção Vitor",
+  "prd_path": "docs/prd/backlog/prd-context-import-unified.md",
+  "parent_prd": "prd-vitor-output-as-prd",
+  "userStories": [
+    {
+      "id": "CTXIMP-001",
+      "title": "Criar src/components/agent/context-import/ e mover TranscriptModal",
+      "description": "Criar pasta src/components/agent/context-import/ com index.ts. Mover src/components/design-session/transcript-modal.tsx pra esse diretório. Atualizar todos os imports (vitor pre-work, pm-review insumos sheet). Sem mudança de comportamento.",
+      "acceptanceCriteria": [
+        "src/components/agent/context-import/transcript-modal.tsx existe",
+        "src/components/design-session/transcript-modal.tsx NÃO existe",
+        "tsc --noEmit passa",
+        "Nenhum import quebrado"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/components/agent/context-import/transcript-modal.tsx && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test ! -f src/components/design-session/transcript-modal.tsx && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -rEn \"from .*design-session/transcript-modal\" src/ | wc -l | tr -d ' '",
+          "expected": "0"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": [
+        "src/components/agent/context-import/transcript-modal.tsx",
+        "src/components/agent/context-import/index.ts",
+        "src/components/design-session/pre-work-step.tsx",
+        "src/components/pm-review/pm-review-insumos-sheet.tsx"
+      ],
+      "passes": true
+    },
+    {
+      "id": "CTXIMP-002",
+      "title": "Extrair ContextLinkList primitivo",
+      "description": "Criar src/components/agent/context-import/context-link-list.tsx. Props: items: Array<{id, title, source, capturedAt, weight?}>, onRemove?, showWeight?, emptyLabel?. Lista vertical com source badge + título + ações. Sem dependência de pmReviewId ou designSessionId.",
+      "acceptanceCriteria": [
+        "Arquivo existe e exporta default ContextLinkList",
+        "Componente não importa nada de pm-review/ ou design-session/",
+        "Props tipadas (sem any)",
+        "Renderiza items.length === 0 com emptyLabel"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"from .*(pm-review|design-session)/\" src/components/agent/context-import/context-link-list.tsx",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c \"export default\" src/components/agent/context-import/context-link-list.tsx",
+          "expected": "1"
+        }
+      ],
+      "dependsOn": [
+        "CTXIMP-001"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/components/agent/context-import/context-link-list.tsx"
+      ]
+    },
+    {
+      "id": "CTXIMP-003",
+      "title": "Extrair ContextInsumosSheet primitivo",
+      "description": "Criar src/components/agent/context-import/context-insumos-sheet.tsx. Props: open, onOpenChange, title, scope: 'session' | 'project', linkedTranscripts, poolTranscripts, onLink, onUnlink, onImportNew, showWeight? (default false), scopeLabel?. ResponsiveSheet com 3 seções (Linkados / Pool / Importar novo). Esconde Pool quando scope='session' e pool vazio. Reutiliza ContextLinkList.",
+      "acceptanceCriteria": [
+        "Arquivo existe e exporta default ContextInsumosSheet",
+        "Usa ResponsiveSheet de src/components/ui/",
+        "Esconde seção Pool quando scope='session' e pool vazio",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"from .*(pm-review|design-session)/\" src/components/agent/context-import/context-insumos-sheet.tsx",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c \"ResponsiveSheet\" src/components/agent/context-import/context-insumos-sheet.tsx",
+          "expected": "regex:^[1-9]"
+        }
+      ],
+      "dependsOn": [
+        "CTXIMP-002"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/agent/context-import/context-insumos-sheet.tsx"
+      ]
+    },
+    {
+      "id": "CTXIMP-004",
+      "title": "Criar ContextRibbon primitivo",
+      "description": "Criar src/components/agent/context-import/context-ribbon.tsx. Props: counts: { transcripts, files?, notes? }, onOpenInsumos, actions? (slot pra ações extras). Barra horizontal h-9, texto resumo + botão 'Insumos'. Em mobile colapsa pra contadores.",
+      "acceptanceCriteria": [
+        "Arquivo existe e exporta default ContextRibbon",
+        "tsc passa",
+        "Aceita actions opcional (slot)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/components/agent/context-import/context-ribbon.tsx && echo ok",
+          "expected": "ok"
+        }
+      ],
+      "dependsOn": [
+        "CTXIMP-001"
+      ],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/components/agent/context-import/context-ribbon.tsx"
+      ]
+    },
+    {
+      "id": "CTXIMP-005",
+      "title": "Extrair read_transcript_content tool pra shared",
+      "description": "Criar src/lib/agent/tools/read-transcript-content.ts com factory createReadTranscriptContentTool(opts). Migrar lógica de src/lib/agent/agents/vitoria/tools.ts:350. Vitoria importa do shared. Comportamento idêntico.",
+      "acceptanceCriteria": [
+        "src/lib/agent/tools/read-transcript-content.ts existe e exporta factory",
+        "vitoria/tools.ts importa do shared",
+        "tsc passa",
+        "Sem regressão em Vitoria"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/lib/agent/tools/read-transcript-content.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c \"from .*lib/agent/tools/read-transcript-content\" src/lib/agent/agents/vitoria/tools.ts",
+          "expected": "1"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/tools/read-transcript-content.ts",
+        "src/lib/agent/agents/vitoria/tools.ts"
+      ]
+    },
+    {
+      "id": "CTXIMP-006",
+      "title": "Refatorar PM Review insumos sheet pra consumir primitivos",
+      "description": "Substituir corpo de src/components/pm-review/pm-review-insumos-sheet.tsx por wrapper fino que monta props e renderiza <ContextInsumosSheet scope='project' showWeight />. Manter section de Meetings linkados inline no wrapper. Comportamento visual idêntico.",
+      "acceptanceCriteria": [
+        "pm-review-insumos-sheet.tsx tem < 200 linhas (era 423)",
+        "Importa ContextInsumosSheet",
+        "tsc passa",
+        "Smoke browser: linkar/deslinkar transcript funciona"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "wc -l < src/components/pm-review/pm-review-insumos-sheet.tsx | tr -d ' '",
+          "expected": "regex:^(1[0-9]{2}|[1-9][0-9])$"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c \"ContextInsumosSheet\" src/components/pm-review/pm-review-insumos-sheet.tsx",
+          "expected": "1"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "PM Review → Insumos → linkar pool → deslinkar",
+          "expected": "Sem erro; sheet funciona"
+        }
+      ],
+      "dependsOn": [
+        "CTXIMP-003"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/pm-review/pm-review-insumos-sheet.tsx"
+      ]
+    },
+    {
+      "id": "CTXIMP-007",
+      "title": "Adicionar ContextRibbon ao Vitor pre-work step",
+      "description": "Em src/components/design-session/pre-work-step.tsx: adicionar <ContextRibbon> no topo (counts.transcripts = transcripts.length). State insumosOpen controla <ContextInsumosSheet scope='session' />. Sheet recebe linkedTranscripts=transcripts, poolTranscripts=[], onLink/onUnlink usando endpoints existentes. onImportNew abre TranscriptModal. NÃO remover paperclip/mic do composer.",
+      "acceptanceCriteria": [
+        "Importa ContextRibbon + ContextInsumosSheet",
+        "tsc passa",
+        "Smoke: ribbon mostra contador; sheet linka/deslinka",
+        "Composer paperclip+mic continuam funcionando"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"ContextRibbon|ContextInsumosSheet\" src/components/design-session/pre-work-step.tsx",
+          "expected": "regex:^[2-9]"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "DS pre-work → ver ribbon → abrir sheet → linkar/deslinkar",
+          "expected": "Ribbon renderiza; sheet funciona; contador atualiza"
+        }
+      ],
+      "dependsOn": [
+        "CTXIMP-003",
+        "CTXIMP-004"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/design-session/pre-work-step.tsx"
+      ]
+    },
+    {
+      "id": "CTXIMP-008",
+      "title": "Registrar read_transcript_content no Vitor + revisar prompt",
+      "description": "Em src/lib/agent/agents/vitor/tools.ts (criar se não existir): importar createReadTranscriptContentTool e registrar. Em vitor/index.ts:198-220: deixar de injetar fullText em agentContext.transcripts; passar apenas {id, title, source, summary, capturedAt}. Em vitor/prompt.ts: bloco 'Fontes de contexto linkadas' listando IDs + instrução pra usar read_transcript_content (espelha vitoria/prompt.ts:430).",
+      "acceptanceCriteria": [
+        "vitor/tools.ts registra read_transcript_content",
+        "vitor/index.ts não passa fullText",
+        "vitor/prompt.ts contém 'read_transcript_content' e 'transcriptRefId'",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c \"read_transcript_content\" src/lib/agent/agents/vitor/tools.ts",
+          "expected": "regex:^[1-9]"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c \"fullText\" src/lib/agent/agents/vitor/index.ts",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"read_transcript_content|transcriptRefId\" src/lib/agent/agents/vitor/prompt.ts",
+          "expected": "regex:^[2-9]"
+        }
+      ],
+      "dependsOn": [
+        "CTXIMP-005"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitor/tools.ts",
+        "src/lib/agent/agents/vitor/index.ts",
+        "src/lib/agent/agents/vitor/prompt.ts"
+      ]
+    },
+    {
+      "id": "CTXIMP-009",
+      "title": "Smoke E2E manual — Vitor com ribbon + leitura sob demanda",
+      "description": "Cenário 1: DS com 2+ transcripts → ribbon mostra contador → perguntar ao Vitor sobre conteúdo → confirmar via logs que chamou read_transcript_content. Cenário 2: linkar novo transcript → Vitor reconhece. Cenário 3: deslinkar → Vitor para de citar.",
+      "acceptanceCriteria": [
+        "Cenário 1 passa: tool call visível em logs",
+        "Cenário 2 passa: novo transcript reconhecido",
+        "Cenário 3 passa: deslinkado some das fontes"
+      ],
+      "verifiable": [
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Executar 3 cenários com DS real",
+          "expected": "Todos passam sem console error"
+        }
+      ],
+      "dependsOn": [
+        "CTXIMP-007",
+        "CTXIMP-008"
+      ],
+      "estimateMinutes": 25,
+      "touches": []
+    }
+  ]
+}

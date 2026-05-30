@@ -1,0 +1,3 @@
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-001
+  files: src/components/agent/context-import/{transcript-modal.tsx,index.ts}, src/components/design-session/pre-work-step.tsx, src/components/pm-review/pm-review-insumos-sheet.tsx, src/components/planning/context-sheet.tsx
+  learnings: Além de pre-work-step e pm-review, encontrei context-sheet.tsx (planning) também importando transcript-modal — todos atualizados. Export do transcript-modal é named (não default), então index.ts re-exporta como named.

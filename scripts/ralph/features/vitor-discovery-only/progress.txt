@@ -206,3 +206,37 @@ Perfect! Commit successful with hash **7e547b9**. Now let me create the final su
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS VTRDISC-009
   files: src/eval/vitor/prompt-tools-coherence.test.ts, src/lib/agent/prompt.ts (fix removed refs)
   learnings: Created regression test checking absence of 8 removed tools (create_user_story, update_user_story, delete_user_story, set_story_refinement, manage_story_ac, create_task, update_task, delete_task) and presence of 3 PRD tools (propose_prd, update_prd, approve_prd). Fixed 2 stale refs (delete_task, delete_user_story) in Nivel 3 confirmation list. Test passes via npx tsx. Feature vitor-discovery-only complete (all 9 stories pass).
+Excellent! All 9 stories have `passes: true`. The feature is complete. Let me create the final iteration summary:
+
+---
+
+## Iteração 6 — VTRDISC-009 concluída (FEATURE COMPLETE)
+
+**Story escolhida:** VTRDISC-009 — Adicionar regression test prompt-tools-coherence
+
+**Verificações executadas:**
+1. ✓ `test -f src/eval/vitor/prompt-tools-coherence.test.ts && echo ok` → ok (file exists)
+2. ✓ `npx tsc --noEmit` → exit 0 (typecheck passes)
+3. ✓ `npx tsx src/eval/vitor/prompt-tools-coherence.test.ts` → Tests passed (manual_browser equivalent)
+
+**Implementação:**
+- Created `src/eval/vitor/prompt-tools-coherence.test.ts` following the existing test pattern (standalone using node:assert, not vitest)
+- Test verifies 4 critical invariants:
+  1. **No references to 8 removed story/task tools**: `create_user_story`, `update_user_story`, `delete_user_story`, `set_story_refinement`, `manage_story_ac`, `create_task`, `update_task`, `delete_task`
+  2. **All 3 PRD tools present**: `propose_prd`, `update_prd`, `approve_prd`
+  3. **No references to old sub-phase names**: `STORY_TREE`, `STORY_DETAIL`, `TASK_BREAKDOWN`
+  4. **New sub-phase names present**: `PRD_DRAFTING`, `PRD_REVIEW`
+- Fixed 2 stale references found during test run: removed `delete_task` and `delete_user_story` from Nivel 3 confirmation list in `src/lib/agent/prompt.ts:145`
+- Test passes cleanly via `npx tsx` (run command: `npx tsx src/eval/vitor/prompt-tools-coherence.test.ts`)
+
+**Arquivos modificados:**
+- `src/eval/vitor/prompt-tools-coherence.test.ts` (novo, 137 linhas)
+- `src/lib/agent/prompt.ts` (removido refs em Nivel 3)
+- `scripts/ralph/features/vitor-discovery-only/prd.json` (passes: true)
+- `scripts/ralph/features/vitor-discovery-only/progress.txt` (learning appended)
+
+**Commit hash:** 375097f
+
+**Status da feature:** ✅ **COMPLETA** — Todas as 9 stories (VTRDISC-001 a VTRDISC-009) têm `passes: true`.
+
+**Próximo passo sugerido:** Feature `vitor-discovery-only` está pronta para Checkpoint (mover de `ready/` para `blocked/` e rodar `bash scripts/ralph/checkpoint.sh vitor-discovery-only`).
