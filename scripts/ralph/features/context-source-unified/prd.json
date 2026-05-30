@@ -348,7 +348,8 @@
         "src/lib/composio/client.ts",
         "package.json",
         "supabase/migrations/20260530j_create_context_source_files_bucket.sql"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-011",

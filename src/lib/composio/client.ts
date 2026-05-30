@@ -45,7 +45,7 @@ async function getClient(): Promise<ComposioClient | null> {
     // SDK exige version explícita por tool execution; "latest" libera sem
     // hardcodar data específica (Composio v3 atualiza schemas continuamente).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    toolkitVersions: { github: "latest" } as any,
+    toolkitVersions: { github: "latest", googlesheets: "latest" } as any,
   });
   return _client;
 }
@@ -61,6 +61,16 @@ function githubAuthConfigId(): string | null {
   );
 }
 
+function gsheetsAuthConfigId(): string | null {
+  return process.env.COMPOSIO_GSHEETS_AUTH_CONFIG_ID ?? null;
+}
+
+function getAuthConfigId(toolkit: "github" | "googlesheets"): string | null {
+  if (toolkit === "github") return githubAuthConfigId();
+  if (toolkit === "googlesheets") return gsheetsAuthConfigId();
+  return null;
+}
+
 export type ComposioConnectionStatus = {
   toolkit: string;
   /** "active" | "initiated" | "expired" | "failed" | "inactive" | "not_connected" */
@@ -69,25 +79,27 @@ export type ComposioConnectionStatus = {
 };
 
 /**
- * Inicia conexão OAuth pra um toolkit (github). Devolve URL que o frontend
+ * Inicia conexão OAuth pra um toolkit (github | googlesheets). Devolve URL que o frontend
  * redireciona pra autenticação. userId = member.id (entityId no Composio).
  */
 export async function initiateConnection(
   userId: string,
-  toolkit: "github",
+  toolkit: "github" | "googlesheets",
   callbackUrl?: string,
 ): Promise<{ redirectUrl: string; connectionId: string } | { error: string }> {
   const client = await getClient();
   if (!client) return { error: "Composio não configurado (COMPOSIO_API_KEY ausente)" };
 
-  const authConfigId = githubAuthConfigId();
+  const authConfigId = getAuthConfigId(toolkit);
   if (!authConfigId) {
+    const varName = toolkit === "github"
+      ? "COMPOSIO_GITHUB_AUTH_CONFIG_ID (ou COMPOSIO_GITHUB_APP_ID)"
+      : "COMPOSIO_GSHEETS_AUTH_CONFIG_ID";
     return {
       error:
-        "COMPOSIO_GITHUB_AUTH_CONFIG_ID (ou COMPOSIO_GITHUB_APP_ID) ausente. Crie um Auth Config no painel Composio (toolkit=github, Composio-managed OAuth) e copie o ac_xxx pro .env.",
+        `${varName} ausente. Crie um Auth Config no painel Composio (toolkit=${toolkit}, Composio-managed OAuth) e copie o ac_xxx pro .env.`,
     };
   }
-  void toolkit; // toolkit é implícito via authConfigId; mantido pra clarity da API
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,7 +123,7 @@ export async function initiateConnection(
  */
 export async function getConnectionStatus(
   userId: string,
-  toolkit: "github",
+  toolkit: "github" | "googlesheets",
 ): Promise<ComposioConnectionStatus> {
   const client = await getClient();
   if (!client) {
@@ -148,7 +160,7 @@ export async function getConnectionStatus(
  */
 export async function disconnect(
   userId: string,
-  toolkit: "github",
+  toolkit: "github" | "googlesheets",
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const client = await getClient();
   if (!client) return { ok: false, error: "Composio não configurado" };
@@ -173,7 +185,7 @@ export async function disconnect(
  */
 export async function getUserTools(
   userId: string,
-  toolkits: Array<"github">,
+  toolkits: Array<"github" | "googlesheets">,
   opts: { limit?: number; toolSlugs?: string[] } = {},
 ): Promise<ToolSet> {
   const client = await getClient();
@@ -208,7 +220,7 @@ const SLUG_CACHE = new Map<string, string>();
 
 export async function findToolSlug(
   userId: string,
-  toolkit: "github",
+  toolkit: "github" | "googlesheets",
   keywords: string[],
 ): Promise<string | null> {
   const cacheKey = `${toolkit}::${keywords.join("|").toLowerCase()}`;
@@ -279,7 +291,9 @@ export async function getComposioTools(
   userId: string,
   toolkits: string[],
 ): Promise<ToolSet> {
-  const supported = toolkits.filter((t): t is "github" => t === "github");
+  const supported = toolkits.filter(
+    (t): t is "github" | "googlesheets" => t === "github" || t === "googlesheets"
+  );
   if (supported.length === 0) return {};
   return getUserTools(userId, supported);
 }

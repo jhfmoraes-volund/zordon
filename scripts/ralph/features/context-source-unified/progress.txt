@@ -232,3 +232,36 @@ iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXSRC-008
 iter 2026-05-30T02:43:25Z: PASS CTXSRC-009
   files: src/lib/context-sources/adapters/github.ts
   learnings: GitHub adapter via Composio: parseGitHubUrl regex suporta 3 kinds (repo/pr/issue). ComposioConnectionMissing exception inline (não precisou criar arquivo separado). executeTool + getConnectionStatus de @/lib/composio/client. createdBy pode ser null (guard necessário). Padrão markdown builder espelhado de meeting.ts.
+---
+
+## Ralph Iteration 9 — Summary
+
+**Story escolhida:** CTXSRC-009 — GitHub adapter via Composio (reuse)
+
+**Verificações executadas:**
+- ✅ `grep -c 'from "@/lib/composio' src/lib/context-sources/adapters/github.ts` → 1 (esperado: regex:^[1-9])
+- ✅ `grep -cE 'github_(repo|pr|issue)' src/lib/context-sources/adapters/github.ts` → 7 (esperado: regex:^[3-9])
+- ✅ `npx tsc --noEmit` → exit 0
+
+**Implementação:**
+- **GitHub adapter completo** com 3 kinds suportados:
+  - `github_repo` — busca README.md via `GITHUB_GET_REPOSITORY_CONTENT`
+  - `github_pr` — busca pull request via `GITHUB_GET_PULL_REQUEST`
+  - `github_issue` — busca issue via `GITHUB_GET_AN_ISSUE`
+- **Parser de URL** via regex que detecta automaticamente o kind da URL
+- **ComposioConnectionMissing exception** criada inline (não foi necessário arquivo separado)
+- **Integração com Composio:** usa `executeTool` e `getConnectionStatus` de `@/lib/composio/client`
+- **Tratamento de edge cases:** guard para `source.createdBy` null, build de connectUrl para OAuth flow
+- **Formato markdown consistente** espelhando o padrão usado em `meeting.ts`
+
+**Ajustes técnicos:**
+- Descoberta: `source.createdBy` pode ser `null` (tipo do DB) — adicionado guard antes de chamar Composio
+- Primeira tentativa falhou no tsc com 4 erros de tipo null
+- Corrigido com check explícito e throw de erro descritivo
+
+**Commit:** `5a8e829` — branch `joao-dev` (não foi possível usar sync-main.sh pois não está em main)
+
+**Próximo passo sugerido:** CTXSRC-010 (CSV adapter + GSheets via Composio) e CTXSRC-011 (API endpoints unificados) são agora elegíveis. CTXSRC-010 depende apenas de CTXSRC-008 (passes: true). CTXSRC-011 depende de [CTXSRC-008, CTXSRC-002, CTXSRC-003] (todos passes: true). CTXSRC-010 tem menor id lexicográfico.
+iter 2026-05-30T03:00:00Z: PASS CTXSRC-010
+  files: supabase/migrations/20260530j_create_context_source_files_bucket.sql, src/lib/composio/client.ts, src/lib/context-sources/adapters/csv.ts, src/lib/context-sources/adapters/gsheets.ts
+  learnings: CSV adapter usa csv-parse/sync pra parse → markdown table. GSheets via GOOGLESHEETS_GET_SPREADSHEET_VALUES (Composio). ComposioConnectionMissing exception inline com connectUrl. Bucket RLS usa can_view_project(projectId) com 1 param (não 2). composio/client.ts expandido pra aceitar "googlesheets" em todos os métodos + toolkitVersions. csv-parse já estava em package.json (não foi necessário npm install).
