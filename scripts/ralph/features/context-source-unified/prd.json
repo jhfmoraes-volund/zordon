@@ -694,7 +694,8 @@
         "src/components/sprint/sprint-context-sheet.tsx",
         "src/components/agent/context-import/context-insumos-sheet.tsx",
         "src/components/agent/context-import/index.ts"
-      ]
+      ],
+      "passes": true
     }
   ]
 }

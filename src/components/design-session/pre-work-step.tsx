@@ -15,9 +15,9 @@ import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   TranscriptModal,
-  ContextInsumosSheet,
   type ImportedTranscript,
 } from "@/components/agent/context-import";
+import ContextSheet from "@/components/agent/context-import/context-sheet";
 import { StepActions } from "./ribbon";
 import {
   useSessionFiles,
@@ -150,8 +150,8 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
     };
   }, [sessionId]);
 
-  const handleRemoveTranscript = useCallback(
-    async (transcriptId: string) => {
+  const handleUnlinkTranscript = useCallback(
+    async (transcriptId: string, title: string) => {
       const prev = transcripts;
       setTranscripts((cur) => cur.filter((t) => t.id !== transcriptId));
       const res = await fetch(
@@ -163,24 +163,11 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
     [sessionId, transcripts],
   );
 
-  const handleLinkTranscript = useCallback(
-    async (transcriptId: string) => {
-      // Pool is empty for scope='session', so this would only be called
-      // if we implement pool fetching in the future. For now, no-op.
-      console.log("Link transcript:", transcriptId);
-    },
-    [],
-  );
-
-  const handleOpenImportNew = useCallback(() => {
-    setInsumosOpen(false);
-    setRoamModalOpen(true);
-  }, []);
-
-  const linkedTranscriptItems = useMemo(
+  const linkedItems = useMemo(
     () =>
       transcripts.map((t) => ({
         id: t.id,
+        kind: "transcript" as const,
         title: t.meetingTitle,
         source: t.source,
         capturedAt: t.meetingStart,
@@ -309,7 +296,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
               </span>
               <button
                 type="button"
-                onClick={() => handleRemoveTranscript(t.id)}
+                onClick={() => handleUnlinkTranscript(t.id, t.meetingTitle ?? "esta transcrição")}
                 aria-label="Remover transcrição"
               >
                 <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
@@ -437,16 +424,18 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
         onImported={(t) => setTranscripts((cur) => [t, ...cur])}
       />
 
-      <ContextInsumosSheet
+      <ContextSheet
         open={insumosOpen}
         onOpenChange={setInsumosOpen}
-        title="Insumos de contexto"
-        scope="session"
-        linkedTranscripts={linkedTranscriptItems}
-        poolTranscripts={[]}
-        onUnlink={handleRemoveTranscript}
-        onLink={handleLinkTranscript}
-        onImportNew={handleOpenImportNew}
+        ritualLabel="DS"
+        linkedItems={linkedItems}
+        capabilities={{
+          transcript: true,
+        }}
+        handlers={{
+          onUnlink: handleUnlinkTranscript,
+          onImportTranscript: () => setRoamModalOpen(true),
+        }}
       />
     </div>
   );
