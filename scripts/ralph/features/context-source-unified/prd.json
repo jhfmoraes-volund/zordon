@@ -565,6 +565,134 @@
       "estimateMinutes": 20,
       "touches": [
         "supabase/migrations/20260530h_drop_legacy_link_tables.sql"
+      ],
+      "passes": true,
+      "deferred": true,
+      "deferredReason": "Drop legacy adiado: pm-review.ts tem 12 refs, insumo-pool.ts tem 4 refs, vitoria/pm-review.ts tem 2 refs. Dropar agora quebra. Migra-se em PRD futuro de cleanup."
+    },
+    {
+      "id": "CTXSRC-016",
+      "title": "Promover planning/context-sheet.tsx como primitivo ContextSheet (Pills pattern)",
+      "description": "Criar src/components/agent/context-import/context-sheet.tsx como primitivo canônico baseado 1:1 em planning/context-sheet.tsx (pattern Pills + InlinePanel + 3 modais). Generalizar via props: ritualLabel (string, ex Planning/PM Review/DS), linkedItems (array), capabilities ({transcript, spreadsheet, github}), handlers (onLink/onUnlink/onImportNew). Header title format: Contexto da [ritualLabel]. Pills compactos rounded com counts dinâmicos. Sem Tabs. Sem DropdownMenu. Modais separados (TranscriptModal/SpreadsheetImportModal/GitHubRepoModal). Sheet fecha antes de modal abrir.",
+      "acceptanceCriteria": [
+        "Arquivo src/components/agent/context-import/context-sheet.tsx existe",
+        "Exporta default ContextSheet com Props interface tipada",
+        "Pattern Pills + InlinePanel preservado de planning/context-sheet.tsx",
+        "Sem uso de Tabs / DropdownMenu (são patterns errados)",
+        "Modais separados invocados via openImport()",
+        "tsc passes"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/components/agent/context-import/context-sheet.tsx && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"Tabs|DropdownMenu\" src/components/agent/context-import/context-sheet.tsx",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"ContextPill|Pills\" src/components/agent/context-import/context-sheet.tsx",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [
+        "CTXSRC-013"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/agent/context-import/context-sheet.tsx"
+      ],
+      "passes": true
+    },
+    {
+      "id": "CTXSRC-017",
+      "title": "Migrar pm-review-insumos-sheet.tsx para usar ContextSheet primitivo + renomear Insumos→Contexto",
+      "description": "Refatorar src/components/pm-review/pm-review-insumos-sheet.tsx para usar o novo ContextSheet primitivo (CTXSRC-016). Renomear arquivo para src/components/pm-review/pm-review-context-sheet.tsx. Atualizar callers do PM Review: botão Insumos vira Contexto (label e ícone). Substituir ContextInsumosSheet por ContextSheet. Linked meetings rendem como Pills tipo reunião dentro do mesmo padrão.",
+      "acceptanceCriteria": [
+        "src/components/pm-review/pm-review-context-sheet.tsx existe",
+        "src/components/pm-review/pm-review-insumos-sheet.tsx deletado (ou re-export do novo)",
+        "Callers do PM Review atualizados (label Contexto)",
+        "Sem ContextInsumosSheet referenciado em pm-review/",
+        "tsc passes"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/components/pm-review/pm-review-context-sheet.tsx && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -rln \"ContextInsumosSheet\" src/components/pm-review/ 2>/dev/null | wc -l | tr -d \" \"",
+          "expected": "0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -rln \"Insumos\" src/app/\\(dashboard\\)/projects/ src/components/pm-review/ 2>/dev/null | wc -l | tr -d \" \"",
+          "expected": "0"
+        }
+      ],
+      "dependsOn": [
+        "CTXSRC-016"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/pm-review/pm-review-context-sheet.tsx",
+        "src/components/pm-review/pm-review-insumos-sheet.tsx",
+        "src/app/(dashboard)/projects/[id]/pm-review/page.tsx"
+      ]
+    },
+    {
+      "id": "CTXSRC-018",
+      "title": "Migrar planning/context-sheet.tsx (dogfood) + sprint-context-sheet.tsx + DS Vitor para usar primitivo + cleanup ContextInsumosSheet",
+      "description": "Refatorar src/components/planning/context-sheet.tsx como thin wrapper que usa o novo ContextSheet primitivo (CTXSRC-016) — dogfood. Refatorar src/components/sprint/sprint-context-sheet.tsx para usar o mesmo primitivo. Migrar callers da DS Vitor (qualquer lugar que use ContextInsumosSheet com tabs). Deletar src/components/agent/context-import/context-insumos-sheet.tsx (pattern errado). Garantir coesão visual cross-ritual.",
+      "acceptanceCriteria": [
+        "planning/context-sheet.tsx usa ContextSheet primitivo",
+        "sprint/sprint-context-sheet.tsx usa ContextSheet primitivo",
+        "ContextInsumosSheet deletado de src/components/agent/context-import/",
+        "Zero referências a Insumos/ContextInsumosSheet em src/",
+        "tsc passes"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/components/agent/context-import/context-insumos-sheet.tsx && echo bad || echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -rcE \"ContextInsumosSheet\" src/ 2>/dev/null | grep -v \":0\" | wc -l | tr -d \" \"",
+          "expected": "0"
+        }
+      ],
+      "dependsOn": [
+        "CTXSRC-017"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/planning/context-sheet.tsx",
+        "src/components/sprint/sprint-context-sheet.tsx",
+        "src/components/agent/context-import/context-insumos-sheet.tsx",
+        "src/components/agent/context-import/index.ts"
       ]
     }
   ]

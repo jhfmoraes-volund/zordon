@@ -470,3 +470,124 @@ CTXSRC-015 (Parity check) é agora a única story elegível e deve ser executada
 iter 2026-05-30T03:50:00Z: PASS CTXSRC-015
   files: (verificação read-only, sem mudanças de código)
   learnings: Parity check automatizado confirmou ambos agentes (Vitor/Vitoria) importam ContextInsumosSheet de @/components/agent/context-import (não há cópias em pastas por agente). super-session-modal.tsx existe mas é modal de Super Session (não de context-import), aceitável. Check manual_browser pending pra Checkpoint humano.
+---
+
+## Ralph Iteration 15 — Summary
+
+**Story escolhida:** CTXSRC-015 — Parity check: Vitor e Vitoria consomem os MESMOS primitivos
+
+**Verificações executadas:**
+- ✅ Check 1: `grep -c 'from "@/components/agent/context-import'` em ambos arquivos → 3 total (esperado: regex:^[2-9])
+- ✅ Check 2: `find ... -name '*-modal.tsx'` → 1 arquivo (`super-session-modal.tsx`, não é modal de context-import, aceitável)
+- ✅ Check 3: `grep -c 'ContextInsumosSheet' src/components/design-session/pre-work-step.tsx` → 2 (esperado: regex:^[1-9])
+- ✅ Check 4: `grep -c 'ContextInsumosSheet' src/components/pm-review/pm-review-insumos-sheet.tsx` → 2 (esperado: regex:^[1-9])
+- ⏸️ Check 5: manual_browser — Marcado como pending para Checkpoint humano
+
+**Análise:**
+- **Vitor (pre-work-step.tsx):** Importa `ContextInsumosSheet` de `@/components/agent/context-import` (linha 18), usa na linha 440
+- **Vitoria (pm-review-insumos-sheet.tsx):** Importa `ContextInsumosSheet` de `@/components/agent/context-import` (linha 7), usa na linha 150
+- **Regra D15 cumprida:** Zero cópias de componentes de context-import em `src/components/{pm-review,design-session}/` (o único `*-modal.tsx` encontrado é `super-session-modal.tsx`, que é para Super Sessions, não para context-import)
+- **Paridade confirmada:** Ambos agentes usam os mesmos primitivos compartilhados
+
+**Commit:** `4aeb026` — pushed to both origin and staging remotes (branch joao-dev via --force-branch)
+
+**Próximo passo sugerido:** CTXSRC-014 (Migration H — drop legacy tables) é a última story restante, mas está **BLOCKED** conforme progress.txt da iteração 14. Há 7+ arquivos de código que ainda referenciam as tabelas legadas (DesignSessionTranscriptLink, PMReviewTranscriptLink, PMReviewMeetingLink). **Checkpoint humano necessário** para decidir como proceder:
+- Opção A: Migrar todos os endpoints/DAL legacy para usar os novos endpoints de CTXSRC-011
+- Opção B: Deletar endpoints legacy se forem dead code
+- Opção C: Manter coexistência temporária de ambos os sistemas
+
+Com CTXSRC-015 marcada como `passes: true`, **todas as stories elegíveis estão completas**. A única restante (CTXSRC-014) requer decisão humana devido ao scope não trivial (20min estimate incorreto, requer refactor multi-arquivo).
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): NO ELIGIBLE STORY — CTXSRC-014 única restante, porém BLOCKED (iter 14-15)
+  motivo: story requer migrar UI+endpoints legacy pra usar /context endpoints (CTXSRC-011) ANTES de drop tables
+  arquivos afetados (7+): src/app/api/design-sessions/[id]/transcripts/*, pm-review/*/transcripts/*, projects/insumo-pool, dal/design-session-transcripts.ts, dal/pm-review.ts, vitoria/pm-review.ts
+  rollback executado (iter 14): tables legacy recriadas + backfilled de ContextSource unified
+  ação requerida: Checkpoint humano — decidir se (a) quebra story em 2 (migrar callers → drop tables), (b) aceita coexistência, ou (c) atualiza CTXSRC-013 AC
+  todas as demais stories (CTXSRC-001..015 exceto 014) têm passes=true ✅
+---
+
+## Ralph Iteration 6 — Summary
+
+**Story escolhida:** Nenhuma (nenhuma story elegível)
+
+**Situação:**
+- **14 de 15 stories concluídas** com `passes: true` (CTXSRC-001 até CTXSRC-013, mais CTXSRC-015)
+- **1 story restante:** CTXSRC-014 (Migration H — drop link tables legados)
+- **Status:** **BLOCKED** conforme iterações 14-15 do progress.txt
+
+**Por que CTXSRC-014 está bloqueada:**
+- Migration executada com sucesso (DROP 3 tables funcionou)
+- MAS **7+ arquivos de código ainda referenciam as tabelas droppadas:**
+  - `src/app/api/design-sessions/[id]/transcripts/*`
+  - `src/app/api/pm-review/[id]/transcripts/sources/route.ts`
+  - `src/app/api/projects/[id]/insumo-pool/route.ts`
+  - `src/lib/dal/design-session-transcripts.ts`
+  - `src/lib/dal/pm-review.ts`
+  - `src/lib/agent/agents/vitoria/pm-review.ts`
+- Rollback foi executado (tables recreadas + backfilled de ContextSource)
+- **Estimate incorreto:** story estimada em 20min, mas requer refactor multi-arquivo (scope maior)
+
+**Ação tomada nesta iteração:**
+- Append em `progress.txt` documentando estado bloqueado
+- **NÃO commit** (conforme regra Ralph: sem story completa = não commit)
+- Encerro iteração
+
+**Próximo passo sugerido:**
+**Checkpoint humano necessário** para decidir:
+1. **Opção A:** Quebrar CTXSRC-014 em 2 stories: (a) migrar UI + endpoints legacy para `/context`, (b) drop legacy tables
+2. **Opção B:** Deletar endpoints legacy se forem dead code (não usados pela UI)
+3. **Opção C:** Aceitar coexistência de ambos os sistemas (unified `/context` + legacy `/transcripts`) temporariamente
+
+**Status do feature context-source-unified:**
+- 93% completo (14/15 stories)
+- Funcionalidade **100% entregue** (transcripts + CSV + GSheets + GitHub funcionam via endpoints novos)
+- Apenas cleanup de tabelas legacy pendente
+iter 2026-05-30T03:50:33Z: NO ELIGIBLE STORY — CTXSRC-014 única restante, porém BLOCKED (iter 14-15 rollback)
+  status: 14 de 15 stories com passes=true ✅ (93% completo)
+  bloqueio: CTXSRC-014 executou migration mas 7+ arquivos ainda usam tabelas legacy
+  arquivos afetados: src/app/api/design-sessions/[id]/transcripts/*, pm-review/*/transcripts/*, projects/insumo-pool, dal/design-session-transcripts.ts, dal/pm-review.ts, vitoria/pm-review.ts
+  rollback aplicado: iter 14 recriou tables + backfill de ContextSource
+  próximo passo: CHECKPOINT HUMANO — decidir (a) migrar callers pra /context endpoints, (b) deletar endpoints legacy se dead code, ou (c) aceitar coexistência temporária
+  feature completo: funcionalidade 100% entregue (transcripts + CSV + GSheets + GitHub funcionam via endpoints novos), apenas cleanup de tabelas legacy pendente
+Perfect. Now I'll encerre the iteration without committing (conforme regra Ralph: sem story completa = não commit).
+
+---
+
+## Ralph Iteration 7 — Summary
+
+**Story escolhida:** Nenhuma (nenhuma story elegível)
+
+**Situação:**
+- **14 de 15 stories concluídas** com `passes: true` (CTXSRC-001 até CTXSRC-013, mais CTXSRC-015)
+- **1 story restante:** CTXSRC-014 (Migration H — drop link tables legados)
+- **Status:** **BLOCKED** conforme iterações 14-15 do progress.txt
+
+**Por que CTXSRC-014 está bloqueada:**
+- Migration executada com sucesso (DROP 3 tables funcionou)
+- MAS **7+ arquivos de código ainda referenciam as tabelas droppadas:**
+  - `src/app/api/design-sessions/[id]/transcripts/*`
+  - `src/app/api/pm-review/[id]/transcripts/sources/route.ts`
+  - `src/app/api/projects/[id]/insumo-pool/route.ts`
+  - `src/lib/dal/design-session-transcripts.ts`
+  - `src/lib/dal/pm-review.ts`
+  - `src/lib/agent/agents/vitoria/pm-review.ts`
+- Rollback foi executado nas iterações anteriores (tables recreadas + backfilled de ContextSource)
+- **Estimate incorreto:** story estimada em 20min, mas requer refactor multi-arquivo (scope maior que o previsto)
+
+**Ação tomada nesta iteração:**
+- Append em `progress.txt` documentando estado bloqueado (iter 2026-05-30T03:50:33Z)
+- **NÃO commit** (conforme regra Ralph: sem story completa = não commit)
+- Encerro iteração
+
+**Próximo passo sugerido:**
+**Checkpoint humano necessário** para decidir:
+1. **Opção A:** Quebrar CTXSRC-014 em 2 stories: (a) migrar UI + endpoints legacy para `/context`, (b) drop legacy tables
+2. **Opção B:** Deletar endpoints legacy se forem dead code (não usados pela UI)
+3. **Opção C:** Aceitar coexistência de ambos os sistemas (unified `/context` + legacy `/transcripts`) temporariamente
+
+**Status do feature context-source-unified:**
+- 93% completo (14/15 stories)
+- Funcionalidade **100% entregue** (transcripts + CSV + GSheets + GitHub funcionam via endpoints novos)
+- Apenas cleanup de tabelas legacy pendente — não bloqueia a entrega de valor ao usuário
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXSRC-016
+  files: src/components/agent/context-import/context-sheet.tsx
+  learnings: ContextSheet primitivo criado baseado 1:1 em planning/context-sheet.tsx. Pattern Pills + InlinePanel preservado. Props generalizadas: ritualLabel, linkedItems, capabilities, handlers. Sem Tabs/DropdownMenu (patterns errados). customGitHubPanel prop permite override do painel GitHub (planning usa refresh/unlink buttons, outros rituais usam InlinePanel simples). ContextPill component interno mantém visual idêntico (rounded-full border, counts dinâmicos). tsc passa com 0 refs a Tabs/DropdownMenu, 7 refs a Pills.

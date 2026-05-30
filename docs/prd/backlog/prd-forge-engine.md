@@ -85,8 +85,8 @@ A pirâmide de abstrações pra entregar uma feature é alta demais: **Ideia →
 
 ## 3 · Não-objetivos
 
-- ❌ **Cloud/remote runner** — localhost-first, sem servidor de execução. Phase ∞.
-- ❌ **Multi-tenant** — 1 dev por laptop, sem queue compartilhada entre devs.
+- ❌ **Servidor central de execução Forge** — execução é per-builder no laptop dele. Phase ∞ pode reconsiderar.
+- ❌ **Multi-tenant cross-org** — Zordon é monorepo interno; cada org rodaria sua própria stack. Builders dentro da mesma org compartilham via Supabase comum.
 - ❌ **Substituir Vitor/Vitoria/Alpha** — eles continuam como agentes upstream que produzem Specs.
 - ❌ **Reescrever Forge UI** — preservar todas as Fases LOCKED (1-8) da Forge atual; só plugar em dados reais.
 - ❌ **Dashboard de custo histórico web** — `forge ps` no terminal + UI live bastam pra v1.
@@ -99,8 +99,11 @@ A pirâmide de abstrações pra entregar uma feature é alta demais: **Ideia →
 **Charles (CTO, escreve specs):**
 > "Tenho uma ideia de feature. Hoje eu gasto 60min escrevendo PRD com DDL e RLS que provavelmente está errado. Quero gastar 5min descrevendo a intenção e deixar o sistema descobrir o resto."
 
-**Builder dev (executa runs):**
-> "Quero abrir `/forge`, ver as 5 specs em execução simultânea no laptop, ver token-by-token o que cada agente está fazendo, e poder matar um run que tá desviando do escopo sem perder os outros."
+**Builder dev (executa runs no laptop dele):**
+> "Cloneio o Zordon, rodo `pnpm dev` e `forge run <slug>`. Vejo no `localhost:3000/projects/X/forge` os meus runs e os runs dos outros builders no mesmo projeto (RLS por ProjectAccess). Quando algo trava, mato o run sem afetar os outros. Pago meu Claude e a org reembolsa."
+
+**Designer/PM (observa sem disparar):**
+> "Não tenho Claude Code instalado. Abro `volund.com/projects/X/forge` (deploy prod) e vejo em tempo real o que os builders estão construindo. Não consigo disparar runs novos — disparar é privilégio de quem está codando."
 
 **Vitor (agente upstream, futuro):**
 > "Termino uma Design Session com 3 stories aprovadas. Devo emitir uma `Spec.md` pra cada story (não uma só pra todas) e jogar no Forge — daí o Forge cuida do resto."
@@ -118,7 +121,9 @@ A pirâmide de abstrações pra entregar uma feature é alta demais: **Ideia →
 | D7 | **ForgeEvent emitido por hooks Claude Code** (`PostToolUse`, `Stop`, `SubagentStop`). Hook escreve em arquivo `.forge/events.jsonl`; watcher Node faz upload pro Supabase. | Não invade prompt. Eventual consistency aceitável. |
 | D8 | **Filesystem é state durante o loop; Supabase é state persistido.** `.forge/<run-id>/` é working dir transitório; ao closeout, eventos viram permanentes no DB. | Local rápido + auditoria long-term sem latência. |
 | D9 | **Humano nos extremos** preservado: aprova Spec antes do plan; aprova plan antes do run; aprova merge final. Loop autônomo só entre esses gates. | Confiança no autônomo cresce com gates explícitos, não com supervisão contínua. |
-| D10 | **Localhost-only.** Orchestrator é processo Node local. Claude Code roda no laptop. Sem auth, sem cloud, sem Docker. | YAGNI. Phase ∞ pra cloud. |
+| D10 | **Forge engine é a única peça do Zordon que roda local no laptop do builder.** Tudo o resto (Vitor, Vitoria, Auth, UI hosting, Cron, Webhooks) continua na infra deployed do Volund. Supabase é compartilhada — estado é shared, execução é per-builder. Setup: `git clone volund && pnpm install && pnpm dev` + `claude login`. Phase ∞: binário standalone `@volund/forge` distribuído sem clonar repo. | Builders são técnicos em Claude Code; complexidade de setup local é aceita. Distribuir execução remove orquestrador central. |
+| D23 | **Cada builder paga o próprio Claude** (reembolso org). Sem chave centralizada, sem proxy. Worker usa `claude` CLI autenticado na máquina do builder. | Autonomia + auditoria fiscal individual. Risco de vazamento de key centralizada eliminado. |
+| D24 | **Forge runs são visíveis cross-builder** via RLS `ProjectAccess`. Quem tem acesso ao projeto vê todos os runs do projeto, independente de quem disparou. Colaboração > privacidade WIP. | Forge é ferramenta de time. PRs já são públicos pelo git; runs intermediários sendo públicos pro time não é regressão. |
 | D11 | **CLI + UI vivem em paralelo**, mesmo state model. CLI = `forge {init\|plan\|run\|ps\|kill\|done}`. UI = `/forge` existente. | Power user no terminal; demo + observability na UI. |
 | D12 | **Commit convention**: `ZRD-JM-NN: forge — <task-id> — <slug>`. Memory `feedback_commit_convention.md` respeitada. | Acabar com a dupla língua (`ralph(...)` vs `ZRD-JM-NN`) no git log. |
 | D13 | **Cost tracking via `claude -p --output-format=stream-json`**. Hook parser extrai usage + cost por iter. | Claude Code já retorna isso; só precisamos consumir. |
