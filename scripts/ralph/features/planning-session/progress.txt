@@ -5,3 +5,28 @@ iter 2026-05-30T04:30:00Z: PASS PLAN-001
 iter 2026-05-30T04:29:01Z: PASS PLAN-002
   files: src/lib/supabase/database.types.ts, src/lib/dal/planning-session.ts
   learnings: Added PlanningSession + PlanningSessionPRD types inline to existing database.types.ts (line 6997-7135). DAL follows product-requirements.ts pattern with server-only, db() client, 6 CRUD fns. All typecheck passes.
+Perfeito! Commit `4c43684` realizado com sucesso. 
+
+---
+
+## Output da iteração 3
+
+**Story escolhida:** PLAN-002 — "database.types.ts regen + DAL planning-session (6 fns)"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passed)
+2. ✅ `grep -cE 'PlanningSession|PlanningSessionPRD' src/lib/supabase/database.types.ts` → 8 (expected >=2)
+3. ✅ `grep -cE 'export (async )?function (createSession|getSession|listForProject|updateStatus|updatePrdAssignment|listPrds)' src/lib/dal/planning-session.ts` → 6 (expected 6)
+
+**Commit hash:** `4c43684`
+
+**Arquivos tocados:**
+- `src/lib/supabase/database.types.ts` (adicionadas definições PlanningSession + PlanningSessionPRD nas linhas 6997-7135)
+- `src/lib/dal/planning-session.ts` (criado com 6 funções CRUD)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-002 marcado passes=true)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Próximo passo sugerido:** Iteração 4 pode pegar PLAN-003 (buildCodebaseIndex via tree-sitter-wasm) ou PLAN-004 (buildPrdIndex) — ambas sem dependências pendentes.
+iter 2026-05-30T04:34:55Z: PASS PLAN-003
+  files: src/lib/agent/planning/codebase-index.ts, package.json
+  learnings: tree-sitter API usa Parser.init() static + new Parser(). Cache por git SHA em /tmp/volund-codebase-index/. Parser.parse() pode retornar null.
