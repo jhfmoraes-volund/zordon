@@ -226,7 +226,8 @@
       "estimateMinutes": 30,
       "touches": [
         "supabase/migrations/20260530g_backfill_pm_review_links.sql"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-008",

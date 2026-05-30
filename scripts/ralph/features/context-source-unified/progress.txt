@@ -141,3 +141,34 @@ Perfect! Commit successful. Let me provide the iteration summary:
 iter 2026-05-29T17:30:00Z: PASS CTXSRC-006
   files: supabase/migrations/20260530f_backfill_ds_transcript_links.sql
   learnings: Postgres lowercase conversion: schema usa camelCase mas INSERT precisa lowercase (designsessionid não designSessionId). DesignSessionTranscriptLink tem 0 rows, migration idempotente executou sem erro. Mapeamento: transcriptRefId→contextsourceid, linkedById→addedby, linkedAt→addedat.
+Perfect! Commit successful. Let me provide the iteration summary:
+
+---
+
+## Ralph Iteration 6 — Summary
+
+**Story escolhida:** CTXSRC-006 — Migration F: backfill DS transcript links
+
+**Verificações executadas:**
+- ✅ Migration file `20260530f_backfill_ds_transcript_links.sql` criado
+- ✅ Migration executada via psql (0 rows backfilled - both tables empty)
+- ✅ Count verificado: `SELECT (SELECT count(*) FROM "DesignSessionTranscriptLink") = (SELECT count(*) FROM "DesignSessionContextLink")` → returns `t` (true)
+- ✅ Idempotência garantida via `ON CONFLICT DO NOTHING`
+
+**Implementação:**
+- Migration backfilla DesignSessionTranscriptLink → DesignSessionContextLink
+- Mapeia: `transcriptRefId → contextsourceid`, `linkedById → addedby`, `linkedAt → addedat`, `weight` preservado
+- Ambas as tabelas têm 0 rows (sistema novo, sem dados históricos)
+
+**Ajustes técnicos:**
+- **Descoberta crítica:** Postgres converte colunas camelCase pra lowercase quando criadas sem quotes. Schema definição usa `designSessionId` mas INSERT precisa usar `designsessionid`
+- Primeira tentativa falhou com erro "column designSessionId does not exist"
+- Corrigido após consultar `\d "DesignSessionContextLink"` pra ver nomes reais das colunas
+- Migration executou com sucesso: `INSERT 0 0` (idempotente, sem dados pra backfill)
+
+**Commit:** `c4b59f3` — pushed to origin and staging remotes
+
+**Próximo passo sugerido:** CTXSRC-007 (Migration G — backfill PM Review links) e CTXSRC-008 (Adapters base) são agora elegíveis. CTXSRC-007 depende de [CTXSRC-003, CTXSRC-004, CTXSRC-005] (todos passes: true). CTXSRC-008 depende apenas de CTXSRC-001 (passes: true). CTXSRC-007 tem menor id lexicográfico.
+iter 2026-05-30T02:37:37Z: PASS CTXSRC-007
+  files: supabase/migrations/20260530g_backfill_pm_review_links.sql
+  learnings: PMReviewMeetingLink não tem weight column (só PMReviewTranscriptLink tem). Migration insere NULL pra meeting links. 2 transcript links + 1 meeting link backfilled. Idempotência via ON CONFLICT DO NOTHING funcionou em retry (parte 1 já tinha rodado).
