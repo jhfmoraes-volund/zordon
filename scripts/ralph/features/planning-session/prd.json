@@ -395,7 +395,8 @@
       "estimateMinutes": 30,
       "touches": [
         "src/lib/agent/planning/subagents/task-gen.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-012",

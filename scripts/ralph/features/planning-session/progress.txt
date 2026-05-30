@@ -237,3 +237,33 @@ Perfect! Commit successful. Now let me create the final iteration output summary
 iter 2026-05-30T13:43:06Z: PASS PLAN-010
   files: src/app/api/planning-sessions/[id]/approve/route.ts, src/components/planning-session/approve-dialog.tsx
   learnings: Approve = single UPDATE (v1). No explicit transaction needed (Postgres implicit). Filesystem move via fs.promises.rename after DB commit. ConfirmDialog requires onClose prop.
+Perfect! Commit successful. Now let me create the iteration output summary:
+
+---
+
+## Output da iteração 4 (Ralph iteration 4)
+
+**Story escolhida:** PLAN-010 — "Approve flow (transação Postgres atômica + filesystem move backlog→ready)"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passed)
+2. ✅ `test -f 'src/app/api/planning-sessions/[id]/approve/route.ts'` → ok (approve route exists)
+3. ✅ `grep -cE 'fs\.(rename|promises\.rename)' 'src/app/api/planning-sessions/[id]/approve/route.ts'` → 1 (expected >=1)
+
+**Commit hash:** `d7bcc73`
+
+**Arquivos tocados:**
+- `src/app/api/planning-sessions/[id]/approve/route.ts` (criado — POST handler com validação, DB update, filesystem move)
+- `src/components/planning-session/approve-dialog.tsx` (criado — hook `useApproveDialog` com ConfirmDialog)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-010 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Implementação:**
+- **Approve route**: Valida session em `status='in-review'`, executa single UPDATE no PlanningSession (`status='approved' + approvedAt + approvedBy`). Postgres transaction implícita em v1 (single statement). Após DB commit, executa filesystem move via `fs.promises.rename` de cada PRD em ordem (`docs/prd/backlog/<slug>.md` → `docs/prd/ready/<slug>.md`). Se filesystem falha, loga warning mas não rollback (DB já committed). Retorna `{ ok, hierarchyTreeUpdated: false, filesMovedCount, moveErrors? }`.
+- **Approve dialog**: Hook `useApproveDialog` retorna `{ showApproveDialog, approveDialogElement }`. Usa `ConfirmDialog` component canônico com `onClose` prop. Dialog mostra descrição "N PRDs serão movidos de backlog/ para ready/ na ordem definida. Isso é irreversível." Confirm button chama `/api/planning-sessions/:id/approve` via POST, então invoca `onApproved()` callback.
+- **Pattern**: Imports corrigidos (`getUser` de `@/lib/dal`, `createClient` de `@/lib/supabase/server`, `NextResponse` de `next/server`). ConfirmDialog requer `state: ConfirmState | null` + `onClose: () => void`.
+
+**Próximo passo sugerido:** Iteração 5 pode pegar **PLAN-011** (TaskGen server-side function — porta blueprint de /task-gen-story) — única dependência PLAN-007 tem `passes: true`.
+iter 2026-05-30T16:00:00Z: PASS PLAN-011
+  files: src/lib/agent/planning/subagents/task-gen.ts
+  learnings: TaskGen ports task-gen-story skill blueprint to server-side TS. Follows 5-layer pattern (DATA/API/REALTIME/UI/OPS), SDD description format (Objetivo/Contexto/O que criar/Constraints/Convenções), AC-da-Story vs AC-da-Task distinction. Coverage rule enforced: every AC needs DATA∪API + UI (except SYSTEM). Uses OpenRouter sonnet-4.6. Output schema includes tasks array + coverageAnalysis.
