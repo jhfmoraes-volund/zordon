@@ -212,7 +212,8 @@
         "src/lib/agent/planning/subagents/story-decomposer.ts",
         "src/lib/agent/planning/subagents/capacity.ts",
         "src/lib/agent/planning/subagents/consolidator.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-007",

@@ -80,3 +80,27 @@ iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS PLAN-004
 iter 2026-05-30T08:19:51Z: PASS PLAN-005
   files: src/lib/agent/planning/subagents/codebase-auditor.ts, src/lib/agent/planning/subagents/dep-resolver.ts
   learnings: callOpenRouterJson pattern from insights/llm.ts. Auditor uses sonnet-4.6, Resolver uses haiku-4-5. Zod schemas validated via safeParse before return.
+---
+
+## Output da iteração 6
+
+**Story escolhida:** PLAN-005 — "Subagents CodebaseAuditor (sonnet) + DependencyResolver (haiku)"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passed)
+2. ✅ `ls ... | grep -c subagents` → 2 (expected 2)
+3. ✅ `grep -cE 'claude-sonnet|sonnet' src/lib/agent/planning/subagents/codebase-auditor.ts` → 1 (expected >=1)
+4. ✅ `grep -cE 'claude-haiku|haiku' src/lib/agent/planning/subagents/dep-resolver.ts` → 1 (expected >=1)
+
+**Commit hash:** `df4ff43`
+
+**Arquivos tocados:**
+- `src/lib/agent/planning/subagents/codebase-auditor.ts` (criado com `callCodebaseAuditor` + Zod schema `AuditorOutput`)
+- `src/lib/agent/planning/subagents/dep-resolver.ts` (criado com `callDependencyResolver` + Zod schema `DAGOutput`)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-005 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Próximo passo sugerido:** Iteração 7 pode pegar **PLAN-006** (Subagents StoryDecomposer + CapacityAllocator + VitoriaConsolidator) — única dependência PLAN-005 agora tem `passes: true`.
+iter 2026-05-30T12:00:00Z: PASS PLAN-006
+  files: src/lib/agent/planning/subagents/story-decomposer.ts, src/lib/agent/planning/subagents/capacity.ts, src/lib/agent/planning/subagents/consolidator.ts
+  learnings: 3 subagents follow same pattern (server-only, Zod schema, callOpenRouterJson). StoryDecomposer extracts user stories from PRDs, Capacity allocates to sprints (4800min/sprint assumed), Consolidator is STRICT (no opinion, just validates+orders). All use sonnet-4.6 except dep-resolver (haiku).
