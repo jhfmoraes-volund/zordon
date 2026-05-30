@@ -172,3 +172,35 @@ Perfect! Commit successful. Let me provide the iteration summary:
 iter 2026-05-30T02:37:37Z: PASS CTXSRC-007
   files: supabase/migrations/20260530g_backfill_pm_review_links.sql
   learnings: PMReviewMeetingLink não tem weight column (só PMReviewTranscriptLink tem). Migration insere NULL pra meeting links. 2 transcript links + 1 meeting link backfilled. Idempotência via ON CONFLICT DO NOTHING funcionou em retry (parte 1 já tinha rodado).
+Perfect! Commit successful: `b729bdb` — pushed to both origin and staging remotes.
+
+---
+
+## Ralph Iteration 7 — Summary
+
+**Story escolhida:** CTXSRC-007 — Migration G: backfill PM Review links (transcript + meeting → context)
+
+**Verificações executadas:**
+- ✅ Migration file `20260530g_backfill_pm_review_links.sql` criado
+- ✅ Migration executada via psql (2 transcript links + 1 meeting link backfilled)
+- ✅ Count verificado: `(SELECT count(*) FROM "PMReviewTranscriptLink") + (SELECT count(*) FROM "PMReviewMeetingLink") = (SELECT count(*) FROM "PMReviewContextLink")` → returns `t` (true)
+- ✅ Idempotência garantida via `ON CONFLICT DO NOTHING` em ambas as partes
+
+**Implementação:**
+- Migration com dois INSERTs atômicos no mesmo arquivo:
+  1. **Transcript links:** `PMReviewTranscriptLink → PMReviewContextLink` (direto, preserva weight)
+  2. **Meeting links:** `PMReviewMeetingLink → PMReviewContextLink` (JOIN com ContextSource kind='meeting' para resolver meetingId → contextSourceId)
+
+**Ajustes técnicos:**
+- **Descoberta:** PMReviewMeetingLink não tem coluna `weight` (só PMReviewTranscriptLink tem)
+- Primeira tentativa falhou com "column pml.weight does not exist"
+- Corrigido para usar `NULL` como weight para meeting links
+- Idempotência funcionou perfeitamente em retry: parte 1 (transcript) retornou INSERT 0 0 (já existia), parte 2 (meeting) INSERT 0 1 (nova)
+- Total backfilled: 2 transcript links + 1 meeting link = 3 rows em PMReviewContextLink
+
+**Commit:** `b729bdb` — pushed to origin and staging remotes
+
+**Próximo passo sugerido:** CTXSRC-008 (Adapters base + read_context_source tool) é agora elegível, depende apenas de CTXSRC-001 (passes: true). É a próxima story com menor id lexicográfico entre as elegíveis.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXSRC-008
+  files: src/lib/context-sources/adapters/{transcript,meeting,csv,gsheets,github}.ts, src/lib/agent/tools/read-context-source.ts
+  learnings: Adapters seguem interface unificada { resolveContent(supabase, source): Promise<{fullText, snapshotAt}> }. Transcript e meeting implementados; csv/gsheets/github stub com throw aguardando stories posteriores. Tool factory dispatcha por source.kind com switch exhaustivo. tsc passa com 5 adapters + tool factory.

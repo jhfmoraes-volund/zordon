@@ -266,7 +266,8 @@
         "src/lib/context-sources/adapters/gsheets.ts",
         "src/lib/context-sources/adapters/github.ts",
         "src/lib/agent/tools/read-context-source.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-009",
