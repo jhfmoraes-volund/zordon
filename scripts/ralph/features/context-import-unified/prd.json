@@ -79,7 +79,8 @@
       "estimateMinutes": 25,
       "touches": [
         "src/components/agent/context-import/context-link-list.tsx"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXIMP-003",

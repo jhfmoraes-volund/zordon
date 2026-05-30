@@ -1,3 +1,23 @@
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-001
   files: src/components/agent/context-import/{transcript-modal.tsx,index.ts}, src/components/design-session/pre-work-step.tsx, src/components/pm-review/pm-review-insumos-sheet.tsx, src/components/planning/context-sheet.tsx
   learnings: Além de pre-work-step e pm-review, encontrei context-sheet.tsx (planning) também importando transcript-modal — todos atualizados. Export do transcript-modal é named (não default), então index.ts re-exporta como named.
+Perfeito! Commit realizado com hash `3f44819`.
+
+---
+
+## Iteração 1 — Resultado
+
+**Story escolhida:** CTXIMP-001 — "Criar diretório src/components/agent/context-import/ e mover TranscriptModal"
+
+**Verificações rodadas:**
+1. ✅ `src/components/agent/context-import/transcript-modal.tsx` existe
+2. ✅ Arquivo antigo removido
+3. ✅ `npx tsc --noEmit` passa (0 erros)
+4. ✅ Nenhum import do caminho antigo permanece
+
+**Commit:** `3f44819` — ralph(context-import-unified): CTXIMP-001 move TranscriptModal to context-import/
+
+**Próximo passo sugerido:** CTXIMP-002 (extrair ContextLinkList primitivo) — dependências satisfeitas, elegível pra próxima iteração.
+iter 2026-05-30T00:59:59Z: PASS CTXIMP-002
+  files: src/components/agent/context-import/context-link-list.tsx, src/components/agent/context-import/index.ts
+  learnings: ContextLinkList primitivo agnóstico de feature — recebe array de items + callbacks. Visual espelhado do pm-review mas stateless. showWeight opt-in.
