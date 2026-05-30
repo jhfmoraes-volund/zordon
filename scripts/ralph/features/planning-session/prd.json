@@ -359,7 +359,8 @@
       "touches": [
         "src/app/api/planning-sessions/[id]/approve/route.ts",
         "src/components/planning-session/approve-dialog.tsx"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-011",

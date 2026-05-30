@@ -207,3 +207,33 @@ Perfect! Commit successful. Now let me create the final iteration output summary
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS PLAN-009
   files: src/components/planning-session/board.tsx, src/app/(dashboard)/projects/[id]/planning/page.tsx
   learnings: ResponsiveSheet requires ResponsiveSheetContent wrapper with size prop. Board uses drag/drop HTML5 API + useOptimisticCollection for PRD mutations. Page auto-creates draft session if none exists.
+Perfect! Commit successful. Now let me create the final iteration output summary:
+
+---
+
+## Output da iteração 3 (Ralph iteration 3)
+
+**Story escolhida:** PLAN-009 — "UI Board com sprint columns + drag/drop optimistic"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passed)
+2. ✅ `test -f src/components/planning-session/board.tsx && test -f 'src/app/(dashboard)/projects/[id]/planning/page.tsx'` → ok (both files exist)
+3. ✅ `grep -cE 'useOptimisticCollection' src/components/planning-session/board.tsx` → 2 (expected >=1)
+
+**Commit hash:** `a02fb8e`
+
+**Arquivos tocados:**
+- `src/components/planning-session/board.tsx` (criado — board component com drag/drop)
+- `src/app/(dashboard)/projects/[id]/planning/page.tsx` (criado — página planning session)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-009 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Implementação:**
+- **PlanningBoard component**: Reutiliza `BoardColumn` primitives de `design-session/board/`. Cria N colunas dinâmicas (1 por sprint, max 12). Drag/drop via HTML5 Drag & Drop API (`draggable`, `onDragStart`, `onDrop`). PRDs renderizados em `StickyCard` com `accent="sky"`. Usa `useOptimisticCollection` com custom `prdReducer` para mutation `type: "drag"` — aplica otimista, persiste via PUT, reconcilia.
+- **Planning page**: Auto-load ou auto-create draft session via `/api/planning-sessions?projectId=...`. Estado: `draft` (mostra botão "Gerar plano de release") → `orchestrating` (progress sheet pulsando) → `in-review` (board editável) → `approved`. Botão "Gerar plano" chama `POST /orchestrate` com `targetVersion: "v1"`. ResponsiveSheet progress (side-sheet desktop, bottom-sheet mobile 90dvh).
+- **Padrões seguidos**: ResponsiveSheet requer `ResponsiveSheetContent` wrapper com prop `size="sm|md|lg"`. HTML5 drag/drop (`dataTransfer.setData("prd-id", ...)`, `dataTransfer.getData("prd-id")`). `useOptimisticCollection` pattern: `mutate(mutation, persist, { errorLabel, retry: false })`.
+
+**Próximo passo sugerido:** Iteração 4 pode pegar **PLAN-010** (Approve flow — transação Postgres atômica + filesystem move backlog→ready) — única dependência PLAN-009 agora tem `passes: true`.
+iter 2026-05-30T13:43:06Z: PASS PLAN-010
+  files: src/app/api/planning-sessions/[id]/approve/route.ts, src/components/planning-session/approve-dialog.tsx
+  learnings: Approve = single UPDATE (v1). No explicit transaction needed (Postgres implicit). Filesystem move via fs.promises.rename after DB commit. ConfirmDialog requires onClose prop.
