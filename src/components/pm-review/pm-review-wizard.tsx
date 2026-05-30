@@ -117,7 +117,7 @@ type Props = {
   notes: Note[];
   hasReport: boolean;
   refreshing?: boolean;
-  /** Abre o sheet de insumos. */
+  /** Abre o sheet de contexto. */
   onOpenInsumos: () => void;
   /** Envia mensagem direto pra Vitoria via chat. */
   onSendToVitoria: (text: string) => void;
@@ -128,7 +128,7 @@ type Props = {
 };
 
 const NOTE_REQUEST_PROMPT =
-  "Vitoria, com base nos insumos linkados + contexto do projeto (DS, sprint, código), liste agora as notas tipadas: panorama (summary), rumo do projeto, próximos passos, riscos, necessidades, indicadores do time e decisões em aberto. Crie via add_pm_review_note. Se ainda não leu os transcripts, leia primeiro.";
+  "Vitoria, com base no contexto linkado + contexto do projeto (DS, sprint, código), liste agora as notas tipadas: panorama (summary), rumo do projeto, próximos passos, riscos, necessidades, indicadores do time e decisões em aberto. Crie via add_pm_review_note. Se ainda não leu os transcripts, leia primeiro.";
 
 /**
  * Critério mínimo pra habilitar Step 3.
@@ -196,16 +196,16 @@ export function PMReviewWizard({
 
   return (
     <div className="space-y-4">
-      {/* ─── STEP 1 — INSUMOS ────────────────────────────────────────────── */}
+      {/* ─── STEP 1 — CONTEXTO ────────────────────────────────────────────── */}
       <StepCard
         index={1}
-        title="Insumos"
+        title="Contexto"
         subtitle="Material que a Vitoria vai ler pra sintetizar"
         done={step1Done}
       >
         {linkedCount === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Nenhum insumo linkado ainda. Adicione transcripts ou reuniões do{" "}
+            Nenhum contexto linkado ainda. Adicione transcripts ou reuniões do{" "}
             <strong>pool do projeto</strong> ou importe novos do Roam/Granola.
           </p>
         ) : (
@@ -251,7 +251,7 @@ export function PMReviewWizard({
 
         <div className="mt-3">
           <Button size="sm" variant="outline" onClick={onOpenInsumos}>
-            <Plus className="size-3.5" /> Curar insumos
+            <Plus className="size-3.5" /> Curar contexto
           </Button>
         </div>
       </StepCard>
@@ -268,7 +268,7 @@ export function PMReviewWizard({
           <Info className="mt-0.5 size-3 shrink-0" />
           <span>
             Vitoria cria notas tipadas (rumo / próximo passo / risco /
-            necessidade / sinal / decisão em aberto) lendo seus insumos e o
+            necessidade / sinal / decisão em aberto) lendo o contexto linkado e o
             contexto do projeto. Cada nota vai como item da seção
             correspondente no report final. <strong>Dispensar</strong> tira
             uma nota da síntese sem apagar o histórico.
@@ -277,8 +277,8 @@ export function PMReviewWizard({
 
         {sortedActive.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Nenhuma nota ainda. Peça pra Vitoria coletar — ela lê os insumos
-            linkados e cria as notas baseadas neles.
+            Nenhuma nota ainda. Peça pra Vitoria coletar — ela lê o contexto
+            linkado e cria as notas baseadas nele.
           </p>
         ) : (
           <ul className="space-y-1.5">
@@ -355,7 +355,7 @@ export function PMReviewWizard({
             disabled={linkedCount === 0 && activeNotes.length === 0}
             title={
               linkedCount === 0
-                ? "Adicione ≥1 insumo no Passo 1 antes de pedir notas"
+                ? "Adicione ≥1 contexto no Passo 1 antes de pedir notas"
                 : undefined
             }
           >

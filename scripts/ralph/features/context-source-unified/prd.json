@@ -654,7 +654,8 @@
         "src/components/pm-review/pm-review-context-sheet.tsx",
         "src/components/pm-review/pm-review-insumos-sheet.tsx",
         "src/app/(dashboard)/projects/[id]/pm-review/page.tsx"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-018",

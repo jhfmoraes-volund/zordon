@@ -206,7 +206,7 @@ function EmptyReport({
       label: "Transcripts linkados",
       detail: projectContext.hasTranscripts
         ? "ok"
-        : "linke pelo menos 1 via 'Insumos' no ribbon",
+        : "linke pelo menos 1 via 'Contexto' no ribbon",
       required: !projectContext.hasNotesEnough,
     },
     {

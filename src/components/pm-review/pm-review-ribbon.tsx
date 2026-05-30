@@ -102,13 +102,13 @@ export function PMReviewRibbon({
           type="button"
           onClick={onOpenContext}
           className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs hover:bg-accent"
-          title="Insumos linkados (reuniões + transcripts)"
+          title="Contexto linkado (reuniões + transcripts)"
         >
           <Link2 className="size-3" />
           <span className="font-mono tabular-nums">
             {linkedMeetingCount + linkedTranscriptCount}
           </span>
-          <span className="hidden sm:inline text-muted-foreground">insumos</span>
+          <span className="hidden sm:inline text-muted-foreground">contexto</span>
         </button>
 
         <span

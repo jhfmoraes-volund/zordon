@@ -591,3 +591,42 @@ Perfect. Now I'll encerre the iteration without committing (conforme regra Ralph
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXSRC-016
   files: src/components/agent/context-import/context-sheet.tsx
   learnings: ContextSheet primitivo criado baseado 1:1 em planning/context-sheet.tsx. Pattern Pills + InlinePanel preservado. Props generalizadas: ritualLabel, linkedItems, capabilities, handlers. Sem Tabs/DropdownMenu (patterns errados). customGitHubPanel prop permite override do painel GitHub (planning usa refresh/unlink buttons, outros rituais usam InlinePanel simples). ContextPill component interno mantém visual idêntico (rounded-full border, counts dinâmicos). tsc passa com 0 refs a Tabs/DropdownMenu, 7 refs a Pills.
+Perfect! Commit `dbfd59b` was created and pushed to both remotes (origin and staging). Now let me create the summary output:
+
+---
+
+## Ralph Iteration Summary
+
+**Story escolhida:** CTXSRC-016 — Promover planning/context-sheet.tsx como primitivo ContextSheet (Pills pattern)
+
+**Verificações executadas:**
+- ✅ TypeScript compilation passes (`npx tsc --noEmit` exit 0)
+- ✅ Arquivo `src/components/agent/context-import/context-sheet.tsx` existe
+- ✅ Sem uso de Tabs ou DropdownMenu (grep count = 0, esperado: 0)
+- ✅ Pattern Pills presente (grep count = 7, esperado: >= 1)
+
+**Implementação:**
+- Criado primitivo canônico `ContextSheet` baseado 1:1 em `planning/context-sheet.tsx`
+- Pattern preservado: Pills compactos (rounded-full border) + InlinePanel + modais separados
+- Props generalizadas:
+  - `ritualLabel` (Planning / PM Review / DS) → título dinâmico "Contexto da [ritualLabel]"
+  - `linkedItems: ContextItem[]` (id, kind, title, source, capturedAt, weight)
+  - `capabilities: { transcript?, spreadsheet?, github? }` — controla quais Pills renderizar
+  - `handlers: { onUnlink, onImportTranscript?, onImportSpreadsheet?, onImportGitHub? }`
+  - `customGitHubPanel?` — permite override do painel GitHub (planning precisa de refresh/unlink buttons, outros rituais usam InlinePanel simples)
+- **Sem Tabs / DropdownMenu** (patterns errados conforme AC) — usa Pills + InlinePanel (pattern correto)
+- Counts dinâmicos por kind calculados via `linkedItems.filter(item => item.kind === kind).length`
+- Visual 100% idêntico ao original: mesmo `cn()` className, mesmas cores dark mode, mesmo spacing
+
+**Ajustes técnicos:**
+- Component interno `ContextPill` mantido privado (não exportado)
+- Component interno `InlinePanel` mantido privado
+- `sourceIcon()` helper retorna elemento correto por kind (FileText / FileSpreadsheet / GitBranch)
+- Sheet fecha antes de modal abrir (`openImport()` com `setTimeout(..., 50)`) para evitar backdrop overlap
+
+**Commit:** `dbfd59b` — pushed to both origin and staging remotes (branch joao-dev via --force-branch)
+
+**Próximo passo sugerido:** CTXSRC-017 (Migrar pm-review-insumos-sheet.tsx para usar ContextSheet primitivo) é agora elegível, depende apenas de CTXSRC-016 (passes: true ✅). É a próxima story com menor id lexicográfico entre as elegíveis.
+iter 2026-05-30T15:00:00Z: PASS CTXSRC-017
+  files: src/components/pm-review/pm-review-context-sheet.tsx (new), src/components/pm-review/pm-review-insumos-sheet.tsx (deprecated re-export), src/app/(dashboard)/pm-reviews/[id]/page.tsx, src/components/pm-review/pm-review-ribbon.tsx, src/components/pm-review/pm-review-wizard.tsx, src/components/pm-review/pm-review-report.tsx
+  learnings: PMReviewContextSheet criado usando ContextSheet primitivo (CTXSRC-016). Renomeado "Insumos" → "Contexto" em ribbon/wizard/report. old file virou re-export deprecado pra compat. Zero ContextInsumosSheet refs em pm-review/. onOpenInsumos prop interno ok (não user-facing).

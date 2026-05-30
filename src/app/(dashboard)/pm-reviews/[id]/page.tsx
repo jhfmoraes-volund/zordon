@@ -20,7 +20,7 @@ import { PMReviewReport } from "@/components/pm-review/pm-review-report";
 import { PMReviewRibbon } from "@/components/pm-review/pm-review-ribbon";
 import { PMReviewSheet } from "@/components/pm-review/pm-review-sheet";
 import { PMReviewWizard } from "@/components/pm-review/pm-review-wizard";
-import { PMReviewInsumosSheet } from "@/components/pm-review/pm-review-insumos-sheet";
+import { PMReviewContextSheet } from "@/components/pm-review/pm-review-context-sheet";
 
 const SYNTHESIZE_PROMPT =
   "Sintetize o report agora. Use update_pm_review_report com as 6 seções fixas em markdown, baseado nas notes ativas e fontes linkadas.";
@@ -39,7 +39,7 @@ export default function PMReviewPage({
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [editSheetOpen, setEditSheetOpen] = useState(false);
-  const [insumosSheetOpen, setInsumosSheetOpen] = useState(false);
+  const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [wizardExpanded, setWizardExpanded] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
 
@@ -232,7 +232,7 @@ export default function PMReviewPage({
       notes={pmReview.notes}
       hasReport={hasReport}
       refreshing={refreshing}
-      onOpenInsumos={() => setInsumosSheetOpen(true)}
+      onOpenInsumos={() => setContextSheetOpen(true)}
       onSendToVitoria={handleSendToVitoria}
       onSynthesize={handleSynthesize}
       onChanged={loadPMReview}
@@ -273,7 +273,7 @@ export default function PMReviewPage({
         busy={busy}
         onEdit={() => setEditSheetOpen(true)}
         onPublish={handlePublish}
-        onOpenContext={() => setInsumosSheetOpen(true)}
+        onOpenContext={() => setContextSheetOpen(true)}
       />
 
       {/* Main panel: wizard (sem report) OU report + collapsible curar (com report) */}
@@ -325,11 +325,11 @@ export default function PMReviewPage({
         </>
       )}
 
-      <PMReviewInsumosSheet
+      <PMReviewContextSheet
         pmReviewId={pmReview.id}
         projectId={pmReview.projectId}
-        open={insumosSheetOpen}
-        onOpenChange={setInsumosSheetOpen}
+        open={contextSheetOpen}
+        onOpenChange={setContextSheetOpen}
         linkedTranscripts={pmReview.linkedTranscripts}
         linkedMeetings={pmReview.linkedMeetings}
         onChanged={loadPMReview}
