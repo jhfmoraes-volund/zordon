@@ -265,3 +265,50 @@ iter 2026-05-30T02:43:25Z: PASS CTXSRC-009
 iter 2026-05-30T03:00:00Z: PASS CTXSRC-010
   files: supabase/migrations/20260530j_create_context_source_files_bucket.sql, src/lib/composio/client.ts, src/lib/context-sources/adapters/csv.ts, src/lib/context-sources/adapters/gsheets.ts
   learnings: CSV adapter usa csv-parse/sync pra parse → markdown table. GSheets via GOOGLESHEETS_GET_SPREADSHEET_VALUES (Composio). ComposioConnectionMissing exception inline com connectUrl. Bucket RLS usa can_view_project(projectId) com 1 param (não 2). composio/client.ts expandido pra aceitar "googlesheets" em todos os métodos + toolkitVersions. csv-parse já estava em package.json (não foi necessário npm install).
+---
+
+## Ralph Iteration 10 — Summary
+
+**Story escolhida:** CTXSRC-010 — CSV adapter + GSheets via Composio (opt-in)
+
+**Verificações executadas:**
+- ✅ `grep -c '"csv-parse"' package.json` → 1 (esperado: regex:^[1-9])
+- ✅ `SELECT count(*) FROM storage.buckets WHERE id='context-source-files'` → 1 (esperado: regex:^\s*1)
+- ✅ `grep -c 'googlesheets' src/lib/composio/client.ts` → 10 (esperado: regex:^[2-9])
+- ✅ `npx tsc --noEmit` → exit 0
+
+**Implementação:**
+- **Migration 20260530j_create_context_source_files_bucket.sql:**
+  - Bucket privado `context-source-files` com 10 MB limit
+  - 3 RLS policies (select/insert/delete) usando `can_view_project(cs."projectId")` com 1 parâmetro (descoberta: função aceita só projectId, não (userId, projectId))
+  
+- **composio/client.ts expandido para 'googlesheets':**
+  - Tipos atualizados: `"github" | "googlesheets"` em `initiateConnection`, `getConnectionStatus`, `disconnect`, `getUserTools`, `findToolSlug`
+  - Novo helper `gsheetsAuthConfigId()` e `getAuthConfigId(toolkit)` para resolver auth config por toolkit
+  - `toolkitVersions: { github: "latest", googlesheets: "latest" }` no construtor Composio
+  
+- **CSV adapter (`src/lib/context-sources/adapters/csv.ts`):**
+  - Download de arquivo do bucket `context-source-files` (nome = source.id)
+  - Parse via `csv-parse/sync` com `columns: true` (primeira linha = headers)
+  - Converte para markdown table com metadata (fonte, capturado em, total de linhas)
+  - Snapshot-only (sem refresh)
+  
+- **GSheets adapter (`src/lib/context-sources/adapters/gsheets.ts`):**
+  - Verifica conexão OAuth via `getConnectionStatus(source.createdBy, "googlesheets")`
+  - Lança `ComposioConnectionMissing` exception inline (com connectUrl) se sem conexão
+  - Chama `GOOGLESHEETS_GET_SPREADSHEET_VALUES` via `executeTool` (Composio SDK)
+  - Parser de URL: extrai spreadsheetId de URL completa ou aceita ID direto
+  - Converte resultado (`{values: string[][]}`) para markdown table
+  - Guard para `source.createdBy` null
+
+**Ajustes técnicos:**
+- **Descoberta 1:** `can_view_project` aceita 1 parâmetro (p_project_id), não 2 (userId, projectId) — corrigido na migration RLS policies
+- **Descoberta 2:** csv-parse já estava instalado no package.json (linha 36) — não foi necessário `npm install`
+- Migration executada 2× (primeira falhou com erro de função, corrigida e re-executada com sucesso)
+
+**Commit:** `85bd145` — pushed to origin and staging remotes (branch joao-dev via --force-branch)
+
+**Próximo passo sugerido:** CTXSRC-011 (API endpoints unificados) é agora elegível, depende de [CTXSRC-008, CTXSRC-002, CTXSRC-003] (todos passes: true). É a próxima story com menor id lexicográfico entre as elegíveis.
+iter 2026-05-30T12:00:00Z: PASS CTXSRC-011
+  files: src/app/api/context-sources/route.ts, src/app/api/context-sources/[id]/route.ts, src/app/api/context-sources/[id]/content/route.ts, src/app/api/context-sources/[id]/refresh/route.ts, src/app/api/design-sessions/[id]/context/route.ts, src/app/api/design-sessions/[id]/context/link/route.ts, src/app/api/design-sessions/[id]/context/[linkId]/route.ts, src/app/api/pm-reviews/[id]/context/route.ts, src/app/api/pm-reviews/[id]/context/link/route.ts, src/app/api/pm-reviews/[id]/context/[linkId]/route.ts
+  learnings: 10 endpoints criados (context-sources base + design-sessions + pm-reviews). Zod validation nos POSTs (CreateContextSourceSchema discriminatedUnion + LinkContextSchema). CSV upload via base64 + storage bucket. RLS via supabase client automático. PM Review usa canCreatePMReviewForProject helper (não requirePMReviewEditApi). Design Session usa requireSessionAccessApi/requireSessionEditApi. Adapters dispatched por kind em /content e /refresh endpoints.
