@@ -180,7 +180,8 @@
       "touches": [
         "src/lib/agent/tools/read-transcript-content.ts",
         "src/lib/agent/agents/vitoria/tools.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXIMP-006",

@@ -53,3 +53,19 @@ iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-003
 iter 2026-05-30T01:04:40Z: PASS CTXIMP-004
   files: src/components/agent/context-import/context-ribbon.tsx, src/components/agent/context-import/index.ts
   learnings: ContextRibbon primitivo h-9 responsivo — desktop mostra texto completo, mobile colapsa pra contadores (NT NA NN). Slot actions opt-in pra futuras extensões.
+---
+
+## Iteração 4 — Resultado
+
+**Story escolhida:** CTXIMP-004 — "Criar ContextRibbon primitivo"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` — passou (0 erros)
+2. ✅ Arquivo `src/components/agent/context-import/context-ribbon.tsx` existe
+
+**Commit:** `04b5ac8` — ralph(context-import-unified): CTXIMP-004 criar ContextRibbon primitivo
+
+**Próximo passo sugerido:** CTXIMP-005 (extrair read_transcript_content tool pra shared) — agora elegível, pois não tem dependências. Também CTXIMP-006 (refatorar PM Review) tornou-se elegível pois CTXIMP-003 já passou.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-005
+  files: src/lib/agent/tools/read-transcript-content.ts, src/lib/agent/agents/vitoria/tools.ts
+  learnings: Tool read_transcript_content extraída pra shared como factory — Vitoria importa, comportamento idêntico. Proxima iter: Vitor adota a mesma tool.
