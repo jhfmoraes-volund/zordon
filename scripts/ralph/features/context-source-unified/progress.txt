@@ -670,3 +670,38 @@ Perfect! Commit `178837c` created and pushed successfully to both origin and sta
 iter 2026-05-30T14:45:00Z: PASS CTXSRC-018
   files: src/components/planning/context-sheet.tsx, src/components/design-session/pre-work-step.tsx, src/components/agent/context-import/index.ts, src/components/agent/context-import/context-insumos-sheet.tsx (deleted)
   learnings: Refatorou planning/context-sheet.tsx como thin wrapper do ContextSheet primitivo (Pills pattern). Migrou pre-work-step.tsx de ContextInsumosSheet pra ContextSheet. Deletou context-insumos-sheet.tsx (pattern Tabs errado, substituído por Pills). sprint-context-sheet.tsx NÃO tocado (é sobre retrospectivas, não context sources). planning wrapper usa ContextSheetPrimitive pra evitar conflito de nome. Zero refs a ContextInsumosSheet/Insumos em src/.
+Perfect! Commit successful: `1ced234` — pushed to both origin and staging remotes.
+
+---
+
+## Ralph Iteration 3 — Summary
+
+**Story escolhida:** CTXSRC-018 — Migrar planning/context-sheet.tsx (dogfood) + sprint-context-sheet.tsx + DS Vitor para usar primitivo + cleanup ContextInsumosSheet
+
+**Verificações executadas:**
+- ✅ `npx tsc --noEmit` → exit 0 (compilation passes)
+- ✅ `test -f src/components/agent/context-import/context-insumos-sheet.tsx && echo bad || echo ok` → ok (file deleted)
+- ✅ `grep -rcE "ContextInsumosSheet" src/ | grep -v ":0" | wc -l` → 0 (zero references)
+
+**Implementação:**
+1. **planning/context-sheet.tsx** refatorado como thin wrapper usando `ContextSheetPrimitive` (renamed import to avoid conflict)
+   - Maps `linkedTranscripts` → `linkedItems` format
+   - Uses `customGitHubPanel` prop to inject refresh/unlink controls
+   - Capabilities: transcript, spreadsheet, github
+2. **pre-work-step.tsx** migrado de `ContextInsumosSheet` → `ContextSheet`
+   - Renamed `handleRemoveTranscript` → `handleUnlinkTranscript` to match new signature
+   - Maps transcripts to `linkedItems` with `kind: "transcript"`
+   - Capabilities: transcript only
+3. **context-insumos-sheet.tsx** deletado (pattern errado com Tabs)
+4. **index.ts** atualizado: removido export `ContextInsumosSheet`, adicionado `ContextSheet`
+
+**Descoberta importante:**
+- **sprint-context-sheet.tsx NÃO foi tocado** — é sobre retrospectivas de sprint (Quebom/Quepena/Quetal), não tem relação com context sources. O PRD story description estava misleading ao mencionar "sprint-context-sheet.tsx".
+
+**Ajustes técnicos:**
+- Naming conflict resolvido em planning/context-sheet.tsx usando `ContextSheetPrimitive` como alias de import
+- Signature `onUnlink` agora aceita `(id, title)` conforme ContextSheet primitive
+
+**Commit:** `1ced234` — pushed to both origin and staging remotes (branch joao-dev via --force-branch)
+
+**Próximo passo sugerido:** Todos os stories de CTXSRC-001 a CTXSRC-018 agora têm `passes: true`. A feature context-source-unified está completa (exceto CTXSRC-014 que foi deferred). O PRD pode mover para estado `done/`.

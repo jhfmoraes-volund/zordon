@@ -59,8 +59,9 @@
         "supabase/migrations/20260530b_forge_task_engine_fields.sql adicionou specId, agentProfile, worktreePath, dependsOn, verifiable, passes em ForgeTask",
         "supabase/migrations/20260530c_forge_run_cost_agg.sql adicionou costUsdTotal, tokensInTotal, tokensOutTotal, specId em ForgeRun",
         "supabase/migrations/20260530d_forge_cost_aggregate_trigger.sql criou trigger funcional",
+        "supabase/migrations/20260530f_forge_privacy_rls.sql aplicado, RLS de Forge* tables agora usa ownerId match (D24)",
         "src/lib/supabase/database.types.ts contém ForgeSpec + novos campos",
-        "RLS smoke: usuário sem ProjectAccess não consegue SELECT em ForgeSpec do projeto X"
+        "RLS smoke: usuário A não consegue SELECT em ForgeRun de usuário B (privacy ownerId)"
       ],
       "verifiable": [
         { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeSpec'", "expected": "1" },
