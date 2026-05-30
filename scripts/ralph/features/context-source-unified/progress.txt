@@ -204,3 +204,31 @@ Perfect! Commit successful: `b729bdb` — pushed to both origin and staging remo
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXSRC-008
   files: src/lib/context-sources/adapters/{transcript,meeting,csv,gsheets,github}.ts, src/lib/agent/tools/read-context-source.ts
   learnings: Adapters seguem interface unificada { resolveContent(supabase, source): Promise<{fullText, snapshotAt}> }. Transcript e meeting implementados; csv/gsheets/github stub com throw aguardando stories posteriores. Tool factory dispatcha por source.kind com switch exhaustivo. tsc passa com 5 adapters + tool factory.
+---
+
+## Ralph Iteration 8 — Summary
+
+**Story escolhida:** CTXSRC-008 — Adapters base + read_context_source tool (factory)
+
+**Verificações executadas:**
+- ✅ Tool file `src/lib/agent/tools/read-context-source.ts` criado
+- ✅ 5 adapter files criados em `src/lib/context-sources/adapters/` (transcript, meeting, csv, gsheets, github)
+- ✅ TypeScript compilation passes (`npx tsc --noEmit` exit 0)
+
+**Implementação:**
+- **Adapters:**
+  - `transcript.ts` — retorna `fullText` direto do DB
+  - `meeting.ts` — busca Meeting row via `externalId`, monta fullText em markdown com title/date/type/notes
+  - `csv.ts`, `gsheets.ts`, `github.ts` — stubs com `throw Error` aguardando stories CTXSRC-009/010
+- **Tool factory:**
+  - `createReadContextSourceTool()` exporta tool compatível com AI SDK
+  - Validação Zod: `{ sourceId: uuid }`
+  - Dispatcha por `source.kind` com switch exhaustivo (transcript | meeting | spreadsheet_csv | spreadsheet_gsheets | github_repo | github_pr | github_issue)
+  - Retorna `{ ok, id, kind, title, fullText, snapshotAt, ... }`
+
+**Commit:** `de6db2c` — pushed to origin and staging remotes
+
+**Próximo passo sugerido:** CTXSRC-009 (GitHub adapter via Composio) e CTXSRC-010 (CSV + GSheets) são agora elegíveis, ambas dependem apenas de CTXSRC-008 (passes: true). CTXSRC-009 tem menor id lexicográfico.
+iter 2026-05-30T02:43:25Z: PASS CTXSRC-009
+  files: src/lib/context-sources/adapters/github.ts
+  learnings: GitHub adapter via Composio: parseGitHubUrl regex suporta 3 kinds (repo/pr/issue). ComposioConnectionMissing exception inline (não precisou criar arquivo separado). executeTool + getConnectionStatus de @/lib/composio/client. createdBy pode ser null (guard necessário). Padrão markdown builder espelhado de meeting.ts.

@@ -27,7 +27,7 @@ Pipeline atual:
 
 ```
 Vitor (DS) → PRDs aprovados em docs/prd/ready/
-   ↓ ???
+   ↓ (GAP MANUAL)
 PM monta release plan manualmente em Notion/Slack
    ↓
 PM cria Modules + UserStories + Tasks no Zordon manualmente
@@ -35,7 +35,7 @@ PM cria Modules + UserStories + Tasks no Zordon manualmente
 Builders/Ralph executam tasks
 ```
 
-O **"???"** é onde mora 6-8h de trabalho manual do PM por release. Dores:
+O **gap manual** é onde mora 6-8h de trabalho do PM por release. Dores:
 
 1. **Sem ordenação automática.** Ralph pega o próximo PRD em `ready/` alfabético — pode quebrar dependências declaradas em §16.
 2. **Tasks desconectadas dos PRDs.** PM cria task no Zordon que perde o "porquê" do PRD. Builders executam sem ground truth de produto.

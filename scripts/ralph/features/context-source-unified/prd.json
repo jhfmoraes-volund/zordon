@@ -302,7 +302,8 @@
       "estimateMinutes": 25,
       "touches": [
         "src/lib/context-sources/adapters/github.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-010",
