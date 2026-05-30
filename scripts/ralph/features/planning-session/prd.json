@@ -284,7 +284,8 @@
         "src/app/api/planning-sessions/[id]/orchestrate/route.ts",
         "src/app/api/planning-sessions/[id]/prds/[prdId]/route.ts",
         "src/app/api/planning-sessions/[id]/abort/route.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-009",

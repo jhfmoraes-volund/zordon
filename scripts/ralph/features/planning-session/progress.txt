@@ -127,3 +127,42 @@ iter 2026-05-30T12:00:00Z: PASS PLAN-006
 iter 2026-05-30T13:29:26Z: PASS PLAN-007
   files: src/lib/agent/planning/cascade.ts, src/lib/jobs/planning-orchestrate-job.ts
   learnings: runCascade orchestrates 7 stages (0 indexes, 1A+1B parallel, 2/6/7 sequential). Cost cap $3 pre-flight. Subagents return {parsed, usage:{totalTokens, cost}}. Persists agentOutputsJsonb + draftRoadmapJsonb + creates PlanningSessionPRD rows.
+Perfect! Commit successful. Now let me create the iteration output summary:
+
+---
+
+## Output da iteração 8
+
+**Story escolhida:** PLAN-007 — "runCascade orchestrator + job worker + cost cap pre-flight"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passed)
+2. ✅ `test -f src/lib/agent/planning/cascade.ts && test -f src/lib/jobs/planning-orchestrate-job.ts` → ok (both files exist)
+3. ✅ `grep -cE 'export (async )?function runCascade' src/lib/agent/planning/cascade.ts` → 1 (expected >=1)
+
+**Commit hash:** `a445211`
+
+**Arquivos tocados:**
+- `src/lib/agent/planning/cascade.ts` (criado — orchestrator com 7 stages: 0/1A/1B/2/6/7)
+- `src/lib/jobs/planning-orchestrate-job.ts` (criado — job worker que invoca runCascade)
+- `src/lib/agent/planning/subagents/codebase-auditor.ts` (modificado — retorna `{parsed, usage}`)
+- `src/lib/agent/planning/subagents/dep-resolver.ts` (modificado — retorna `{parsed, usage}`)
+- `src/lib/agent/planning/subagents/story-decomposer.ts` (modificado — retorna `{parsed, usage}`)
+- `src/lib/agent/planning/subagents/capacity.ts` (modificado — retorna `{parsed, usage}`)
+- `src/lib/agent/planning/subagents/consolidator.ts` (modificado — retorna `{parsed, usage}`)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-007 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Implementação:**
+- `runCascade` executa 7 stages na ordem: Stage 0 (build indexes local), Stage 1A+1B (parallel via `Promise.all`), Stage 2 (story decomposer), Stage 6 (capacity), Stage 7 (consolidator)
+- Cost cap pré-flight: estima custo por version (v1=$0.30, v2=$0.80, v3=$1.50), aborta se excede $3.00
+- Persiste `agentOutputsJsonb` após cada stage (recovery em caso de falha)
+- Persiste `draftRoadmapJsonb` final e cria rows em `PlanningSessionPRD`
+- Atualiza status: `draft` → `orchestrating` → `in-review` (ou `error` se falha)
+- Todos os subagents agora retornam `{parsed: T, usage: {totalTokens, cost}}` para tracking de custo
+- Job worker (`planning-orchestrate-job.ts`) é thin wrapper que invoca `runCascade` e retorna resultado
+
+**Próximo passo sugerido:** Iteração 9 pode pegar **PLAN-008** (API routes: create, orchestrate async, get, drag/drop, abort) — única dependência PLAN-007 agora tem `passes: true`.
+iter 2026-05-30T15:00:00Z: PASS PLAN-008
+  files: src/app/api/planning-sessions/route.ts, src/app/api/planning-sessions/[id]/route.ts, src/app/api/planning-sessions/[id]/orchestrate/route.ts, src/app/api/planning-sessions/[id]/prds/[prdId]/route.ts, src/app/api/planning-sessions/[id]/abort/route.ts
+  learnings: 5 API routes follow pattern: Zod validation server-side, getUser() auth, requireProjectEdit* for mutations. Orchestrate runs job synchronously (maxDuration 300s), returns 200 on success (not 202 async). Schema has facilitatorId not createdBy, title not targetVersion (targetVersion is cascade param).
