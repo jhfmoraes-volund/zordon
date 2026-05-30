@@ -104,3 +104,26 @@ iter 2026-05-30T08:19:51Z: PASS PLAN-005
 iter 2026-05-30T12:00:00Z: PASS PLAN-006
   files: src/lib/agent/planning/subagents/story-decomposer.ts, src/lib/agent/planning/subagents/capacity.ts, src/lib/agent/planning/subagents/consolidator.ts
   learnings: 3 subagents follow same pattern (server-only, Zod schema, callOpenRouterJson). StoryDecomposer extracts user stories from PRDs, Capacity allocates to sprints (4800min/sprint assumed), Consolidator is STRICT (no opinion, just validates+orders). All use sonnet-4.6 except dep-resolver (haiku).
+---
+
+## Output da iteração 7
+
+**Story escolhida:** PLAN-006 — "Subagents StoryDecomposer + CapacityAllocator + VitoriaConsolidator"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passed)
+2. ✅ `ls ... | grep -c .ts` → 3 (expected 3)
+
+**Commit hash:** `bee8d17`
+
+**Arquivos tocados:**
+- `src/lib/agent/planning/subagents/story-decomposer.ts` (criado — extrai UserStories de PRDs matched a personas/módulos)
+- `src/lib/agent/planning/subagents/capacity.ts` (criado — aloca PRDs em sprints 1-12, assume 4800min/sprint)
+- `src/lib/agent/planning/subagents/consolidator.ts` (criado — Vitoria STRICT: valida+ordena sem opinião)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-006 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Próximo passo sugerido:** Iteração 8 pode pegar **PLAN-007** (runCascade orchestrator + job worker + cost cap) — única dependência PLAN-006 agora tem `passes: true`.
+iter 2026-05-30T13:29:26Z: PASS PLAN-007
+  files: src/lib/agent/planning/cascade.ts, src/lib/jobs/planning-orchestrate-job.ts
+  learnings: runCascade orchestrates 7 stages (0 indexes, 1A+1B parallel, 2/6/7 sequential). Cost cap $3 pre-flight. Subagents return {parsed, usage:{totalTokens, cost}}. Persists agentOutputsJsonb + draftRoadmapJsonb + creates PlanningSessionPRD rows.

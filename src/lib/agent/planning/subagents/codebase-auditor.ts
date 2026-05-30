@@ -53,7 +53,7 @@ const MODEL = "anthropic/claude-sonnet-4.6";
 export async function callCodebaseAuditor(
   prdIndex: PrdIndexEntry[],
   codebaseIndex: CodebaseIndex
-): Promise<AuditorOutput> {
+) {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(prdIndex, codebaseIndex);
 
@@ -70,7 +70,13 @@ export async function callCodebaseAuditor(
     );
   }
 
-  return parsed.data;
+  return {
+    parsed: parsed.data,
+    usage: {
+      totalTokens: (result.usage.prompt_tokens ?? 0) + (result.usage.completion_tokens ?? 0),
+      cost: result.usage.cost ?? 0,
+    },
+  };
 }
 
 function buildSystemPrompt(): string {

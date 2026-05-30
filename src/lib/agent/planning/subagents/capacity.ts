@@ -47,7 +47,7 @@ export async function callCapacityAllocator(
   prdIndex: PrdIndexEntry[],
   dagOutput: DAGOutput,
   targetSprints: number = 6
-): Promise<CapacityOutput> {
+) {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(prdIndex, dagOutput, targetSprints);
 
@@ -64,7 +64,13 @@ export async function callCapacityAllocator(
     );
   }
 
-  return parsed.data;
+  return {
+    parsed: parsed.data,
+    usage: {
+      totalTokens: (result.usage.prompt_tokens ?? 0) + (result.usage.completion_tokens ?? 0),
+      cost: result.usage.cost ?? 0,
+    },
+  };
 }
 
 function buildSystemPrompt(): string {

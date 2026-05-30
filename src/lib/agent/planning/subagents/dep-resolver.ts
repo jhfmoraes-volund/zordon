@@ -46,7 +46,7 @@ const MODEL = "anthropic/claude-haiku-4-5";
  */
 export async function callDependencyResolver(
   prdIndex: PrdIndexEntry[]
-): Promise<DAGOutput> {
+) {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(prdIndex);
 
@@ -63,7 +63,13 @@ export async function callDependencyResolver(
     );
   }
 
-  return parsed.data;
+  return {
+    parsed: parsed.data,
+    usage: {
+      totalTokens: (result.usage.prompt_tokens ?? 0) + (result.usage.completion_tokens ?? 0),
+      cost: result.usage.cost ?? 0,
+    },
+  };
 }
 
 function buildSystemPrompt(): string {

@@ -53,7 +53,7 @@ export async function callVitoriaConsolidator(
   dagOutput: DAGOutput,
   storyOutput: StoryDecomposerOutput,
   capacityOutput: CapacityOutput
-): Promise<ConsolidatorOutput> {
+) {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(
     prdIndex,
@@ -76,7 +76,13 @@ export async function callVitoriaConsolidator(
     );
   }
 
-  return parsed.data;
+  return {
+    parsed: parsed.data,
+    usage: {
+      totalTokens: (result.usage.prompt_tokens ?? 0) + (result.usage.completion_tokens ?? 0),
+      cost: result.usage.cost ?? 0,
+    },
+  };
 }
 
 function buildSystemPrompt(): string {

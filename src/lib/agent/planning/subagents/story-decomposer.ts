@@ -39,7 +39,7 @@ const MODEL = "anthropic/claude-sonnet-4.6";
 export async function callStoryDecomposer(
   prdIndex: PrdIndexEntry[],
   auditorOutput: AuditorOutput
-): Promise<StoryDecomposerOutput> {
+) {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(prdIndex, auditorOutput);
 
@@ -56,7 +56,13 @@ export async function callStoryDecomposer(
     );
   }
 
-  return parsed.data;
+  return {
+    parsed: parsed.data,
+    usage: {
+      totalTokens: (result.usage.prompt_tokens ?? 0) + (result.usage.completion_tokens ?? 0),
+      cost: result.usage.cost ?? 0,
+    },
+  };
 }
 
 function buildSystemPrompt(): string {

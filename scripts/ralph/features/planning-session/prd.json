@@ -249,7 +249,8 @@
       "touches": [
         "src/lib/agent/planning/cascade.ts",
         "src/lib/jobs/planning-orchestrate-job.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-008",
