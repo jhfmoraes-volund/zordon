@@ -126,6 +126,11 @@ A pirâmide de abstrações pra entregar uma feature é alta demais: **Ideia →
 | D15 | **Spec.md vive em `docs/specs/<slug>.md`**, NÃO em `docs/prd/`. Estados em filesystem: `specs/{draft,active,done,archive}/`. | Não polui o pipeline PRD legado. |
 | D16 | **Duplo Diamante Agêntico é a filosofia máxima da FORGE.** Spec.md é a cintura imutável entre Entender e Construir. Este PRD constrói apenas o Diamond 2; Diamond 1 já existe via Vitor/Vitoria/Alpha. | Sem essa separação clara, agentes upstream (discovery) contaminam decisões downstream (execução), gerando retrabalho. Ver §0. |
 | D17 | **Spec.md tem 5 seções obrigatórias** (goal, anchors, constraints, success-signals, non-goals) — mais a 6ª opcional (`upstream`) que aponta pra DS/PRD/conversa de origem (rastreabilidade Diamond 1 → Diamond 2 sem acoplamento). | Refs tipadas (memory `feedback_ambitious_features`). Spec sem origem é spec órfã. |
+| D18 | **Forge é scoped por projeto. 2 camadas de zoom**: Camada 1 = `/projects/[id]/forge` (Project Hub: specs do projeto, runs ativos, backlog, custo do projeto). Camada 2 = `/projects/[id]/forge/[runId]` (Project Forge: HUD + DAG + TaskList + Diff). Sem hub cross-project. | Foco em "um projeto que chegou". Cross-project dilui atenção. Phase ∞ pode adicionar dashboard global. |
+| D19 | **Planner é reuse-first**: iter-0 inclui passo de discovery (Agent subagent_type=Explore) que mapeia padrões existentes no repo antes de propor stories. Cada story tem `reuses: [paths]` apontando pro código a estender. | Reescrever o que existe é o erro mais caro. Memory `project_ui_patterns` lista o canon — planner DEVE consultar antes de propor. |
+| D20 | **Anti-pattern detection via verifiable greps no diff**: cada profile carrega lista de anti-patterns (UI: `<Dialog `, `window.confirm`, `setState após fetch`; DB: `prisma migrate`, `RLS missing`; etc). Verifiable check pós-story faz grep e falha se detecta. | Anti-patterns são memórias compactadas dos erros que já cometemos. Encodar como check automático evita repetição. |
+| D21 | **Pivot detection após 2 falhas consecutivas** numa mesma story: orchestrator pausa o run, marca `needs-pivot`, escreve relatório `pivot-required.md` com hipótese de problema na Spec.md. Run não retry sem aprovação humana — volta pro Diamond 1. | Fail-forward é caro. 2 falhas seguidas = Spec.md está errada, não a execução. Voltar pro Entender é mais barato do que insistir no Construir. |
+| D22 | **Cross-spec learnings persistidos** em tabela `ForgeLearning` (slug, lesson, profileScope, addedAt). Planner consulta antes de spawnar workers; profile worker recebe learnings relevantes no system prompt. | "can_view_project tem 1 param" foi re-descoberto 3× em runs diferentes. Memory captura cross-spec; ForgeLearning captura cross-run com escopo automático. |
 
 ## 6 · Arquitetura
 
@@ -331,41 +336,52 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
 
 ## 9 · UX
 
-**Tela 1 — `/forge` Hub (atualização)**
+**Camada 1 — `/projects/[id]/forge` Project Hub (nova, scope-by-project)**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  ⚒  FORGE        ──  3 runs ativos  ──  $4.27 hoje  ──  [+ New]   │
+│  ⚒  PROJECT · zelar                                       [+ Spec] │
+├─────────────────────────────────────────────────────────────────────┤
+│  specs aguardando run:  3        commits hoje:        12            │
+│  specs em execução:     2        custo do projeto:    $4.20         │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  📋  context-source-unified           ████████░░░░  8/15  $1.20    │
-│      4 tasks running · ARCHITECT · DB · API · UI                    │
+│  ── ACTIVE FORGES ──                                                │
 │                                                                     │
-│  📋  forge-engine                     ██████░░░░░░  6/12  $2.85    │
-│      3 tasks running · DB · WIRING · UI                             │
+│  ▶ forge-engine             ██████░░░░  6/12     $2.85   12m       │
+│  ▶ pm-review-v2             ██░░░░░░░░  2/8      $1.35    4m       │
 │                                                                     │
-│  📋  mobile-layout-pass               queued                $0.00   │
-│      not started                                                    │
+│  ── BACKLOG (specs ready) ──                                        │
+│                                                                     │
+│  ⏳ mobile-layout-pass      ready · 8 stories · ~3h                 │
+│  ⏳ dark-mode               ready · 4 stories · ~1h                 │
+│                                                                     │
+│  ── DRAFTS ──                                                       │
+│                                                                     │
+│  📝 daily-digest-email      draft (faltam: anchors, success)        │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Tela 2 — `/forge/specs/[slug]` (nova)**
+**Camada 2 — `/projects/[id]/forge/[runId]` Project Forge (drill-in)**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  ⚒  Spec · forge-engine                              [Approve Plan] │
+│  ⚒  forge-engine  ◂ zelar / forges                  [HUD] [DAG] ··· │
 ├─────────────────────────────────────────────────────────────────────┤
-│  Goal: Forge ganha motor real (Ralph) e Ralph ganha face            │
 │                                                                     │
-│  ── Generated DAG (12 stories) ─────────────────────────────────    │
+│  ── ACTIVE WORKERS (3 parallel) ────────────────────────────────    │
+│  ▶ FE-006  wiring    profile injection      ████░░  0:42  $0.18    │
+│  ▶ FE-007  wiring    forge-event hook       ██░░░░  0:23  $0.09    │
+│  ▶ FE-010  ui        realtime source        █░░░░░  0:11  $0.04    │
 │                                                                     │
-│  FE-001 ──┬── FE-002 ──┬── FE-004 ─── FE-007 ──┐                    │
-│           │            │                        ├── FE-010 ─── ...  │
-│           └── FE-003   └── FE-005 ─── FE-006 ──┘                    │
+│  ── DAG (12 stories) ───────────────────────────────────────────    │
+│  ✓ FE-001 ─┬─✓ FE-002 ─┬─✓ FE-004 ─── ▶ FE-007 ──┐                 │
+│            │           │                          ├── ▶ FE-010 ··· │
+│            └─✓ FE-003  └─✓ FE-005 ─── ▶ FE-006 ──┘                 │
 │                                                                     │
-│  Ready to claim: FE-001 (doc, 25min)                                │
-│  Profile distribution: 5 wiring · 3 ui · 2 db · 2 doc               │
+│  ── METRICS ──                  spec: forge-engine                  │
+│  tokens 12k/45k · cost $0.72 · elapsed 12m · ETA ~28m              │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -501,15 +517,22 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
   agentProfile: doc
 
 - id: FE-002
-  title: Iter-0 planner (spec → stories.jsonl via plan-mode)
+  title: Iter-0 planner reuse-first (spec → stories.jsonl via plan-mode)
   description: |
-    Função planner(spec): spawns claude -p com prompt que lê spec + scaneia repo
-    relevante (via anchors) e produz stories.jsonl válido. Usa plan-mode flag.
-    Output: array de stories com id, title, deps, verifiable, agentProfile,
-    estimateMinutes, touches. Valida DAG sem ciclo. Rejeita story > 30min.
+    Função planner(spec): spawns claude -p com prompt que faz **discovery-pass
+    reuse-first** antes de propor stories. Sequência:
+    1. Lê spec + anchors apontados
+    2. Spawna Agent(subagent_type=Explore) pra mapear padrões existentes no
+       repo que tocam o domínio da spec
+    3. Cada story sai com campo `reuses: [paths]` apontando código a estender
+    4. Aplica plan-mode flag pra humano aprovar DAG
+    Valida DAG sem ciclo. Rejeita story > 30min. Cross-spec learnings (D22)
+    são consultados se ForgeLearning já existe (FE-013).
   acceptanceCriteria:
-    - "src/lib/forge/planner.ts exporta plan(specPath): Promise<{stories, dag}>"
+    - "src/lib/forge/planner.ts exporta plan(specPath): Promise<{stories, dag, reuseMap}>"
     - "Stories válidas conforme StorySchema (subset de FE-001 schema)"
+    - "Cada story tem campo reuses[] (pode ser vazio se story é green-field)"
+    - "Discovery-pass invoca Agent Explore antes do plan-mode (verificável no transcript jsonl)"
     - "Detecta ciclo no dependsOn e retorna erro com lista de ids no ciclo"
     - "Estimate > 30 vira erro com nome da story"
     - "CLI 'forge plan <slug>' invoca e grava em .forge/<slug>/plan.jsonl"
@@ -553,18 +576,25 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
   agentProfile: db
 
 - id: FE-004
-  title: Orchestrator TS local (substitui ralph.sh)
+  title: Orchestrator TS local com pivot detection (substitui ralph.sh)
   description: |
     Node CLI service local. Lê .forge/<run-id>/plan.jsonl, pega tasks ready
-    (deps satisfeitas + sem worker ativo), spawn workers paralelos (até maxConcurrency),
-    aguarda completion, merge worktree serializado, atualiza Supabase via DAL.
-    Lock via orchestrator.pid. Limit padrão: 3 paralelos.
+    (deps satisfeitas + sem worker ativo), spawn workers paralelos (até
+    maxConcurrency=3), aguarda completion, merge worktree serializado, atualiza
+    Supabase via DAL. Lock via orchestrator.pid.
+
+    **Pivot detection (D21):** counter de falhas por story. Após 2 falhas
+    consecutivas na mesma story, orchestrator pausa o run, marca
+    status='paused-pivot', escreve relatório `.forge/<run-id>/pivot-required.md`
+    com sintomas + hipótese (Spec.md provavelmente incoerente). Run não retry
+    sem aprovação humana.
   acceptanceCriteria:
     - "src/lib/forge/orchestrator.ts exporta runOrchestrator({specId, maxConcurrency=3})"
     - "Lock pid em .forge/<run-id>/orchestrator.pid impede 2 instâncias"
     - "Pick task: ready (passes=false, deps todos passes=true) + lex order como tiebreak"
     - "Merge serializado: enquanto worktree A faz merge, worktree B espera"
-    - "Falha de task não derruba o run; conta como error e segue próximas ready"
+    - "Falha de task incrementa failureCount; 2 falhas consecutivas → status='paused-pivot' + pivot-required.md gerado"
+    - "Pivot report inclui: story id, AC, anti-patterns detectados, sugestão (pivot na spec OR scope creep)"
     - "Suporta SIGINT graceful: termina workers ativos, marca status='aborted'"
   verifiable:
     - kind: typecheck
@@ -604,18 +634,22 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
   agentProfile: wiring
 
 - id: FE-006
-  title: Subagent profiles (db/api/ui/wiring/test/doc) com prompts injetados
+  title: Subagent profiles (db/api/ui/wiring/test/doc) com prompts injetados + anti-patterns
   description: |
-    Cada profile tem um system prompt customizado (src/lib/forge/profiles/<name>.ts)
-    que injeta: memories relevantes (ui → project_ui_patterns.md, db → Supabase rules),
-    skills disponíveis (db → supabase MCP, ui → render checklist), tom + constraints.
-    Worker (FE-005) carrega profile.systemPrompt e passa pro Agent.
+    Cada profile tem system prompt customizado (src/lib/forge/profiles/<name>.ts)
+    + lista de anti-patterns (D20). Profile injeta: memories relevantes, skills
+    disponíveis, tom + constraints, e antiPatterns: { pattern, message, severity }[].
+    Worker (FE-005) carrega profile.systemPrompt + anti-patterns. Verifiable check
+    pós-story faz grep no diff por cada anti-pattern.
   acceptanceCriteria:
     - "src/lib/forge/profiles/index.ts exporta getProfile(name): Profile"
-    - "Cada profile tem: systemPrompt, allowedTools[], requiredMemories[], maxRetries"
+    - "Cada profile tem: systemPrompt, allowedTools[], requiredMemories[], antiPatterns[], maxRetries"
+    - "UI profile antiPatterns inclui: '<Dialog ' (sem ResponsiveSheet), 'window.confirm', 'setState após fetch' (com regex helper)"
+    - "DB profile antiPatterns inclui: 'prisma migrate', migration sem RLS, ALTER sem migration atômica"
+    - "API profile antiPatterns inclui: validação Zod fora de api/, response sync pra LLM/job >1s"
+    - "Worker resultado falha se algum anti-pattern severity='block' detectado no diff"
     - "UI profile prompt menciona explicitamente: ResponsiveSheet, Field, useOptimisticCollection"
     - "DB profile prompt menciona: psql DIRECT_URL, atomic migrations, RLS via helpers"
-    - "Testes em src/lib/forge/profiles/__tests__/ validam que cada prompt > 500 chars"
   verifiable:
     - kind: typecheck
       command_or_query: "npx tsc --noEmit"
@@ -756,6 +790,32 @@ FOR EACH ROW EXECUTE FUNCTION public.forge_task_cost_trigger();
   estimateMinutes: 25
   touches: [src/app/(dashboard)/forge/_components/task-sheet/diff-tab.tsx, src/app/api/forge/tasks/[id]/diff/route.ts]
   agentProfile: ui
+
+- id: FE-013
+  title: ForgeLearning — persistência de aprendizados cross-spec
+  description: |
+    Tabela ForgeLearning (slug, lesson, profileScope, addedAt, severity).
+    Cada vez que um worker descobre algo não-óbvio (ex: "can_view_project tem
+    1 param, não 2"), grava ali via tool `record_learning`. Planner (FE-002)
+    consulta antes de spawnar workers; profile worker recebe learnings
+    relevantes (profileScope match) inline no system prompt.
+  acceptanceCriteria:
+    - "supabase/migrations/20260530e_forge_learning.sql cria tabela com RLS por createdBy/projectId"
+    - "src/lib/forge/dal/learning.ts: recordLearning(lesson) e listLearnings(profileScope) funcionais"
+    - "Worker tem tool 'record_learning' no allowedTools de cada profile"
+    - "Planner injeta learnings.length > 0 ? 'KNOWN PITFALLS:\\n...' : '' no prompt"
+    - "Verifiable check: após 2 runs no mesmo profile, learning de run 1 aparece no prompt do run 2"
+  verifiable:
+    - kind: typecheck
+      command_or_query: "npx tsc --noEmit"
+      expected: "exit 0"
+    - kind: sql
+      command_or_query: "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeLearning'"
+      expected: "1"
+  dependsOn: [FE-003]
+  estimateMinutes: 25
+  touches: [supabase/migrations/20260530e_forge_learning.sql, src/lib/forge/dal/learning.ts, src/lib/forge/profiles/index.ts, src/lib/forge/planner.ts]
+  agentProfile: db
 
 - id: FE-012
   title: Closeout — branch merge + gh pr create + spec move

@@ -2595,7 +2595,6 @@ export type Database = {
           id: string
           linkedAt: string
           linkedById: string | null
-          note: string | null
           transcriptRefId: string
           weight: string | null
         }
@@ -2604,7 +2603,6 @@ export type Database = {
           id?: string
           linkedAt?: string
           linkedById?: string | null
-          note?: string | null
           transcriptRefId: string
           weight?: string | null
         }
@@ -2613,7 +2611,6 @@ export type Database = {
           id?: string
           linkedAt?: string
           linkedById?: string | null
-          note?: string | null
           transcriptRefId?: string
           weight?: string | null
         }
@@ -4743,28 +4740,28 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "PMReviewMeetingLink_linkedById_fkey"
+            foreignKeyName: "PMReviewMeetingLink_createdById_fkey"
             columns: ["linkedById"]
             isOneToOne: false
             referencedRelation: "Member"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "PMReviewMeetingLink_linkedById_fkey"
+            foreignKeyName: "PMReviewMeetingLink_createdById_fkey"
             columns: ["linkedById"]
             isOneToOne: false
             referencedRelation: "member_capacity_overview"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "PMReviewMeetingLink_linkedById_fkey"
+            foreignKeyName: "PMReviewMeetingLink_createdById_fkey"
             columns: ["linkedById"]
             isOneToOne: false
             referencedRelation: "member_commitment_overview"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "PMReviewMeetingLink_linkedById_fkey"
+            foreignKeyName: "PMReviewMeetingLink_createdById_fkey"
             columns: ["linkedById"]
             isOneToOne: false
             referencedRelation: "member_summary"

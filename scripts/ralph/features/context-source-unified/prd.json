@@ -530,7 +530,8 @@
         "CTXSRC-013"
       ],
       "estimateMinutes": 15,
-      "touches": []
+      "touches": [],
+      "passes": true
     },
     {
       "id": "CTXSRC-014",

@@ -29,11 +29,13 @@
     },
     {
       "id": "FE-002",
-      "title": "Iter-0 planner (spec → stories.jsonl via plan-mode)",
-      "description": "Função planner(spec): spawns claude -p com prompt que lê spec + scaneia repo via anchors e produz stories.jsonl válido. Detecta ciclo no dependsOn. Rejeita story > 30min.",
+      "title": "Iter-0 planner reuse-first (spec → stories.jsonl via plan-mode)",
+      "description": "Função planner(spec): discovery-pass reuse-first via Agent(Explore) ANTES de plan-mode. Cada story sai com reuses:[paths]. Detecta ciclo. Rejeita >30min. Consulta ForgeLearning (D22) se existir.",
       "acceptanceCriteria": [
-        "src/lib/forge/planner.ts exporta plan(specPath): Promise<{stories, dag}>",
+        "src/lib/forge/planner.ts exporta plan(specPath): Promise<{stories, dag, reuseMap}>",
         "Stories válidas conforme StorySchema",
+        "Cada story tem campo reuses[] (vazio se green-field)",
+        "Discovery-pass invoca Agent Explore antes do plan-mode (verificável no transcript jsonl)",
         "Detecta ciclo no dependsOn e retorna erro com lista de ids no ciclo",
         "Estimate > 30 vira erro com nome da story",
         "CLI 'forge plan <slug>' invoca e grava em .forge/<slug>/plan.jsonl"
@@ -73,14 +75,15 @@
     },
     {
       "id": "FE-004",
-      "title": "Orchestrator TS local (substitui ralph.sh)",
-      "description": "Node CLI service local. Lê plan.jsonl, pega tasks ready, spawn workers paralelos (até maxConcurrency=3), merge serializado, atualiza Supabase via DAL. Lock via pid file.",
+      "title": "Orchestrator TS local com pivot detection (substitui ralph.sh)",
+      "description": "Node CLI service local. Workers paralelos (maxConcurrency=3), merge serializado, pivot detection (D21): após 2 falhas consecutivas na mesma story, pausa run + gera pivot-required.md.",
       "acceptanceCriteria": [
         "src/lib/forge/orchestrator.ts exporta runOrchestrator({specId, maxConcurrency=3})",
         "Lock pid em .forge/<run-id>/orchestrator.pid impede 2 instâncias",
         "Pick task: ready (passes=false, deps todos passes=true) + lex order como tiebreak",
         "Merge serializado: enquanto worktree A faz merge, worktree B espera",
-        "Falha de task não derruba o run; conta como error e segue próximas ready",
+        "Falha de task incrementa failureCount; 2 falhas consecutivas → status='paused-pivot' + pivot-required.md gerado",
+        "Pivot report inclui: story id, AC, anti-patterns detectados, sugestão (pivot na spec OR scope creep)",
         "SIGINT graceful: termina workers ativos, marca status='aborted'"
       ],
       "verifiable": [
@@ -116,14 +119,17 @@
     },
     {
       "id": "FE-006",
-      "title": "Subagent profiles (db/api/ui/wiring/test/doc) com prompts injetados",
-      "description": "Cada profile (src/lib/forge/profiles/<name>.ts) injeta: memories relevantes (ui→project_ui_patterns, db→Supabase rules), skills, tom, constraints.",
+      "title": "Subagent profiles + anti-patterns (db/api/ui/wiring/test/doc)",
+      "description": "Cada profile injeta memories, skills, constraints + lista de anti-patterns (D20). Verifiable check pós-story faz grep no diff por cada anti-pattern severity='block'.",
       "acceptanceCriteria": [
         "src/lib/forge/profiles/index.ts exporta getProfile(name): Profile",
-        "Cada profile tem: systemPrompt, allowedTools[], requiredMemories[], maxRetries",
+        "Cada profile tem: systemPrompt, allowedTools[], requiredMemories[], antiPatterns[], maxRetries",
+        "UI profile antiPatterns inclui: '<Dialog ' (sem ResponsiveSheet), 'window.confirm', setState após fetch (regex)",
+        "DB profile antiPatterns inclui: 'prisma migrate', migration sem RLS, ALTER sem migration atômica",
+        "API profile antiPatterns inclui: validação Zod fora de api/, response sync pra LLM/job >1s",
+        "Worker resultado falha se anti-pattern severity='block' detectado no diff",
         "UI profile prompt menciona explicitamente: ResponsiveSheet, Field, useOptimisticCollection",
-        "DB profile prompt menciona: psql DIRECT_URL, atomic migrations, RLS via helpers",
-        "Cada systemPrompt > 500 chars"
+        "DB profile prompt menciona: psql DIRECT_URL, atomic migrations, RLS via helpers"
       ],
       "verifiable": [
         { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
@@ -238,6 +244,27 @@
       "estimateMinutes": 25,
       "touches": ["src/app/(dashboard)/forge/_components/task-sheet/diff-tab.tsx", "src/app/api/forge/tasks/[id]/diff/route.ts"],
       "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "FE-013",
+      "title": "ForgeLearning — persistência de aprendizados cross-spec",
+      "description": "Tabela ForgeLearning (slug, lesson, profileScope, addedAt, severity). Worker grava via tool record_learning. Planner consulta antes de spawnar workers; profile worker recebe learnings relevantes inline no system prompt.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260530e_forge_learning.sql cria tabela com RLS por createdBy/projectId",
+        "src/lib/forge/dal/learning.ts: recordLearning(lesson) e listLearnings(profileScope) funcionais",
+        "Worker tem tool 'record_learning' no allowedTools de cada profile",
+        "Planner injeta learnings.length > 0 ? 'KNOWN PITFALLS:\\n...' : '' no prompt",
+        "Após 2 runs no mesmo profile, learning de run 1 aparece no prompt do run 2"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeLearning'", "expected": "1" }
+      ],
+      "dependsOn": ["FE-003"],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/20260530e_forge_learning.sql", "src/lib/forge/dal/learning.ts", "src/lib/forge/profiles/index.ts", "src/lib/forge/planner.ts"],
+      "agentProfile": "db",
       "passes": false
     },
     {

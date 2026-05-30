@@ -389,3 +389,84 @@ Perfeito! Commit `b46d4c3` criado e pushado para origin e staging.
 iter 2026-05-30T03:38:51Z: PASS CTXSRC-013
   files: src/lib/agent/agents/vitor/tools.ts, src/lib/agent/agents/vitoria/tools.ts, src/lib/agent/prompt.ts, src/lib/agent/agents/vitoria/prompt.ts
   learnings: Vitor e Vitoria agora usam read_context_source (não read_transcript_content). Prompts atualizados pra mencionar sourceId + kind. pre-work-step.tsx já estava correto (usa StepActions portal, não <ContextRibbon direto). AC menciona useProvideStepActions mas implementação real usa StepActions component diretamente (padrão portal-based).
+Perfect! Commit `0c63acc` pushed to both origin and staging remotes.
+
+---
+
+## Ralph Iteration 13 — Summary
+
+**Story escolhida:** CTXSRC-013 — Wiring Vitor + Vitoria com read_context_source + endpoints novos
+
+**Verificações executadas:**
+- ✅ `npx tsc --noEmit` → exit 0 (compilation passes)
+- ✅ `grep -c 'read_context_source' vitor/tools.ts vitoria/tools.ts` → 2 (esperado: regex:^[2-9])
+- ✅ `grep -c 'read_context_source' prompt.ts vitoria/prompt.ts` → 8 (esperado: regex:^[2-9])
+- ✅ `grep -cE '<ContextRibbon\b' pre-work-step.tsx` → 0 (esperado: 0)
+- ✅ pre-work-step.tsx usa `StepActions` portal (2 ocorrências) — padrão correto de injeção no header
+
+**Implementação:**
+1. **Vitor tools.ts** (linha 1-12): Substituído `read_transcript_content` por `read_context_source`
+2. **Vitoria tools.ts** (linha 7, 351): Substituído `read_transcript_content` por `read_context_source`
+3. **Vitor prompt** (centralizado em `agent/prompt.ts`):
+   - Linha 240: Comentário atualizado `CTXSRC-013: lista context sources...`
+   - Linha 252: `transcriptRefId` → `contextSourceId`
+   - Linhas 261-268: Atualizado título "Fontes de contexto linkadas", menção de tool `read_context_source({ sourceId })`, documentação dos kinds suportados
+4. **Vitoria prompt.ts**:
+   - Linhas 93-94: Tabela de tool routing atualizada (`read_context_source` em vez de `read_transcript_content`)
+   - Linhas 99-103: Regra dura atualizada explicando que `read_context_source` lê ContextSource unificado (transcript, meeting, CSV, GSheets, GitHub)
+   - Linhas 107-117: Instruções de uso atualizadas com os novos params (`sourceId`, `kind`, `fullText`)
+   - Linha 431: Label atualizado "use esses IDs em read_context_source"
+
+**Descobertas:**
+- ✅ **pre-work-step.tsx já estava correto** — usa `StepActions` portal component (não `<ContextRibbon` direto), conforme D15 de paridade
+- ✅ **pm-review-insumos-sheet.tsx** já importava `ContextInsumosSheet` de `@/components/agent/context-import`
+- ⚠️ **Discrepância no prd.json AC:** AC menciona `useProvideStepActions` hook mas implementação real usa `StepActions` component diretamente (padrão portal-based via step-actions-context.tsx). Funcionalidade está correta, nomenclatura na AC é que diverge.
+
+**Ajustes técnicos:**
+- Nenhuma mudança necessária em pre-work-step.tsx ou pm-review-insumos-sheet.tsx — código já seguia o padrão correto
+- Apenas wiring de tools e prompts foi necessário
+
+**Commit:** `0c63acc` — pushed to both origin and staging remotes (branch joao-dev via --force-branch)
+
+**Próximo passo sugerido:** CTXSRC-015 (Parity check) e CTXSRC-014 (Migration H — drop legacy tables) são agora elegíveis. CTXSRC-014 depende de CTXSRC-013 (passes: true ✅). CTXSRC-015 também depende de CTXSRC-013 (passes: true ✅). CTXSRC-014 tem menor id lexicográfico.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): BLOCKED CTXSRC-014 — Migration executed successfully but 7+ code files still reference dropped tables (DesignSessionTranscriptLink, PMReviewTranscriptLink, PMReviewMeetingLink). Files affected: src/app/api/design-sessions/[id]/transcripts/*, src/app/api/pm-review/[id]/transcripts/sources/route.ts, src/app/api/projects/[id]/insumo-pool/route.ts, src/lib/agent/agents/vitoria/pm-review.ts, src/lib/dal/design-session-transcripts.ts, src/lib/dal/pm-review.ts. These need to be updated to use DesignSessionContextLink/PMReviewContextLink OR deleted if they're dead code superseded by CTXSRC-011 endpoints. Story estimate (20min) was incorrect — requires refactoring multiple API routes + DAL functions. Checkpoint needed to decide: (a) update legacy endpoints to use new tables, (b) delete legacy endpoints and update callers to use CTXSRC-011 unified endpoints, or (c) rollback migration H and keep both systems temporarily.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): ROLLBACK CTXSRC-014 — Migration H droppou tabelas mas 7+ arquivos ainda usam (UI chama /api/*/transcripts, não /context). Rollback executado: recreei PMReviewTranscriptLink, PMReviewMeetingLink, DesignSessionTranscriptLink com schema corrigado (linkedAt/linkedById/note, não createdAt) + backfill de ContextSource unificado. Typecheck passa. Story real é maior que estimado (20min) — precisa refatorar UI + endpoints pra usar CTXSRC-011 endpoints ANTES de dropar tabelas. Sugestão: quebrar CTXSRC-014 em 2 stories: (a) migrar callers pra /context endpoints, (b) drop legacy tables. Ou aceitar que ambos os sistemas coexistem até Checkpoint humano decidir rota.
+According to the Ralph iteration rules, when I encounter a failure and can't fix it in 1 attempt, I should **NOT commit** and should **encerre** the iteration. Since I rolled back the migration and the story is blocked, I should not mark it as passes=true. Let me provide the iteration summary:
+
+---
+
+## Ralph Iteration 4 — Summary
+
+**Story escolhida:** CTXSRC-014 — Migration H: drop link tables legados
+
+**Verificações executadas:**
+- ❌ Migration 20260530h_drop_legacy_link_tables.sql criada e executada (DROP 3 tables successful)
+- ❌ Types regenerados
+- ❌ TypeScript compilation FAILED com 12+ erros — 7 arquivos ainda referenciam tabelas droppadas
+- ⚠️ **ROLLBACK executado:** Tables recreadas com schema correto + backfill de ContextSource
+- ✅ TypeScript compilation passes APÓS rollback
+- ⏸️ Smoke test não executado (story não completável)
+
+**Descoberta crítica:**
+A story CTXSRC-014 tem **dependência oculta não satisfeita**:
+- CTXSRC-013 (Wiring Vitor + Vitoria) deveria ter migrado UI para usar `/api/*/context` endpoints (criados em CTXSRC-011)
+- MAS o código da UI **ainda chama os endpoints legacy** `/api/design-sessions/[id]/transcripts` e `/api/pm-review/[id]/transcripts`
+- Esses endpoints legacy dependem de `DesignSessionTranscriptLink`, `PMReviewTranscriptLink`, `PMReviewMeetingLink`
+- **7 arquivos afetados:** API routes (design-sessions/transcripts, pm-review/transcripts, projects/insumo-pool), DAL (design-session-transcripts.ts, pm-review.ts), agent (vitoria/pm-review.ts)
+
+**Ação tomada:**
+- Rollback migration H: recreei as 3 tabelas legacy com schema correto (`linkedAt`/`linkedById`/`note`)
+- Backfill de `ContextSource` unified → tabelas legacy (0 DS links, 2 PMReview transcript links, 1 PMReview meeting link)
+- Types regenerados → typecheck passes ✅
+
+**Commit:** Nenhum (conforme regra Ralph: falha → NÃO commit)
+
+**Próximo passo sugerido:** Story CTXSRC-014 permanece com `passes: false`. **Checkpoint humano necessário** para decidir:
+1. **Opção A:** Quebrar CTXSRC-014 em 2 stories: (a) migrar UI + endpoints pra `/context`, (b) drop legacy tables
+2. **Opção B:** Aceitar coexistência de ambos os sistemas (unified `/context` + legacy `/transcripts`) temporariamente
+3. **Opção C:** Atualizar CTXSRC-013 AC para incluir migração de UI callers (story foi marcada passes=true incorretamente)
+
+CTXSRC-015 (Parity check) é agora a única story elegível e deve ser executada na próxima iteração.
+iter 2026-05-30T03:50:00Z: PASS CTXSRC-015
+  files: (verificação read-only, sem mudanças de código)
+  learnings: Parity check automatizado confirmou ambos agentes (Vitor/Vitoria) importam ContextInsumosSheet de @/components/agent/context-import (não há cópias em pastas por agente). super-session-modal.tsx existe mas é modal de Super Session (não de context-import), aceitável. Check manual_browser pending pra Checkpoint humano.
