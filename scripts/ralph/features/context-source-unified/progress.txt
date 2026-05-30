@@ -24,3 +24,28 @@ Perfect! Commit successful: `fc2f0c3`
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXSRC-002
   files: supabase/migrations/20260530b_create_design_session_context_link.sql, src/lib/supabase/database.types.ts
   learnings: RLS usa can_view_design_session (não can_view_session). Ribbon refactor pré-existente não bloqueou migration. db:types via project-id funciona mesmo com psql tendo falha de socket local.
+✅ Commit `fb4922e` criado e pushado para `origin` e `staging`.
+
+---
+
+## Ralph Iteration 2 — Summary
+
+**Story:** CTXSRC-002 — Migration B: DesignSessionContextLink + RLS
+
+**Verificações executadas:**
+- ✅ Migration file `20260530b_create_design_session_context_link.sql` criado
+- ✅ Tabela `DesignSessionContextLink` criada no DB com FK, unique constraint, 4 RLS policies
+- ✅ `database.types.ts` atualizado (8 ocorrências de DesignSessionContextLink)
+- ✅ TypeScript compilation passes
+
+**Ajustes realizados:**
+- Corrigido RLS policy: `can_view_session` → `can_view_design_session` (descoberto via query de funções existentes)
+- Drop e recriação da tabela após erro parcial na primeira tentativa
+- Tipos regenerados via `npm run db:types` (project-id method)
+
+**Commit:** `fb4922e` — pushed to both origin and staging remotes
+
+**Próximo passo sugerido:** CTXSRC-003 (Migration C — PMReviewContextLink) e CTXSRC-004 (backfill TranscriptRef) são agora elegíveis, ambas dependem apenas de CTXSRC-001 que já tem `passes: true`. CTXSRC-003 tem menor id lexicográfico.
+iter 2026-05-30T02:26:20Z: PASS CTXSRC-003
+  files: supabase/migrations/20260530c_create_pm_review_context_link.sql, src/lib/supabase/database.types.ts
+  learnings: RLS usa can_create_pm_review (helper existente) + can_view_project. Padrão espelhado de DesignSessionContextLink. source <(...) falhou com psql, necessário DIRECT_URL hardcoded.

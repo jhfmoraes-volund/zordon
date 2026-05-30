@@ -4646,6 +4646,76 @@ export type Database = {
           },
         ]
       }
+      PMReviewContextLink: {
+        Row: {
+          addedat: string
+          addedby: string | null
+          contextsourceid: string
+          id: string
+          pmreviewid: string
+          weight: string | null
+        }
+        Insert: {
+          addedat?: string
+          addedby?: string | null
+          contextsourceid: string
+          id?: string
+          pmreviewid: string
+          weight?: string | null
+        }
+        Update: {
+          addedat?: string
+          addedby?: string | null
+          contextsourceid?: string
+          id?: string
+          pmreviewid?: string
+          weight?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PMReviewContextLink_addedby_fkey"
+            columns: ["addedby"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewContextLink_addedby_fkey"
+            columns: ["addedby"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewContextLink_addedby_fkey"
+            columns: ["addedby"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewContextLink_addedby_fkey"
+            columns: ["addedby"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewContextLink_contextsourceid_fkey"
+            columns: ["contextsourceid"]
+            isOneToOne: false
+            referencedRelation: "ContextSource"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PMReviewContextLink_pmreviewid_fkey"
+            columns: ["pmreviewid"]
+            isOneToOne: false
+            referencedRelation: "PMReview"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       PMReviewMeetingLink: {
         Row: {
           id: string

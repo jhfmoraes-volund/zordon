@@ -113,7 +113,8 @@
       "touches": [
         "supabase/migrations/20260530c_create_pm_review_context_link.sql",
         "src/lib/supabase/database.types.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "CTXSRC-004",
