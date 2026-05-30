@@ -136,7 +136,8 @@
       "estimateMinutes": 25,
       "touches": [
         "src/lib/agent/planning/prd-index.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "PLAN-005",

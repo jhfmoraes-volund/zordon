@@ -30,3 +30,29 @@ Perfeito! Commit `4c43684` realizado com sucesso.
 iter 2026-05-30T04:34:55Z: PASS PLAN-003
   files: src/lib/agent/planning/codebase-index.ts, package.json
   learnings: tree-sitter API usa Parser.init() static + new Parser(). Cache por git SHA em /tmp/volund-codebase-index/. Parser.parse() pode retornar null.
+---
+
+## Output da iteração 4
+
+**Story escolhida:** PLAN-003 — "buildCodebaseIndex via tree-sitter-wasm + cache por SHA"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passou)
+2. ✅ `test -f src/lib/agent/planning/codebase-index.ts` → ok (arquivo existe)
+3. ✅ `grep -cE 'tree-sitter' package.json` → 2 (expected >=1)
+
+**Commit hash:** `0bc94ca`
+
+**Arquivos tocados:**
+- `package.json` (adicionadas dependências `web-tree-sitter` e `tree-sitter-typescript`)
+- `pnpm-lock.yaml` (criado pela instalação das dependências)
+- `src/lib/agent/planning/codebase-index.ts` (criado com função `buildCodebaseIndex` completa)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-003 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Próximo passo sugerido:** Iteração 5 pode pegar **PLAN-004** (buildPrdIndex) — não tem dependências pendentes e é a próxima elegível na ordem lexicográfica.
+⚠️  [BashTool] Pre-flight check is taking longer than expected. Run with ANTHROPIC_LOG=debug to check for failed or slow API requests.
+⚠️  [BashTool] Pre-flight check is taking longer than expected. Run with ANTHROPIC_LOG=debug to check for failed or slow API requests.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS PLAN-004
+  files: src/lib/agent/planning/prd-index.ts, package.json
+  learnings: gray-matter for frontmatter parsing. Cache by SHA of concatenated PRD files. Extract §1 problem, §2 oneLiner, §4 personas, §12 risk level, §16 metadata (dependsOn, estimateMinutes).
