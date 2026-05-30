@@ -36,3 +36,20 @@ iter 2026-05-30T00:59:59Z: PASS CTXIMP-002
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS CTXIMP-003
   files: src/components/agent/context-import/context-insumos-sheet.tsx, src/components/agent/context-import/index.ts
   learnings: ContextInsumosSheet primitivo stateless com scope='session'|'project' controla visibilidade do pool. Aceita callbacks onLink/onUnlink/onImportNew — fetcher fica no caller. ScopeLabels opt-in customiza textos.
+---
+
+## Iteração 3 — Resultado
+
+**Story escolhida:** CTXIMP-003 — "Extrair ContextInsumosSheet primitivo"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` — passou (0 erros)
+2. ✅ Nenhum import de `pm-review/` ou `design-session/` — count: 0
+3. ✅ Usa `ResponsiveSheet` — count: 17 (matches regex `^[1-9]`)
+
+**Commit:** `6eb2598` — ralph(context-import-unified): CTXIMP-003 extrair ContextInsumosSheet primitivo
+
+**Próximo passo sugerido:** CTXIMP-004 (criar ContextRibbon primitivo) ou CTXIMP-005 (extrair read_transcript_content tool) — ambos elegíveis, pois suas dependências já tem passes=true. CTXIMP-004 é menor lexicograficamente.
+iter 2026-05-30T01:04:40Z: PASS CTXIMP-004
+  files: src/components/agent/context-import/context-ribbon.tsx, src/components/agent/context-import/index.ts
+  learnings: ContextRibbon primitivo h-9 responsivo — desktop mostra texto completo, mobile colapsa pra contadores (NT NA NN). Slot actions opt-in pra futuras extensões.
