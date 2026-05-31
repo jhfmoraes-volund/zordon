@@ -56,7 +56,7 @@
         "src/lib/forge/runtime/event-kinds.ts"
       ],
       "agentProfile": "code",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ESS-003",

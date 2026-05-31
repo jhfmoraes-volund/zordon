@@ -1,3 +1,28 @@
 iter 2026-05-31T21:57:32Z: PASS ESS-001
   files: supabase/migrations/20260601m_forge_event_kind_widen.sql
   learnings: Constraint ForgeEvent_kind_check não existia previamente; migration rodou limpo. psql requer URL completa (não socket local).
+Excelente! Iteração completa. Vou preparar o resumo final:
+
+---
+
+## Resumo da Iteração Ralph - forge-event-ssot
+
+**Story escolhida:** ESS-001 - Migration drop ForgeEvent_kind_check
+
+**Verificações executadas:**
+✅ Migration criada em `supabase/migrations/20260601m_forge_event_kind_widen.sql`
+✅ Migration executada via psql com sucesso
+✅ Verificação SQL confirmou: `count(*) FROM pg_constraint WHERE conname='ForgeEvent_kind_check'` = 0
+
+**Commit:** `315afe0` - ralph(forge-event-ssot): ESS-001 migration drop ForgeEvent_kind_check
+
+**Arquivos modificados:**
+- supabase/migrations/20260601m_forge_event_kind_widen.sql (criado)
+- scripts/ralph/features/forge-event-ssot/prd.json (ESS-001 marcado passes=true)
+- scripts/ralph/features/forge-event-ssot/progress.txt (criado com log da iteração)
+
+**Próximo passo sugerido:** 
+ESS-002 é a próxima story elegível (sem dependências, passes=false). Ela cria o arquivo `src/lib/forge/runtime/event-kinds.ts` com a taxonomy de event kinds como type union literal.
+iter 2026-05-31T21:59:17Z: PASS ESS-002
+  files: src/lib/forge/runtime/event-kinds.ts
+  learnings: Runtime directory criado conforme estrutura do PRD. Type union literal com 18 kinds (autorun, story, claude, error, done). Tipecheck + grep passam limpo.
