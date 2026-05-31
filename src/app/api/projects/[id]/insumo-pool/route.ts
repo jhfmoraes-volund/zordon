@@ -128,11 +128,12 @@ export async function GET(
   // Remove transcripts JÁ linkados ao PM Review corrente.
   if (excludePMReviewId) {
     const { data: alreadyLinked } = await supabase
-      .from("PMReviewTranscriptLink")
+      .from("EntityLink")
       .select("transcriptRefId")
-      .eq("pmReviewId", excludePMReviewId);
+      .eq("pmReviewId", excludePMReviewId)
+      .not("transcriptRefId", "is", null);
     for (const l of alreadyLinked ?? []) {
-      transcriptMap.delete(l.transcriptRefId);
+      if (l.transcriptRefId) transcriptMap.delete(l.transcriptRefId);
     }
   }
 
@@ -181,9 +182,10 @@ export async function GET(
   // Remove meetings JÁ linkadas ao PM Review corrente.
   if (excludePMReviewId) {
     const { data: alreadyLinked } = await supabase
-      .from("PMReviewMeetingLink")
+      .from("EntityLink")
       .select("meetingId")
-      .eq("pmReviewId", excludePMReviewId);
+      .eq("pmReviewId", excludePMReviewId)
+      .not("meetingId", "is", null);
     const seen = new Set(
       (alreadyLinked ?? []).map((l) => l.meetingId as string),
     );

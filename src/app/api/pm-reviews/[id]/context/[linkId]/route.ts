@@ -35,10 +35,10 @@ export async function DELETE(
 
   // Delete link (WHERE pinning both id and pmReviewId for safety)
   const { error } = await supabase
-    .from("PMReviewContextLink")
+    .from("EntityLink")
     .delete()
     .eq("id", linkId)
-    .eq("pmreviewid", pmReviewId);
+    .eq("pmReviewId", pmReviewId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

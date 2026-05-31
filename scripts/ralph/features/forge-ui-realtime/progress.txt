@@ -1,0 +1,3 @@
+iter 2026-05-31T22:50:02Z: PASS FUI-001
+  files: supabase/migrations/20260601p_forge_realtime_publication.sql
+  learnings: Tables already in publication; idempotent DO block ensures no error on re-run

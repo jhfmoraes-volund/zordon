@@ -20,10 +20,10 @@ export async function DELETE(
 
   // Delete link (WHERE pinning both id and sessionId for safety)
   const { error } = await supabase
-    .from("DesignSessionContextLink")
+    .from("EntityLink")
     .delete()
     .eq("id", linkId)
-    .eq("designsessionid", sessionId);
+    .eq("designSessionId", sessionId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

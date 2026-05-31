@@ -94,3 +94,36 @@ Perfect! Commit successful with hash `bb644c5`. Now let me prepare the final out
 iter 2026-05-31T$(date -u +%H:%M:%S)Z: PASS FRL-004
   files: scripts/forge/test-smoke-run-lifecycle.sh
   learnings: Smoke test validated end-to-end lifecycle: ForgeRun transitions queued→running→error (story_failed). All helpers (markRunRunning, updateRunProgress, markRunError) worked correctly. startedAt/endedAt populated, meta.errorReason and meta.eventCounts set. Test uses manifest mode (FORGE_RUN_ID env var) to bootstrap from ForgeRun.manifest instead of filesystem prd.json.
+Perfeito! Commit realizado com sucesso. Hash: `cc114b6`.
+
+---
+
+## Ralph Iteration 4 — Complete (Final)
+
+**Story chosen:** FRL-004 — "Smoke test lifecycle end-to-end"
+
+**Implementation:**
+- Created `scripts/forge/test-smoke-run-lifecycle.sh` smoke test script (346 lines)
+- Test validates complete ForgeRun lifecycle: queued → running → done/error
+- Verifies startedAt, endedAt, progress, meta.reason/errorReason, and meta.eventCounts
+- Uses manifest mode (FORGE_RUN_ID env var) to bootstrap from ForgeRun.manifest
+
+**Verifications ran:**
+- ✅ manual_browser check (`bash scripts/forge/test-smoke-run-lifecycle.sh`) — **PASS**
+- All run-state.ts helpers (markRunRunning, updateRunProgress, markRunError) working correctly
+
+**Type errors fixed:**
+- `planning.ts:287` — Cast `weight` to `TranscriptWeight | null` with fallback to "supporting"
+- `pm-review.ts` — Already had proper `.filter()` calls to ensure non-null values before mapping
+
+**Files touched:**
+- `scripts/forge/test-smoke-run-lifecycle.sh` — new smoke test
+- `scripts/ralph/features/forge-run-lifecycle/prd.json` — marked FRL-004 passes=true
+- `scripts/ralph/features/forge-run-lifecycle/progress.txt` — appended iteration log
+- `src/lib/dal/planning.ts` — fixed type error in linkedTranscripts mapping
+
+**Commit hashes:**
+- `8bc84cb` — ralph(forge-run-lifecycle): FRL-004 smoke test end-to-end lifecycle
+- `cc114b6` — fix: type errors in planning and pm-review DALs
+
+**Next step suggested:** All 4 stories (FRL-001 through FRL-004) have now passed. The forge-run-lifecycle feature is complete. PRD can move to done/ state via Ralph checkpoint/closeout.

@@ -60,10 +60,10 @@ export async function POST(
 
   // Check if already linked
   const { data: existing } = await supabase
-    .from("PMReviewContextLink")
+    .from("EntityLink")
     .select("id")
-    .eq("pmreviewid", pmReviewId)
-    .eq("contextsourceid", contextSourceId)
+    .eq("pmReviewId", pmReviewId)
+    .eq("contextSourceId", contextSourceId)
     .maybeSingle();
 
   if (existing) {
@@ -75,11 +75,11 @@ export async function POST(
 
   // Create link
   const { data: link, error } = await supabase
-    .from("PMReviewContextLink")
+    .from("EntityLink")
     .insert({
-      pmreviewid: pmReviewId,
-      contextsourceid: contextSourceId,
-      addedby: memberId,
+      pmReviewId: pmReviewId,
+      contextSourceId: contextSourceId,
+      linkedById: memberId,
       weight: weight || "primary",
     })
     .select()

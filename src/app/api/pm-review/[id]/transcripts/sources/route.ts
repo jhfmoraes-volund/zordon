@@ -65,9 +65,10 @@ export async function GET(
     getMemberIntegrationToken(member.id, "roam"),
     getMemberIntegrationToken(member.id, "granola"),
     db()
-      .from("PMReviewTranscriptLink")
-      .select('"transcriptRefId", transcript:TranscriptRef("sourceId", source)')
-      .eq("pmReviewId", pmReviewId),
+      .from("EntityLink")
+      .select('"transcriptRefId", transcript:TranscriptRef!EntityLink_transcriptRefId_fkey("sourceId", source)')
+      .eq("pmReviewId", pmReviewId)
+      .not("transcriptRefId", "is", null),
   ]);
 
   const importedSet = new Set<string>();

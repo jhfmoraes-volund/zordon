@@ -26,7 +26,7 @@ export async function DELETE(
   if (denied) return denied;
 
   const { error } = await db()
-    .from("DesignSessionTranscriptLink")
+    .from("EntityLink")
     .delete()
     .eq("id", linkId)
     .eq("designSessionId", sessionId);

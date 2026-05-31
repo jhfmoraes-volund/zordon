@@ -43,10 +43,10 @@ export async function POST(
 
   // Check if already linked
   const { data: existing } = await supabase
-    .from("DesignSessionContextLink")
+    .from("EntityLink")
     .select("id")
-    .eq("designsessionid", sessionId)
-    .eq("contextsourceid", contextSourceId)
+    .eq("designSessionId", sessionId)
+    .eq("contextSourceId", contextSourceId)
     .maybeSingle();
 
   if (existing) {
@@ -58,11 +58,11 @@ export async function POST(
 
   // Create link
   const { data: link, error } = await supabase
-    .from("DesignSessionContextLink")
+    .from("EntityLink")
     .insert({
-      designsessionid: sessionId,
-      contextsourceid: contextSourceId,
-      addedby: memberId,
+      designSessionId: sessionId,
+      contextSourceId: contextSourceId,
+      linkedById: memberId,
       weight: weight || "primary",
     })
     .select()
