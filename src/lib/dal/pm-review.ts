@@ -148,13 +148,15 @@ export async function listPMReviewsForProject(
 
   const [meetingsRes, transcriptsRes, notesRes] = await Promise.all([
     supabase
-      .from("PMReviewMeetingLink")
+      .from("EntityLink")
       .select("pmReviewId")
-      .in("pmReviewId", ids),
+      .in("pmReviewId", ids)
+      .not("meetingId", "is", null),
     supabase
-      .from("PMReviewTranscriptLink")
+      .from("EntityLink")
       .select("pmReviewId")
-      .in("pmReviewId", ids),
+      .in("pmReviewId", ids)
+      .not("transcriptRefId", "is", null),
     supabase
       .from("PMReviewNote")
       .select("pmReviewId, kind")
@@ -213,18 +215,20 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
 
   const [meetingsRes, transcriptsRes, notesRes, dsRes, sprintRes] = await Promise.all([
     supabase
-      .from("PMReviewMeetingLink")
+      .from("EntityLink")
       .select(
-        'id, "meetingId", "linkedAt", "linkedById", note, meeting:Meeting(id, title, date, visibility, kind)',
+        'id, "meetingId", "linkedAt", "linkedById", note, meeting:Meeting!EntityLink_meetingId_fkey(id, title, date, visibility, kind)',
       )
       .eq("pmReviewId", id)
+      .not("meetingId", "is", null)
       .order("linkedAt", { ascending: false }),
     supabase
-      .from("PMReviewTranscriptLink")
+      .from("EntityLink")
       .select(
-        'id, "transcriptRefId", "linkedAt", "linkedById", weight, note, transcript:TranscriptRef(id, source, "sourceId", title, "capturedAt", "meetingId")',
+        'id, "transcriptRefId", "linkedAt", "linkedById", weight, note, transcript:TranscriptRef!EntityLink_transcriptRefId_fkey(id, source, "sourceId", title, "capturedAt", "meetingId")',
       )
       .eq("pmReviewId", id)
+      .not("transcriptRefId", "is", null)
       .order("linkedAt", { ascending: false }),
     supabase
       .from("PMReviewNote")
@@ -393,7 +397,7 @@ export async function linkMeetingToPMReview(params: {
 }): Promise<{ id: string; created: boolean }> {
   const supabase = db();
   const { data: existing } = await supabase
-    .from("PMReviewMeetingLink")
+    .from("EntityLink")
     .select("id")
     .eq("pmReviewId", params.pmReviewId)
     .eq("meetingId", params.meetingId)
@@ -401,7 +405,7 @@ export async function linkMeetingToPMReview(params: {
   if (existing) return { id: existing.id, created: false };
 
   const { data: inserted, error } = await supabase
-    .from("PMReviewMeetingLink")
+    .from("EntityLink")
     .insert({
       pmReviewId: params.pmReviewId,
       meetingId: params.meetingId,
@@ -420,7 +424,7 @@ export async function unlinkMeetingFromPMReview(params: {
 }): Promise<void> {
   const supabase = db();
   const { error } = await supabase
-    .from("PMReviewMeetingLink")
+    .from("EntityLink")
     .delete()
     .eq("pmReviewId", params.pmReviewId)
     .eq("meetingId", params.meetingId);
@@ -436,7 +440,7 @@ export async function linkTranscriptToPMReview(params: {
 }): Promise<{ id: string; created: boolean }> {
   const supabase = db();
   const { data: existing } = await supabase
-    .from("PMReviewTranscriptLink")
+    .from("EntityLink")
     .select("id")
     .eq("pmReviewId", params.pmReviewId)
     .eq("transcriptRefId", params.transcriptRefId)
@@ -444,7 +448,7 @@ export async function linkTranscriptToPMReview(params: {
   if (existing) return { id: existing.id, created: false };
 
   const { data: inserted, error } = await supabase
-    .from("PMReviewTranscriptLink")
+    .from("EntityLink")
     .insert({
       pmReviewId: params.pmReviewId,
       transcriptRefId: params.transcriptRefId,
@@ -464,7 +468,7 @@ export async function unlinkTranscriptFromPMReview(params: {
 }): Promise<void> {
   const supabase = db();
   const { error } = await supabase
-    .from("PMReviewTranscriptLink")
+    .from("EntityLink")
     .delete()
     .eq("pmReviewId", params.pmReviewId)
     .eq("transcriptRefId", params.transcriptRefId);

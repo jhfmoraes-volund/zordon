@@ -39,7 +39,7 @@ const FULL_SELECT = `
   "linkedAt",
   "linkedById",
   weight,
-  transcript:TranscriptRef!DesignSessionTranscriptLink_transcriptRefId_fkey(
+  transcript:TranscriptRef!EntityLink_transcriptRefId_fkey(
     id, source, "sourceId", title, "capturedAt", "endedAt",
     participants, summary, "actionItems", "fullText"
   )
@@ -117,9 +117,10 @@ export async function listSessionTranscripts(
   sessionId: string,
 ): Promise<SessionTranscript[]> {
   const { data, error } = await client
-    .from("DesignSessionTranscriptLink")
+    .from("EntityLink")
     .select(FULL_SELECT)
-    .eq("designSessionId", sessionId);
+    .eq("designSessionId", sessionId)
+    .not("transcriptRefId", "is", null);
   if (error) throw error;
   const rows = (data ?? []) as unknown as LinkRow[];
   const items = rows
@@ -149,7 +150,7 @@ export async function linkTranscriptToSession(
   },
 ): Promise<{ id: string; created: boolean }> {
   const { data: existing, error: lookupErr } = await client
-    .from("DesignSessionTranscriptLink")
+    .from("EntityLink")
     .select("id")
     .eq("designSessionId", params.sessionId)
     .eq("transcriptRefId", params.transcriptRefId)
@@ -158,7 +159,7 @@ export async function linkTranscriptToSession(
   if (existing) return { id: existing.id as string, created: false };
 
   const { data: inserted, error: insErr } = await client
-    .from("DesignSessionTranscriptLink")
+    .from("EntityLink")
     .insert({
       designSessionId: params.sessionId,
       transcriptRefId: params.transcriptRefId,
@@ -176,7 +177,7 @@ export async function unlinkTranscriptFromSession(
   params: { sessionId: string; linkId: string },
 ): Promise<void> {
   const { error } = await client
-    .from("DesignSessionTranscriptLink")
+    .from("EntityLink")
     .delete()
     .eq("id", params.linkId)
     .eq("designSessionId", params.sessionId);

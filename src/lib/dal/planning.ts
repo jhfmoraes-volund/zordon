@@ -136,13 +136,15 @@ export async function listPlanningsForProject(
   const ids = list.map((r) => r.id);
   const [meetingsRes, transcriptsRes, notesRes, actionsRes] = await Promise.all([
     supabase
-      .from("PlanningMeetingLink")
+      .from("EntityLink")
       .select("planningCeremonyId")
-      .in("planningCeremonyId", ids),
+      .in("planningCeremonyId", ids)
+      .not("meetingId", "is", null),
     supabase
-      .from("PlanningTranscriptLink")
+      .from("EntityLink")
       .select("planningCeremonyId")
-      .in("planningCeremonyId", ids),
+      .in("planningCeremonyId", ids)
+      .not("transcriptRefId", "is", null),
     supabase
       .from("PlanningContextNote")
       .select("planningCeremonyId, dismissedAt")
@@ -218,13 +220,10 @@ export async function getPlanningById(
       sprint:Sprint(name),
       facilitator:Member!PlanningCeremony_facilitatorId_fkey(name),
       project:Project(githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifestUpdatedAt),
-      linkedMeetings:PlanningMeetingLink(
-        meetingId, linkedAt, linkedById, note,
-        meeting:Meeting(id, title, date, visibility, kind)
-      ),
-      linkedTranscripts:PlanningTranscriptLink(
-        transcriptRefId, linkedAt, linkedById, weight, note,
-        transcript:TranscriptRef(id, source, sourceId, title, capturedAt, meetingId)
+      links:EntityLink!EntityLink_planningCeremonyId_fkey(
+        meetingId, transcriptRefId, linkedAt, linkedById, weight, note,
+        meeting:Meeting!EntityLink_meetingId_fkey(id, title, date, visibility, kind),
+        transcript:TranscriptRef!EntityLink_transcriptRefId_fkey(id, source, sourceId, title, capturedAt, meetingId)
       ),
       notes:PlanningContextNote(*)
       `,
@@ -243,6 +242,16 @@ export async function getPlanningById(
   if (actionErr) throw actionErr;
 
   // Cast helpers — Supabase JS infere joins como possivelmente arrays/objects.
+  type EntityLinkEmbed = {
+    meetingId: string | null;
+    transcriptRefId: string | null;
+    linkedAt: string;
+    linkedById: string | null;
+    weight: string | null;
+    note: string | null;
+    meeting: PlanningDetail["linkedMeetings"][number]["meeting"];
+    transcript: PlanningDetail["linkedTranscripts"][number]["transcript"];
+  };
   type Row = typeof row;
   const r = row as Row & {
     sprint: { name: string } | null;
@@ -253,10 +262,31 @@ export async function getPlanningById(
       githubDefaultBranch: string | null;
       repoManifestUpdatedAt: string | null;
     } | null;
-    linkedMeetings: PlanningDetail["linkedMeetings"];
-    linkedTranscripts: PlanningDetail["linkedTranscripts"];
+    links: EntityLinkEmbed[];
     notes: PlanningContextNoteRow[];
   };
+
+  // EntityLink unifica meeting/transcript numa tabela — particiona pelo ref preenchido.
+  const allLinks = r.links ?? [];
+  const linkedMeetings: PlanningDetail["linkedMeetings"] = allLinks
+    .filter((l) => l.meetingId !== null)
+    .map((l) => ({
+      meetingId: l.meetingId as string,
+      linkedAt: l.linkedAt,
+      linkedById: l.linkedById,
+      note: l.note,
+      meeting: l.meeting,
+    }));
+  const linkedTranscripts: PlanningDetail["linkedTranscripts"] = allLinks
+    .filter((l) => l.transcriptRefId !== null)
+    .map((l) => ({
+      transcriptRefId: l.transcriptRefId as string,
+      linkedAt: l.linkedAt,
+      linkedById: l.linkedById,
+      weight: l.weight,
+      note: l.note,
+      transcript: l.transcript,
+    }));
 
   const notesActive = r.notes.filter((n) => n.dismissedAt === null);
 
@@ -273,12 +303,12 @@ export async function getPlanningById(
     archivedAt: r.archivedAt,
     facilitatorId: r.facilitatorId,
     facilitatorName: r.facilitator?.name ?? null,
-    linkedMeetingCount: r.linkedMeetings.length,
-    linkedTranscriptCount: r.linkedTranscripts.length,
+    linkedMeetingCount: linkedMeetings.length,
+    linkedTranscriptCount: linkedTranscripts.length,
     contextNoteCount: notesActive.length,
     pendingActionCount: pendingActionCount ?? 0,
-    linkedMeetings: r.linkedMeetings,
-    linkedTranscripts: r.linkedTranscripts,
+    linkedMeetings,
+    linkedTranscripts,
     notes: r.notes,
     projectRepo: {
       owner: r.project?.githubRepoOwner ?? null,
@@ -302,13 +332,15 @@ export async function getPlanningPhaseContext(
 
   const [meetings, transcripts, notes, summaryNotes, pending] = await Promise.all([
     supabase
-      .from("PlanningMeetingLink")
+      .from("EntityLink")
       .select("id", { count: "exact", head: true })
-      .eq("planningCeremonyId", id),
+      .eq("planningCeremonyId", id)
+      .not("meetingId", "is", null),
     supabase
-      .from("PlanningTranscriptLink")
+      .from("EntityLink")
       .select("id", { count: "exact", head: true })
-      .eq("planningCeremonyId", id),
+      .eq("planningCeremonyId", id)
+      .not("transcriptRefId", "is", null),
     supabase
       .from("PlanningContextNote")
       .select("id", { count: "exact", head: true })

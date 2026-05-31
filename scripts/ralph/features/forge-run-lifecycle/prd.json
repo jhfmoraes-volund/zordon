@@ -129,7 +129,7 @@
         "scripts/forge/test-smoke-run-lifecycle.sh"
       ],
       "agentProfile": "ops",
-      "passes": false
+      "passes": true
     }
   ]
 }
