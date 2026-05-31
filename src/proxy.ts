@@ -50,7 +50,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublicPath = pathname === "/login";
+  const isPublicPath = pathname === "/login" || pathname.startsWith("/forge-spike");
   const isApi = pathname.startsWith("/api/");
 
   if (!user && !isPublicPath && !isApi) {

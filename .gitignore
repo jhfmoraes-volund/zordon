@@ -64,3 +64,6 @@ next-env.d.ts
 
 # pg_dump pre-migration backups (large, local only)
 /backups/
+
+# forge runtime state (per-run events.jsonl, regenerated locally)
+/.forge/

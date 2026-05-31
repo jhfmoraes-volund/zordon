@@ -93,6 +93,7 @@ export default async function DevSandboxPage() {
             <Button
               size="lg"
               variant="outline"
+              nativeButton={false}
               render={<Link href="/dev/stories" />}
             >
               <BookOpen />
@@ -117,6 +118,7 @@ export default async function DevSandboxPage() {
             <Button
               size="lg"
               variant="outline"
+              nativeButton={false}
               render={<Link href="/dev/tags" />}
             >
               <Tag />
@@ -141,7 +143,8 @@ export default async function DevSandboxPage() {
             <Button
               size="lg"
               variant="outline"
-              render={<Link href="/dev/forge-sandbox" />}
+              nativeButton={false}
+              render={<Link href="/forge-spike" />}
             >
               <Flame />
               Abrir sandbox

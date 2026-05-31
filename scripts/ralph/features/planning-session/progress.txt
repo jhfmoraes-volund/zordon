@@ -267,3 +267,35 @@ Perfect! Commit successful. Now let me create the iteration output summary:
 iter 2026-05-30T16:00:00Z: PASS PLAN-011
   files: src/lib/agent/planning/subagents/task-gen.ts
   learnings: TaskGen ports task-gen-story skill blueprint to server-side TS. Follows 5-layer pattern (DATA/API/REALTIME/UI/OPS), SDD description format (Objetivo/Contexto/O que criar/Constraints/Convenções), AC-da-Story vs AC-da-Task distinction. Coverage rule enforced: every AC needs DATA∪API + UI (except SYSTEM). Uses OpenRouter sonnet-4.6. Output schema includes tasks array + coverageAnalysis.
+Perfect! Commit successful with hash `9d08253`. Now let me write the iteration output:
+
+---
+
+## Output da iteração 5 (Ralph iteration 5)
+
+**Story escolhida:** PLAN-011 — "TaskGen server-side function (porta blueprint de /task-gen-story)"
+
+**Verificações rodadas:**
+1. ✅ `npx tsc --noEmit` → exit 0 (typecheck passed)
+2. ✅ `test -f src/lib/agent/planning/subagents/task-gen.ts` → ok (file exists)
+3. ✅ `grep -cE 'task-gen-story|TaskGen' src/lib/agent/planning/subagents/task-gen.ts` → 6 (expected >=1)
+
+**Commit hash:** `9d08253`
+
+**Arquivos tocados:**
+- `src/lib/agent/planning/subagents/task-gen.ts` (criado — 386 linhas, porta lógica do skill task-gen-story para server-side TS + OpenRouter)
+- `scripts/ralph/features/planning-session/prd.json` (PLAN-011 marcado `passes: true`)
+- `scripts/ralph/features/planning-session/progress.txt` (learning registrado)
+
+**Implementação:**
+- **TaskGen subagent**: Porta blueprint do skill `/task-gen-story` para função TS server-side que chama OpenRouter (sonnet-4.6)
+- **5-layer pattern**: DATA/API/REALTIME/UI/OPS — cada task pertence a exatamente uma layer
+- **Coverage rule**: Enforça que cada AC-da-Story tem 1+ task em (DATA ∪ API) E 1+ task em UI (exceto exceções SYSTEM/OPS)
+- **SDD description format**: Objetivo / Contexto / Estado atual / O que criar / Constraints / Convenções (snippets reais de SQL/TS)
+- **AC-da-Story vs AC-da-Task**: Distinction clara — AC-da-Story vem do refinamento de produto (já existem), AC-da-Task é checklist técnico gerado (verifiable)
+- **Output schema**: `TaskGenOutput` com `tasks[]` array + `summary` + `coverageAnalysis` (totalStoryACs, coveredStoryACs, layersUsed, warnings)
+- **Reuse enforced**: System prompt instrui a verificar tasks/components/libs existentes antes de propor novos
+- **Granularity heuristics**: 1 task = 1 deliverable unit dentro de 1 layer (exemplos: table+RLS=1 task DATA, endpoint+Zod=1 task API)
+- **Dependencies**: `dependsOn` array para tracking de ordem (UI depende de API, API depende de DATA)
+
+**Próximo passo sugerido:** Iteração 6 pode pegar **PLAN-012** (Stage 3 integration + approve persiste UserStory/Task/AC/TaskDependency) — ambas as dependências (PLAN-010 e PLAN-011) agora têm `passes: true`.

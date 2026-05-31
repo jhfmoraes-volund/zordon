@@ -402,18 +402,18 @@ export default function ClientDetailPage({
   return (
     <PageContainer>
       <div className="space-y-6">
-      <div>
-        <Link
-          href="/clients"
-          className="inline-flex items-center text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-          Clientes
+      <header className="flex items-start gap-3">
+        <Link href="/clients">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0"
+            aria-label="Voltar"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
         </Link>
-      </div>
-
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1 min-w-0">
+        <div className="space-y-1 min-w-0 flex-1">
           {loading || !client ? (
             <>
               <Skeleton className="h-7 w-48" />

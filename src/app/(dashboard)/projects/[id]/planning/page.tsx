@@ -56,7 +56,8 @@ export default function PlanningSessionPage({
             }),
           });
           if (!createRes.ok) throw new Error("Failed to create session");
-          const { sessionId } = await createRes.json();
+          const { session: created } = await createRes.json();
+          const sessionId = created.id;
 
           // Fetch the newly created session
           const getRes = await fetch(`/api/planning-sessions/${sessionId}`);

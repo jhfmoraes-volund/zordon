@@ -1,0 +1,283 @@
+{
+  "feature": "vitoria-post-forge-audit",
+  "title": "Vitoria Post-Forge Audit — gap detection + Task/Sprint delegation",
+  "prd_path": "docs/prd/backlog/prd-vitoria-post-forge-audit.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "VPA-001",
+      "title": "Migrations ForgeAuditResult + ForgeAuditAcResult + Task XOR constraint",
+      "description": "3 migrations atômicas. Pre-check Migration 3: Tasks com ambos FKs null devem ser zero. Regenerar database.types.ts. Smoke RLS.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260531a_forge_audit_result.sql aplicado, tabela ForgeAuditResult existe",
+        "supabase/migrations/20260531b_forge_audit_ac_result.sql aplicado, tabela ForgeAuditAcResult existe com UNIQUE(auditId, acIndex)",
+        "supabase/migrations/20260531c_task_pr_xor_constraint.sql adicionou acceptanceCriterionRef + CHECK XOR",
+        "Pre-check SELECT documentado em comentário da migration 3",
+        "RLS de ForgeAuditResult: can_view_project gate funciona",
+        "Realtime publication inclui ForgeAuditResult",
+        "database.types.ts regenerado com novas tables + Task.acceptanceCriterionRef",
+        "Smoke: INSERT Task com ambos null retorna constraint violation",
+        "Smoke: INSERT Task com ambos NOT null retorna constraint violation"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('ForgeAuditResult','ForgeAuditAcResult')",
+          "expected": "2"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.check_constraints WHERE constraint_name='Task_hierarchy_xor'",
+          "expected": "1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": [
+        "supabase/migrations/20260531a_forge_audit_result.sql",
+        "supabase/migrations/20260531b_forge_audit_ac_result.sql",
+        "supabase/migrations/20260531c_task_pr_xor_constraint.sql",
+        "src/lib/supabase/database.types.ts"
+      ],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "VPA-002",
+      "title": "AC parser uniforme (Json field + §16 fallback)",
+      "description": "src/lib/forge/audit/parse-ac-list.ts: parseAcList(prd). Primary: prd.acceptanceCriteria Json. Fallback: §16 stories. Throw 'PRD has no AC to verify' se ambos vazios.",
+      "acceptanceCriteria": [
+        "src/lib/forge/audit/parse-ac-list.ts exporta parseAcList",
+        "Json não-vazio retorna source='json' pra todos AC",
+        "Json vazio + §16 stories retorna source='story' com sourceRef preenchido",
+        "Ambos vazios: throw com message 'PRD has no AC to verify'",
+        "Test: PRD com 3 AC em Json + 5 AC em §16 → 3 AC source='json' (só Json)",
+        "Test: PRD com Json vazio + 5 AC em §16 → 5 AC source='story'",
+        "Index sequencial 0..N-1, mesmo entre stories"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["VPA-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/audit/parse-ac-list.ts",
+        "src/lib/forge/audit/parse-ac-list.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VPA-003",
+      "title": "AC verifier subagent (Claude Code Agent + verdict parser)",
+      "description": "src/lib/forge/audit/verifier.ts: verifyAc(ac, repoPath, timeoutMs?). Spawn Claude Code Agent com tools restritos (Read/Grep/Glob). Output JSON { verdict, evidence[], notes, costUsd }. Timeout 90s default.",
+      "acceptanceCriteria": [
+        "src/lib/forge/audit/verifier.ts exporta verifyAc",
+        "Allowed tools restritos a Read + Grep + Glob (sem Edit/Write/Bash)",
+        "Timeout default 90s; on timeout: verdict='unverifiable', notes contém 'timeout'",
+        "Malformed JSON: verdict='unverifiable', notes contém 'parse error'",
+        "evidence shape: array de { path, lines?, excerpt? }",
+        "costUsd preenchido",
+        "Test: mock repo with AC met → verdict='done' + evidence non-empty",
+        "Test: mock repo without AC → verdict='missing'"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["VPA-002"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/forge/audit/verifier.ts",
+        "src/lib/forge/audit/verifier.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VPA-004",
+      "title": "Audit DAL — orquestra clone + verify + persist",
+      "description": "src/lib/dal/vitoria-audit.ts: startAudit (sync, returns auditId em <1s), runAudit (background-safe), getAudit. Pipeline: clone repo shallow → parseAcList → verify cada AC → persist ForgeAuditAcResult → aggregate counts → cleanup.",
+      "acceptanceCriteria": [
+        "src/lib/dal/vitoria-audit.ts exporta startAudit + runAudit + getAudit",
+        "startAudit sync: insert row + return auditId em <1s",
+        "runAudit background-safe; status updates emit realtime",
+        "src/lib/forge/audit/repo-cloner.ts shallow clone --depth 1",
+        "Cleanup em finally (mesmo em erro)",
+        "Status flow: pending → running → ready (ou failed)",
+        "ForgeAuditAcResult UPSERT por (auditId, acIndex) — idempotent",
+        "Counts (acDone, acPartial, acMissing, acUnverifiable) corretos",
+        "Smoke: startAudit + sleep + getAudit retorna status='ready' com AC results"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["VPA-003"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/dal/vitoria-audit.ts",
+        "src/lib/forge/audit/repo-cloner.ts",
+        "src/lib/forge/audit/repo-cloner.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VPA-005",
+      "title": "Task generator — gap → TaskDraft com PRD+AC linkage",
+      "description": "src/lib/forge/audit/task-generator.ts: generateTaskDrafts(audit, prd). Para cada AC verdict != done: title (max 80c, action verb), scope (bug/feature/manual_qa), priority (1-3), estimatedFp heurística. acceptanceCriterionRef formato 'audit:<id>:ac:<index>'.",
+      "acceptanceCriteria": [
+        "src/lib/forge/audit/task-generator.ts exporta generateTaskDrafts",
+        "TaskDraft shape documentado em type export",
+        "verdict='partial' → scope='bug', priority=2, estimatedFp=1",
+        "verdict='missing' → scope='feature', priority=1, estimatedFp ∈ {3,5}",
+        "verdict='unverifiable' → scope='manual_qa', priority=3, estimatedFp=2",
+        "AC com verdict='done' NÃO gera Task",
+        "acceptanceCriterionRef formato: 'audit:<uuid>:ac:<int>'",
+        "Title truncated to 80 chars + action verb prefix",
+        "Test: audit com 5 AC (3 done, 1 partial, 1 missing) → 2 TaskDrafts"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["VPA-004"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/audit/task-generator.ts",
+        "src/lib/forge/audit/task-generator.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VPA-006",
+      "title": "Sprint composer (reuso Consolidator PLAN-011 com prompt adapter)",
+      "description": "src/lib/forge/audit/sprint-composer.ts: composeSprintDraft(tasks, projectId). Reusa Consolidator subagent se disponível; fallback ordering puro. Title default '<PRD> — post-Forge gaps'. estimatedDays = ceil(sum FP / 8). Ordering: bug → manual_qa → feature.",
+      "acceptanceCriteria": [
+        "src/lib/forge/audit/sprint-composer.ts exporta composeSprintDraft",
+        "Sem Consolidator: fallback retorna SprintDraft funcional",
+        "Title default: '<PRD reference> — post-Forge gaps'",
+        "estimatedDays = ceil(sum(estimatedFp) / 8)",
+        "tasksOrdered ordering: bugs first, manual_qa second, features third",
+        "Within scope: priority ascendente",
+        "Test: 5 TaskDrafts (2 bug, 2 feature, 1 qa) → ordem [bug, bug, qa, feature, feature]",
+        "Smoke: SprintDraft com 5 tasks totalFp=12 → estimatedDays=2"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["VPA-005"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/audit/sprint-composer.ts",
+        "src/lib/forge/audit/sprint-composer.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VPA-007",
+      "title": "API endpoints (POST audits / GET / materialize / cancel / list)",
+      "description": "5 routes em src/app/api/forge/audits/. POST audit (202 + auditId), GET detail, POST materialize (SQL atomic transaction com UPSERT dedup), POST cancel, GET list. Schemas Zod em api-schemas.ts.",
+      "acceptanceCriteria": [
+        "src/app/api/forge/audits/route.ts: POST + GET (list)",
+        "src/app/api/forge/audits/[id]/route.ts: GET (detail)",
+        "src/app/api/forge/audits/[id]/materialize/route.ts: POST",
+        "src/app/api/forge/audits/[id]/cancel/route.ts: POST",
+        "POST audit sem ForgeRun done → 422",
+        "POST com audit em curso pra mesmo PRD → 409",
+        "Materialize é transação atomica (rollback em qualquer falha)",
+        "UPSERT de Tasks por (productRequirementId, acceptanceCriterionRef) — dedup",
+        "Materialize response inclui duplicatesSkipped count",
+        "Cancel cleanup clone via repo-cloner.cleanup",
+        "Zod schemas em src/lib/forge/audit/api-schemas.ts"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/forge/audits",
+          "expected": "401"
+        }
+      ],
+      "dependsOn": ["VPA-006"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/api/forge/audits/route.ts",
+        "src/app/api/forge/audits/[id]/route.ts",
+        "src/app/api/forge/audits/[id]/materialize/route.ts",
+        "src/app/api/forge/audits/[id]/cancel/route.ts",
+        "src/lib/forge/audit/api-schemas.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VPA-008",
+      "title": "UI Vitoria Audit Panel + Review Sheet + trigger + smoke E2E + docs",
+      "description": "VitoriaAuditPanel (4 estados) + AuditReviewSheet (ResponsiveSheet lg + Task draft editor com Field). ConfirmDialog pra Materialize. Realtime subscription. Sonner toasts. Smoke E2E test:vitoria-audit-e2e. Docs em forge-runbook.md.",
+      "acceptanceCriteria": [
+        "src/components/prd/vitoria-audit-panel.tsx renderiza 4 estados",
+        "Botão 'Audit with Vitoria' só visível se ForgeRun done linkado",
+        "src/components/prd/audit-review-sheet.tsx usa ResponsiveSheet (não Sheet raw)",
+        "Task draft editor usa Field compound API",
+        "Materialize button confirma via ConfirmDialog (não window.confirm)",
+        "Realtime subscription pra ForgeAuditResult durante running",
+        "Sonner toasts pra erros",
+        "script test:vitoria-audit-e2e roda + asserta status flow",
+        "docs/runbooks/forge-runbook.md ganha seção 'Vitoria post-Forge audit' (≥3 parágrafos)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "grep -r 'VitoriaAuditPanel' 'src/app/(dashboard)/projects' | head -1",
+          "expected": "non-empty match"
+        }
+      ],
+      "dependsOn": ["VPA-007"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/prd/vitoria-audit-panel.tsx",
+        "src/components/prd/audit-review-sheet.tsx",
+        "src/app/(dashboard)/projects/[id]/prds/[prdId]/page.tsx",
+        "package.json",
+        "docs/runbooks/forge-runbook.md"
+      ],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

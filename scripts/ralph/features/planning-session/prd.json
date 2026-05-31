@@ -433,7 +433,10 @@
       "touches": [
         "src/lib/agent/planning/cascade.ts",
         "src/app/api/planning-sessions/[id]/approve/route.ts"
-      ]
+      ],
+      "passes": true,
+      "deferred": true,
+      "deferredReason": "Aguardando PLAN-015 a PLAN-018: cascade precisa de insumos (ContextSheet) + PRD sections enriquecidas + TaskGen com mais contexto + smoke test ANTES de Stage 3 persistir Task rows. Sem isso, tasks viriam rasas/incorretas. Re-enable após PLAN-018 passar."
     },
     {
       "id": "PLAN-013",
@@ -469,7 +472,10 @@
       "touches": [
         "supabase/migrations/20260601c_task_sdd_spec.sql",
         "src/lib/supabase/database.types.ts"
-      ]
+      ],
+      "passes": true,
+      "deferred": true,
+      "deferredReason": "Aguardando PLAN-015 a PLAN-018: cascade precisa de insumos (ContextSheet) + PRD sections enriquecidas + TaskGen com mais contexto + smoke test ANTES de Stage 3 persistir Task rows. Sem isso, tasks viriam rasas/incorretas. Re-enable após PLAN-018 passar."
     },
     {
       "id": "PLAN-014",
@@ -512,6 +518,179 @@
         "src/lib/agent/planning/cascade.ts",
         "src/app/api/planning-sessions/[id]/approve/route.ts",
         "src/components/hierarchy-tree/task-row.tsx"
+      ],
+      "passes": true,
+      "deferred": true,
+      "deferredReason": "Aguardando PLAN-015 a PLAN-018: cascade precisa de insumos (ContextSheet) + PRD sections enriquecidas + TaskGen com mais contexto + smoke test ANTES de Stage 3 persistir Task rows. Sem isso, tasks viriam rasas/incorretas. Re-enable após PLAN-018 passar."
+    },
+    {
+      "id": "PLAN-015",
+      "title": "Insumos no Planning (PlanningSessionContextLink + DAL + API + ContextSheet UI)",
+      "description": "Adicionar Insumos à PlanningSession (espelha pattern PM Review). Migration supabase/migrations/20260601d_planning_session_context_link.sql cria tabela PlanningSessionContextLink (M:N PlanningSession ↔ ContextSource) com RLS herdando via planningSessionId. DAL src/lib/dal/planning-session.ts ganha 3 fns: linkContextSource, unlinkContextSource, listLinkedContextSources. API: POST /api/planning-sessions/[id]/context/link, DELETE /api/planning-sessions/[id]/context/[linkId]. UI: src/app/(dashboard)/projects/[id]/planning/page.tsx ganha botão Contexto que abre ContextSheet primitivo (reuso de src/components/agent/context-import/context-sheet.tsx) — Pills pattern unificado. Owner anexa transcripts/sheets/github ANTES de clicar Gerar plano.",
+      "acceptanceCriteria": [
+        "Migration 20260601d_planning_session_context_link.sql aplica",
+        "DAL planning-session.ts exporta linkContextSource/unlinkContextSource/listLinkedContextSources",
+        "2 API routes existem (POST link, DELETE link)",
+        "page.tsx tem botão Contexto que renderiza ContextSheet com props de planning",
+        "tsc passes"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "test -f supabase/migrations/20260601d_planning_session_context_link.sql && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "psql \"$DIRECT_URL\" -tAc \"SELECT count(*) FROM pg_tables WHERE tablename = 'PlanningSessionContextLink'\"",
+          "expected": "1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"export (async )?function (linkContextSource|unlinkContextSource|listLinkedContextSources)\" src/lib/dal/planning-session.ts",
+          "expected": "3"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"ContextSheet|Contexto\" \"src/app/(dashboard)/projects/[id]/planning/page.tsx\"",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [
+        "PLAN-010"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "supabase/migrations/20260601d_planning_session_context_link.sql",
+        "src/lib/dal/planning-session.ts",
+        "src/app/api/planning-sessions/[id]/context/link/route.ts",
+        "src/app/api/planning-sessions/[id]/context/[linkId]/route.ts",
+        "src/app/(dashboard)/projects/[id]/planning/page.tsx"
+      ]
+    },
+    {
+      "id": "PLAN-016",
+      "title": "Enriquecer buildPrdIndex pra extrair §4/§5/§7/§8/§9/§10/§12 sections + getPrdSection helper",
+      "description": "Refatorar src/lib/agent/planning/prd-index.ts: PrdIndexEntry ganha campos sections: { personas (§4 raw), decisions (§5 raw), schema (§7 raw), apis (§8 raw), ux (§9 raw), integrations (§10 raw), risks (§12 raw) }. Cada section extraída via regex que pega tudo entre os headers ## §N e ## §(N+1). Adicionar fn getPrdSection(slug, sectionNum, options?) que faz lazy-load do section completo se index não tiver. Sections em string raw (não pre-processadas) — subagents decidem como consumir.",
+      "acceptanceCriteria": [
+        "PrdIndexEntry tem campo sections com 7 sub-campos (personas/decisions/schema/apis/ux/integrations/risks)",
+        "buildPrdIndex extrai pelo menos 5 das 7 sections de um PRD real existente (test contra prd-context-source-unified)",
+        "Fn getPrdSection existe e exportada",
+        "Cache hit em segunda chamada (mesmo SHA)",
+        "tsc passes"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"sections\\?: |sections: \\{\" src/lib/agent/planning/prd-index.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"personas|decisions|schema|apis|ux|integrations|risks\" src/lib/agent/planning/prd-index.ts",
+          "expected": ">=7"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"export (async )?function getPrdSection\" src/lib/agent/planning/prd-index.ts",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [
+        "PLAN-004"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/planning/prd-index.ts"
+      ]
+    },
+    {
+      "id": "PLAN-017",
+      "title": "Refatorar TaskGen pra consumir PRD sections + ContextSource summaries",
+      "description": "Atualizar src/lib/agent/planning/subagents/task-gen.ts: callTaskGen agora recebe input enriquecido { userStory, prdIndex (com sections), codebaseAuditorOutput, linkedContextSources?: ContextSourceSummary[] }. System prompt instrui o LLM a citar decisions (§5) ao justificar choices em sddSpec, considerar risks (§12) em complexity scoring, ler schema (§7) pra DATA tasks. Por task type, injeta section relevante: DATA→§7, API→§8, UI→§9, INTEGRATION→§10. ContextSources passam como bullet summaries no prompt (não fulltext — caso linkado). Reutilizar pattern via slicer src/lib/agent/planning/prd-section-slicer.ts.",
+      "acceptanceCriteria": [
+        "task-gen.ts recebe novo input enriquecido",
+        "Prompt cita decisões, riscos, schema, APIs conforme task type",
+        "prd-section-slicer.ts existe com fns pra cada task type",
+        "ContextSource summaries injetados no prompt quando linkados",
+        "tsc passes"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/lib/agent/planning/prd-section-slicer.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"linkedContextSources|sections|decisions|schema|risks\" src/lib/agent/planning/subagents/task-gen.ts",
+          "expected": ">=4"
+        }
+      ],
+      "dependsOn": [
+        "PLAN-011",
+        "PLAN-015",
+        "PLAN-016"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/planning/subagents/task-gen.ts",
+        "src/lib/agent/planning/prd-section-slicer.ts"
+      ]
+    },
+    {
+      "id": "PLAN-018",
+      "title": "Smoke test e2e runCascade com mocked OpenRouter + validação stage outputs",
+      "description": "Criar src/eval/planning/cascade-e2e.test.ts: mock OpenRouter retornando canned JSON por subagent (cada output válido contra seu Zod schema). Chamar runCascade end-to-end. Assert: status flow draft→orchestrating→in-review, draftRoadmapJsonb populado, PlanningSessionPRD rows criadas, totalCostUsd <= 0.50 (v1 estimado), tokensUsed > 0. Cobre 4 caminhos: success v1, success v2 (com tasks), erro mid-stage (subagent invalid JSON), cost cap excedido. Não chama OpenRouter de verdade.",
+      "acceptanceCriteria": [
+        "Arquivo src/eval/planning/cascade-e2e.test.ts existe",
+        "Cobre 4 cenários: success v1, success v2, erro JSON, cost cap",
+        "Mock de OpenRouter (sem chamadas reais)",
+        "pnpm vitest run src/eval/planning/ passes"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "test -f src/eval/planning/cascade-e2e.test.ts && echo ok",
+          "expected": "ok"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "grep -cE \"success.*v1|success.*v2|erro|cost cap\" src/eval/planning/cascade-e2e.test.ts",
+          "expected": ">=4"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "pnpm vitest run src/eval/planning/",
+          "expected": "Tests passed"
+        }
+      ],
+      "dependsOn": [
+        "PLAN-017"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/eval/planning/cascade-e2e.test.ts"
       ]
     }
   ]
