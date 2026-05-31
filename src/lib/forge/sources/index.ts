@@ -7,9 +7,9 @@ export type SourceType = "mock" | "sse" | "supabase";
 
 /**
  * Auto-detect source strategy:
- * 1. Try SSE first (local dev, lowest latency)
- * 2. Fallback to Supabase realtime if SSE unavailable
- * 3. Manual override via ?source=mock|sse|supabase
+ * 1. SSE was removed in FUI-004 - detection will always fail
+ * 2. Falls back to Supabase realtime (primary method now)
+ * 3. Manual override via ?source=mock|sse|supabase (sse will fail)
  */
 export async function createAutoSource(
   runId: string,
@@ -39,25 +39,13 @@ export async function createAutoSource(
 }
 
 /**
- * Check if SSE endpoint is available by attempting a HEAD request
- * Timeout after 500ms to avoid blocking UI
+ * DEPRECATED: SSE endpoint check
+ * Endpoint was removed in FUI-004 - this will always return false
  */
-async function checkSSEAvailable(runId: string): Promise<boolean> {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 500);
-
-    const response = await fetch(`/api/forge/runs/${runId}/stream`, {
-      method: "HEAD",
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    return response.ok;
-  } catch {
-    // Network error, timeout, or 404 = SSE not available
-    return false;
-  }
+async function checkSSEAvailable(_runId: string): Promise<boolean> {
+  // SSE endpoint removed in FUI-004 - always return false
+  // This causes auto-detection to fall back to Supabase Realtime
+  return false;
 }
 
 // Re-export individual sources for manual use

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
@@ -57,12 +57,11 @@ export default function ForgeHomePage() {
   const [pingState, setPingState] = useState<PingState>("unknown");
   const [prds, setPrds] = useState<PrdSummary[] | null>(null);
   const [debugRunId, setDebugRunId] = useState<string | null>(null);
-  const [debugEvents, setDebugEvents] = useState<ForgeEvent[]>([]);
+  const [debugEvents] = useState<ForgeEvent[]>([]); // Unused - SSE removed in FUI-004
   const [debugSpawning, setDebugSpawning] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
-  const esRef = useRef<EventSource | null>(null);
 
   // Probe ping
   useEffect(() => {
@@ -134,31 +133,12 @@ export default function ForgeHomePage() {
     };
   }, [projectId, projectName]);
 
-  // EventSource for debug run
-  useEffect(() => {
-    if (!debugRunId) return;
-    const es = new EventSource(`/api/forge/runs/${debugRunId}/stream`);
-    esRef.current = es;
-    es.onmessage = (ev) => {
-      try {
-        setDebugEvents((prev) => [...prev, JSON.parse(ev.data)]);
-      } catch {
-        // ignore
-      }
-    };
-    es.onerror = () => {
-      setError((prev) => prev ?? "EventSource error (auto-retry)");
-    };
-    return () => {
-      es.close();
-      esRef.current = null;
-    };
-  }, [debugRunId]);
+  // REMOVED: SSE EventSource was deleted in FUI-004
+  // Debug run no longer streams events - user should navigate to /forge-spike/runs/[id]
 
   const spawnDebug = async () => {
     setDebugSpawning(true);
     setError(null);
-    setDebugEvents([]);
     try {
       const r = await fetch("/api/forge/runs", {
         method: "POST",
@@ -171,6 +151,8 @@ export default function ForgeHomePage() {
       }
       const json = await r.json();
       setDebugRunId(json.runId);
+      // SSE removed in FUI-004 - show message to navigate to run page
+      setError(`Run created: ${json.runId}. Navigate to /forge-spike/runs/${json.runId} to view events.`);
     } catch (err) {
       setError(`fetch error: ${String(err)}`);
     } finally {

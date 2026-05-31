@@ -74,3 +74,27 @@ Perfect! Let me summarize the iteration output:
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS FUI-004
   files: src/app/api/forge/runs/[id]/stream/route.ts (deleted), src/app/api/forge/autoruns/[id]/route.ts (deleted)
   learnings: SSE routes removed cleanly; typecheck passes; directories auto-cleaned
+---
+
+## Iteration complete
+
+**Story:** FUI-004 — Deletar rotas SSE e autoruns/[id]
+
+**Verification results:**
+- ✅ Typecheck passed: `npx tsc --noEmit` completed without errors
+- ✅ File deletion verified: `src/app/api/forge/runs/[id]/stream/route.ts` no longer exists
+- ✅ All acceptance criteria met:
+  - `src/app/api/forge/runs/[id]/stream/route.ts` deleted (including parent directory)
+  - `src/app/api/forge/autoruns/[id]/route.ts` deleted (including parent directory)
+  - Typecheck passes after removal
+
+**Files removed:**
+- `src/app/api/forge/runs/[id]/stream/route.ts` — SSE streaming endpoint (255 lines removed)
+- `src/app/api/forge/autoruns/[id]/route.ts` — Autorun endpoint
+
+**Commit:** `9a50997` — ralph(forge-ui-realtime): FUI-004 delete SSE routes (stream + autoruns)
+
+**Next step:** Both **FUI-005** (Smoke browser test) and **FUI-006** (Sweep referências mortas) are now eligible, as their only dependency (FUI-004) has `passes: true`. FUI-006 has lower ID and should be prioritized.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS FUI-006
+  files: src/app/forge-spike/autoruns/[id]/page.tsx, src/app/forge-spike/page.tsx, src/lib/forge/sources/sse.ts, src/lib/forge/sources/index.ts
+  learnings: Deprecated autoruns page + SSE debug. SSE sources layer marked deprecated but kept for Forge HUD backward compat with auto-fallback to Realtime.

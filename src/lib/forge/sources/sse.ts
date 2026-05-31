@@ -2,10 +2,12 @@ import type { ForgeEvent } from "../types";
 import type { ForgeSource } from "../source";
 
 /**
- * SSE-based ForgeSource — reads from /api/forge/runs/[id]/stream
+ * DEPRECATED: SSE-based ForgeSource
  *
- * Backfills from .forge/<runId>/events.jsonl on connect, then streams live updates.
- * Compatible with the ForgeSource interface for mock/realtime switching.
+ * The endpoint this relied on was removed in FUI-004.
+ * Use createSupabaseSource instead for Realtime-based event streaming.
+ *
+ * This file is kept for reference but should not be used in new code.
  */
 export function createSSESource(runId: string): ForgeSource {
   const subscribers = new Set<(e: ForgeEvent) => void>();
@@ -21,7 +23,8 @@ export function createSSESource(runId: string): ForgeSource {
       if (running || eventSource) return;
       running = true;
 
-      const url = `/api/forge/runs/${runId}/stream`;
+      // DEAD CODE: endpoint removed in FUI-004
+      const url = `<removed-in-FUI-004>/forge/runs/${runId}/stream-deleted`;
       eventSource = new EventSource(url);
 
       eventSource.onmessage = (event) => {

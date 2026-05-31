@@ -12,7 +12,7 @@
         "supabase/migrations/20260601n_forge_realtime_publication.sql existe",
         "ForgeEvent aparece em pg_publication_tables",
         "ForgeRun aparece em pg_publication_tables",
-        "Migration roda sem erro mesmo se j\u00e1 estiver na publication"
+        "Migration roda sem erro mesmo se já estiver na publication"
       ],
       "verifiable": [
         {
@@ -38,7 +38,7 @@
         "Exporta RunEventStream(props: { runId, maxRendered? })",
         "useEffect: initial fetch + subscribe + cleanup",
         "Estado connectionState com 4 valores (connecting/realtime/polling/disconnected)",
-        "Fallback poll dispara se canal n\u00e3o SUBSCRIBED em 5s",
+        "Fallback poll dispara se canal não SUBSCRIBED em 5s",
         "Cap 5000 eventos com banner",
         "Tipecheck passa"
       ],
@@ -69,10 +69,10 @@
       "title": "Migrar page.tsx pra server thin + client island",
       "description": "Server fetch meta do run + render <RunEventStream>. Remove SSE inline.",
       "acceptanceCriteria": [
-        "page.tsx \u00e9 server component (sem \"use client\")",
+        "page.tsx é server component (sem \"use client\")",
         "Faz await supabase.from('ForgeRun').select().eq('id',id).maybeSingle()",
         "Renderiza header com status + <RunEventStream runId={id} />",
-        "C\u00f3digo SSE / EventSource removido",
+        "Código SSE / EventSource removido",
         "Tipecheck passa"
       ],
       "verifiable": [
@@ -105,11 +105,11 @@
     {
       "id": "FUI-004",
       "title": "Deletar rotas SSE e autoruns/[id]",
-      "description": "Remover arquivos. Grep n\u00e3o acha refer\u00eancia viva.",
+      "description": "Remover arquivos. Grep não acha referência viva.",
       "acceptanceCriteria": [
-        "src/app/api/forge/runs/[id]/stream/route.ts n\u00e3o existe",
-        "src/app/api/forge/autoruns/[id]/route.ts n\u00e3o existe",
-        "Tipecheck passa ap\u00f3s remo\u00e7\u00e3o"
+        "src/app/api/forge/runs/[id]/stream/route.ts não existe",
+        "src/app/api/forge/autoruns/[id]/route.ts não existe",
+        "Tipecheck passa após remoção"
       ],
       "verifiable": [
         {
@@ -137,11 +137,11 @@
     {
       "id": "FUI-005",
       "title": "Smoke browser test",
-      "description": "Dev server + run + abrir p\u00e1gina + ver eventos chegando.",
+      "description": "Dev server + run + abrir página + ver eventos chegando.",
       "acceptanceCriteria": [
-        "P\u00e1gina abre sem erro no console",
-        "Lista cresce mid-run em \u2264500ms ap\u00f3s emit",
-        "Badge realtime fica verde \u226595% do tempo",
+        "Página abre sem erro no console",
+        "Lista cresce mid-run em ≤500ms após emit",
+        "Badge realtime fica verde ≥95% do tempo",
         "Nenhum 'Controller is already closed' no log do Next"
       ],
       "verifiable": [
@@ -163,11 +163,11 @@
     },
     {
       "id": "FUI-006",
-      "title": "Sweep refer\u00eancias mortas",
+      "title": "Sweep referências mortas",
       "description": "Achar e remover qualquer link/import pra rotas deletadas.",
       "acceptanceCriteria": [
         "grep -rE '/api/forge/runs/.*/stream|/api/forge/autoruns/' src/ retorna 0",
-        "Tipecheck passa ap\u00f3s sweep"
+        "Tipecheck passa após sweep"
       ],
       "verifiable": [
         {
@@ -189,7 +189,7 @@
         "src/"
       ],
       "agentProfile": "code",
-      "passes": false
+      "passes": true
     }
   ]
 }
