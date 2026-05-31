@@ -15,9 +15,11 @@ const MAX_PRDS = 10;
 
 // ─── Schema do output ────────────────────────────────────────────────────────
 
+// Anthropic structured outputs não suporta minItems/maxItems em arrays.
+// Limites vivem no prompt + validação pós-call (clamp em generatePrdsFromBrief).
 const prdItemSchema = z.object({
-  title: z.string().min(3).describe(
-    "Título do PRD em H1 (ex: 'Sistema de Autenticação', 'Feed de Posts'). Substantivo, não verbo."
+  title: z.string().describe(
+    "Título do PRD em H1 (ex: 'Sistema de Autenticação', 'Feed de Posts'). Substantivo, não verbo. Mínimo 3 caracteres."
   ),
   oneLiner: z.string().describe(
     "Solução em uma frase — o que esta feature resolve e como. Máximo 2 frases."
@@ -25,8 +27,8 @@ const prdItemSchema = z.object({
   problem: z.string().describe(
     "Descrição do problema que motiva este PRD. 2-3 parágrafos contextualizando quem sofre, com qual frequência, qual o impacto."
   ),
-  acceptanceCriteria: z.array(z.string()).min(3).describe(
-    "Lista de critérios de aceitação verificáveis (ex: 'Login retorna JWT válido', 'Feed exibe posts dos últimos 7 dias'). Mínimo 3."
+  acceptanceCriteria: z.array(z.string()).describe(
+    "Lista de critérios de aceitação verificáveis (ex: 'Login retorna JWT válido', 'Feed exibe posts dos últimos 7 dias'). Mínimo 3 itens."
   ),
   dependencies: z.array(z.string()).describe(
     "Array de títulos de outros PRDs (desta mesma lista) dos quais este PRD depende. Vazio se não depende de nenhum."
@@ -34,8 +36,8 @@ const prdItemSchema = z.object({
 });
 
 export const prdOutputSchema = z.object({
-  prds: z.array(prdItemSchema).max(MAX_PRDS).describe(
-    `Array de PRDs gerados a partir do brief. Hard cap: ${MAX_PRDS} items.`
+  prds: z.array(prdItemSchema).describe(
+    `Array de PRDs gerados a partir do brief. Hard cap: ${MAX_PRDS} items (enforce no prompt).`
   ),
 });
 
@@ -94,8 +96,11 @@ export async function generatePrdsFromBrief(brief: string): Promise<ParsedPrd[]>
     prompt: `## Brief do cliente\n\n${brief.trim()}`,
   });
 
+  // Clamp pós-call (Anthropic structured outputs não aceita maxItems no schema).
+  const clamped = result.object.prds.slice(0, MAX_PRDS);
+
   // Converte GeneratedPrd[] → ParsedPrd[] (shape compatível com parser.ts)
-  const parsedPrds: ParsedPrd[] = result.object.prds.map((prd) => ({
+  const parsedPrds: ParsedPrd[] = clamped.map((prd) => ({
     title: prd.title,
     oneLiner: prd.oneLiner,
     problem: prd.problem,

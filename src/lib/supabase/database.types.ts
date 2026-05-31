@@ -2790,6 +2790,100 @@ export type Database = {
           },
         ]
       }
+      ForgeJob: {
+        Row: {
+          assignToAnyone: boolean
+          claimedAt: string | null
+          claimedBy: string | null
+          createdAt: string
+          heartbeatAt: string | null
+          id: string
+          maxStories: number | null
+          meta: Json
+          ownerId: string
+          prdSlug: string
+          projectId: string | null
+          runId: string | null
+          status: string
+          updatedAt: string
+        }
+        Insert: {
+          assignToAnyone?: boolean
+          claimedAt?: string | null
+          claimedBy?: string | null
+          createdAt?: string
+          heartbeatAt?: string | null
+          id?: string
+          maxStories?: number | null
+          meta?: Json
+          ownerId: string
+          prdSlug: string
+          projectId?: string | null
+          runId?: string | null
+          status?: string
+          updatedAt?: string
+        }
+        Update: {
+          assignToAnyone?: boolean
+          claimedAt?: string | null
+          claimedBy?: string | null
+          createdAt?: string
+          heartbeatAt?: string | null
+          id?: string
+          maxStories?: number | null
+          meta?: Json
+          ownerId?: string
+          prdSlug?: string
+          projectId?: string | null
+          runId?: string | null
+          status?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ForgeJob_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeJob_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeJob_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeJob_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeJob_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeJob_runId_fkey"
+            columns: ["runId"]
+            isOneToOne: false
+            referencedRelation: "ForgeRun"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ForgeLearning: {
         Row: {
           addedAt: string
@@ -5547,6 +5641,98 @@ export type Database = {
           },
         ]
       }
+      PrdQuickAskJob: {
+        Row: {
+          brief: string
+          createdAt: string
+          error: string | null
+          finishedAt: string | null
+          id: string
+          prdCount: number | null
+          projectId: string
+          sessionId: string
+          startedAt: string | null
+          status: string
+          triggeredByMemberId: string | null
+        }
+        Insert: {
+          brief: string
+          createdAt?: string
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          prdCount?: number | null
+          projectId: string
+          sessionId: string
+          startedAt?: string | null
+          status?: string
+          triggeredByMemberId?: string | null
+        }
+        Update: {
+          brief?: string
+          createdAt?: string
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          prdCount?: number | null
+          projectId?: string
+          sessionId?: string
+          startedAt?: string | null
+          status?: string
+          triggeredByMemberId?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PrdQuickAskJob_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PrdQuickAskJob_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PrdQuickAskJob_sessionId_fkey"
+            columns: ["sessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PrdQuickAskJob_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PrdQuickAskJob_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PrdQuickAskJob_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PrdQuickAskJob_triggeredByMemberId_fkey"
+            columns: ["triggeredByMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ProductRequirement: {
         Row: {
           acceptanceCriteria: Json
@@ -5756,48 +5942,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      PrdQuickAskJob: {
-        Row: {
-          brief: string
-          createdAt: string
-          error: string | null
-          finishedAt: string | null
-          id: string
-          prdCount: number | null
-          projectId: string
-          sessionId: string
-          startedAt: string | null
-          status: string
-          triggeredByMemberId: string | null
-        }
-        Insert: {
-          brief: string
-          createdAt?: string
-          error?: string | null
-          finishedAt?: string | null
-          id?: string
-          prdCount?: number | null
-          projectId: string
-          sessionId: string
-          startedAt?: string | null
-          status?: string
-          triggeredByMemberId?: string | null
-        }
-        Update: {
-          brief?: string
-          createdAt?: string
-          error?: string | null
-          finishedAt?: string | null
-          id?: string
-          prdCount?: number | null
-          projectId?: string
-          sessionId?: string
-          startedAt?: string | null
-          status?: string
-          triggeredByMemberId?: string | null
-        }
-        Relationships: []
       }
       Project: {
         Row: {
@@ -8072,6 +8216,7 @@ export type Database = {
       }
       extract_module_hint: { Args: { p_title: string }; Returns: string }
       forge_next_seq: { Args: { p_run: string }; Returns: number }
+      forge_recover_orphan_jobs: { Args: never; Returns: undefined }
       get_member_integration_secret: {
         Args: { p_member_id: string; p_provider: string }
         Returns: string

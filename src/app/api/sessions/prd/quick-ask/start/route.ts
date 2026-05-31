@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getCurrentMember } from "@/lib/dal";
 import { enqueuePrdQuickAskJob, runPrdQuickAskJob } from "@/lib/sessions/prd-session/jobs";
 import { z } from "zod";
 
@@ -27,22 +27,9 @@ export async function POST(req: NextRequest) {
 
     const { projectId, brief } = parsed.data;
 
-    // Get current member
-    const supabase = db();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-    }
-
-    // Find member
-    const { data: member } = await supabase
-      .from("Member")
-      .select("id")
-      .eq("userId", user.id)
-      .single();
-
+    const member = await getCurrentMember();
     if (!member) {
-      return NextResponse.json({ error: "Membro não encontrado" }, { status: 403 });
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
     // Enqueue job

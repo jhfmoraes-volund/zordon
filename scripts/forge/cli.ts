@@ -10,6 +10,7 @@
  * - ps                    — list active ForgeRuns with progress
  * - kill <runId>          — abort a running ForgeRun
  * - done <runId>          — create PR for completed run
+ * - daemon                — start job claim & execute daemon
  *
  * Usage: tsx scripts/forge/cli.ts <subcommand> [args...]
  *        OR (if bin configured): forge <subcommand> [args...]
@@ -39,6 +40,11 @@ function showHelp() {
   console.log("  ps                           — list active ForgeRuns with progress");
   console.log("  kill <runId>                 — abort a running ForgeRun");
   console.log("  done <runId>                 — create PR for completed run");
+  console.log("  daemon                       — start job claim & execute daemon");
+  console.log("  daemon stop                  — stop running daemon");
+  console.log("  daemon ps                    — show daemon status");
+  console.log("  daemon logs                  — tail daemon logs");
+  console.log("  daemon auth                  — authenticate daemon with Supabase");
   console.log("");
   console.log("options:");
   console.log("  --help, -h                   — show help for a subcommand");
@@ -599,6 +605,265 @@ else if (subcommand === "done") {
       process.exit(1);
     }
   })();
+}
+
+// ── daemon ────────────────────────────────────────────────────────────────
+
+else if (subcommand === "daemon") {
+  const subCmd = args[0];
+
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log("usage: forge daemon [subcommand]");
+    console.log("");
+    console.log("Subcommands:");
+    console.log("  (none)      — start daemon (default)");
+    console.log("  stop        — stop running daemon");
+    console.log("  ps          — show daemon status");
+    console.log("  logs        — tail daemon logs");
+    console.log("  auth        — authenticate daemon with Supabase");
+    console.log("");
+    console.log("examples:");
+    console.log("  forge daemon                 — start daemon");
+    console.log("  forge daemon stop            — stop daemon");
+    console.log("  forge daemon ps              — check status");
+    console.log("  forge daemon logs            — tail logs");
+    process.exit(0);
+  }
+
+  // ── daemon stop ─────────────────────────────────────────────────────────
+  if (subCmd === "stop") {
+    (async () => {
+      try {
+        const { readFileSync, existsSync } = await import("node:fs");
+        const { resolve } = await import("node:path");
+
+        const pidPath = resolve(process.env.HOME ?? "~", ".forge", "daemon.pid");
+
+        if (!existsSync(pidPath)) {
+          console.log(dim("No daemon running"));
+          process.exit(0);
+        }
+
+        const pidStr = readFileSync(pidPath, "utf-8").trim();
+        if (!pidStr) {
+          console.log(dim("No daemon running (empty pidfile)"));
+          process.exit(0);
+        }
+
+        const pid = parseInt(pidStr, 10);
+
+        console.log(yellow(`→ Sending SIGTERM to daemon (PID ${pid})...`));
+        process.kill(pid, "SIGTERM");
+
+        console.log(green("✓ Shutdown signal sent"));
+        console.log("");
+        console.log(dim("  The daemon will complete the current job and exit gracefully."));
+
+        process.exit(0);
+      } catch (err: unknown) {
+        console.error(red("✗ Failed to stop daemon"));
+        console.error("");
+        if (err instanceof Error && "code" in err && err.code === "ESRCH") {
+          console.error("  Process not found (may have already exited)");
+        } else {
+          console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+        }
+        process.exit(1);
+      }
+    })();
+  }
+
+  // ── daemon ps ───────────────────────────────────────────────────────────
+  else if (subCmd === "ps") {
+    (async () => {
+      try {
+        const { readFileSync, existsSync } = await import("node:fs");
+        const { resolve } = await import("node:path");
+        const { execSync } = await import("node:child_process");
+
+        const pidPath = resolve(process.env.HOME ?? "~", ".forge", "daemon.pid");
+        const logPath = resolve(process.env.HOME ?? "~", ".forge", "daemon.log");
+
+        if (!existsSync(pidPath)) {
+          console.log(dim("No daemon running"));
+          process.exit(0);
+        }
+
+        const pidStr = readFileSync(pidPath, "utf-8").trim();
+        if (!pidStr) {
+          console.log(dim("No daemon running (empty pidfile)"));
+          process.exit(0);
+        }
+
+        const pid = parseInt(pidStr, 10);
+
+        // Check if process is alive
+        let isAlive = false;
+        try {
+          process.kill(pid, 0); // Signal 0 = check existence
+          isAlive = true;
+        } catch {
+          isAlive = false;
+        }
+
+        console.log("");
+        console.log(cyan("═══ Daemon Status ═══"));
+        console.log("");
+        console.log(`  PID: ${dim(String(pid))}`);
+        console.log(`  Status: ${isAlive ? green("running") : red("dead")}`);
+
+        if (existsSync(logPath)) {
+          try {
+            const lastLine = execSync(`tail -n 1 "${logPath}"`, { encoding: "utf-8" }).trim();
+            if (lastLine) {
+              console.log(`  Last log: ${dim(lastLine.slice(0, 80))}`);
+            }
+          } catch {
+            // Ignore tail errors
+          }
+        }
+
+        console.log("");
+        process.exit(0);
+      } catch (err: unknown) {
+        console.error(red("✗ Failed to check daemon status"));
+        console.error("");
+        console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    })();
+  }
+
+  // ── daemon logs ─────────────────────────────────────────────────────────
+  else if (subCmd === "logs") {
+    (async () => {
+      try {
+        const { existsSync } = await import("node:fs");
+        const { resolve } = await import("node:path");
+        const { spawn } = await import("node:child_process");
+
+        const logPath = resolve(process.env.HOME ?? "~", ".forge", "daemon.log");
+
+        if (!existsSync(logPath)) {
+          console.log(dim("No log file yet"));
+          process.exit(0);
+        }
+
+        console.log(dim(`Tailing ${logPath}...`));
+        console.log("");
+
+        const tail = spawn("tail", ["-f", logPath], {
+          stdio: "inherit",
+        });
+
+        tail.on("error", (err) => {
+          console.error(red("✗ Failed to tail logs"));
+          console.error("");
+          console.error(`  ${err.message}`);
+          process.exit(1);
+        });
+      } catch (err: unknown) {
+        console.error(red("✗ Failed to tail logs"));
+        console.error("");
+        console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    })();
+  }
+
+  // ── daemon auth ─────────────────────────────────────────────────────────
+  else if (subCmd === "auth") {
+    (async () => {
+      try {
+        const { spawn } = await import("node:child_process");
+
+        console.log(yellow("→ Launching Supabase OAuth flow..."));
+        console.log("");
+        console.log(dim("  This will open your browser to authenticate."));
+        console.log(dim("  Token will be persisted in ~/.supabase/"));
+        console.log("");
+
+        // Invoke `supabase login`
+        const child = spawn("npx", ["supabase", "login"], {
+          stdio: "inherit",
+        });
+
+        child.on("close", (code) => {
+          if (code === 0) {
+            console.log("");
+            console.log(green("✓ Authentication complete"));
+            console.log("");
+            console.log(dim("  You can now run 'forge daemon' to start the daemon."));
+          } else {
+            console.error("");
+            console.error(red(`✗ Authentication failed (exit code: ${code})`));
+          }
+          process.exit(code ?? 1);
+        });
+
+        child.on("error", (err) => {
+          console.error(red("✗ Failed to launch supabase login"));
+          console.error("");
+          console.error(`  ${err.message}`);
+          process.exit(1);
+        });
+      } catch (err: unknown) {
+        console.error(red("✗ Failed to authenticate"));
+        console.error("");
+        console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    })();
+  }
+
+  // ── daemon (default: start) ─────────────────────────────────────────────
+  else if (!subCmd) {
+    (async () => {
+      try {
+        const { resolve } = await import("node:path");
+        const { spawn } = await import("node:child_process");
+
+        const daemonPath = resolve(__dirname, "daemon.ts");
+
+        console.log(yellow("→ Starting Forge daemon..."));
+
+        // Spawn daemon.ts (foreground)
+        const child = spawn("npx", ["tsx", daemonPath], {
+          cwd: process.cwd(),
+          stdio: "inherit",
+        });
+
+        child.on("close", (code) => {
+          if (code === 0) {
+            console.log(green("✓ Daemon stopped"));
+          } else {
+            console.error(red(`✗ Daemon exited with code ${code}`));
+          }
+          process.exit(code ?? 1);
+        });
+
+        child.on("error", (err) => {
+          console.error(red("✗ Failed to start daemon"));
+          console.error("");
+          console.error(`  ${err.message}`);
+          process.exit(1);
+        });
+      } catch (err: unknown) {
+        console.error(red("✗ Failed to start daemon"));
+        console.error("");
+        console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    })();
+  }
+
+  // ── unknown daemon subcommand ───────────────────────────────────────────
+  else {
+    console.error(red(`unknown daemon subcommand: ${subCmd}`));
+    console.error("");
+    console.error("Run 'forge daemon --help' to see available subcommands.");
+    process.exit(64);
+  }
 }
 
 // ── unknown subcommand ────────────────────────────────────────────────────

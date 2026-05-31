@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { OpportunityMatrix } from "./opportunity-matrix";
-import { OpportunityList } from "./opportunity-list";
+import { OpportunityTable } from "./opportunity-table";
 import { OpportunitySheet } from "./opportunity-sheet";
 import { Button } from "@/components/ui/button";
 import { useOpportunities } from "@/hooks/use-opportunities";
@@ -108,20 +107,11 @@ export function OpportunitiesWidget({
         </Button>
       </div>
 
-      {/* Matrix view (2x2 quadrant board) */}
-      <OpportunityMatrix
+      <OpportunityTable
         opportunities={opportunities}
-        onCardClick={handleCardClick}
+        onRowClick={handleCardClick}
+        onPromote={handlePromoteFromList}
       />
-
-      {/* List view (stack-ranked) */}
-      <div className="surface p-4">
-        <OpportunityList
-          opportunities={opportunities}
-          onCardClick={handleCardClick}
-          onPromote={handlePromoteFromList}
-        />
-      </div>
 
       {/* Edit/Create sheet */}
       <OpportunitySheet

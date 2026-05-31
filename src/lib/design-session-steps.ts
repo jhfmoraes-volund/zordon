@@ -16,6 +16,7 @@ export const STEP_CATALOG: Record<string, Omit<StepDef, "index">> = {
   technical_specs: { key: "technical_specs", title: "Especificações", description: "Stack, integrações, regras técnicas e restrições" },
   hypotheses: { key: "hypotheses", title: "Métricas", description: "O que precisamos validar? Indicadores, metas e evidências" },
   briefing: { key: "briefing", title: "Briefing", description: "Resumo consolidado + geração de tasks" },
+  prd_briefing: { key: "prd_briefing", title: "Briefing", description: "PRDs gerados + refino com Vitor antes da Forja" },
   retrospective: { key: "retrospective", title: "Retrospectiva", description: "O que foi entregue + feedback" },
   new_demands: { key: "new_demands", title: "Novas Demandas", description: "Features, bugs, melhorias" },
   refinement: { key: "refinement", title: "Refinamento Técnico", description: "Dúvidas e dependências" },
@@ -57,6 +58,8 @@ const CI_KEYS = [
   "briefing",
 ];
 
+const PRD_KEYS = ["prd_briefing"];
+
 function buildSteps(keys: string[]): StepDef[] {
   return keys.map((key, index) => {
     const def = STEP_CATALOG[key];
@@ -67,9 +70,12 @@ function buildSteps(keys: string[]): StepDef[] {
 
 export const INCEPTION_STEPS: StepDef[] = buildSteps(INCEPTION_KEYS);
 export const CI_STEPS: StepDef[] = buildSteps(CI_KEYS);
+export const PRD_STEPS: StepDef[] = buildSteps(PRD_KEYS);
 
 export function getSteps(type: string): StepDef[] {
-  return type === "inception" ? INCEPTION_STEPS : CI_STEPS;
+  if (type === "inception") return INCEPTION_STEPS;
+  if (type === "prd_session") return PRD_STEPS;
+  return CI_STEPS;
 }
 
 /**

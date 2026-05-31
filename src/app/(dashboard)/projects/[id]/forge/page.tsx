@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { getProjectForgeSummary } from "@/lib/dal/forge-project";
 import { PageContainer } from "@/components/app-shell";
 import { ForgeProjectCard } from "@/components/forge/forge-project-card";
+import { ActiveBuilders } from "@/components/forge/active-builders";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,8 @@ export default async function ProjectForgePage({
             </p>
           </div>
         </div>
+
+        <ActiveBuilders />
 
         <ForgeProjectCard project={project} summary={summary} />
       </div>

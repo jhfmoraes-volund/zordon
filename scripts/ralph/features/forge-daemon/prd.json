@@ -16,13 +16,25 @@
         "database.types.ts atualizado"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeJob'", "expected": "1" },
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='ForgeJob'", "expected": "3" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeJob'",
+          "expected": "1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='ForgeJob'",
+          "expected": "3"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 25,
-      "touches": ["supabase/migrations/20260601d_forge_job.sql", "src/lib/supabase/database.types.ts"],
-      "agentProfile": "db"
+      "touches": [
+        "supabase/migrations/20260601d_forge_job.sql",
+        "src/lib/supabase/database.types.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
     },
     {
       "id": "FDM-002",
@@ -35,13 +47,26 @@
         "Test manual: insere job claimed sem heartbeat → após cron, status=queued"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT jobname FROM cron.job WHERE jobname='forge_orphan_recovery'", "expected": "forge_orphan_recovery" },
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_proc WHERE proname='forge_recover_orphan_jobs'", "expected": "1" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT jobname FROM cron.job WHERE jobname='forge_orphan_recovery'",
+          "expected": "forge_orphan_recovery"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM pg_proc WHERE proname='forge_recover_orphan_jobs'",
+          "expected": "1"
+        }
       ],
-      "dependsOn": ["FDM-001"],
+      "dependsOn": [
+        "FDM-001"
+      ],
       "estimateMinutes": 15,
-      "touches": ["supabase/migrations/20260601e_forge_job_orphan_recovery.sql"],
-      "agentProfile": "db"
+      "touches": [
+        "supabase/migrations/20260601e_forge_job_orphan_recovery.sql"
+      ],
+      "agentProfile": "db",
+      "passes": true
     },
     {
       "id": "FDM-003",
@@ -54,12 +79,21 @@
         "heartbeat só faz UPDATE se status='running' E claimedBy=daemonId"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["FDM-001"],
+      "dependsOn": [
+        "FDM-001"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/forge/dal/job.ts"],
-      "agentProfile": "db"
+      "touches": [
+        "src/lib/forge/dal/job.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
     },
     {
       "id": "FDM-004",
@@ -73,13 +107,27 @@
         "Cancel só permitido se status em (queued, claimed)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3333/api/forge/jobs -H 'Content-Type: application/json' -d '{\"prdSlug\":\"x\"}'", "expected": "202 with jobId OR 401/403" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -X POST http://localhost:3333/api/forge/jobs -H 'Content-Type: application/json' -d '{\"prdSlug\":\"x\"}'",
+          "expected": "202 with jobId OR 401/403"
+        }
       ],
-      "dependsOn": ["FDM-003"],
+      "dependsOn": [
+        "FDM-003"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/app/api/forge/jobs/route.ts", "src/app/api/forge/jobs/[id]/route.ts"],
-      "agentProfile": "api"
+      "touches": [
+        "src/app/api/forge/jobs/route.ts",
+        "src/app/api/forge/jobs/[id]/route.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
     },
     {
       "id": "FDM-005",
@@ -94,13 +142,27 @@
         "Output amigável (cores, timestamps, indentação)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "npx tsx scripts/forge/cli.ts daemon --help", "expected": "exit 0, prints help" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "npx tsx scripts/forge/cli.ts daemon --help",
+          "expected": "exit 0, prints help"
+        }
       ],
-      "dependsOn": ["FDM-003"],
+      "dependsOn": [
+        "FDM-003"
+      ],
       "estimateMinutes": 45,
-      "touches": ["scripts/forge/cli.ts", "scripts/forge/daemon.ts"],
-      "agentProfile": "wiring"
+      "touches": [
+        "scripts/forge/cli.ts",
+        "scripts/forge/daemon.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": true
     },
     {
       "id": "FDM-006",
@@ -113,13 +175,27 @@
         "forge daemon auth invoca supabase login OAuth flow + persiste token"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "npx tsx scripts/forge/cli.ts daemon ps", "expected": "shows status (idle or no daemon running)" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "npx tsx scripts/forge/cli.ts daemon ps",
+          "expected": "shows status (idle or no daemon running)"
+        }
       ],
-      "dependsOn": ["FDM-005"],
+      "dependsOn": [
+        "FDM-005"
+      ],
       "estimateMinutes": 30,
-      "touches": ["scripts/forge/cli.ts", "scripts/forge/daemon.ts"],
-      "agentProfile": "wiring"
+      "touches": [
+        "scripts/forge/cli.ts",
+        "scripts/forge/daemon.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": true
     },
     {
       "id": "FDM-007",
@@ -132,13 +208,26 @@
         "Realtime subscription pra atualizar live"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "lint", "command_or_query": "pnpm exec eslint src/components/forge/active-builders.tsx", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm exec eslint src/components/forge/active-builders.tsx",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["FDM-005"],
+      "dependsOn": [
+        "FDM-005"
+      ],
       "estimateMinutes": 20,
-      "touches": ["src/components/forge/active-builders.tsx"],
-      "agentProfile": "ui"
+      "touches": [
+        "src/components/forge/active-builders.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
     }
   ]
 }

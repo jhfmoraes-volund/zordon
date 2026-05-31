@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getCurrentMember } from "@/lib/dal";
 import { z } from "zod";
 
 const RequestSchema = z.object({
@@ -24,27 +25,14 @@ export async function PATCH(req: NextRequest) {
 
     const { prdIds } = parsed.data;
 
-    // Get current member
-    const supabase = db();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const member = await getCurrentMember();
+    if (!member) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    // Find member
-    const { data: member } = await supabase
-      .from("Member")
-      .select("id")
-      .eq("userId", user.id)
-      .single();
-
-    if (!member) {
-      return NextResponse.json({ error: "Membro não encontrado" }, { status: 403 });
-    }
-
     const nowIso = new Date().toISOString();
+    const supabase = db();
 
-    // Batch update
     const { data, error } = await supabase
       .from("ProductRequirement")
       .update({
