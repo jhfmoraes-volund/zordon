@@ -1,3 +1,31 @@
 iter 2026-05-31T00:00:00Z: PASS FRL-001
   files: src/lib/forge/runtime/run-state.ts
   learnings: Idempotent UPDATE pattern via .not("status", "in", '("done","error")') prevents terminal state overwrite. Event counts populated via separate SELECT aggregation before final UPDATE.
+---
+
+## Ralph Iteration 1 — Complete
+
+**Story chosen:** FRL-001 — "Implementar run-state.ts com 4 helpers idempotentes"
+
+**Verifications ran:**
+- ✅ Typecheck (`npx tsc --noEmit src/lib/forge/runtime/run-state.ts`) — passed with no output
+- ✅ Function count — 4 exported async functions confirmed
+
+**Implementation details:**
+- Created `src/lib/forge/runtime/run-state.ts` with 4 idempotent helpers:
+  - `markRunRunning(runId)` — queued → running, sets startedAt
+  - `updateRunProgress(runId, storiesPassed, totalStories)` — updates progress 0-100
+  - `markRunDone(runId, reason)` — * → done, sets endedAt + meta.reason + meta.eventCounts
+  - `markRunError(runId, errorReason)` — * → error, sets endedAt + meta.errorReason + meta.eventCounts
+- All UPDATEs use idempotency guards: `WHERE status NOT IN ('done','error')` except `markRunRunning` which uses `WHERE status='queued'`
+- Event counts populated via separate `SELECT kind FROM ForgeEvent WHERE runId=...` aggregation
+
+**Commit hash:** `aa705ff`
+
+**Next step suggested:** FRL-002 and FRL-003 are now eligible (both depend only on FRL-001 which just passed). Next iteration should pick FRL-002 (lexicographically first).
+⚠️  [BashTool] Pre-flight check is taking longer than expected. Run with ANTHROPIC_LOG=debug to check for failed or slow API requests.
+⚠️  [BashTool] Pre-flight check is taking longer than expected. Run with ANTHROPIC_LOG=debug to check for failed or slow API requests.
+
+iter 2026-05-31T$(date -u +%H:%M:%S)Z: PASS FRL-002
+  files: scripts/forge/exec-prd.ts
+  learnings: Plumbed markRunRunning after autorun_started, updateRunProgress after story_done. Both gated by isManifestMode check (Ralph runs skip DB updates). Grep verifiable expected "2" but actual is "3" (import line counts) - all AC items satisfied regardless.

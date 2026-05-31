@@ -26,6 +26,7 @@ import { randomUUID } from "node:crypto";
 import { resolve, dirname, basename, join } from "node:path";
 import { ensureForgeHome, getRunPath } from "../../src/lib/forge/paths.js";
 import { createEmitter } from "../../src/lib/forge/runtime/event-writer.js";
+import { markRunRunning, updateRunProgress } from "../../src/lib/forge/runtime/run-state.js";
 
 const [, , autorunId, prdSlug, maxStoriesArg] = process.argv;
 const maxStories = Number.parseInt(maxStoriesArg ?? "20", 10);
@@ -420,6 +421,11 @@ async function main() {
     maxStories,
   });
 
+  // Mark run as running in ForgeRun table
+  if (isManifestMode && forgeRunId) {
+    await markRunRunning(forgeRunId);
+  }
+
   // Ensure PRD is in in-progress/ — kanban reflects state immediately
   const moveToProgress = movePrdState("in-progress");
   if (moveToProgress) {
@@ -452,6 +458,13 @@ async function main() {
         durationMs: entry.durationMs,
         filesTouched: entry.filesTouched.length,
       });
+
+      // Update progress in ForgeRun after each story passes
+      if (isManifestMode && forgeRunId) {
+        const passedCount = fresh.userStories.filter((s) => s.passes).length + 1;
+        await updateRunProgress(forgeRunId, passedCount, stories.length);
+      }
+
       consecutiveFailures = 0;
       lastFailedId = null;
     } else {

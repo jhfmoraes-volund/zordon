@@ -2457,33 +2457,6 @@ export type Database = {
           },
         ]
       }
-      DesignSessionStepData_backup_20260506: {
-        Row: {
-          data: Json | null
-          id: string | null
-          sessionId: string | null
-          stepIndex: number | null
-          stepKey: string | null
-          updatedAt: string | null
-        }
-        Insert: {
-          data?: Json | null
-          id?: string | null
-          sessionId?: string | null
-          stepIndex?: number | null
-          stepKey?: string | null
-          updatedAt?: string | null
-        }
-        Update: {
-          data?: Json | null
-          id?: string | null
-          sessionId?: string | null
-          stepIndex?: number | null
-          stepKey?: string | null
-          updatedAt?: string | null
-        }
-        Relationships: []
-      }
       DesignSessionStepData_backup_20260512: {
         Row: {
           data: Json | null
@@ -2668,6 +2641,136 @@ export type Database = {
           },
           {
             foreignKeyName: "DesignSessionTranscriptLink_transcriptRefId_fkey"
+            columns: ["transcriptRefId"]
+            isOneToOne: false
+            referencedRelation: "TranscriptRef"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      EntityLink: {
+        Row: {
+          contextSourceId: string | null
+          designSessionId: string | null
+          id: string
+          linkedAt: string
+          linkedById: string | null
+          meetingId: string | null
+          note: string | null
+          planningCeremonyId: string | null
+          planningSessionId: string | null
+          pmReviewId: string | null
+          transcriptRefId: string | null
+          weight: string | null
+        }
+        Insert: {
+          contextSourceId?: string | null
+          designSessionId?: string | null
+          id?: string
+          linkedAt?: string
+          linkedById?: string | null
+          meetingId?: string | null
+          note?: string | null
+          planningCeremonyId?: string | null
+          planningSessionId?: string | null
+          pmReviewId?: string | null
+          transcriptRefId?: string | null
+          weight?: string | null
+        }
+        Update: {
+          contextSourceId?: string | null
+          designSessionId?: string | null
+          id?: string
+          linkedAt?: string
+          linkedById?: string | null
+          meetingId?: string | null
+          note?: string | null
+          planningCeremonyId?: string | null
+          planningSessionId?: string | null
+          pmReviewId?: string | null
+          transcriptRefId?: string | null
+          weight?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "EntityLink_contextSourceId_fkey"
+            columns: ["contextSourceId"]
+            isOneToOne: false
+            referencedRelation: "ContextSource"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_linkedById_fkey"
+            columns: ["linkedById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_planningCeremonyId_fkey"
+            columns: ["planningCeremonyId"]
+            isOneToOne: false
+            referencedRelation: "PlanningCeremony"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_planningSessionId_fkey"
+            columns: ["planningSessionId"]
+            isOneToOne: false
+            referencedRelation: "PlanningSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_pmReviewId_fkey"
+            columns: ["pmReviewId"]
+            isOneToOne: false
+            referencedRelation: "PMReview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "EntityLink_transcriptRefId_fkey"
             columns: ["transcriptRefId"]
             isOneToOne: false
             referencedRelation: "TranscriptRef"
@@ -8309,6 +8412,14 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      entitylink_can_edit: {
+        Args: { el: Database["public"]["Tables"]["EntityLink"]["Row"] }
+        Returns: boolean
+      }
+      entitylink_can_view: {
+        Args: { el: Database["public"]["Tables"]["EntityLink"]["Row"] }
+        Returns: boolean
       }
       extract_module_hint: { Args: { p_title: string }; Returns: string }
       forge_next_seq: { Args: { p_run: string }; Returns: number }
