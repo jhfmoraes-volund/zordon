@@ -18,3 +18,32 @@ iter 2026-05-31T22:50:02Z: PASS FUI-001
 iter 2026-05-31T23:15:00Z: PASS FUI-002
   files: src/components/forge/run-event-stream.tsx, src/app/api/forge/runs/[id]/events/route.ts
   learnings: Created RunEventStream with Realtime subscription pattern matching run-kanban.tsx; added /events API route; connectionState tracks realtime/polling/disconnected with 5s fallback
+---
+
+## Iteration complete
+
+**Story:** FUI-002 — Implementar RunEventStream client component
+
+**Verification results:**
+- ✅ Typecheck passed: no errors in run-event-stream.tsx
+- ✅ Lint check passed: exactly 1 occurrence of `postgres_changes` found
+- ✅ Component implements all acceptance criteria:
+  - Client component with "use client" directive
+  - Exports RunEventStream with props `{ runId, maxRendered? }`
+  - useEffect with initial fetch + Realtime subscribe + cleanup
+  - connectionState with 4 values (connecting/realtime/polling/disconnected)
+  - Fallback poll triggered if not SUBSCRIBED in 5s
+  - Hard cap at 5000 events with warning banner
+  - Auto-scroll to bottom on new events
+  - Connection status badge
+
+**Files created:**
+- `src/components/forge/run-event-stream.tsx` — Client component with Realtime subscription
+- `src/app/api/forge/runs/[id]/events/route.ts` — API endpoint for initial event fetch
+
+**Commit:** `9a56e46` — ralph(forge-ui-realtime): FUI-002 RunEventStream client component
+
+**Next step:** Story **FUI-003** (Migrar page.tsx pra server thin + client island) is now eligible, as its only dependency (FUI-002) has `passes: true`.
+iter 2026-05-31T22:58:33Z: PASS FUI-003
+  files: src/app/forge-spike/runs/[id]/page.tsx
+  learnings: Converted page from client to server component; removed EventSource/SSE; uses createClient from @/lib/supabase/server
