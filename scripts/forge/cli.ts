@@ -32,21 +32,23 @@ function showHelp() {
   console.log("usage: forge <subcommand> [args...]");
   console.log("");
   console.log("subcommands:");
-  console.log("  spec validate <path>    — validate a spec.md file");
-  console.log("  init <slug>             — initialize ForgeRun from spec");
-  console.log("  plan <slug>             — generate execution plan from spec");
-  console.log("  run <slug> [--dry-run]  — execute ForgeRun with orchestrator");
-  console.log("  ps                      — list active ForgeRuns with progress");
-  console.log("  kill <runId>            — abort a running ForgeRun");
-  console.log("  done <runId>            — create PR for completed run");
+  console.log("  spec validate <path>         — validate a spec.md file");
+  console.log("  init <slug> [--project ID]   — initialize ForgeRun from spec");
+  console.log("  plan <slug>                  — generate execution plan from spec");
+  console.log("  run <slug> [--dry-run] [--project ID]  — execute ForgeRun with orchestrator");
+  console.log("  ps                           — list active ForgeRuns with progress");
+  console.log("  kill <runId>                 — abort a running ForgeRun");
+  console.log("  done <runId>                 — create PR for completed run");
   console.log("");
   console.log("options:");
-  console.log("  --help, -h              — show help for a subcommand");
+  console.log("  --help, -h                   — show help for a subcommand");
+  console.log("  --project <projectId>        — associate run with a Project (UUID)");
   console.log("");
   console.log("examples:");
   console.log("  forge spec validate docs/specs/active/my-feature.md");
   console.log("  forge plan my-feature");
-  console.log("  forge run my-feature --dry-run");
+  console.log("  forge init my-feature --project abc-123");
+  console.log("  forge run my-feature --dry-run --project abc-123");
   console.log("  forge ps");
   console.log("  forge kill run-12345");
   console.log("  forge done run-12345");
@@ -110,23 +112,30 @@ if (subcommand === "spec" && args[0] === "validate") {
 
 else if (subcommand === "init") {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("usage: forge init <slug>");
+    console.log("usage: forge init <slug> [--project <projectId>]");
     console.log("");
     console.log("Initialize a new ForgeRun from a validated spec.");
     console.log("Creates ForgeRun and ForgeTask records in Supabase.");
     console.log("");
+    console.log("options:");
+    console.log("  --project <projectId>   — associate run with a Project (UUID)");
+    console.log("");
     console.log("examples:");
     console.log("  forge init my-feature");
+    console.log("  forge init my-feature --project abc-123");
     process.exit(0);
   }
 
-  const slug = args[0];
+  const slug = args.filter(a => !a.startsWith("--"))[0];
+  const projectIdIdx = args.indexOf("--project");
+  const projectId = projectIdIdx >= 0 && args[projectIdIdx + 1] ? args[projectIdIdx + 1] : null;
 
   if (!slug) {
-    console.error("usage: forge init <slug>");
+    console.error("usage: forge init <slug> [--project <projectId>]");
     console.error("");
     console.error("examples:");
     console.error("  forge init my-feature");
+    console.error("  forge init my-feature --project abc-123");
     process.exit(64);
   }
 
@@ -158,18 +167,22 @@ else if (subcommand === "init") {
       console.log(yellow("→ Generating plan..."));
       const planResult = await plan(absoluteSpecPath);
 
-      // Create ForgeRun (stub projectId/ownerId for now — in production these come from spec metadata)
+      // Create ForgeRun (use provided projectId or stub)
+      const finalProjectId = projectId ?? "00000000-0000-0000-0000-000000000000";
       const run = await createRun({
         specId: slug as any, // FIXME: database.types.ts needs regeneration after migration
         status: "queued",
         progress: 0,
-        projectId: "00000000-0000-0000-0000-000000000000", // Stub — replace with actual projectId from spec
+        projectId: finalProjectId, // Real projectId if --project passed, else stub
         ownerId: "00000000-0000-0000-0000-000000000000", // Stub — replace with actual ownerId from context
         title: `Forge run: ${slug}`,
         trigger: "ad_hoc",
       } as any); // FIXME: database.types.ts needs regeneration after migration
 
       console.log(green(`✓ Created ForgeRun: ${run.id}`));
+      if (projectId) {
+        console.log(dim(`  Project: ${projectId}`));
+      }
 
       // Create ForgeTasks
       const taskInserts = planResult.stories.map((story, idx) => ({
@@ -287,28 +300,33 @@ else if (subcommand === "plan") {
 
 else if (subcommand === "run") {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("usage: forge run <slug> [--dry-run]");
+    console.log("usage: forge run <slug> [--dry-run] [--project <projectId>]");
     console.log("");
     console.log("Execute ForgeRun with orchestrator.");
     console.log("");
     console.log("options:");
-    console.log("  --dry-run    — list tasks without executing");
+    console.log("  --dry-run               — list tasks without executing");
+    console.log("  --project <projectId>   — associate run with a Project (UUID)");
     console.log("");
     console.log("examples:");
-    console.log("  forge run example              — execute ForgeRun for example spec");
-    console.log("  forge run example --dry-run    — list tasks without executing");
+    console.log("  forge run example                        — execute ForgeRun for example spec");
+    console.log("  forge run example --dry-run              — list tasks without executing");
+    console.log("  forge run example --project abc-123      — execute with project context");
     process.exit(0);
   }
 
-  const slug = args[0];
+  const slug = args.filter(a => !a.startsWith("--"))[0];
   const dryRunFlag = args.includes("--dry-run");
+  const projectIdIdx = args.indexOf("--project");
+  const projectId = projectIdIdx >= 0 && args[projectIdIdx + 1] ? args[projectIdIdx + 1] : null;
 
   if (!slug) {
-    console.error("usage: forge run <slug> [--dry-run]");
+    console.error("usage: forge run <slug> [--dry-run] [--project <projectId>]");
     console.error("");
     console.error("examples:");
-    console.error("  forge run example              — execute ForgeRun for example spec");
-    console.error("  forge run example --dry-run    — list tasks without executing");
+    console.error("  forge run example                        — execute ForgeRun for example spec");
+    console.error("  forge run example --dry-run              — list tasks without executing");
+    console.error("  forge run example --project abc-123      — execute with project context");
     process.exit(64);
   }
 
@@ -316,7 +334,7 @@ else if (subcommand === "run") {
     try {
       const { runOrchestrator } = await import("../../src/lib/forge/orchestrator");
 
-      console.log(yellow(`→ Running orchestrator for spec: ${slug}${dryRunFlag ? ' (dry-run)' : ''}...`));
+      console.log(yellow(`→ Running orchestrator for spec: ${slug}${dryRunFlag ? ' (dry-run)' : ''}${projectId ? ` (project: ${projectId})` : ''}...`));
 
       // In a real implementation, we'd look up the runId from ForgeRun table by specId
       // For now, use slug as both specId and runId (type widening in orchestrator handles this)
@@ -324,6 +342,7 @@ else if (subcommand === "run") {
         specId: slug,
         maxConcurrency: 3,
         dryRun: dryRunFlag,
+        projectId: projectId ?? undefined,
       } as Parameters<typeof runOrchestrator>[0]);
 
       if (dryRunFlag) {
@@ -354,14 +373,20 @@ else if (subcommand === "run") {
 
 else if (subcommand === "ps") {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("usage: forge ps");
+    console.log("usage: forge ps [--target]");
     console.log("");
-    console.log("List active ForgeRuns with progress, cost, and ETA.");
+    console.log("List active ForgeRuns with progress, cost, ETA, and target repo.");
+    console.log("");
+    console.log("options:");
+    console.log("  --target    — show Target column (repo owner/name or (zordon))");
     console.log("");
     console.log("examples:");
     console.log("  forge ps");
+    console.log("  forge ps --target");
     process.exit(0);
   }
+
+  const showTarget = args.includes("--target");
 
   (async () => {
     try {
@@ -369,7 +394,7 @@ else if (subcommand === "ps") {
 
       const { data: runs, error } = await db()
         .from("ForgeRun")
-        .select("id, specId, status, progress, startedAt, endedAt, costUsdTotal")
+        .select("id, specId, status, progress, startedAt, endedAt, costUsdTotal, projectId, Project(repoUrl)")
         .order("createdAt", { ascending: false })
         .limit(20);
 
@@ -385,14 +410,20 @@ else if (subcommand === "ps") {
       console.log("");
 
       // Table header
-      const header = [
+      const headerCols = [
         "ID".padEnd(12),
         "Spec".padEnd(20),
         "Status".padEnd(15),
         "Progress".padEnd(10),
         "Cost".padEnd(8),
         "ETA".padEnd(10),
-      ].join(" │ ");
+      ];
+
+      if (showTarget) {
+        headerCols.push("Target".padEnd(25));
+      }
+
+      const header = headerCols.join(" │ ");
       console.log(dim(header));
       console.log(dim("─".repeat(header.length)));
 
@@ -415,7 +446,26 @@ else if (subcommand === "ps") {
         }
         eta = eta.padEnd(10);
 
-        console.log([id, spec, status, progress, cost, eta].join(" │ "));
+        const rowCols = [id, spec, status, progress, cost, eta];
+
+        if (showTarget) {
+          // Derive target from Project.repoUrl
+          let target = "(zordon)";
+          const stubProjectId = "00000000-0000-0000-0000-000000000000";
+
+          if (run.projectId !== stubProjectId && run.Project && (run.Project as any).repoUrl) {
+            const repoUrl = (run.Project as any).repoUrl as string;
+            // Extract owner/repo from URL like https://github.com/owner/repo.git or git@github.com:owner/repo.git
+            const match = repoUrl.match(/github\.com[:/]([^/]+\/[^/.]+)/);
+            if (match) {
+              target = match[1].replace(/\.git$/, "");
+            }
+          }
+
+          rowCols.push(target.slice(0, 25).padEnd(25));
+        }
+
+        console.log(rowCols.join(" │ "));
       }
 
       console.log("");

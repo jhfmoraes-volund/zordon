@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   ResponsiveSheet,
   ResponsiveSheetBody,
@@ -59,11 +59,12 @@ export function OpportunitySheet({
   const [status, setStatus] = useState<OpportunityRow["status"]>(() => opportunity?.status ?? "discovery");
 
   // Track the current opportunity ID to detect changes
-  const [currentId, setCurrentId] = useState<string | null>(opportunity?.id ?? null);
+  const nextId = opportunity?.id ?? null;
+  const [currentId, setCurrentId] = useState<string | null>(nextId);
 
   // Reset drafts when a different opportunity is opened
-  if (opportunity?.id !== currentId) {
-    setCurrentId(opportunity?.id ?? null);
+  if (nextId !== currentId) {
+    setCurrentId(nextId);
     if (opportunity) {
       setTitle(opportunity.title);
       setDescription(opportunity.description ?? "");

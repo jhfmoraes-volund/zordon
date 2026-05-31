@@ -16,13 +16,25 @@
         "database.types.ts atualizado com githubPat?: string | null"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='Project' AND column_name='githubPat'", "expected": "githubPat" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='Project' AND column_name='githubPat'",
+          "expected": "githubPat"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 15,
-      "touches": ["supabase/migrations/20260601a_project_forge_pat.sql", "src/lib/supabase/database.types.ts"],
-      "agentProfile": "db"
+      "touches": [
+        "supabase/migrations/20260601a_project_forge_pat.sql",
+        "src/lib/supabase/database.types.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
     },
     {
       "id": "FRT-002",
@@ -36,13 +48,26 @@
         "Se PAT presente, injeta como Bearer no clone URL (https://x-access-token:<pat>@github.com/...)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "ls src/lib/forge/workspace.ts", "expected": "src/lib/forge/workspace.ts" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "ls src/lib/forge/workspace.ts",
+          "expected": "src/lib/forge/workspace.ts"
+        }
       ],
-      "dependsOn": ["FRT-001"],
+      "dependsOn": [
+        "FRT-001"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/forge/workspace.ts"],
-      "agentProfile": "wiring"
+      "touches": [
+        "src/lib/forge/workspace.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": true
     },
     {
       "id": "FRT-003",
@@ -56,12 +81,21 @@
         "Fallback cwd=Zordon quando projectId stub"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["FRT-002"],
+      "dependsOn": [
+        "FRT-002"
+      ],
       "estimateMinutes": 25,
-      "touches": ["scripts/forge/exec-story.ts"],
-      "agentProfile": "wiring"
+      "touches": [
+        "scripts/forge/exec-story.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": true
     },
     {
       "id": "FRT-004",
@@ -76,12 +110,21 @@
         "Retorna { prUrl } extraído do stdout"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["FRT-002"],
+      "dependsOn": [
+        "FRT-002"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/lib/forge/closeout.ts"],
-      "agentProfile": "wiring"
+      "touches": [
+        "src/lib/forge/closeout.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": true
     },
     {
       "id": "FRT-005",
@@ -94,13 +137,28 @@
         "Help text do CLI documenta --project"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3333/api/forge/autoruns -H 'Content-Type: application/json' -d '{\"prdSlug\":\"x\",\"projectId\":\"abc\"}'", "expected": "JSON with autorunId or error" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -X POST http://localhost:3333/api/forge/autoruns -H 'Content-Type: application/json' -d '{\"prdSlug\":\"x\",\"projectId\":\"abc\"}'",
+          "expected": "JSON with autorunId or error"
+        }
       ],
-      "dependsOn": ["FRT-003", "FRT-004"],
+      "dependsOn": [
+        "FRT-003",
+        "FRT-004"
+      ],
       "estimateMinutes": 20,
-      "touches": ["src/app/api/forge/autoruns/route.ts", "scripts/forge/cli.ts"],
-      "agentProfile": "api"
+      "touches": [
+        "src/app/api/forge/autoruns/route.ts",
+        "scripts/forge/cli.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
     },
     {
       "id": "FRT-006",
@@ -113,13 +171,28 @@
         "Coluna Target = '(zordon)' quando projectId = stub"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT jobname FROM cron.job WHERE jobname='forge_workspace_gc'", "expected": "forge_workspace_gc" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT jobname FROM cron.job WHERE jobname='forge_workspace_gc'",
+          "expected": "forge_workspace_gc"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["FRT-002"],
+      "dependsOn": [
+        "FRT-002"
+      ],
       "estimateMinutes": 25,
-      "touches": ["scripts/forge/gc-workspaces.ts", "scripts/forge/cli.ts", "supabase/migrations/20260601b_forge_workspace_gc_cron.sql"],
-      "agentProfile": "db"
+      "touches": [
+        "scripts/forge/gc-workspaces.ts",
+        "scripts/forge/cli.ts",
+        "supabase/migrations/20260601b_forge_workspace_gc_cron.sql"
+      ],
+      "agentProfile": "db",
+      "passes": true
     }
   ]
 }

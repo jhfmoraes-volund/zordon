@@ -5517,6 +5517,7 @@ export type Database = {
           definitionOfDone: Json
           endDate: string | null
           githubDefaultBranch: string
+          githubPat: string | null
           githubRepoName: string | null
           githubRepoOwner: string | null
           id: string
@@ -5542,6 +5543,7 @@ export type Database = {
           definitionOfDone?: Json
           endDate?: string | null
           githubDefaultBranch?: string
+          githubPat?: string | null
           githubRepoName?: string | null
           githubRepoOwner?: string | null
           id?: string
@@ -5567,6 +5569,7 @@ export type Database = {
           definitionOfDone?: Json
           endDate?: string | null
           githubDefaultBranch?: string
+          githubPat?: string | null
           githubRepoName?: string | null
           githubRepoOwner?: string | null
           id?: string

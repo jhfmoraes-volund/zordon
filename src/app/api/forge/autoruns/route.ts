@@ -13,10 +13,14 @@ export async function POST(req: Request) {
 
   let prdSlug: string;
   let maxStories = 20;
+  let projectId: string | undefined;
   try {
     const body = await req.json();
     prdSlug = String(body?.prdSlug ?? "");
     if (typeof body?.maxStories === "number") maxStories = body.maxStories;
+    if (body?.projectId && typeof body.projectId === "string") {
+      projectId = body.projectId;
+    }
   } catch {
     return NextResponse.json({ error: "invalid json body" }, { status: 400 });
   }
@@ -38,22 +42,25 @@ export async function POST(req: Request) {
     console.error("autoruns: failed to move PRD to in-progress", err);
   }
 
-  const child = spawn(
-    "npx",
-    ["tsx", script, autorunId, prdSlug, String(maxStories)],
-    {
-      cwd: repoRoot,
-      detached: true,
-      stdio: "ignore",
-      env: process.env,
-    },
-  );
+  // Build args: autorunId, prdSlug, maxStories, [projectId]
+  const args = ["tsx", script, autorunId, prdSlug, String(maxStories)];
+  if (projectId) {
+    args.push(projectId);
+  }
+
+  const child = spawn("npx", args, {
+    cwd: repoRoot,
+    detached: true,
+    stdio: "ignore",
+    env: process.env,
+  });
   child.unref();
 
   return NextResponse.json({
     autorunId,
     prdSlug,
     maxStories,
+    projectId,
     pid: child.pid,
     startedAt: new Date().toISOString(),
     stateMove: move,

@@ -20,6 +20,9 @@ import { execSync } from "node:child_process";
 import { existsSync, renameSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { getRunWithTasks, updateRunStatus, type ForgeRunRow, type ForgeTaskRow } from "./dal/run";
+import type { Database } from "@/lib/supabase/database.types";
+
+type ProjectRow = Database["public"]["Tables"]["Project"]["Row"];
 
 export type CloseoutResult = {
   prUrl: string;
@@ -28,6 +31,9 @@ export type CloseoutResult = {
 
 export type CloseoutOptions = {
   dryRun?: boolean;
+  workspacePath?: string;
+  project?: ProjectRow;
+  prdSlug?: string;
 };
 
 /**
@@ -44,7 +50,7 @@ export async function closeout(
   runId: string,
   options: CloseoutOptions = {},
 ): Promise<CloseoutResult> {
-  const { dryRun = false } = options;
+  const { dryRun = false, workspacePath, project, prdSlug } = options;
 
   // 1. Load run with tasks
   const runWithTasks = await getRunWithTasks(runId);
@@ -96,7 +102,7 @@ export async function closeout(
     await pushToRemotes("joao-dev");
 
     // 7. Create PR via gh CLI (AC4, AC5)
-    const prUrl = await createPR(runId, specId, run);
+    const prUrl = await createPR(runId, specId, run, { workspacePath, project, prdSlug });
 
     // 8. Mark run as done
     await updateRunStatus(runId, "done", {
@@ -289,14 +295,35 @@ async function pushToRemotes(branch: string): Promise<void> {
 /**
  * Create PR via gh CLI.
  * Returns PR URL (AC4).
+ *
+ * If workspacePath/project/prdSlug provided (client mode):
+ * - cd to workspacePath
+ * - git push origin branch
+ * - gh pr create --repo owner/repo --base defaultBranch --draft
+ * - Use GH_TOKEN=pat if project.githubPat present
+ *
+ * Otherwise (dogfood mode):
+ * - Create PR from current branch (joao-dev) to main in current repo
  */
-async function createPR(runId: string, specId: string, run: ForgeRunRow): Promise<string> {
+async function createPR(
+  runId: string,
+  specId: string,
+  run: ForgeRunRow,
+  options: { workspacePath?: string; project?: ProjectRow; prdSlug?: string } = {},
+): Promise<string> {
+  const { workspacePath, project, prdSlug } = options;
+
   console.log("→ Creating PR via gh CLI...");
 
-  const title = `[Forge] ${specId}`;
+  const title = prdSlug ? `forge: ${prdSlug}` : `[Forge] ${specId}`;
   const body = buildPRBody(runId, specId, run);
 
-  // Create PR from current branch (joao-dev) to main
+  // Client mode: push to target repo and create PR there
+  if (workspacePath && project && prdSlug) {
+    return createClientPR(workspacePath, project, prdSlug, runId, title, body);
+  }
+
+  // Dogfood mode: create PR from joao-dev to main in current repo
   try {
     const output = execSync(
       `gh pr create --title "${title}" --body "${body.replace(/"/g, '\\"')}" --base main --head joao-dev`,
@@ -318,6 +345,93 @@ async function createPR(runId: string, specId: string, run: ForgeRunRow): Promis
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to create PR: ${message}`);
+  }
+}
+
+/**
+ * Create PR in client repo (target workspace).
+ *
+ * AC2: git push origin branch
+ * AC3: gh pr create --repo owner/repo --base defaultBranch
+ * AC4: PR always --draft
+ * AC5: Export GH_TOKEN if project.githubPat present
+ * AC6: Return { prUrl } from stdout
+ */
+async function createClientPR(
+  workspacePath: string,
+  project: ProjectRow,
+  prdSlug: string,
+  runId: string,
+  title: string,
+  body: string,
+): Promise<string> {
+  console.log(`→ Creating PR in target repo: ${project.repoUrl}`);
+
+  // Extract owner/repo from repoUrl
+  // Supports: https://github.com/owner/repo.git, git@github.com:owner/repo.git
+  const repoUrl = project.repoUrl ?? "";
+  let ownerRepo = "";
+
+  if (repoUrl.includes("github.com/")) {
+    const match = repoUrl.match(/github\.com[/:]([^/]+\/[^/.]+)/);
+    ownerRepo = match?.[1]?.replace(/\.git$/, "") ?? "";
+  }
+
+  if (!ownerRepo) {
+    throw new Error(`Cannot extract owner/repo from repoUrl: ${repoUrl}`);
+  }
+
+  // Determine default branch (assume main, could query gh api later)
+  const defaultBranch = "main";
+
+  // Build branch name (from workspace.ts D3)
+  const branch = `forge/${prdSlug}-${runId.slice(0, 8)}`;
+
+  // AC2: Push branch to origin
+  console.log(`→ Pushing branch ${branch} to origin...`);
+  try {
+    execSync(`git push origin "${branch}"`, {
+      cwd: workspacePath,
+      stdio: "pipe",
+      encoding: "utf-8",
+    });
+    console.log(`✓ Pushed branch ${branch}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to push branch ${branch}: ${message}`);
+  }
+
+  // AC5: Build env with GH_TOKEN if PAT present
+  const env = { ...process.env };
+  if (project.githubPat) {
+    env.GH_TOKEN = project.githubPat;
+  }
+
+  // AC3, AC4: Create PR with --repo, --base, --draft
+  console.log(`→ Creating draft PR in ${ownerRepo}...`);
+  try {
+    const output = execSync(
+      `gh pr create --repo "${ownerRepo}" --base "${defaultBranch}" --head "${branch}" --draft --title "${title}" --body "${body.replace(/"/g, '\\"')}"`,
+      {
+        cwd: workspacePath,
+        encoding: "utf-8",
+        stdio: "pipe",
+        env,
+      },
+    );
+
+    // AC6: Extract PR URL from stdout
+    const prUrl = output.trim().split("\n").pop() ?? "";
+
+    if (!prUrl.startsWith("http")) {
+      throw new Error(`Invalid PR URL returned: ${prUrl}`);
+    }
+
+    console.log(`✓ Draft PR created: ${prUrl}`);
+    return prUrl;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to create PR in ${ownerRepo}: ${message}`);
   }
 }
 

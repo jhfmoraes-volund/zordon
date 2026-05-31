@@ -11,6 +11,11 @@
 import { mkdirSync, appendFileSync, readFileSync, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
+import { ensureWorkspace } from "../../src/lib/forge/workspace.js";
+import { db } from "../../src/lib/db.js";
+import type { Database } from "../../src/lib/supabase/database.types.js";
+
+type ProjectRow = Database["public"]["Tables"]["Project"]["Row"];
 
 const [, , runId, prdSlug, storyId] = process.argv;
 
@@ -21,7 +26,7 @@ if (!runId || !prdSlug || !storyId) {
 
 const repoRoot = process.cwd();
 const eventsPath = resolve(repoRoot, ".forge", runId, "events.jsonl");
-mkdirSync(dirname(eventsPath), { recursive: true });
+mkdirSync(dirname(eventsPath), { recursive: true});
 
 let seq = 0;
 function emit(kind: string, payload: Record<string, unknown> = {}) {
@@ -36,6 +41,9 @@ function emit(kind: string, payload: Record<string, unknown> = {}) {
   };
   appendFileSync(eventsPath, JSON.stringify(event) + "\n");
 }
+
+// Main async function to support await
+async function main() {
 
 emit("started", { pid: process.pid, prdSlug, storyId });
 
@@ -198,6 +206,66 @@ const prompt = [
 
 emit("prompt_built", { promptLength: prompt.length, profile: story.agentProfile });
 
+// ── Workspace setup (if projectId provided) ───────────────────────────────────
+
+const STUB_PROJECT_ID = "00000000-0000-0000-0000-000000000000";
+const projectId = process.env.FORGE_PROJECT_ID;
+let workingDir = repoRoot; // Default: dogfood mode (Zordon)
+
+if (projectId && projectId !== STUB_PROJECT_ID) {
+  emit("status", { message: `fetching project ${projectId} for workspace setup` });
+
+  // Fetch project from database
+  const { data: project, error: projectError } = await db()
+    .from("Project")
+    .select("*")
+    .eq("id", projectId)
+    .maybeSingle();
+
+  if (projectError) {
+    emit("error", { message: `failed to fetch project: ${projectError.message}` });
+    emit("done", { ok: false, totalEvents: seq + 1 });
+    process.exit(5);
+  }
+
+  if (!project) {
+    emit("error", { message: `project ${projectId} not found` });
+    emit("done", { ok: false, totalEvents: seq + 1 });
+    process.exit(6);
+  }
+
+  // Ensure workspace exists
+  emit("status", { message: `setting up workspace for ${project.name}` });
+  try {
+    const { workspacePath, branch } = ensureWorkspace({
+      runId,
+      prdSlug,
+      project: project as ProjectRow,
+    });
+
+    workingDir = workspacePath;
+
+    emit("workspace_ready", {
+      path: workspacePath,
+      branch,
+      repoUrl: project.repoUrl,
+      projectId: project.id,
+      projectName: project.name,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    emit("error", { message: `workspace setup failed: ${message}` });
+    emit("done", { ok: false, totalEvents: seq + 1 });
+    process.exit(7);
+  }
+} else {
+  emit("status", {
+    message: projectId === STUB_PROJECT_ID
+      ? "projectId is stub — using dogfood mode (cwd=Zordon)"
+      : "no projectId — using dogfood mode (cwd=Zordon)"
+  });
+}
+
 // ── Spawn Claude with stream-json output ─────────────────────────────────
 
 emit("status", { message: "spawning claude -p with stream-json output" });
@@ -215,7 +283,7 @@ const claudeArgs = [
 ];
 
 const claude = spawn("claude", claudeArgs, {
-  cwd: repoRoot,
+  cwd: workingDir,
   stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env, FORGE_RUN_ID: runId, FORGE_TASK_ID: storyId },
 });
@@ -350,3 +418,12 @@ setTimeout(() => {
   emit("done", { ok: false, totalEvents: seq + 1, killed: true });
   process.exit(124);
 }, 600_000);
+
+} // close main()
+
+// Run main and catch errors
+main().catch((err) => {
+  emit("error", { message: `main() crashed: ${err instanceof Error ? err.message : String(err)}` });
+  emit("done", { ok: false, totalEvents: seq + 1 });
+  process.exit(1);
+});
