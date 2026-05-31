@@ -21,6 +21,9 @@ import {
   ConfirmDialog,
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
+import { SessionPickerModal } from "@/components/sessions/session-picker-modal";
+import { PrdUploadSheet } from "@/components/sessions/prd-session/upload-sheet";
+import { PrdQuickAskSheet } from "@/components/sessions/prd-session/quick-ask-sheet";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
@@ -92,7 +95,10 @@ export function ProjectSessionsTab({
   const setSessions = sessionsCollection.setCommitted;
   const sessionMutate = sessionsCollection.mutate;
   const [loading, setLoading] = useState(true);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [superOpen, setSuperOpen] = useState(false);
+  const [prdUploadOpen, setPrdUploadOpen] = useState(false);
+  const [prdQuickAskOpen, setPrdQuickAskOpen] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
@@ -313,12 +319,26 @@ export function ProjectSessionsTab({
             <Sparkles className="size-3.5" />
             Planning
           </Link>
-          <Button size="sm" onClick={() => setSuperOpen(true)}>
+          <Button size="sm" onClick={() => setPickerOpen(true)}>
             <Plus className="size-3.5" />
-            Inception
+            Nova Session
           </Button>
         </div>
       </div>
+
+      <SessionPickerModal
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={(type) => {
+          if (type === "inception") {
+            setSuperOpen(true);
+          } else if (type === "prd-upload") {
+            setPrdUploadOpen(true);
+          } else if (type === "prd-quickask") {
+            setPrdQuickAskOpen(true);
+          }
+        }}
+      />
 
       <SuperSessionModal
         projectId={projectId}
@@ -326,6 +346,18 @@ export function ProjectSessionsTab({
         open={superOpen}
         onOpenChange={setSuperOpen}
         onCreated={load}
+      />
+
+      <PrdUploadSheet
+        projectId={projectId}
+        open={prdUploadOpen}
+        onOpenChange={setPrdUploadOpen}
+      />
+
+      <PrdQuickAskSheet
+        projectId={projectId}
+        open={prdQuickAskOpen}
+        onOpenChange={setPrdQuickAskOpen}
       />
 
       {loading ? (

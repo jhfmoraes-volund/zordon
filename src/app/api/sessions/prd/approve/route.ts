@@ -1,0 +1,75 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { z } from "zod";
+
+const RequestSchema = z.object({
+  prdIds: z.array(z.string().uuid()).min(1).max(10),
+});
+
+/**
+ * PATCH /api/sessions/prd/approve
+ * Batch approve: move PRDs de draft → ready.
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const parsed = RequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validação falhou", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const { prdIds } = parsed.data;
+
+    // Get current member
+    const supabase = db();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
+    // Find member
+    const { data: member } = await supabase
+      .from("Member")
+      .select("id")
+      .eq("userId", user.id)
+      .single();
+
+    if (!member) {
+      return NextResponse.json({ error: "Membro não encontrado" }, { status: 403 });
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // Batch update
+    const { data, error } = await supabase
+      .from("ProductRequirement")
+      .update({
+        status: "ready",
+        approvedBy: member.id,
+        approvedAt: nowIso,
+        updatedAt: nowIso,
+      })
+      .in("id", prdIds)
+      .select("id, title, status");
+
+    if (error) {
+      console.error("[PATCH /api/sessions/prd/approve]", error);
+      return NextResponse.json(
+        { error: "Erro ao aprovar PRDs" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ approved: data });
+  } catch (error) {
+    console.error("[PATCH /api/sessions/prd/approve]", error);
+    return NextResponse.json(
+      { error: "Erro interno ao aprovar PRDs" },
+      { status: 500 }
+    );
+  }
+}

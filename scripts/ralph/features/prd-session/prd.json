@@ -15,13 +15,25 @@
         "database.types.ts atualizado"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='DesignSession' AND column_name='subKind'", "expected": "subKind" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='DesignSession' AND column_name='subKind'",
+          "expected": "subKind"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 15,
-      "touches": ["supabase/migrations/20260601c_prd_session_subkind.sql", "src/lib/supabase/database.types.ts"],
-      "agentProfile": "db"
+      "touches": [
+        "supabase/migrations/20260601c_prd_session_subkind.sql",
+        "src/lib/supabase/database.types.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
     },
     {
       "id": "PRS-002",
@@ -35,12 +47,19 @@
         "Unit test: 3 PRDs de exemplo retornam shape correto"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 25,
-      "touches": ["src/lib/sessions/prd-session/parser.ts"],
-      "agentProfile": "db"
+      "touches": [
+        "src/lib/sessions/prd-session/parser.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
     },
     {
       "id": "PRS-003",
@@ -54,13 +73,28 @@
         "Retry com mesma payload retorna sessionId existente"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3333/api/sessions/prd/upload -H 'Content-Type: application/json' -d '{\"projectId\":\"abc\",\"files\":[{\"filename\":\"x.md\",\"content\":\"# Test\"}]}'", "expected": "JSON with sessionId" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -X POST http://localhost:3333/api/sessions/prd/upload -H 'Content-Type: application/json' -d '{\"projectId\":\"abc\",\"files\":[{\"filename\":\"x.md\",\"content\":\"# Test\"}]}'",
+          "expected": "JSON with sessionId"
+        }
       ],
-      "dependsOn": ["PRS-001", "PRS-002"],
+      "dependsOn": [
+        "PRS-001",
+        "PRS-002"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/app/api/sessions/prd/upload/route.ts", "src/lib/sessions/prd-session/dal.ts"],
-      "agentProfile": "api"
+      "touches": [
+        "src/app/api/sessions/prd/upload/route.ts",
+        "src/lib/sessions/prd-session/dal.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
     },
     {
       "id": "PRS-004",
@@ -73,12 +107,21 @@
         "Hard cap: response truncated a 10 items"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["PRS-002"],
+      "dependsOn": [
+        "PRS-002"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/lib/agent/vitor/prompts/prd-quickask.ts"],
-      "agentProfile": "api"
+      "touches": [
+        "src/lib/agent/vitor/prompts/prd-quickask.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
     },
     {
       "id": "PRS-005",
@@ -91,13 +134,28 @@
         "GET /api/jobs/[jobId] retorna status (queued|running|done|failed)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3333/api/sessions/prd/quick-ask/start -H 'Content-Type: application/json' -d '{\"projectId\":\"abc\",\"brief\":\"clone instagram\"}'", "expected": "JSON 202 with sessionId and jobId" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -X POST http://localhost:3333/api/sessions/prd/quick-ask/start -H 'Content-Type: application/json' -d '{\"projectId\":\"abc\",\"brief\":\"clone instagram\"}'",
+          "expected": "JSON 202 with sessionId and jobId"
+        }
       ],
-      "dependsOn": ["PRS-001", "PRS-004"],
+      "dependsOn": [
+        "PRS-001",
+        "PRS-004"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/app/api/sessions/prd/quick-ask/start/route.ts", "src/lib/sessions/prd-session/jobs.ts"],
-      "agentProfile": "api"
+      "touches": [
+        "src/app/api/sessions/prd/quick-ask/start/route.ts",
+        "src/lib/sessions/prd-session/jobs.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
     },
     {
       "id": "PRS-006",
@@ -111,13 +169,26 @@
         "Erro de network mostra toast (não Dialog)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "lint", "command_or_query": "pnpm exec eslint src/components/sessions/prd-session/upload-sheet.tsx", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm exec eslint src/components/sessions/prd-session/upload-sheet.tsx",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["PRS-003"],
+      "dependsOn": [
+        "PRS-003"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/components/sessions/prd-session/upload-sheet.tsx"],
-      "agentProfile": "ui"
+      "touches": [
+        "src/components/sessions/prd-session/upload-sheet.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
     },
     {
       "id": "PRS-007",
@@ -131,13 +202,26 @@
         "Sem avatar (per feedback_chat_ui memory)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "lint", "command_or_query": "pnpm exec eslint src/components/sessions/prd-session/quick-ask-sheet.tsx", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm exec eslint src/components/sessions/prd-session/quick-ask-sheet.tsx",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["PRS-005"],
+      "dependsOn": [
+        "PRS-005"
+      ],
       "estimateMinutes": 35,
-      "touches": ["src/components/sessions/prd-session/quick-ask-sheet.tsx"],
-      "agentProfile": "ui"
+      "touches": [
+        "src/components/sessions/prd-session/quick-ask-sheet.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
     },
     {
       "id": "PRS-008",
@@ -150,12 +234,22 @@
         "Sem novo tipo de animação ou tema"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["PRS-006", "PRS-007"],
+      "dependsOn": [
+        "PRS-006",
+        "PRS-007"
+      ],
       "estimateMinutes": 20,
-      "touches": ["src/app/(dashboard)/projects/[id]/sessions/new/page.tsx"],
-      "agentProfile": "ui"
+      "touches": [
+        "src/app/(dashboard)/projects/[id]/sessions/new/page.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
     }
   ]
 }

@@ -948,6 +948,8 @@ export type Database = {
           createdAt: string
           email: string | null
           id: string
+          logoStoragePath: string | null
+          logoUpdatedAt: string | null
           name: string
           notes: string | null
           phone: string | null
@@ -957,6 +959,8 @@ export type Database = {
           createdAt?: string
           email?: string | null
           id?: string
+          logoStoragePath?: string | null
+          logoUpdatedAt?: string | null
           name: string
           notes?: string | null
           phone?: string | null
@@ -966,6 +970,8 @@ export type Database = {
           createdAt?: string
           email?: string | null
           id?: string
+          logoStoragePath?: string | null
+          logoUpdatedAt?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
@@ -1420,6 +1426,7 @@ export type Database = {
           scheduledAt: string | null
           selectedSteps: string[] | null
           status: string
+          subKind: string | null
           title: string
           totalSteps: number
           type: string
@@ -1447,6 +1454,7 @@ export type Database = {
           scheduledAt?: string | null
           selectedSteps?: string[] | null
           status?: string
+          subKind?: string | null
           title: string
           totalSteps?: number
           type?: string
@@ -1474,6 +1482,7 @@ export type Database = {
           scheduledAt?: string | null
           selectedSteps?: string[] | null
           status?: string
+          subKind?: string | null
           title?: string
           totalSteps?: number
           type?: string
@@ -2812,7 +2821,43 @@ export type Database = {
           severity?: string
           slug?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ForgeLearning_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeLearning_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeLearning_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeLearning_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeLearning_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ForgeRun: {
         Row: {
@@ -2903,6 +2948,124 @@ export type Database = {
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeRun_specId_fkey"
+            columns: ["specId"]
+            isOneToOne: false
+            referencedRelation: "ForgeSpec"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ForgeSpec: {
+        Row: {
+          approvedAt: string | null
+          approvedBy: string | null
+          createdAt: string
+          id: string
+          nonGoals: Json
+          ownerId: string
+          problem: string
+          slug: string
+          solution: string
+          status: string
+          successCriteria: Json
+          title: string
+          updatedAt: string
+          upstream: Json | null
+          userStories: Json
+        }
+        Insert: {
+          approvedAt?: string | null
+          approvedBy?: string | null
+          createdAt?: string
+          id?: string
+          nonGoals?: Json
+          ownerId: string
+          problem: string
+          slug: string
+          solution: string
+          status?: string
+          successCriteria?: Json
+          title: string
+          updatedAt?: string
+          upstream?: Json | null
+          userStories?: Json
+        }
+        Update: {
+          approvedAt?: string | null
+          approvedBy?: string | null
+          createdAt?: string
+          id?: string
+          nonGoals?: Json
+          ownerId?: string
+          problem?: string
+          slug?: string
+          solution?: string
+          status?: string
+          successCriteria?: Json
+          title?: string
+          updatedAt?: string
+          upstream?: Json | null
+          userStories?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ForgeSpec_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeSpec_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeSpec_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeSpec_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeSpec_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeSpec_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeSpec_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeSpec_ownerId_fkey"
+            columns: ["ownerId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
         ]
@@ -3037,6 +3200,13 @@ export type Database = {
             columns: ["runId"]
             isOneToOne: false
             referencedRelation: "ForgeRun"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeTask_specId_fkey"
+            columns: ["specId"]
+            isOneToOne: false
+            referencedRelation: "ForgeSpec"
             referencedColumns: ["id"]
           },
           {
@@ -4257,6 +4427,138 @@ export type Database = {
           },
         ]
       }
+      Opportunity: {
+        Row: {
+          clientId: string
+          createdAt: string
+          createdBy: string
+          description: string | null
+          effort: number
+          id: string
+          impact: number
+          priorityRank: number | null
+          promotedProjectId: string | null
+          sourceDesignSessionId: string | null
+          sourceMeetingId: string | null
+          sourceTranscriptRefId: string | null
+          status: Database["public"]["Enums"]["OpportunityStatus"]
+          title: string
+          updatedAt: string
+        }
+        Insert: {
+          clientId: string
+          createdAt?: string
+          createdBy: string
+          description?: string | null
+          effort: number
+          id?: string
+          impact: number
+          priorityRank?: number | null
+          promotedProjectId?: string | null
+          sourceDesignSessionId?: string | null
+          sourceMeetingId?: string | null
+          sourceTranscriptRefId?: string | null
+          status?: Database["public"]["Enums"]["OpportunityStatus"]
+          title: string
+          updatedAt?: string
+        }
+        Update: {
+          clientId?: string
+          createdAt?: string
+          createdBy?: string
+          description?: string | null
+          effort?: number
+          id?: string
+          impact?: number
+          priorityRank?: number | null
+          promotedProjectId?: string | null
+          sourceDesignSessionId?: string | null
+          sourceMeetingId?: string | null
+          sourceTranscriptRefId?: string | null
+          status?: Database["public"]["Enums"]["OpportunityStatus"]
+          title?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Opportunity_clientId_fkey"
+            columns: ["clientId"]
+            isOneToOne: false
+            referencedRelation: "Client"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_clientId_fkey"
+            columns: ["clientId"]
+            isOneToOne: false
+            referencedRelation: "client_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_promotedProjectId_fkey"
+            columns: ["promotedProjectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_sourceDesignSessionId_fkey"
+            columns: ["sourceDesignSessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_sourceDesignSessionId_fkey"
+            columns: ["sourceDesignSessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_sourceMeetingId_fkey"
+            columns: ["sourceMeetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Opportunity_sourceTranscriptRefId_fkey"
+            columns: ["sourceTranscriptRefId"]
+            isOneToOne: false
+            referencedRelation: "TranscriptRef"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       PDIAction: {
         Row: {
           completedAt: string | null
@@ -4873,60 +5175,6 @@ export type Database = {
           },
         ]
       }
-      Opportunity: {
-        Row: {
-          clientId: string
-          createdAt: string
-          createdBy: string
-          description: string | null
-          effort: number
-          id: string
-          impact: number
-          priorityRank: number | null
-          promotedProjectId: string | null
-          sourceDesignSessionId: string | null
-          sourceMeetingId: string | null
-          sourceTranscriptRefId: string | null
-          status: Database["public"]["Enums"]["OpportunityStatus"]
-          title: string
-          updatedAt: string
-        }
-        Insert: {
-          clientId: string
-          createdAt?: string
-          createdBy: string
-          description?: string | null
-          effort: number
-          id?: string
-          impact: number
-          priorityRank?: number | null
-          promotedProjectId?: string | null
-          sourceDesignSessionId?: string | null
-          sourceMeetingId?: string | null
-          sourceTranscriptRefId?: string | null
-          status?: Database["public"]["Enums"]["OpportunityStatus"]
-          title: string
-          updatedAt?: string
-        }
-        Update: {
-          clientId?: string
-          createdAt?: string
-          createdBy?: string
-          description?: string | null
-          effort?: number
-          id?: string
-          impact?: number
-          priorityRank?: number | null
-          promotedProjectId?: string | null
-          sourceDesignSessionId?: string | null
-          sourceMeetingId?: string | null
-          sourceTranscriptRefId?: string | null
-          status?: Database["public"]["Enums"]["OpportunityStatus"]
-          title?: string
-          updatedAt?: string
-        }
-        Relationships: []
-      }
       PMReview: {
         Row: {
           archivedAt: string | null
@@ -5508,6 +5756,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      PrdQuickAskJob: {
+        Row: {
+          brief: string
+          createdAt: string
+          error: string | null
+          finishedAt: string | null
+          id: string
+          prdCount: number | null
+          projectId: string
+          sessionId: string
+          startedAt: string | null
+          status: string
+          triggeredByMemberId: string | null
+        }
+        Insert: {
+          brief: string
+          createdAt?: string
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          prdCount?: number | null
+          projectId: string
+          sessionId: string
+          startedAt?: string | null
+          status?: string
+          triggeredByMemberId?: string | null
+        }
+        Update: {
+          brief?: string
+          createdAt?: string
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          prdCount?: number | null
+          projectId?: string
+          sessionId?: string
+          startedAt?: string | null
+          status?: string
+          triggeredByMemberId?: string | null
+        }
+        Relationships: []
       }
       Project: {
         Row: {
@@ -7719,6 +8009,7 @@ export type Database = {
         Returns: boolean
       }
       can_create_pm_review: { Args: { p_project_id: string }; Returns: boolean }
+      can_edit_client: { Args: { p_client_id: string }; Returns: boolean }
       can_edit_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_edit_project: { Args: { p_project_id: string }; Returns: boolean }
       can_edit_session: { Args: { p_session_id: string }; Returns: boolean }
