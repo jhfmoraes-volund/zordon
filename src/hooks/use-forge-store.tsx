@@ -10,8 +10,9 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import { createForgeStore, type ForgeStore } from "@/lib/forge/store";
-import { createMockSource } from "@/lib/forge/sources/mock";
+import { createAutoSource, type SourceType } from "@/lib/forge/sources";
 import type { ForgeSource } from "@/lib/forge/source";
 import type { ForgeState } from "@/lib/forge/types";
 
@@ -29,13 +30,41 @@ type SelectionCtx = {
 
 const SelectionContext = createContext<SelectionCtx | null>(null);
 
-export function ForgeProvider({ children }: { children: React.ReactNode }) {
-  const ctx = useMemo<Ctx>(() => {
-    const store = createForgeStore();
-    const source = createMockSource();
-    source.onEvent((e) => store.dispatch(e));
-    return { store, source };
-  }, []);
+export function ForgeProvider({
+  children,
+  runId,
+}: {
+  children: React.ReactNode;
+  runId?: string;
+}) {
+  const searchParams = useSearchParams();
+  const sourceOverride = searchParams.get("source") as SourceType | null;
+
+  const [ctx, setCtx] = useState<Ctx | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function initSource() {
+      const store = createForgeStore();
+      // If runId provided, use auto-detect; otherwise fallback to mock
+      const source = runId
+        ? await createAutoSource(runId, sourceOverride ?? undefined)
+        : (await import("@/lib/forge/sources/mock")).createMockSource();
+
+      source.onEvent((e) => store.dispatch(e));
+
+      if (mounted) {
+        setCtx({ store, source });
+      }
+    }
+
+    void initSource();
+
+    return () => {
+      mounted = false;
+    };
+  }, [runId, sourceOverride]);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selection = useMemo<SelectionCtx>(
@@ -45,10 +74,16 @@ export function ForgeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     return () => {
-      ctx.source.reset();
-      ctx.store.reset();
+      if (ctx) {
+        ctx.source.reset();
+        ctx.store.reset();
+      }
     };
   }, [ctx]);
+
+  if (!ctx) {
+    return <div className="p-6 text-muted-foreground">Initializing forge...</div>;
+  }
 
   return (
     <ForgeContext.Provider value={ctx}>

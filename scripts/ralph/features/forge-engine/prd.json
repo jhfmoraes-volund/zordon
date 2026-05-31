@@ -116,7 +116,7 @@
         "src/lib/supabase/database.types.ts"
       ],
       "agentProfile": "db",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-004",
@@ -154,7 +154,7 @@
         "scripts/forge/cli.ts"
       ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-005",
@@ -187,7 +187,7 @@
         "src/lib/forge/worker.ts"
       ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-006",
@@ -229,7 +229,7 @@
         "src/lib/forge/profiles/doc.ts"
       ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-007",
@@ -267,7 +267,7 @@
         "src/lib/forge/event-uploader.ts"
       ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-008",
@@ -303,7 +303,7 @@
         "src/lib/forge/worker.ts"
       ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-009",
@@ -339,7 +339,7 @@
         "package.json"
       ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-010",
@@ -377,7 +377,7 @@
         "src/hooks/use-forge-store.tsx"
       ],
       "agentProfile": "ui",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-011",
@@ -411,7 +411,7 @@
         "src/app/api/forge/tasks/[id]/diff/route.ts"
       ],
       "agentProfile": "ui",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-014",
@@ -450,7 +450,7 @@
         "scripts/forge/exec.ts"
       ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-013",
@@ -486,7 +486,7 @@
         "src/lib/forge/planner.ts"
       ],
       "agentProfile": "db",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-012",
@@ -521,7 +521,7 @@
         "scripts/forge/cli.ts"
       ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 export type AgentStatus =
+  | "queued"
   | "idle"
   | "spawning"
   | "thinking"

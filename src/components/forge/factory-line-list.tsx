@@ -82,6 +82,7 @@ function FactoryLineEmpty() {
 }
 
 const STATUS_TONE: Record<AgentStatus, string> = {
+  queued: "oklch(0.5 0 0)",
   idle: "oklch(0.6 0 0)",
   spawning: "oklch(0.7 0.16 65)",
   thinking: "oklch(0.6 0.13 250)",
@@ -92,6 +93,7 @@ const STATUS_TONE: Record<AgentStatus, string> = {
 };
 
 const STATUS_PULSE: Record<AgentStatus, boolean> = {
+  queued: false,
   idle: false,
   spawning: true,
   thinking: true,

@@ -2781,8 +2781,42 @@ export type Database = {
           },
         ]
       }
+      ForgeLearning: {
+        Row: {
+          addedAt: string
+          id: string
+          lesson: string
+          ownerId: string
+          profileScope: string | null
+          projectId: string | null
+          severity: string
+          slug: string
+        }
+        Insert: {
+          addedAt?: string
+          id?: string
+          lesson: string
+          ownerId: string
+          profileScope?: string | null
+          projectId?: string | null
+          severity?: string
+          slug: string
+        }
+        Update: {
+          addedAt?: string
+          id?: string
+          lesson?: string
+          ownerId?: string
+          profileScope?: string | null
+          projectId?: string | null
+          severity?: string
+          slug?: string
+        }
+        Relationships: []
+      }
       ForgeRun: {
         Row: {
+          costUsdTotal: number
           createdAt: string
           endedAt: string | null
           id: string
@@ -2790,13 +2824,17 @@ export type Database = {
           ownerId: string
           progress: number
           projectId: string
+          specId: string | null
           startedAt: string | null
           status: string
           title: string
+          tokensInTotal: number
+          tokensOutTotal: number
           trigger: string
           triggerRef: string | null
         }
         Insert: {
+          costUsdTotal?: number
           createdAt?: string
           endedAt?: string | null
           id?: string
@@ -2804,13 +2842,17 @@ export type Database = {
           ownerId: string
           progress?: number
           projectId: string
+          specId?: string | null
           startedAt?: string | null
           status: string
           title: string
+          tokensInTotal?: number
+          tokensOutTotal?: number
           trigger: string
           triggerRef?: string | null
         }
         Update: {
+          costUsdTotal?: number
           createdAt?: string
           endedAt?: string | null
           id?: string
@@ -2818,9 +2860,12 @@ export type Database = {
           ownerId?: string
           progress?: number
           projectId?: string
+          specId?: string | null
           startedAt?: string | null
           status?: string
           title?: string
+          tokensInTotal?: number
+          tokensOutTotal?: number
           trigger?: string
           triggerRef?: string | null
         }
@@ -2865,17 +2910,21 @@ export type Database = {
       ForgeTask: {
         Row: {
           agentId: string | null
+          agentProfile: string | null
           assigneeId: string | null
           costUsd: number
           currentTool: string | null
+          dependsOn: Json
           dueDate: string | null
           endedAt: string | null
           id: string
           meta: Json
           ord: number
+          passes: boolean | null
           progress: number
           projectId: string
           runId: string | null
+          specId: string | null
           startedAt: string | null
           status: string
           title: string
@@ -2883,20 +2932,26 @@ export type Database = {
           tokensOut: number
           type: string
           userStoryId: string | null
+          verifiable: Json
+          worktreePath: string | null
         }
         Insert: {
           agentId?: string | null
+          agentProfile?: string | null
           assigneeId?: string | null
           costUsd?: number
           currentTool?: string | null
+          dependsOn?: Json
           dueDate?: string | null
           endedAt?: string | null
           id?: string
           meta?: Json
           ord: number
+          passes?: boolean | null
           progress?: number
           projectId: string
           runId?: string | null
+          specId?: string | null
           startedAt?: string | null
           status: string
           title: string
@@ -2904,20 +2959,26 @@ export type Database = {
           tokensOut?: number
           type?: string
           userStoryId?: string | null
+          verifiable?: Json
+          worktreePath?: string | null
         }
         Update: {
           agentId?: string | null
+          agentProfile?: string | null
           assigneeId?: string | null
           costUsd?: number
           currentTool?: string | null
+          dependsOn?: Json
           dueDate?: string | null
           endedAt?: string | null
           id?: string
           meta?: Json
           ord?: number
+          passes?: boolean | null
           progress?: number
           projectId?: string
           runId?: string | null
+          specId?: string | null
           startedAt?: string | null
           status?: string
           title?: string
@@ -2925,6 +2986,8 @@ export type Database = {
           tokensOut?: number
           type?: string
           userStoryId?: string | null
+          verifiable?: Json
+          worktreePath?: string | null
         }
         Relationships: [
           {

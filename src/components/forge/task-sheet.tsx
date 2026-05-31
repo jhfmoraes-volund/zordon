@@ -20,10 +20,12 @@ import type {
   ForgeState,
   ForgeTask,
 } from "@/lib/forge/types";
+import { DiffTab } from "./diff-tab";
 
-type TabKey = "mind" | "tools" | "metrics";
+type TabKey = "mind" | "tools" | "metrics" | "diff";
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
+  queued: "na fila",
   idle: "ocioso",
   spawning: "iniciando",
   thinking: "pensando",
@@ -34,6 +36,7 @@ const STATUS_LABEL: Record<AgentStatus, string> = {
 };
 
 const STATUS_TONE: Record<AgentStatus, string> = {
+  queued: "oklch(0.5 0 0)",
   idle: "oklch(0.6 0 0)",
   spawning: "oklch(0.7 0.16 65)",
   thinking: "oklch(0.6 0.13 250)",
@@ -158,7 +161,7 @@ function TaskSheetBody({ taskId }: { taskId: string }) {
             endedAt={task.ended_at}
           />
         </div>
-        <TabBar tab={tab} setTab={setTab} />
+        <TabBar tab={tab} setTab={setTab} taskStatus={task.status} />
       </ResponsiveSheetHeader>
 
       <ResponsiveSheetBody className="flex-1 min-h-0 p-0">
@@ -166,8 +169,10 @@ function TaskSheetBody({ taskId }: { taskId: string }) {
           <MindTab events={events} status={task.status} />
         ) : tab === "tools" ? (
           <ToolsTab events={events} />
-        ) : (
+        ) : tab === "metrics" ? (
           <MetricsTab task={task} events={events} />
+        ) : (
+          <DiffTab taskId={taskId} />
         )}
       </ResponsiveSheetBody>
     </>
@@ -177,13 +182,29 @@ function TaskSheetBody({ taskId }: { taskId: string }) {
 function TabBar({
   tab,
   setTab,
+  taskStatus,
 }: {
   tab: TabKey;
   setTab: (t: TabKey) => void;
+  taskStatus: AgentStatus;
 }) {
+  const tabs: TabKey[] = ["mind", "tools", "metrics"];
+
+  // Only show diff tab if task is not queued (AC5: Aba só aparece se task.status != 'queued')
+  if (taskStatus !== "queued") {
+    tabs.push("diff");
+  }
+
+  const tabLabel: Record<TabKey, string> = {
+    mind: "Mind",
+    tools: "Tools",
+    metrics: "Metrics",
+    diff: "Diff",
+  };
+
   return (
     <div className="-mb-3 flex gap-1 border-b">
-      {(["mind", "tools", "metrics"] as TabKey[]).map((key) => (
+      {tabs.map((key) => (
         <button
           key={key}
           type="button"
@@ -194,7 +215,7 @@ function TabBar({
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          {key === "mind" ? "Mind" : key === "tools" ? "Tools" : "Metrics"}
+          {tabLabel[key]}
           {tab === key && (
             <span
               aria-hidden
