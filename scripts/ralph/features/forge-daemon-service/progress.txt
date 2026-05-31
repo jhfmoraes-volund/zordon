@@ -106,3 +106,27 @@ Check passou.
 iter 2026-05-31T21:55:10Z: PASS FDS-005
   files: scripts/forge/test-smoke-daemon-detach.sh
   learnings: smoke test subshell detach usa wait + trap cleanup; heartbeat DB check com retry loop 10s; daemon sobrevive exit do parent shell via nohup+disown
+---
+
+## Ralph Iteração 5 — Relatório Final
+
+**Story escolhida:** FDS-005 — Smoke test detach + sobrevivência
+
+**Implementação:**
+- Criado `scripts/forge/test-smoke-daemon-detach.sh` com teste automatizado end-to-end:
+  - Inicia daemon em um subshell isolado
+  - Aguarda finalização do subshell (via `wait`)
+  - Verifica que daemon continua rodando após morte do subshell (validação da técnica `nohup + disown`)
+  - Tenta verificar heartbeat no DB (com retry loop de 10s, opcional se `DIRECT_URL` disponível)
+  - Trap `cleanup()` garante que daemon é sempre parado ao final do teste
+  - Script executável (`chmod +x`)
+  - Output colorizado com status PASS/FAIL explícito
+
+**Verificações executadas:**
+1. ✓ `bash scripts/forge/test-smoke-daemon-detach.sh` → "✓ PASS: Daemon survived subshell exit"
+
+Check passou. O daemon sobreviveu corretamente ao exit do shell que o lançou.
+
+**Commit hash:** a3fbd68
+
+**Próximo passo:** **Feature COMPLETA** — todas as 5 stories (FDS-001 a FDS-005) agora têm `passes: true`. O PRD `forge-daemon-service` está pronto para Checkpoint Humano ou Closeout. Ralph pode mover o PRD de `in-progress/` para `blocked/` (checkpoint) ou `done/` (closeout).

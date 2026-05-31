@@ -1,0 +1,3 @@
+iter 2026-05-31T21:57:32Z: PASS ESS-001
+  files: supabase/migrations/20260601m_forge_event_kind_widen.sql
+  learnings: Constraint ForgeEvent_kind_check não existia previamente; migration rodou limpo. psql requer URL completa (não socket local).

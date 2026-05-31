@@ -14,13 +14,19 @@
         "COMMENT em ForgeEvent.kind referencia src/lib/forge/runtime/event-kinds.ts"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_constraint WHERE conname='ForgeEvent_kind_check'", "expected": "0" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM pg_constraint WHERE conname='ForgeEvent_kind_check'",
+          "expected": "0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 10,
-      "touches": ["supabase/migrations/20260601m_forge_event_kind_widen.sql"],
+      "touches": [
+        "supabase/migrations/20260601m_forge_event_kind_widen.sql"
+      ],
       "agentProfile": "db",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ESS-002",
@@ -33,12 +39,22 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/event-kinds.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -c 'autorun_started' src/lib/forge/runtime/event-kinds.ts", "expected": "1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/event-kinds.ts",
+          "expected": ""
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'autorun_started' src/lib/forge/runtime/event-kinds.ts",
+          "expected": "1"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 10,
-      "touches": ["src/lib/forge/runtime/event-kinds.ts"],
+      "touches": [
+        "src/lib/forge/runtime/event-kinds.ts"
+      ],
       "agentProfile": "code",
       "passes": false
     },
@@ -58,12 +74,24 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/event-writer.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -c 'createEmitter' src/lib/forge/runtime/event-writer.ts", "expected": "1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/event-writer.ts",
+          "expected": ""
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'createEmitter' src/lib/forge/runtime/event-writer.ts",
+          "expected": "1"
+        }
       ],
-      "dependsOn": ["ESS-002"],
+      "dependsOn": [
+        "ESS-002"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/forge/runtime/event-writer.ts"],
+      "touches": [
+        "src/lib/forge/runtime/event-writer.ts"
+      ],
       "agentProfile": "code",
       "passes": false
     },
@@ -79,13 +107,29 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -c 'createEmitter' scripts/forge/exec-prd.ts", "expected": "1" },
-        { "kind": "lint", "command_or_query": "grep -c 'function emit(' scripts/forge/exec-prd.ts", "expected": "0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts",
+          "expected": ""
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'createEmitter' scripts/forge/exec-prd.ts",
+          "expected": "1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'function emit(' scripts/forge/exec-prd.ts",
+          "expected": "0"
+        }
       ],
-      "dependsOn": ["ESS-003"],
+      "dependsOn": [
+        "ESS-003"
+      ],
       "estimateMinutes": 20,
-      "touches": ["scripts/forge/exec-prd.ts"],
+      "touches": [
+        "scripts/forge/exec-prd.ts"
+      ],
       "agentProfile": "code",
       "passes": false
     },
@@ -100,12 +144,24 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/exec-story.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -c 'createEmitter' scripts/forge/exec-story.ts", "expected": "1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit scripts/forge/exec-story.ts",
+          "expected": ""
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'createEmitter' scripts/forge/exec-story.ts",
+          "expected": "1"
+        }
       ],
-      "dependsOn": ["ESS-003"],
+      "dependsOn": [
+        "ESS-003"
+      ],
       "estimateMinutes": 20,
-      "touches": ["scripts/forge/exec-story.ts"],
+      "touches": [
+        "scripts/forge/exec-story.ts"
+      ],
       "agentProfile": "code",
       "passes": false
     },
@@ -119,11 +175,20 @@
         "Latência p95 emit→DB ≤ 500ms"
       ],
       "verifiable": [
-        { "kind": "manual_browser", "command_or_query": "bash scripts/forge/test-smoke-event-ssot.sh", "expected": "PASS" }
+        {
+          "kind": "manual_browser",
+          "command_or_query": "bash scripts/forge/test-smoke-event-ssot.sh",
+          "expected": "PASS"
+        }
       ],
-      "dependsOn": ["ESS-004", "ESS-005"],
+      "dependsOn": [
+        "ESS-004",
+        "ESS-005"
+      ],
       "estimateMinutes": 25,
-      "touches": ["scripts/forge/test-smoke-event-ssot.sh"],
+      "touches": [
+        "scripts/forge/test-smoke-event-ssot.sh"
+      ],
       "agentProfile": "ops",
       "passes": false
     }
