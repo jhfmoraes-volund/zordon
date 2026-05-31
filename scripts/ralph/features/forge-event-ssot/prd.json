@@ -93,7 +93,7 @@
         "src/lib/forge/runtime/event-writer.ts"
       ],
       "agentProfile": "code",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ESS-004",

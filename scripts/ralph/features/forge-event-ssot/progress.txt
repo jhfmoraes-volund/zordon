@@ -26,3 +26,25 @@ ESS-002 é a próxima story elegível (sem dependências, passes=false). Ela cri
 iter 2026-05-31T21:59:17Z: PASS ESS-002
   files: src/lib/forge/runtime/event-kinds.ts
   learnings: Runtime directory criado conforme estrutura do PRD. Type union literal com 18 kinds (autorun, story, claude, error, done). Tipecheck + grep passam limpo.
+---
+
+## Resumo da Iteração Ralph - forge-event-ssot
+
+**Story escolhida:** ESS-002 - Criar event-kinds.ts (taxonomy ao vivo)
+
+**Verificações executadas:**
+✅ `npx tsc --noEmit src/lib/forge/runtime/event-kinds.ts` — passou (sem erros de tipo)
+✅ `grep -c 'autorun_started' src/lib/forge/runtime/event-kinds.ts` — retornou 1 (conforme esperado)
+
+**Commit:** `9f97268` - ralph(forge-event-ssot): ESS-002 event-kinds.ts taxonomy
+
+**Arquivos modificados:**
+- `src/lib/forge/runtime/event-kinds.ts` (criado — type union literal com 18 event kinds)
+- `scripts/ralph/features/forge-event-ssot/prd.json` (ESS-002 marcado passes=true)
+- `scripts/ralph/features/forge-event-ssot/progress.txt` (atualizado com log da iteração)
+
+**Próximo passo sugerido:**
+ESS-003 é a próxima story elegível (depende de ESS-002 que acabou de passar). Ela implementa o `createEmitter()` em `src/lib/forge/runtime/event-writer.ts` com dual-write (jsonl síncrono + fila DB assíncrona), flush automático (250ms/100 eventos), backoff exponencial, e cap de 10k eventos.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS ESS-003
+  files: src/lib/forge/runtime/event-writer.ts
+  learnings: createEmitter implementado com dual-write (jsonl sync + DB async), flush periódico 250ms/100 eventos, backoff exponencial 1s→60s, cap 10k. Cast `as never` necessário pra tipo Json do Supabase.
