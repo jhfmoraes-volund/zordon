@@ -19,15 +19,15 @@ export async function GET(
 
   // Fetch all context links with ContextSource metadata
   const { data: links, error } = await supabase
-    .from("DesignSessionContextLink")
+    .from("EntityLink")
     .select(
       `
       id,
-      contextsourceid,
-      addedby,
-      addedat,
+      "contextSourceId",
+      "linkedById",
+      "linkedAt",
       weight,
-      ContextSource:contextsourceid (
+      ContextSource:ContextSource!EntityLink_contextSourceId_fkey (
         id,
         kind,
         title,
@@ -38,19 +38,20 @@ export async function GET(
       )
     `,
     )
-    .eq("designsessionid", sessionId)
-    .order("addedat", { ascending: false });
+    .eq("designSessionId", sessionId)
+    .not("contextSourceId", "is", null)
+    .order("linkedAt", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Transform to client-friendly shape
+  // Transform to client-friendly shape (output keys mantidos: addedBy/addedAt).
   const contextLinks = (links || []).map((link) => ({
     linkId: link.id,
-    sourceId: link.contextsourceid,
-    addedBy: link.addedby,
-    addedAt: link.addedat,
+    sourceId: link.contextSourceId,
+    addedBy: link.linkedById,
+    addedAt: link.linkedAt,
     weight: link.weight,
     source: link.ContextSource,
   }));

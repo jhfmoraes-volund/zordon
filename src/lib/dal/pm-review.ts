@@ -20,8 +20,9 @@ type Tables = Database["public"]["Tables"];
 // ─── Row types ────────────────────────────────────────────────────────────
 
 export type PMReviewRow = Tables["PMReview"]["Row"];
-export type PMReviewMeetingLinkRow = Tables["PMReviewMeetingLink"]["Row"];
-export type PMReviewTranscriptLinkRow = Tables["PMReviewTranscriptLink"]["Row"];
+// Links unificados em EntityLink (meeting/transcript distinguidos por ref preenchido).
+export type PMReviewMeetingLinkRow = Tables["EntityLink"]["Row"];
+export type PMReviewTranscriptLinkRow = Tables["EntityLink"]["Row"];
 export type PMReviewNoteRow = Tables["PMReviewNote"]["Row"];
 
 export type TranscriptWeight = "primary" | "supporting" | "background";
@@ -164,8 +165,9 @@ export async function listPMReviewsForProject(
       .is("dismissedAt", null),
   ]);
 
-  const meetingsByPm = countBy(meetingsRes.data ?? [], (r) => r.pmReviewId);
-  const transcriptsByPm = countBy(transcriptsRes.data ?? [], (r) => r.pmReviewId);
+  // pmReviewId é non-null em todas as rows retornadas pelos filtros .in() acima
+  const meetingsByPm = countBy(meetingsRes.data ?? [], (r) => r.pmReviewId as string);
+  const transcriptsByPm = countBy(transcriptsRes.data ?? [], (r) => r.pmReviewId as string);
   const notesByPmKind = new Map<string, Map<string, number>>();
   const totalsByPm = new Map<string, number>();
   for (const n of notesRes.data ?? []) {
@@ -282,21 +284,25 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
     reportMarkdown: row.reportMarkdown,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    linkedMeetings: (meetingsRes.data ?? []).map((l) => ({
-      meetingId: l.meetingId,
-      linkedAt: l.linkedAt,
-      linkedById: l.linkedById,
-      note: l.note,
-      meeting: l.meeting as PMReviewDetail["linkedMeetings"][number]["meeting"],
-    })),
-    linkedTranscripts: (transcriptsRes.data ?? []).map((l) => ({
-      transcriptRefId: l.transcriptRefId,
-      linkedAt: l.linkedAt,
-      linkedById: l.linkedById,
-      weight: (l.weight as TranscriptWeight | null) ?? null,
-      note: l.note,
-      transcript: l.transcript as PMReviewDetail["linkedTranscripts"][number]["transcript"],
-    })),
+    linkedMeetings: (meetingsRes.data ?? [])
+      .filter((l) => l.meetingId !== null)
+      .map((l) => ({
+        meetingId: l.meetingId as string,
+        linkedAt: l.linkedAt,
+        linkedById: l.linkedById,
+        note: l.note,
+        meeting: l.meeting as PMReviewDetail["linkedMeetings"][number]["meeting"],
+      })),
+    linkedTranscripts: (transcriptsRes.data ?? [])
+      .filter((l) => l.transcriptRefId !== null)
+      .map((l) => ({
+        transcriptRefId: l.transcriptRefId as string,
+        linkedAt: l.linkedAt,
+        linkedById: l.linkedById,
+        weight: (l.weight as TranscriptWeight | null) ?? null,
+        note: l.note,
+        transcript: l.transcript as PMReviewDetail["linkedTranscripts"][number]["transcript"],
+      })),
     notes,
     projectContext: {
       hasTranscripts: (transcriptsRes.data?.length ?? 0) > 0,

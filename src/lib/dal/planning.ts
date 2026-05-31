@@ -27,8 +27,9 @@ type Tables = Database["public"]["Tables"];
 // ─── Row types (re-exportados pra API/UI usarem) ──────────────────────────
 
 export type PlanningCeremonyRow = Tables["PlanningCeremony"]["Row"];
-export type PlanningMeetingLinkRow = Tables["PlanningMeetingLink"]["Row"];
-export type PlanningTranscriptLinkRow = Tables["PlanningTranscriptLink"]["Row"];
+// Links unificados em EntityLink (meeting/transcript distinguidos por ref preenchido).
+export type PlanningMeetingLinkRow = Tables["EntityLink"]["Row"];
+export type PlanningTranscriptLinkRow = Tables["EntityLink"]["Row"];
 export type PlanningContextNoteRow = Tables["PlanningContextNote"]["Row"];
 export type TranscriptRefRow = Tables["TranscriptRef"]["Row"];
 
@@ -283,7 +284,7 @@ export async function getPlanningById(
       transcriptRefId: l.transcriptRefId as string,
       linkedAt: l.linkedAt,
       linkedById: l.linkedById,
-      weight: l.weight,
+      weight: (l.weight as TranscriptWeight | null) ?? "supporting",
       note: l.note,
       transcript: l.transcript,
     }));
@@ -540,7 +541,7 @@ export async function linkMeetingToPlanning(input: {
 }): Promise<PlanningMeetingLinkRow> {
   const supabase = db();
   const { data, error } = await supabase
-    .from("PlanningMeetingLink")
+    .from("EntityLink")
     .insert({
       planningCeremonyId: input.planningCeremonyId,
       meetingId: input.meetingId,
@@ -559,7 +560,7 @@ export async function unlinkMeetingFromPlanning(
   meetingId: string,
 ): Promise<void> {
   const { error } = await db()
-    .from("PlanningMeetingLink")
+    .from("EntityLink")
     .delete()
     .eq("planningCeremonyId", planningCeremonyId)
     .eq("meetingId", meetingId);
@@ -575,7 +576,7 @@ export async function linkTranscriptToPlanning(input: {
 }): Promise<PlanningTranscriptLinkRow> {
   const supabase = db();
   const { data, error } = await supabase
-    .from("PlanningTranscriptLink")
+    .from("EntityLink")
     .insert({
       planningCeremonyId: input.planningCeremonyId,
       transcriptRefId: input.transcriptRefId,
@@ -595,7 +596,7 @@ export async function unlinkTranscriptFromPlanning(
   transcriptRefId: string,
 ): Promise<void> {
   const { error } = await db()
-    .from("PlanningTranscriptLink")
+    .from("EntityLink")
     .delete()
     .eq("planningCeremonyId", planningCeremonyId)
     .eq("transcriptRefId", transcriptRefId);

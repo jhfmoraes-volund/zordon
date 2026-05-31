@@ -157,10 +157,9 @@ export async function listPrds(
 
 // ─── CRUD: PlanningSessionContextLink ─────────────────────────────────────────
 
-export type PlanningSessionContextLinkRow =
-  Tables["PlanningSessionContextLink"]["Row"];
-export type PlanningSessionContextLinkInsert =
-  Tables["PlanningSessionContextLink"]["Insert"];
+// Links unificados em EntityLink (contexto distinguido por contextSourceId preenchido).
+export type PlanningSessionContextLinkRow = Tables["EntityLink"]["Row"];
+export type PlanningSessionContextLinkInsert = Tables["EntityLink"]["Insert"];
 
 /**
  * Link a ContextSource to a PlanningSession
@@ -171,11 +170,11 @@ export async function linkContextSource(
   linkedBy: string,
 ): Promise<PlanningSessionContextLinkRow> {
   const { data, error } = await db()
-    .from("PlanningSessionContextLink")
+    .from("EntityLink")
     .insert({
       planningSessionId,
       contextSourceId,
-      linkedBy,
+      linkedById: linkedBy,
     })
     .select("*")
     .single();
@@ -188,7 +187,7 @@ export async function linkContextSource(
  */
 export async function unlinkContextSource(linkId: string): Promise<void> {
   const { error } = await db()
-    .from("PlanningSessionContextLink")
+    .from("EntityLink")
     .delete()
     .eq("id", linkId);
   if (error) throw error;
@@ -201,9 +200,10 @@ export async function listLinkedContextSources(
   planningSessionId: string,
 ): Promise<PlanningSessionContextLinkRow[]> {
   const { data, error } = await db()
-    .from("PlanningSessionContextLink")
+    .from("EntityLink")
     .select("*")
     .eq("planningSessionId", planningSessionId)
+    .not("contextSourceId", "is", null)
     .order("linkedAt", { ascending: false });
   if (error) throw error;
   return data ?? [];
