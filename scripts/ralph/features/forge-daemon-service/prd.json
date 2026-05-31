@@ -122,7 +122,7 @@
         "docs/runbooks/forge-daemon-runbook.md"
       ],
       "agentProfile": "docs",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FDS-005",

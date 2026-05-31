@@ -56,3 +56,26 @@ Ambos os checks passaram.
 iter 2026-05-31T21:50:54Z: PASS FDS-003
   files: scripts/forge/daemon.ts
   learnings: handleShutdown() agora loga timestamp ISO com 'shutdown signal received' pra debug; tsc path aliases não resolvem sem tsconfig.json mas --project tsconfig.json resolve
+---
+
+## Ralph Iteração 3 - Relatório
+
+**Story escolhida:** FDS-003 — daemon.ts loga shutdown signal antes do exit
+
+**Implementação:**
+- Adicionei log de timestamp ISO com mensagem "shutdown signal received" na função `handleShutdown()` em `scripts/forge/daemon.ts` (linha 277-279)
+- A mensagem aparecerá em `~/.forge/daemon.log` quando o daemon receber SIGTERM/SIGINT via `daemon-ctl.sh stop`
+- Mudança cirúrgica: apenas 2 linhas adicionadas
+
+**Verificações executadas:**
+1. ✓ `npx tsc --noEmit --project tsconfig.json` → sem erros em daemon.ts (0 erros reportados)
+2. ✓ `grep -c 'shutdown signal received' scripts/forge/daemon.ts` → "1" (esperado: 1)
+
+Ambos os checks passaram.
+
+**Commit hash:** b50e9f0
+
+**Próximo passo:** Próximas stories elegíveis são FDS-004 (depende de FDS-002, já passou) e FDS-005 (depende de FDS-001, já passou). Ralph escolherá FDS-004 (menor lexicograficamente).
+iter $(date -u +%Y-%m-%dT%H:%M:%S)Z: PASS FDS-004
+  files: docs/runbooks/forge-daemon-runbook.md
+  learnings: Runbook específico criado (não bloco em AGENTS.md) — padrão: doc nova vai em subpasta certa de docs/runbooks/, nunca solto na raiz
