@@ -96,7 +96,7 @@
         "scripts/forge/daemon.ts"
       ],
       "agentProfile": "code",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FDS-004",

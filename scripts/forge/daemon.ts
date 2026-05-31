@@ -274,7 +274,9 @@ async function runDaemon() {
   let currentExecution: JobExecution | null = null;
 
   const handleShutdown = () => {
+    const ts = new Date().toISOString();
     console.log("");
+    console.log(dim(`[${ts}] shutdown signal received`));
     console.log(yellow("→ Shutdown requested..."));
     shutdownRequested = true;
 

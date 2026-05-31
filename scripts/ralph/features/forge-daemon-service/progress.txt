@@ -27,3 +27,32 @@ Both checks passed.
 iter 2026-05-31T21:48:48Z: PASS FDS-002
   files: scripts/forge/daemon-ctl.sh
   learnings: logs usa tail -F com -n <lines> + -f/--follow; restart chama stop + start sequencialmente; case statement passa args com shift + "$@"
+---
+
+## Iteração Ralph 2 - Relatório
+
+**Story escolhida:** FDS-002 — Adicionar comandos logs e restart
+
+**Implementação:**
+- Adicionei função `show_logs()` ao `scripts/forge/daemon-ctl.sh`:
+  - Suporta `-n <lines>` para especificar número de linhas (default: 50)
+  - Suporta `-f/--follow` para seguir logs em tempo real (`tail -F`)
+  - Valida existência do arquivo de log
+- Adicionei função `restart_daemon()`:
+  - Chama `stop_daemon` (bloqueia até morte do processo)
+  - Sleep 1s para garantir limpeza
+  - Chama `start_daemon` (bloqueia até novo PID)
+- Atualizei o case statement principal para incluir `logs)` e `restart)` com passagem de argumentos via `shift + "$@"`
+
+**Verificações executadas:**
+1. ✓ `grep -cE 'logs\)|restart\)' scripts/forge/daemon-ctl.sh` → "2" (esperado: 2)
+2. ✓ `shellcheck scripts/forge/daemon-ctl.sh 2>&1 | wc -l` → "0" (esperado: 0)
+
+Ambos os checks passaram.
+
+**Commit hash:** 6170a5b
+
+**Próximo passo:** Próximas stories elegíveis são FDS-003 (sem dependências) e FDS-004 (agora desbloqueada, depende de FDS-002). Ralph escolherá FDS-003 (menor lexicograficamente).
+iter 2026-05-31T21:50:54Z: PASS FDS-003
+  files: scripts/forge/daemon.ts
+  learnings: handleShutdown() agora loga timestamp ISO com 'shutdown signal received' pra debug; tsc path aliases não resolvem sem tsconfig.json mas --project tsconfig.json resolve
