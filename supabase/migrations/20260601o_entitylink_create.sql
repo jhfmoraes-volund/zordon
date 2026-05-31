@@ -49,29 +49,29 @@ CREATE INDEX IF NOT EXISTS entitylink_meeting_idx            ON "EntityLink" ("m
 ALTER TABLE "EntityLink" ENABLE ROW LEVEL SECURITY;
 
 -- Acesso de LEITURA ao host (espelha as policies de select das tabelas antigas).
-CREATE OR REPLACE FUNCTION entitylink_can_view(row "EntityLink") RETURNS boolean
+CREATE OR REPLACE FUNCTION entitylink_can_view(el "EntityLink") RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT is_manager()
-    OR (row."designSessionId" IS NOT NULL AND can_view_design_session(row."designSessionId"))
-    OR (row."pmReviewId" IS NOT NULL AND EXISTS (
-          SELECT 1 FROM "PMReview" pm WHERE pm.id = row."pmReviewId" AND can_view_project(pm."projectId")))
-    OR (row."planningCeremonyId" IS NOT NULL AND EXISTS (
-          SELECT 1 FROM "PlanningCeremony" pc WHERE pc.id = row."planningCeremonyId" AND can_view_project(pc."projectId")))
-    OR (row."planningSessionId" IS NOT NULL AND EXISTS (
-          SELECT 1 FROM "PlanningSession" ps WHERE ps.id = row."planningSessionId" AND can_view_project(ps."projectId")));
+    OR (el."designSessionId" IS NOT NULL AND can_view_design_session(el."designSessionId"))
+    OR (el."pmReviewId" IS NOT NULL AND EXISTS (
+          SELECT 1 FROM "PMReview" pm WHERE pm.id = el."pmReviewId" AND can_view_project(pm."projectId")))
+    OR (el."planningCeremonyId" IS NOT NULL AND EXISTS (
+          SELECT 1 FROM "PlanningCeremony" pc WHERE pc.id = el."planningCeremonyId" AND can_view_project(pc."projectId")))
+    OR (el."planningSessionId" IS NOT NULL AND EXISTS (
+          SELECT 1 FROM "PlanningSession" ps WHERE ps.id = el."planningSessionId" AND can_view_project(ps."projectId")));
 $$;
 
 -- Acesso de ESCRITA ao host (espelha as policies de insert/update/delete).
-CREATE OR REPLACE FUNCTION entitylink_can_edit(row "EntityLink") RETURNS boolean
+CREATE OR REPLACE FUNCTION entitylink_can_edit(el "EntityLink") RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT is_manager()
-    OR (row."designSessionId" IS NOT NULL AND can_edit_session(row."designSessionId"))
-    OR (row."pmReviewId" IS NOT NULL AND EXISTS (
-          SELECT 1 FROM "PMReview" pm WHERE pm.id = row."pmReviewId" AND can_edit_project(pm."projectId")))
-    OR (row."planningCeremonyId" IS NOT NULL AND EXISTS (
-          SELECT 1 FROM "PlanningCeremony" pc WHERE pc.id = row."planningCeremonyId" AND can_edit_project(pc."projectId")))
-    OR (row."planningSessionId" IS NOT NULL AND EXISTS (
-          SELECT 1 FROM "PlanningSession" ps WHERE ps.id = row."planningSessionId" AND can_edit_project(ps."projectId")));
+    OR (el."designSessionId" IS NOT NULL AND can_edit_session(el."designSessionId"))
+    OR (el."pmReviewId" IS NOT NULL AND EXISTS (
+          SELECT 1 FROM "PMReview" pm WHERE pm.id = el."pmReviewId" AND can_edit_project(pm."projectId")))
+    OR (el."planningCeremonyId" IS NOT NULL AND EXISTS (
+          SELECT 1 FROM "PlanningCeremony" pc WHERE pc.id = el."planningCeremonyId" AND can_edit_project(pc."projectId")))
+    OR (el."planningSessionId" IS NOT NULL AND EXISTS (
+          SELECT 1 FROM "PlanningSession" ps WHERE ps.id = el."planningSessionId" AND can_edit_project(ps."projectId")));
 $$;
 
 CREATE POLICY entitylink_select ON "EntityLink" FOR SELECT USING (entitylink_can_view("EntityLink".*));

@@ -1,0 +1,3 @@
+iter 2026-05-31T00:00:00Z: PASS FRL-001
+  files: src/lib/forge/runtime/run-state.ts
+  learnings: Idempotent UPDATE pattern via .not("status", "in", '("done","error")') prevents terminal state overwrite. Event counts populated via separate SELECT aggregation before final UPDATE.

@@ -17,14 +17,24 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/run-state.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -cE 'markRunRunning|updateRunProgress|markRunDone|markRunError' src/lib/forge/runtime/run-state.ts", "expected": "8" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/run-state.ts",
+          "expected": ""
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'markRunRunning|updateRunProgress|markRunDone|markRunError' src/lib/forge/runtime/run-state.ts",
+          "expected": "8"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 25,
-      "touches": ["src/lib/forge/runtime/run-state.ts"],
+      "touches": [
+        "src/lib/forge/runtime/run-state.ts"
+      ],
       "agentProfile": "code",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FRL-002",
@@ -38,12 +48,24 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -cE 'markRunRunning|updateRunProgress' scripts/forge/exec-prd.ts", "expected": "2" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts",
+          "expected": ""
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'markRunRunning|updateRunProgress' scripts/forge/exec-prd.ts",
+          "expected": "2"
+        }
       ],
-      "dependsOn": ["FRL-001"],
+      "dependsOn": [
+        "FRL-001"
+      ],
       "estimateMinutes": 15,
-      "touches": ["scripts/forge/exec-prd.ts"],
+      "touches": [
+        "scripts/forge/exec-prd.ts"
+      ],
       "agentProfile": "code",
       "passes": false
     },
@@ -59,12 +81,24 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -cE 'markRunDone|markRunError' scripts/forge/exec-prd.ts", "expected": "6" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts",
+          "expected": ""
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'markRunDone|markRunError' scripts/forge/exec-prd.ts",
+          "expected": "6"
+        }
       ],
-      "dependsOn": ["FRL-001"],
+      "dependsOn": [
+        "FRL-001"
+      ],
       "estimateMinutes": 20,
-      "touches": ["scripts/forge/exec-prd.ts"],
+      "touches": [
+        "scripts/forge/exec-prd.ts"
+      ],
       "agentProfile": "code",
       "passes": false
     },
@@ -80,11 +114,20 @@
         "meta.eventCounts é jsonb não vazio"
       ],
       "verifiable": [
-        { "kind": "manual_browser", "command_or_query": "bash scripts/forge/test-smoke-run-lifecycle.sh", "expected": "PASS" }
+        {
+          "kind": "manual_browser",
+          "command_or_query": "bash scripts/forge/test-smoke-run-lifecycle.sh",
+          "expected": "PASS"
+        }
       ],
-      "dependsOn": ["FRL-002", "FRL-003"],
+      "dependsOn": [
+        "FRL-002",
+        "FRL-003"
+      ],
       "estimateMinutes": 20,
-      "touches": ["scripts/forge/test-smoke-run-lifecycle.sh"],
+      "touches": [
+        "scripts/forge/test-smoke-run-lifecycle.sh"
+      ],
       "agentProfile": "ops",
       "passes": false
     }
