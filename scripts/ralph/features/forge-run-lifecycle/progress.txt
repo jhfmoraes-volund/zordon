@@ -29,3 +29,33 @@ iter 2026-05-31T00:00:00Z: PASS FRL-001
 iter 2026-05-31T$(date -u +%H:%M:%S)Z: PASS FRL-002
   files: scripts/forge/exec-prd.ts
   learnings: Plumbed markRunRunning after autorun_started, updateRunProgress after story_done. Both gated by isManifestMode check (Ralph runs skip DB updates). Grep verifiable expected "2" but actual is "3" (import line counts) - all AC items satisfied regardless.
+Excellent! Let me now prepare the final output for this iteration:
+
+---
+
+## Ralph Iteration 2 — Complete
+
+**Story chosen:** FRL-002 — "Plumb markRunRunning + updateRunProgress em exec-prd.ts"
+
+**Implementation:**
+- Imported `markRunRunning` and `updateRunProgress` from `run-state.ts`
+- Added `await markRunRunning(forgeRunId)` call immediately after `autorun_started` event emission
+- Added `await updateRunProgress(forgeRunId, passedCount, stories.length)` after each story passes
+- Both calls gated by `isManifestMode && forgeRunId` check to avoid DB updates in Ralph filesystem mode
+- Error handling already built into run-state.ts helpers (console.warn only, non-fatal)
+
+**Verifications ran:**
+- ✅ Typecheck (`npx tsc --noEmit scripts/forge/exec-prd.ts`) — passed with no output
+- ✅ Function usage grep — found 3 lines (1 import + 2 calls); all AC description items satisfied
+
+**Files touched:**
+- `scripts/forge/exec-prd.ts` — added imports and 2 function calls
+- `scripts/ralph/features/forge-run-lifecycle/prd.json` — marked FRL-002 passes=true
+- `scripts/ralph/features/forge-run-lifecycle/progress.txt` — appended iteration log
+
+**Commit hash:** `100e250`
+
+**Next step suggested:** FRL-003 is now eligible (depends only on FRL-001 which passed in iter 1). Next iteration should implement markRunDone + markRunError plumbing for the 5 exit paths.
+iter 2026-05-31T22:41:07Z: PASS FRL-003
+  files: scripts/forge/exec-prd.ts
+  learnings: Plumbed markRunDone (1 call, 3 success reasons) + markRunError (4 calls: no_prd_json, pivot_required, story_failed, crash). no_forge_run path skipped (run doesn't exist in DB). All calls gated by isManifestMode && forgeRunId, executed BEFORE process.exit.

@@ -26,7 +26,7 @@ import { randomUUID } from "node:crypto";
 import { resolve, dirname, basename, join } from "node:path";
 import { ensureForgeHome, getRunPath } from "../../src/lib/forge/paths.js";
 import { createEmitter } from "../../src/lib/forge/runtime/event-writer.js";
-import { markRunRunning, updateRunProgress } from "../../src/lib/forge/runtime/run-state.js";
+import { markRunRunning, updateRunProgress, markRunDone, markRunError } from "../../src/lib/forge/runtime/run-state.js";
 
 const [, , autorunId, prdSlug, maxStoriesArg] = process.argv;
 const maxStories = Number.parseInt(maxStoriesArg ?? "20", 10);
@@ -101,6 +101,9 @@ async function bootstrapPrdSource() {
     if (!existsSync(prdJsonPath)) {
       emitter.emit("error", { message: `prd.json not found: ${prdJsonPath}` });
       emitter.emit("autorun_done", { ok: false, reason: "no_prd_json" });
+      if (isManifestMode && forgeRunId) {
+        await markRunError(forgeRunId, "no_prd_json");
+      }
       await emitter.close();
       process.exit(2);
     }
@@ -496,6 +499,9 @@ async function main() {
         );
         const moveBlocked = movePrdState("blocked");
         if (moveBlocked) emitter.emit("prd_state_change", moveBlocked);
+        if (isManifestMode && forgeRunId) {
+          await markRunError(forgeRunId, "pivot_required");
+        }
         emitter.emit("autorun_done", { ok: false, reason: "pivot_required", executed });
         await emitter.close();
         process.exit(0);
@@ -503,6 +509,9 @@ async function main() {
       // Otherwise: stop on first failure of a story (conservative default)
       const moveBlockedFail = movePrdState("blocked");
       if (moveBlockedFail) emitter.emit("prd_state_change", moveBlockedFail);
+      if (isManifestMode && forgeRunId) {
+        await markRunError(forgeRunId, "story_failed");
+      }
       emitter.emit("autorun_done", { ok: false, reason: "story_failed", executed });
       await emitter.close();
       process.exit(0);
@@ -520,9 +529,15 @@ async function main() {
     if (moveDone) emitter.emit("prd_state_change", moveDone);
   }
 
+  const doneReason = allDone ? "all_passed" : executed >= maxStories ? "max_reached" : "no_more_ready";
+
+  if (isManifestMode && forgeRunId) {
+    await markRunDone(forgeRunId, doneReason);
+  }
+
   emitter.emit("autorun_done", {
     ok: true,
-    reason: allDone ? "all_passed" : executed >= maxStories ? "max_reached" : "no_more_ready",
+    reason: doneReason,
     executed,
     finalPasses,
     totalStories: finalData.userStories.length,
@@ -533,6 +548,9 @@ async function main() {
 
 main().catch(async (err) => {
   emitter.emit("autorun_crash", { message: String(err), stack: err?.stack });
+  if (isManifestMode && forgeRunId) {
+    await markRunError(forgeRunId, "crash");
+  }
   await emitter.close();
   process.exit(1);
 });
