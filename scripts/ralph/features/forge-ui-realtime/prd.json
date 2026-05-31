@@ -62,7 +62,7 @@
         "src/components/forge/run-event-stream.tsx"
       ],
       "agentProfile": "ui",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FUI-003",

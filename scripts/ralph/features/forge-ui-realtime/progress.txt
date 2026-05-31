@@ -1,3 +1,20 @@
 iter 2026-05-31T22:50:02Z: PASS FUI-001
   files: supabase/migrations/20260601p_forge_realtime_publication.sql
   learnings: Tables already in publication; idempotent DO block ensures no error on re-run
+---
+
+## Iteration complete
+
+**Story:** FUI-001 — Garantir ForgeEvent + ForgeRun na publication Realtime
+
+**Verification results:**
+- ✅ Migration file created: `supabase/migrations/20260601p_forge_realtime_publication.sql`
+- ✅ SQL check passed: `SELECT count(*)` returned `2` (both tables in publication)
+- ✅ Idempotency verified: migration runs without error when re-executed
+
+**Commit:** `0bf11e5` — ralph(forge-ui-realtime): FUI-001 ForgeEvent+ForgeRun in Realtime publication
+
+**Next step:** Story **FUI-002** (Implementar RunEventStream client component) is now eligible, as its only dependency (FUI-001) has `passes: true`.
+iter 2026-05-31T23:15:00Z: PASS FUI-002
+  files: src/components/forge/run-event-stream.tsx, src/app/api/forge/runs/[id]/events/route.ts
+  learnings: Created RunEventStream with Realtime subscription pattern matching run-kanban.tsx; added /events API route; connectionState tracks realtime/polling/disconnected with 5s fallback
