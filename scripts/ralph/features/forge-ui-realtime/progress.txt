@@ -47,3 +47,30 @@ iter 2026-05-31T23:15:00Z: PASS FUI-002
 iter 2026-05-31T22:58:33Z: PASS FUI-003
   files: src/app/forge-spike/runs/[id]/page.tsx
   learnings: Converted page from client to server component; removed EventSource/SSE; uses createClient from @/lib/supabase/server
+Perfect! Let me summarize the iteration output:
+
+---
+
+## Iteration complete
+
+**Story:** FUI-003 — Migrar page.tsx pra server thin + client island
+
+**Verification results:**
+- ✅ Typecheck passed: `npx tsc --noEmit` completed without errors
+- ✅ SSE code removed: 0 occurrences of `EventSource` or `text/event-stream`
+- ✅ RunEventStream present: Component imported and used in page
+
+**Changes:**
+- Converted `/forge-spike/runs/[id]/page.tsx` from client component to server component
+- Removed all `EventSource` and SSE streaming logic
+- Added server-side fetch of `ForgeRun` metadata using `createClient()` from `@/lib/supabase/server`
+- Replaced inline event rendering with `<RunEventStream runId={runId} />` client island
+- Updated header to show run status, progress, and creation time from DB
+- Preserved back navigation and error handling
+
+**Commit:** `d7cf410` — ralph(forge-ui-realtime): FUI-003 server thin page + RunEventStream client island
+
+**Next step:** Story **FUI-004** (Deletar rotas SSE e autoruns/[id]) is now eligible, as its only dependency (FUI-003) has `passes: true`.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS FUI-004
+  files: src/app/api/forge/runs/[id]/stream/route.ts (deleted), src/app/api/forge/autoruns/[id]/route.ts (deleted)
+  learnings: SSE routes removed cleanly; typecheck passes; directories auto-cleaned

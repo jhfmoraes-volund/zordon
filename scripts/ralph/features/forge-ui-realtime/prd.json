@@ -132,7 +132,7 @@
         "src/app/api/forge/autoruns/[id]/route.ts"
       ],
       "agentProfile": "code",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FUI-005",
