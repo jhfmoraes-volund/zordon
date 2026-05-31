@@ -6,6 +6,7 @@ export type TabKey =
   | "sessions"
   | "ceremonies"
   | "wiki"
+  | "forge"
   | "settings";
 
 export type ProjectMeta = {

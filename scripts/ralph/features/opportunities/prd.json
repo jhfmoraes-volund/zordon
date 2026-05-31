@@ -9,7 +9,7 @@
       "id": "OPP-001",
       "title": "Migration: Opportunity table + enum",
       "description": "Cria enum OpportunityStatus e tabela Opportunity (PRD §7.1) com checks (impact/effort BETWEEN 1 AND 5), FKs (clientId ON DELETE CASCADE, sources ON DELETE SET NULL, promotedProjectId ON DELETE SET NULL, createdBy ON DELETE RESTRICT) e índices parciais.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo supabase/migrations/20260530_opportunity_table.sql existe com DDL do §7.1",
         "psql roda sem erro",
@@ -49,7 +49,7 @@
       "id": "OPP-002",
       "title": "Migration: can_edit_client helper",
       "description": "Cria função SECURITY DEFINER can_edit_client(uuid) per PRD §7.2 — manager bypass + role check via ProjectAccess JOIN Project (role IN contributor,lead). GRANT EXECUTE TO authenticated.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo supabase/migrations/20260530b_can_edit_client_helper.sql existe",
         "Função can_edit_client existe com prosecdef=true (SECURITY DEFINER)",
@@ -83,7 +83,7 @@
       "id": "OPP-003",
       "title": "Migration: Opportunity RLS policies",
       "description": "Cria 4 policies em Opportunity per PRD §7.3 — opp_select (qualquer ProjectAccess no mesmo clientId OU manager), opp_insert/update/delete (can_edit_client check).",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo supabase/migrations/20260530c_opportunity_rls.sql existe",
         "4 policies registradas em pg_policy pra Opportunity",
@@ -102,7 +102,10 @@
           "expected": "opp_delete\\nopp_insert\\nopp_select\\nopp_update"
         }
       ],
-      "dependsOn": ["OPP-001", "OPP-002"],
+      "dependsOn": [
+        "OPP-001",
+        "OPP-002"
+      ],
       "estimateMinutes": 15,
       "touches": [
         "supabase/migrations/20260530c_opportunity_rls.sql"
@@ -112,7 +115,7 @@
       "id": "OPP-004",
       "title": "Migration: touch updatedAt trigger",
       "description": "Cria função touch_opportunity_updated_at + trigger BEFORE UPDATE pra manter Opportunity.updatedAt sempre fresh, per PRD §7.4.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo supabase/migrations/20260530d_opportunity_touch_trigger.sql existe",
         "Trigger trg_opportunity_touch_updated_at registrado em Opportunity",
@@ -130,7 +133,9 @@
           "expected": "trg_opportunity_touch_updated_at"
         }
       ],
-      "dependsOn": ["OPP-001"],
+      "dependsOn": [
+        "OPP-001"
+      ],
       "estimateMinutes": 10,
       "touches": [
         "supabase/migrations/20260530d_opportunity_touch_trigger.sql"
@@ -140,7 +145,7 @@
       "id": "OPP-005",
       "title": "Regenerar database.types.ts",
       "description": "Roda supabase gen types e committa atualização contendo tipos Opportunity (Row/Insert/Update) + enum OpportunityStatus.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "src/lib/supabase/database.types.ts contém 'Opportunity:' como key em Tables.public",
         "Enum OpportunityStatus exposto em Enums.public",
@@ -163,7 +168,12 @@
           "expected": "no-errors"
         }
       ],
-      "dependsOn": ["OPP-001", "OPP-002", "OPP-003", "OPP-004"],
+      "dependsOn": [
+        "OPP-001",
+        "OPP-002",
+        "OPP-003",
+        "OPP-004"
+      ],
       "estimateMinutes": 10,
       "touches": [
         "src/lib/supabase/database.types.ts"
@@ -173,7 +183,7 @@
       "id": "OPP-006",
       "title": "DAL: opportunities.ts",
       "description": "Cria src/lib/dal/opportunities.ts com funções tipadas listByClient, getById, create, update, softReject, promote. promote() é idempotente (early return se promotedProjectId já existe) e roda transação: INSERT Project + INSERT DesignSession kind=inception + UPDATE Opportunity status=in_project + promotedProjectId.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo src/lib/dal/opportunities.ts existe",
         "Exporta listByClient(clientId), getById(id), create(input), update(id, patch), softReject(id), promote(id, projectName?)",
@@ -192,7 +202,9 @@
           "expected": "6"
         }
       ],
-      "dependsOn": ["OPP-005"],
+      "dependsOn": [
+        "OPP-005"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/lib/dal/opportunities.ts"
@@ -202,7 +214,7 @@
       "id": "OPP-007",
       "title": "API GET/POST /api/clients/[id]/opportunities",
       "description": "Cria src/app/api/clients/[id]/opportunities/route.ts. GET retorna lista ordenada. POST valida Zod (title obrigatório, impact/effort 1-5, status optional default discovery, sources optional) e cria Opportunity via DAL.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo route.ts existe",
         "GET handler retorna { opportunities: Opportunity[] } com status 200",
@@ -226,7 +238,9 @@
           "expected": ">=1"
         }
       ],
-      "dependsOn": ["OPP-006"],
+      "dependsOn": [
+        "OPP-006"
+      ],
       "estimateMinutes": 25,
       "touches": [
         "src/app/api/clients/[id]/opportunities/route.ts"
@@ -236,7 +250,7 @@
       "id": "OPP-008",
       "title": "API PATCH/DELETE /api/opportunities/[id]",
       "description": "Cria src/app/api/opportunities/[id]/route.ts. PATCH aceita partial Zod (todos campos opcionais). DELETE hard delete (UI usa softReject normalmente).",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo route.ts existe",
         "PATCH retorna { opportunity } 200 e respeita RLS",
@@ -255,7 +269,9 @@
           "expected": "2"
         }
       ],
-      "dependsOn": ["OPP-006"],
+      "dependsOn": [
+        "OPP-006"
+      ],
       "estimateMinutes": 20,
       "touches": [
         "src/app/api/opportunities/[id]/route.ts"
@@ -265,7 +281,7 @@
       "id": "OPP-009",
       "title": "API POST /api/opportunities/[id]/promote",
       "description": "Cria src/app/api/opportunities/[id]/promote/route.ts. Body Zod { projectName?: string (max 200) }. Chama DAL.promote() que é idempotente. Retorna { projectId, designSessionId } (201 se criou, 200 se já promovida).",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo route.ts existe",
         "POST retorna { projectId, designSessionId }",
@@ -284,7 +300,9 @@
           "expected": ">=2"
         }
       ],
-      "dependsOn": ["OPP-006"],
+      "dependsOn": [
+        "OPP-006"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/app/api/opportunities/[id]/promote/route.ts"
@@ -294,7 +312,7 @@
       "id": "OPP-010",
       "title": "Hook useOpportunities (optimistic)",
       "description": "Cria src/hooks/use-opportunities.ts envolvendo useOptimisticCollection. Reducer customizado pra mutations: create (filtra temp + append real no reconcile), patch, softReject (PATCH status=rejected), promote (PATCH status=in_project + promotedProjectId).",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo existe e exporta useOpportunities(clientId, initial)",
         "Suporta mutations: create, patch, softReject, promote",
@@ -313,7 +331,11 @@
           "expected": ">=1"
         }
       ],
-      "dependsOn": ["OPP-007", "OPP-008", "OPP-009"],
+      "dependsOn": [
+        "OPP-007",
+        "OPP-008",
+        "OPP-009"
+      ],
       "estimateMinutes": 25,
       "touches": [
         "src/hooks/use-opportunities.ts"
@@ -323,7 +345,7 @@
       "id": "OPP-011",
       "title": "OpportunityCard component",
       "description": "Cria src/components/opportunities/opportunity-card.tsx — derivado de sticky-card.tsx. Mostra título (truncado), descrição (1 linha), StatusChip, badge de score (impact*5 - effort), link pro Project promovido se existir. onClick abre OpportunitySheet em modo edit.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo existe",
         "Recebe prop opportunity: Opportunity e onClick handler",
@@ -342,7 +364,9 @@
           "expected": ">=2"
         }
       ],
-      "dependsOn": ["OPP-010"],
+      "dependsOn": [
+        "OPP-010"
+      ],
       "estimateMinutes": 25,
       "touches": [
         "src/components/opportunities/opportunity-card.tsx"
@@ -352,7 +376,7 @@
       "id": "OPP-012",
       "title": "OpportunityMatrix component (2×2 board)",
       "description": "Cria src/components/opportunities/opportunity-matrix.tsx — board 2×2 com 4 quadrantes (Quick Wins, Big Bets, Fill-ins, Money Pits) conforme PRD §9. Distribui cards por impact/effort. Cada quadrante mostra top-5 + 'ver mais (N)'. Esconde rejected.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo existe",
         "4 quadrantes renderizados com labels corretos",
@@ -371,7 +395,9 @@
           "expected": "4"
         }
       ],
-      "dependsOn": ["OPP-011"],
+      "dependsOn": [
+        "OPP-011"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/components/opportunities/opportunity-matrix.tsx"
@@ -381,7 +407,7 @@
       "id": "OPP-013",
       "title": "OpportunityList component (stack-ranked)",
       "description": "Cria src/components/opportunities/opportunity-list.tsx — lista priorizada por priorityRank NULLS LAST, depois score DESC, depois createdAt DESC. Toggle 'Mostrar descartadas' revela rejected. Botão Promove inline pra cards approved.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo existe",
         "Ordem segue priorityRank NULLS LAST, score DESC, createdAt DESC",
@@ -400,7 +426,9 @@
           "expected": ">=2"
         }
       ],
-      "dependsOn": ["OPP-011"],
+      "dependsOn": [
+        "OPP-011"
+      ],
       "estimateMinutes": 25,
       "touches": [
         "src/components/opportunities/opportunity-list.tsx"
@@ -410,7 +438,7 @@
       "id": "OPP-014",
       "title": "OpportunitySheet — edit form",
       "description": "Cria src/components/opportunities/opportunity-sheet.tsx — ResponsiveSheet size=md com Field/FormBody (title, description, impact 1-5 select, effort 1-5 select, status StatusChipSelect, sourceMeetingId, sourceDesignSessionId). Footer: [Descartar | Salvar | Promover→]. Botão Promover só pra status=approved, abre ConfirmDialog.",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo existe",
         "Usa ResponsiveSheet (não Sheet/Dialog nus)",
@@ -430,7 +458,9 @@
           "expected": ">=3"
         }
       ],
-      "dependsOn": ["OPP-010"],
+      "dependsOn": [
+        "OPP-010"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/components/opportunities/opportunity-sheet.tsx"
@@ -440,7 +470,7 @@
       "id": "OPP-015",
       "title": "OpportunitiesWidget + wire-up em /clients/[id]",
       "description": "Cria src/components/opportunities/opportunities-widget.tsx (client component) que orquestra Matrix + List + Sheet, e edita src/app/(dashboard)/clients/[id]/page.tsx pra fazer server-fetch via DAL e passar pra widget. Inclui botão '+ Nova oportunidade' (abre sheet em modo create).",
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo widget existe",
         "page.tsx do client renderiza widget abaixo do header e acima da lista de projetos",
@@ -465,7 +495,11 @@
           "expected": "Card visível na matriz no quadrante correto + lista re-ranked"
         }
       ],
-      "dependsOn": ["OPP-012", "OPP-013", "OPP-014"],
+      "dependsOn": [
+        "OPP-012",
+        "OPP-013",
+        "OPP-014"
+      ],
       "estimateMinutes": 30,
       "touches": [
         "src/components/opportunities/opportunities-widget.tsx",

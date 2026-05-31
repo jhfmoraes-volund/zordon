@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 type ForgeEvent = {
   runId?: string;
@@ -51,6 +52,8 @@ function fmtRelative(iso: string): string {
 }
 
 export default function ForgeHomePage() {
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
   const [pingState, setPingState] = useState<PingState>("unknown");
   const [prds, setPrds] = useState<PrdSummary[] | null>(null);
   const [debugRunId, setDebugRunId] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export default function ForgeHomePage() {
   const [debugSpawning, setDebugSpawning] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   // Probe ping
@@ -79,6 +83,26 @@ export default function ForgeHomePage() {
     };
   }, []);
 
+  // Fetch project name if projectId is present
+  useEffect(() => {
+    if (!projectId) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const json = await r.json();
+        if (alive) setProjectName(json.name);
+      } catch {
+        if (alive) setProjectName(null);
+      }
+    };
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
+
   // Fetch PRDs
   useEffect(() => {
     let alive = true;
@@ -87,7 +111,17 @@ export default function ForgeHomePage() {
         const r = await fetch("/api/forge/prds", { cache: "no-store" });
         if (!r.ok) return;
         const json = await r.json();
-        if (alive) setPrds(json.prds);
+        // Filter by project if projectId is present
+        let filtered = json.prds;
+        if (projectId && projectName) {
+          const projectSlug = projectName
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-z0-9-]/g, "");
+          filtered = json.prds.filter((p: PrdSummary) => p.slug.includes(projectSlug));
+        }
+        if (alive) setPrds(filtered);
       } catch {
         // silent
       }
@@ -98,7 +132,7 @@ export default function ForgeHomePage() {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [projectId, projectName]);
 
   // EventSource for debug run
   useEffect(() => {
@@ -213,6 +247,38 @@ export default function ForgeHomePage() {
         </div>
       </div>
 
+      {/* Project filter banner */}
+      {projectId && projectName && (
+        <div
+          style={{
+            padding: 12,
+            background: "rgba(59,130,246,0.12)",
+            border: "1px solid rgba(59,130,246,0.4)",
+            borderRadius: 6,
+            fontSize: 13,
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ color: "#93c5fd" }}>
+            Filtering by project: <strong style={{ color: "#60a5fa" }}>{projectName}</strong>
+          </span>
+          <Link
+            href="/forge-spike"
+            style={{
+              color: "#60a5fa",
+              textDecoration: "none",
+              fontWeight: 600,
+              fontSize: 12,
+            }}
+          >
+            Clear filter →
+          </Link>
+        </div>
+      )}
+
       {error && (
         <div
           style={{
@@ -313,7 +379,7 @@ export default function ForgeHomePage() {
           }}
         >
           <NavCard
-            href="/forge-spike/prds"
+            href={projectId ? `/forge-spike/prds?projectId=${projectId}` : "/forge-spike/prds"}
             title="PRD Governance"
             description="Kanban filesystem-as-state · 6 estados · HITL banners"
             cta="Open kanban →"

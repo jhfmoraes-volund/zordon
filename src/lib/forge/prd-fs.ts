@@ -356,6 +356,39 @@ export async function readPrd(slug: string): Promise<PrdDetail | null> {
 export { resolve as resolvePath };
 
 /**
+ * Helper: convert project name to kebab-case slug for matching.
+ * Example: "Acme Bank" → "acme-bank"
+ */
+function projectToKebabCase(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+}
+
+/**
+ * Filter PRDs by project name using slug matching.
+ *
+ * PROVISIONAL: This is a hack until PRDs migrate to DB with proper projectId FK.
+ * TODO: When PRDs move to DB (ProductRequirement table), replace with WHERE projectId = X
+ *
+ * Match logic: kebab-case(project.name) must be a substring of prd.slug.
+ * Example: "Acme Bank" → "acme-bank" matches "prd-acme-bank-auth" but not "prd-acme"
+ *
+ * @param prds - Array of PRD summaries to filter
+ * @param project - Project object with name property
+ * @returns Filtered PRDs that match the project slug
+ */
+export function filterPrdsByProject(
+  prds: PrdSummary[],
+  project: { name: string },
+): PrdSummary[] {
+  const projectSlug = projectToKebabCase(project.name);
+  return prds.filter((prd) => prd.slug.includes(projectSlug));
+}
+
+/**
  * Move a PRD markdown from its current state directory to a target state.
  * Filesystem-as-state semantics — `state` IS the parent directory.
  * Returns the new relative path, or null if PRD not found or already at target.

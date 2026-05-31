@@ -1,0 +1,161 @@
+{
+  "feature": "prd-session",
+  "prdPath": "docs/prd/backlog/prd-prd-session.md",
+  "createdAt": "2026-05-31",
+  "owner": "joao",
+  "userStories": [
+    {
+      "id": "PRS-001",
+      "title": "Migration DesignSession.subKind + 'prd_session' type",
+      "description": "ALTER TABLE DesignSession ADD COLUMN subKind text. Índice parcial type+subKind.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260601c_prd_session_subkind.sql criado e aplicado",
+        "Coluna DesignSession.subKind existe (text nullable)",
+        "Índice ix_designsession_type_subkind existe com WHERE type='prd_session'",
+        "database.types.ts atualizado"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='DesignSession' AND column_name='subKind'", "expected": "subKind" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/20260601c_prd_session_subkind.sql", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "db"
+    },
+    {
+      "id": "PRS-002",
+      "title": "parsePrdMarkdown — extrai title + problem + AC",
+      "description": "Função pura que recebe markdown text e retorna { title, oneLiner?, problem?, acceptanceCriteria[], warnings[] }. Permissiva.",
+      "acceptanceCriteria": [
+        "src/lib/sessions/prd-session/parser.ts exporta parsePrdMarkdown(text): ParsedPrd",
+        "Type ParsedPrd tem title, oneLiner, problem, acceptanceCriteria, warnings",
+        "Title extraído do primeiro H1; warnings.push se ausente",
+        "AC extraídos de listas após heading 'Acceptance Criteria' (case-insensitive)",
+        "Unit test: 3 PRDs de exemplo retornam shape correto"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/sessions/prd-session/parser.ts"],
+      "agentProfile": "db"
+    },
+    {
+      "id": "PRS-003",
+      "title": "POST /api/sessions/prd/upload — endpoint + DAL",
+      "description": "Recebe { projectId, files }, cria DesignSession (subKind='upload'), parseia cada file, cria ProductRequirement rows (draft). Idempotente.",
+      "acceptanceCriteria": [
+        "src/app/api/sessions/prd/upload/route.ts implementa POST",
+        "Validation Zod no body (max 10 files, max 200kb cada)",
+        "Cria DesignSession + N ProductRequirement em transação",
+        "Hash SHA256 do payload em DesignSession.meta.payloadHash",
+        "Retry com mesma payload retorna sessionId existente"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3333/api/sessions/prd/upload -H 'Content-Type: application/json' -d '{\"projectId\":\"abc\",\"files\":[{\"filename\":\"x.md\",\"content\":\"# Test\"}]}'", "expected": "JSON with sessionId" }
+      ],
+      "dependsOn": ["PRS-001", "PRS-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/sessions/prd/upload/route.ts", "src/lib/sessions/prd-session/dal.ts"],
+      "agentProfile": "api"
+    },
+    {
+      "id": "PRS-004",
+      "title": "Vitor prompt 'quick-ask PRD generator'",
+      "description": "Prompt especializado que recebe brief e gera array de PRDs. Output schema Zod-validado. Cap 10 PRDs.",
+      "acceptanceCriteria": [
+        "src/lib/agent/vitor/prompts/prd-quickask.ts exporta promptTemplate + outputSchema",
+        "outputSchema valida array de PRDs com title, oneLiner, problem, AC, dependencies",
+        "Função generatePrdsFromBrief(brief): Promise<ParsedPrd[]> existe",
+        "Hard cap: response truncated a 10 items"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["PRS-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/vitor/prompts/prd-quickask.ts"],
+      "agentProfile": "api"
+    },
+    {
+      "id": "PRS-005",
+      "title": "POST /api/sessions/prd/quick-ask/start — async endpoint",
+      "description": "Recebe { projectId, brief }, cria session, enfileira job, retorna 202 + ids. Worker chama Vitor, popula PRDs.",
+      "acceptanceCriteria": [
+        "src/app/api/sessions/prd/quick-ask/start/route.ts retorna 202 + ids",
+        "Job criado em ForgeJob (ou similar) com type='prd_quickask'",
+        "Worker processa async; popula ProductRequirements quando termina",
+        "GET /api/jobs/[jobId] retorna status (queued|running|done|failed)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3333/api/sessions/prd/quick-ask/start -H 'Content-Type: application/json' -d '{\"projectId\":\"abc\",\"brief\":\"clone instagram\"}'", "expected": "JSON 202 with sessionId and jobId" }
+      ],
+      "dependsOn": ["PRS-001", "PRS-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/sessions/prd/quick-ask/start/route.ts", "src/lib/sessions/prd-session/jobs.ts"],
+      "agentProfile": "api"
+    },
+    {
+      "id": "PRS-006",
+      "title": "UI ResponsiveSheet — PRD Session upload",
+      "description": "Modal aberto via '+ Nova Session' → PRD Session → Upload. Textarea + drag-drop até 10 .md files. Preview ao vivo.",
+      "acceptanceCriteria": [
+        "src/components/sessions/prd-session/upload-sheet.tsx implementa ResponsiveSheet",
+        "Drag-drop limita a 10 files .md (extension check)",
+        "Preview mostra título extraído + warnings em tempo real",
+        "Botão Criar dispatcha POST + redirect pra /projects/[id]/sessions/[sessionId]",
+        "Erro de network mostra toast (não Dialog)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "lint", "command_or_query": "pnpm exec eslint src/components/sessions/prd-session/upload-sheet.tsx", "expected": "exit 0" }
+      ],
+      "dependsOn": ["PRS-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/components/sessions/prd-session/upload-sheet.tsx"],
+      "agentProfile": "ui"
+    },
+    {
+      "id": "PRS-007",
+      "title": "UI ResponsiveSheet — PRD Session quick-ask",
+      "description": "Modal com mini-chat com Vitor. Textarea brief → envia → Vitor responde com lista de PRDs. Botão 'Aprovar todos' ou individual.",
+      "acceptanceCriteria": [
+        "src/components/sessions/prd-session/quick-ask-sheet.tsx implementa ResponsiveSheet",
+        "Chat UI usa padrão existente em src/components/agent/",
+        "POST inicial → polling GET jobs/[id] a cada 2s → atualiza UI quando done",
+        "Botão 'Aprovar todos' faz batch PATCH para mover status draft→ready",
+        "Sem avatar (per feedback_chat_ui memory)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "lint", "command_or_query": "pnpm exec eslint src/components/sessions/prd-session/quick-ask-sheet.tsx", "expected": "exit 0" }
+      ],
+      "dependsOn": ["PRS-005"],
+      "estimateMinutes": 35,
+      "touches": ["src/components/sessions/prd-session/quick-ask-sheet.tsx"],
+      "agentProfile": "ui"
+    },
+    {
+      "id": "PRS-008",
+      "title": "Picker de Session no /projects/[id]/sessions/new",
+      "description": "Estende picker atual com card 'PRD Session'. Click abre sub-picker (upload / quick-ask).",
+      "acceptanceCriteria": [
+        "src/app/(dashboard)/projects/[id]/sessions/new/page.tsx (ou componente picker) tem card PRD Session",
+        "Sub-picker mostra Upload e Quick-ask com ícones lucide",
+        "Cards seguem padrão visual das outras Sessions",
+        "Sem novo tipo de animação ou tema"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["PRS-006", "PRS-007"],
+      "estimateMinutes": 20,
+      "touches": ["src/app/(dashboard)/projects/[id]/sessions/new/page.tsx"],
+      "agentProfile": "ui"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type PrdSummary = {
   slug: string;
@@ -91,10 +91,33 @@ function fmtRelative(iso: string): string {
 
 export default function PrdsListPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
   const [prds, setPrds] = useState<PrdSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [pulsing, setPulsing] = useState(false);
+  const [projectName, setProjectName] = useState<string | null>(null);
+
+  // Fetch project name if projectId is present
+  useEffect(() => {
+    if (!projectId) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const json = await r.json();
+        if (alive) setProjectName(json.name);
+      } catch {
+        if (alive) setProjectName(null);
+      }
+    };
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     let alive = true;
@@ -104,8 +127,18 @@ export default function PrdsListPage() {
         const r = await fetch("/api/forge/prds", { cache: "no-store" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const json = await r.json();
+        // Filter by project if projectId is present
+        let filtered = json.prds;
+        if (projectId && projectName) {
+          const projectSlug = projectName
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-z0-9-]/g, "");
+          filtered = json.prds.filter((p: PrdSummary) => p.slug.includes(projectSlug));
+        }
         if (alive) {
-          setPrds(json.prds);
+          setPrds(filtered);
           setLastUpdate(new Date());
           setError(null);
         }
@@ -121,7 +154,7 @@ export default function PrdsListPage() {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [projectId, projectName]);
 
   const byState = (state: PrdSummary["state"]) =>
     (prds ?? []).filter((p) => p.state === state);
@@ -182,10 +215,42 @@ export default function PrdsListPage() {
             {hitlCount} need{hitlCount === 1 ? "s" : ""} you ·{" "}
           </span>
         )}
-        <Link href="/forge-spike" style={{ color: "#60a5fa" }}>
+        <Link href={projectId ? `/forge-spike?projectId=${projectId}` : "/forge-spike"} style={{ color: "#60a5fa" }}>
           ← spike home
         </Link>
       </div>
+
+      {/* Project filter banner */}
+      {projectId && projectName && (
+        <div
+          style={{
+            padding: 12,
+            background: "rgba(59,130,246,0.12)",
+            border: "1px solid rgba(59,130,246,0.4)",
+            borderRadius: 6,
+            fontSize: 13,
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ color: "#93c5fd" }}>
+            Filtering by project: <strong style={{ color: "#60a5fa" }}>{projectName}</strong>
+          </span>
+          <Link
+            href="/forge-spike/prds"
+            style={{
+              color: "#60a5fa",
+              textDecoration: "none",
+              fontWeight: 600,
+              fontSize: 12,
+            }}
+          >
+            Clear filter →
+          </Link>
+        </div>
+      )}
 
       {error && (
         <div

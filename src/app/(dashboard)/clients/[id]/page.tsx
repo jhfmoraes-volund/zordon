@@ -45,6 +45,7 @@ import {
   type ProjectInsightSummary,
 } from "@/components/clients/client-project-card";
 import { ClientInsightsCard } from "@/components/insights/client-insights-card";
+import { OpportunitiesWidget } from "@/components/opportunities/opportunities-widget";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
 import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
@@ -52,6 +53,7 @@ import { showErrorToast } from "@/lib/optimistic/toast";
 import { hasMinAccessLevel } from "@/lib/roles";
 import { fmtDate } from "@/lib/date-utils";
 import type { Client } from "@/lib/supabase/types";
+import type { OpportunityRow } from "@/lib/dal/opportunities";
 
 type EditForm = {
   name: string;
@@ -91,6 +93,7 @@ export default function ClientDetailPage({
     Record<string, ProjectInsightSummary>
   >({});
   const [members, setMembers] = useState<CsatMember[]>([]);
+  const [opportunities, setOpportunities] = useState<OpportunityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -110,7 +113,7 @@ export default function ClientDetailPage({
 
   async function load() {
     setLoading(true);
-    const [clientRes, projectsRes, csatRes, membersRes] = await Promise.all([
+    const [clientRes, projectsRes, csatRes, membersRes, opportunitiesRes] = await Promise.all([
       supabase.from("Client").select("*").eq("id", id).maybeSingle(),
       supabase
         .from("Project")
@@ -125,6 +128,12 @@ export default function ClientDetailPage({
         .eq("clientId", id)
         .order("interviewedAt", { ascending: false }),
       supabase.from("Member").select("id, name").order("name"),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Table not in database.types.ts yet (OPP-005)
+      supabase.from("Opportunity" as any)
+        .select("*")
+        .eq("clientId", id)
+        .order("priorityRank", { ascending: true, nullsFirst: false })
+        .order("createdAt", { ascending: false }),
     ]);
 
     if (!clientRes.data) {
@@ -155,6 +164,8 @@ export default function ClientDetailPage({
       (csatRes.data ?? []) as CsatResponseWithInterviewer[],
     );
     setMembers((membersRes.data ?? []) as CsatMember[]);
+    // @ts-expect-error -- Table not in database.types.ts yet (OPP-005)
+    setOpportunities((opportunitiesRes.data ?? []) as OpportunityRow[]);
 
     // Per-project insight summaries for the drill-down chips on each card.
     // Manager+ only (RLS would block others anyway, but we skip the query).
@@ -186,6 +197,7 @@ export default function ClientDetailPage({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional data loading pattern
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -475,6 +487,14 @@ export default function ClientDetailPage({
       {canSeeInsights && client ? (
         <ClientInsightsCard clientId={client.id} />
       ) : null}
+
+      {/* Opportunities Widget - placed between header and projects section */}
+      {!loading && client && (
+        <OpportunitiesWidget
+          clientId={client.id}
+          initialOpportunities={opportunities}
+        />
+      )}
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">

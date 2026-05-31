@@ -1,0 +1,125 @@
+{
+  "feature": "forge-runtime-target",
+  "prdPath": "docs/prd/backlog/prd-forge-runtime-target.md",
+  "createdAt": "2026-05-31",
+  "owner": "joao",
+  "userStories": [
+    {
+      "id": "FRT-001",
+      "title": "Migration Project.githubPat + RLS",
+      "description": "ALTER TABLE Project ADD COLUMN githubPat text. Política SELECT restritiva (só admin OU pmId do projeto). Atualiza database.types.ts.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260601a_project_forge_pat.sql criado",
+        "Migration aplicada via psql DIRECT_URL",
+        "Coluna githubPat existe em information_schema",
+        "Policy project_github_pat_select existe em pg_policies",
+        "database.types.ts atualizado com githubPat?: string | null"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='Project' AND column_name='githubPat'", "expected": "githubPat" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/20260601a_project_forge_pat.sql", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "db"
+    },
+    {
+      "id": "FRT-002",
+      "title": "src/lib/forge/workspace.ts (ensureWorkspace + teardown)",
+      "description": "Cria pasta .forge/<runId>/workspace, git clone --depth 1 do repoUrl, cria branch forge/<prdSlug>-<runId-short>. teardownWorkspace remove. gcStaleWorkspaces remove workspaces > maxAgeHours.",
+      "acceptanceCriteria": [
+        "src/lib/forge/workspace.ts exporta ensureWorkspace, teardownWorkspace, gcStaleWorkspaces",
+        "ensureWorkspace falha early se project.repoUrl null/empty",
+        "Branch name segue padrão forge/<prdSlug>-<runId-short>",
+        "Clone usa --depth 1 (shallow)",
+        "Se PAT presente, injeta como Bearer no clone URL (https://x-access-token:<pat>@github.com/...)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "ls src/lib/forge/workspace.ts", "expected": "src/lib/forge/workspace.ts" }
+      ],
+      "dependsOn": ["FRT-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/forge/workspace.ts"],
+      "agentProfile": "wiring"
+    },
+    {
+      "id": "FRT-003",
+      "title": "exec-story.ts spawna claude com cwd=workspacePath",
+      "description": "Antes de spawn, chama ensureWorkspace(runId, project). Passa workspacePath pro spawn como cwd. Emite event workspace_ready. Fallback: se projectId ausente OU stub, mantém cwd=Zordon (dogfood mode).",
+      "acceptanceCriteria": [
+        "scripts/forge/exec-story.ts importa ensureWorkspace",
+        "Se projectId real, chama ensureWorkspace antes do spawn claude",
+        "spawn passa cwd: workspacePath",
+        "Emit event workspace_ready com path, branch, repoUrl",
+        "Fallback cwd=Zordon quando projectId stub"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["FRT-002"],
+      "estimateMinutes": 25,
+      "touches": ["scripts/forge/exec-story.ts"],
+      "agentProfile": "wiring"
+    },
+    {
+      "id": "FRT-004",
+      "title": "closeout faz gh pr create no repo-alvo",
+      "description": "closeout.ts: cd workspacePath, git push origin branch, gh pr create --repo owner/repo --base defaultBranch --draft --title 'forge: prdSlug' --body. Usa GH_TOKEN=pat override.",
+      "acceptanceCriteria": [
+        "src/lib/forge/closeout.ts aceita { runId, workspacePath, project, prdSlug }",
+        "Faz git push origin <branch> dentro do workspacePath",
+        "gh pr create usa --repo <owner>/<repo> e --base <defaultBranch>",
+        "PR aberto sempre como --draft",
+        "Se project.githubPat presente, exporta GH_TOKEN antes do gh",
+        "Retorna { prUrl } extraído do stdout"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["FRT-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/forge/closeout.ts"],
+      "agentProfile": "wiring"
+    },
+    {
+      "id": "FRT-005",
+      "title": "API + CLI aceitam projectId",
+      "description": "POST /api/forge/autoruns aceita { prdSlug, projectId, maxStories? }. forge init/run no CLI aceita --project. Quando projectId presente, ForgeRun row é criada com projectId real.",
+      "acceptanceCriteria": [
+        "src/app/api/forge/autoruns/route.ts valida projectId opcional; quando presente, persiste",
+        "scripts/forge/cli.ts subcomandos init/run aceitam --project flag",
+        "ForgeRun.projectId reflete valor real OU stub conforme fallback",
+        "Help text do CLI documenta --project"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3333/api/forge/autoruns -H 'Content-Type: application/json' -d '{\"prdSlug\":\"x\",\"projectId\":\"abc\"}'", "expected": "JSON with autorunId or error" }
+      ],
+      "dependsOn": ["FRT-003", "FRT-004"],
+      "estimateMinutes": 20,
+      "touches": ["src/app/api/forge/autoruns/route.ts", "scripts/forge/cli.ts"],
+      "agentProfile": "api"
+    },
+    {
+      "id": "FRT-006",
+      "title": "gcStaleWorkspaces cron + forge ps --target",
+      "description": "scripts/forge/gc-workspaces.ts chama gcStaleWorkspaces (default 24h). pg_cron schedule diária. forge ps mostra coluna Target (owner/repo ou (zordon)).",
+      "acceptanceCriteria": [
+        "scripts/forge/gc-workspaces.ts existe e funciona standalone",
+        "supabase/migrations/20260601b_forge_workspace_gc_cron.sql agenda job",
+        "forge ps mostra coluna 'Target' (último ProjectRun.projectId resolvido)",
+        "Coluna Target = '(zordon)' quando projectId = stub"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT jobname FROM cron.job WHERE jobname='forge_workspace_gc'", "expected": "forge_workspace_gc" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["FRT-002"],
+      "estimateMinutes": 25,
+      "touches": ["scripts/forge/gc-workspaces.ts", "scripts/forge/cli.ts", "supabase/migrations/20260601b_forge_workspace_gc_cron.sql"],
+      "agentProfile": "db"
+    }
+  ]
+}

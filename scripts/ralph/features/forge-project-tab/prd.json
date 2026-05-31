@@ -1,0 +1,195 @@
+{
+  "feature": "forge-project-tab",
+  "prdPath": "docs/prd/backlog/prd-forge-project-tab.md",
+  "createdAt": "2026-05-31",
+  "owner": "joao",
+  "userStories": [
+    {
+      "id": "FPT-001",
+      "title": "DAL src/lib/dal/forge-project.ts",
+      "description": "Cria DAL que combina prd-fs.listPrds (filtrado por slug match do project) com ForgeRun (top 5 + cost7d agg). Server-only, usado por page.tsx.",
+      "acceptanceCriteria": [
+        "src/lib/dal/forge-project.ts exporta getProjectForgeSummary(projectId): Promise<ProjectForgeSummary>",
+        "Type ProjectForgeSummary tem: prds[], runs[], cost7d, runCount7d",
+        "Filtra ForgeRun por projectId (Supabase query)",
+        "Filtra prds com helper filterPrdsByProject (slug-match com project.name kebab-case)",
+        "Cost7d soma costUsdTotal das runs onde createdAt >= now() - 7 days"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm exec eslint src/lib/dal/forge-project.ts",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/lib/dal/forge-project.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
+    },
+    {
+      "id": "FPT-002",
+      "title": "Página /projects/[id]/forge + card sóbrio",
+      "description": "Server Component que chama getProjectForgeSummary e renderiza ForgeProjectCard. RLS: redireciona/404 se access_level < manager. Empty state.",
+      "acceptanceCriteria": [
+        "src/app/(dashboard)/projects/[id]/forge/page.tsx existe",
+        "Page é Server Component (default export async function)",
+        "Chama getCurrentMember + checa access_level >= manager; senão notFound()",
+        "Renderiza ForgeProjectCard com props { project, summary }",
+        "Empty state quando prds.length === 0 mostra CTA pro spike"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' http://localhost:3333/projects/test-id/forge",
+          "expected": "200 or 404 (auth-dependent)"
+        }
+      ],
+      "dependsOn": [
+        "FPT-001"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/projects/[id]/forge/page.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
+    },
+    {
+      "id": "FPT-003",
+      "title": "Componente ForgeProjectCard (sóbrio, padrão UI canônico)",
+      "description": "Card UI mostrando título, agregados (PRDs/runs/cost), lista de PRDs (até 5), lista de últimas runs (até 5) e botão 'Abrir Forge Spike'. Usa shadcn Card + Button. Sem tema 'arcade'.",
+      "acceptanceCriteria": [
+        "src/components/forge/forge-project-card.tsx implementa o componente",
+        "Botão 'Abrir Forge Spike' linka pra /forge-spike?projectId=<project.id>",
+        "Status badges de PRD usam StatusChip (padrão canônico)",
+        "Layout responsivo (mobile-friendly, sem horizontal scroll)",
+        "Sem cores arcade (cyan/magenta) — só design tokens do app"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm exec eslint src/components/forge/forge-project-card.tsx",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [
+        "FPT-001"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/components/forge/forge-project-card.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
+    },
+    {
+      "id": "FPT-004",
+      "title": "/forge-spike aceita ?projectId= como filtro",
+      "description": "Componente raiz do spike (e subrotas /forge-spike/prds, /forge-spike/runs) lê searchParam projectId via useSearchParams; quando presente, filtra lista de PRDs e runs. Banner topo mostra projeto + link 'limpar filtro'.",
+      "acceptanceCriteria": [
+        "src/app/forge-spike/page.tsx (e prds/page.tsx) leem searchParams.projectId",
+        "Quando projectId presente, lista de PRDs e runs filtra",
+        "Banner topo mostra nome do projeto + link 'limpar filtro' (=removeProjectIdFromUrl)",
+        "Sem projectId, comportamento atual preservado"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' 'http://localhost:3333/forge-spike?projectId=abc'",
+          "expected": "200"
+        }
+      ],
+      "dependsOn": [
+        "FPT-001"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/forge-spike/page.tsx",
+        "src/app/forge-spike/prds/page.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
+    },
+    {
+      "id": "FPT-005",
+      "title": "Tab/link Forge na navegação do projeto",
+      "description": "Adiciona 'Forge' às tabs/sidebar de /projects/[id]/. Visível só pra access_level >= manager. Ícone Flame (lucide).",
+      "acceptanceCriteria": [
+        "src/app/(dashboard)/projects/[id]/layout.tsx (ou nav component) tem link 'Forge'",
+        "Visibilidade condicional ao member.access_level >= 'manager'",
+        "URL ativo destaca tab quando pathname inclui /forge",
+        "Icon Flame de lucide-react"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s http://localhost:3333/projects/test-id/ | grep -c 'Forge'",
+          "expected": ">= 1"
+        }
+      ],
+      "dependsOn": [
+        "FPT-002"
+      ],
+      "estimateMinutes": 15,
+      "touches": [
+        "src/app/(dashboard)/projects/[id]/layout.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
+    },
+    {
+      "id": "FPT-006",
+      "title": "Helper filterPrdsByProject (slug-match)",
+      "description": "Hack provisório até PRDs migrarem pra DB. Recebe PRD slug e Project, retorna true se PRD slug contém kebab-case do project.name OU se PRD slug está em mapa explícito project.forgeLinkedPrds (futuro).",
+      "acceptanceCriteria": [
+        "src/lib/forge/prd-fs.ts exporta filterPrdsByProject(prds, project)",
+        "Match: kebabCase(project.name) é substring de prd.slug",
+        "Helper documentado como provisório com TODO de migrar pra DB",
+        "Unit test: 'Acme Bank' matches 'prd-acme-bank-auth' mas não 'prd-acme'"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": [
+        "src/lib/forge/prd-fs.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
+    }
+  ]
+}

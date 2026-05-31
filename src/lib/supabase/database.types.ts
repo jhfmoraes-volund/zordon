@@ -4873,6 +4873,60 @@ export type Database = {
           },
         ]
       }
+      Opportunity: {
+        Row: {
+          clientId: string
+          createdAt: string
+          createdBy: string
+          description: string | null
+          effort: number
+          id: string
+          impact: number
+          priorityRank: number | null
+          promotedProjectId: string | null
+          sourceDesignSessionId: string | null
+          sourceMeetingId: string | null
+          sourceTranscriptRefId: string | null
+          status: Database["public"]["Enums"]["OpportunityStatus"]
+          title: string
+          updatedAt: string
+        }
+        Insert: {
+          clientId: string
+          createdAt?: string
+          createdBy: string
+          description?: string | null
+          effort: number
+          id?: string
+          impact: number
+          priorityRank?: number | null
+          promotedProjectId?: string | null
+          sourceDesignSessionId?: string | null
+          sourceMeetingId?: string | null
+          sourceTranscriptRefId?: string | null
+          status?: Database["public"]["Enums"]["OpportunityStatus"]
+          title: string
+          updatedAt?: string
+        }
+        Update: {
+          clientId?: string
+          createdAt?: string
+          createdBy?: string
+          description?: string | null
+          effort?: number
+          id?: string
+          impact?: number
+          priorityRank?: number | null
+          promotedProjectId?: string | null
+          sourceDesignSessionId?: string | null
+          sourceMeetingId?: string | null
+          sourceTranscriptRefId?: string | null
+          status?: Database["public"]["Enums"]["OpportunityStatus"]
+          title?: string
+          updatedAt?: string
+        }
+        Relationships: []
+      }
       PMReview: {
         Row: {
           archivedAt: string | null
@@ -7872,6 +7926,12 @@ export type Database = {
         | "github_repo"
         | "github_pr"
         | "github_issue"
+      OpportunityStatus:
+        | "discovery"
+        | "evaluating"
+        | "approved"
+        | "in_project"
+        | "rejected"
       TaskLayer: "DATA" | "API" | "REALTIME" | "UI" | "OPS"
     }
     CompositeTypes: {
@@ -8008,6 +8068,13 @@ export const Constants = {
         "github_repo",
         "github_pr",
         "github_issue",
+      ],
+      OpportunityStatus: [
+        "discovery",
+        "evaluating",
+        "approved",
+        "in_project",
+        "rejected",
       ],
       TaskLayer: ["DATA", "API", "REALTIME", "UI", "OPS"],
     },

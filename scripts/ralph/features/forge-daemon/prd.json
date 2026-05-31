@@ -1,0 +1,144 @@
+{
+  "feature": "forge-daemon",
+  "prdPath": "docs/prd/backlog/prd-forge-daemon.md",
+  "createdAt": "2026-05-31",
+  "owner": "joao",
+  "userStories": [
+    {
+      "id": "FDM-001",
+      "title": "Migration ForgeJob + RLS + índices",
+      "description": "Cria tabela ForgeJob com status state machine, RLS owner-based, índices pra queue, owner, heartbeat.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260601d_forge_job.sql criado e aplicado",
+        "Tabela ForgeJob existe com todas colunas do §7",
+        "Policies job_select/insert/update existem",
+        "3 índices criados (queue, owner, heartbeat)",
+        "database.types.ts atualizado"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeJob'", "expected": "1" },
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='ForgeJob'", "expected": "3" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/20260601d_forge_job.sql", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "db"
+    },
+    {
+      "id": "FDM-002",
+      "title": "Migration orphan recovery + pg_cron",
+      "description": "Função forge_recover_orphan_jobs() + cron a cada 2min que reseta jobs com heartbeatAt stale > 5min.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260601e_forge_job_orphan_recovery.sql criado e aplicado",
+        "Função forge_recover_orphan_jobs existe (pg_proc)",
+        "cron.job 'forge_orphan_recovery' agendado a cada 2min",
+        "Test manual: insere job claimed sem heartbeat → após cron, status=queued"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT jobname FROM cron.job WHERE jobname='forge_orphan_recovery'", "expected": "forge_orphan_recovery" },
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_proc WHERE proname='forge_recover_orphan_jobs'", "expected": "1" }
+      ],
+      "dependsOn": ["FDM-001"],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/20260601e_forge_job_orphan_recovery.sql"],
+      "agentProfile": "db"
+    },
+    {
+      "id": "FDM-003",
+      "title": "src/lib/forge/dal/job.ts — DAL completa",
+      "description": "CRUD + claim atômico. Funções: createJob, claimNextJob, updateJobStatus, heartbeat, cancelJob, listJobsForOwner.",
+      "acceptanceCriteria": [
+        "src/lib/forge/dal/job.ts exporta funções acima",
+        "claimNextJob retorna null se ninguém disponível, ForgeJob se claimou",
+        "claim usa UPDATE WHERE status='queued' AND ... RETURNING (atômico)",
+        "heartbeat só faz UPDATE se status='running' E claimedBy=daemonId"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["FDM-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/forge/dal/job.ts"],
+      "agentProfile": "db"
+    },
+    {
+      "id": "FDM-004",
+      "title": "POST /api/forge/jobs + PATCH cancel",
+      "description": "Endpoint POST cria job (queued). PATCH altera status pra cancelled (só queued ou claimed). Validation Zod.",
+      "acceptanceCriteria": [
+        "src/app/api/forge/jobs/route.ts POST cria ForgeJob",
+        "src/app/api/forge/jobs/[id]/route.ts PATCH muda status pra cancelled",
+        "Validation Zod no body: prdSlug required, projectId optional",
+        "Auth: só is_manager OR is_admin pode criar",
+        "Cancel só permitido se status em (queued, claimed)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3333/api/forge/jobs -H 'Content-Type: application/json' -d '{\"prdSlug\":\"x\"}'", "expected": "202 with jobId OR 401/403" }
+      ],
+      "dependsOn": ["FDM-003"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/forge/jobs/route.ts", "src/app/api/forge/jobs/[id]/route.ts"],
+      "agentProfile": "api"
+    },
+    {
+      "id": "FDM-005",
+      "title": "CLI forge daemon — claim + execute + heartbeat",
+      "description": "Comando forge daemon foreground. Subscribe realtime → claim → spawn exec-prd.ts → heartbeat loop → fecha job no fim.",
+      "acceptanceCriteria": [
+        "scripts/forge/cli.ts ganha subcomando 'daemon'",
+        "Cria ~/.forge/daemon.json no primeiro run com daemonId uuid",
+        "Subscribe realtime + fallback polling 30s",
+        "Spawn exec-prd.ts via child_process com cwd correto",
+        "Heartbeat UPDATE a cada 30s enquanto status=running",
+        "Output amigável (cores, timestamps, indentação)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "npx tsx scripts/forge/cli.ts daemon --help", "expected": "exit 0, prints help" }
+      ],
+      "dependsOn": ["FDM-003"],
+      "estimateMinutes": 45,
+      "touches": ["scripts/forge/cli.ts", "scripts/forge/daemon.ts"],
+      "agentProfile": "wiring"
+    },
+    {
+      "id": "FDM-006",
+      "title": "CLI forge daemon stop/ps/logs/auth",
+      "description": "Subcomandos extra: stop, ps, logs, auth.",
+      "acceptanceCriteria": [
+        "forge daemon stop envia SIGTERM via pidfile ~/.forge/daemon.pid",
+        "forge daemon ps lê status do pidfile + última linha do log",
+        "forge daemon logs faz tail -f ~/.forge/daemon.log",
+        "forge daemon auth invoca supabase login OAuth flow + persiste token"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "manual_browser", "command_or_query": "npx tsx scripts/forge/cli.ts daemon ps", "expected": "shows status (idle or no daemon running)" }
+      ],
+      "dependsOn": ["FDM-005"],
+      "estimateMinutes": 30,
+      "touches": ["scripts/forge/cli.ts", "scripts/forge/daemon.ts"],
+      "agentProfile": "wiring"
+    },
+    {
+      "id": "FDM-007",
+      "title": "UI 'Builders ativos' + warning quando 0",
+      "description": "Em /projects/[id]/forge, mostra contador de daemons com heartbeat recente. Quando 0, warning.",
+      "acceptanceCriteria": [
+        "src/components/forge/active-builders.tsx mostra '▶ Builders ativos: N'",
+        "Consulta ForgeJob com claimedBy distinct + heartbeatAt > now()-2min",
+        "Quando count=0: warning amarelo + 'Abra forge daemon em algum PC'",
+        "Realtime subscription pra atualizar live"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
+        { "kind": "lint", "command_or_query": "pnpm exec eslint src/components/forge/active-builders.tsx", "expected": "exit 0" }
+      ],
+      "dependsOn": ["FDM-005"],
+      "estimateMinutes": 20,
+      "touches": ["src/components/forge/active-builders.tsx"],
+      "agentProfile": "ui"
+    }
+  ]
+}

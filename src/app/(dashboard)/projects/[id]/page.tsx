@@ -8,6 +8,7 @@ import {
   BookOpen,
   CalendarClock,
   FileText,
+  Flame,
   Lightbulb,
   Pencil,
   Settings as SettingsIcon,
@@ -74,12 +75,13 @@ import { useTaskActions } from "./_hooks/use-task-actions";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
 
-const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
+const TABS: { key: TabKey; label: string; icon: typeof BookOpen; minAccessLevel?: "manager" | "builder" }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
   { key: "ceremonies", label: "Rituais", icon: CalendarClock },
   { key: "wiki", label: "Wiki", icon: FileText },
+  { key: "forge", label: "Forge", icon: Flame, minAccessLevel: "manager" },
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -96,9 +98,14 @@ export default function ProjectDetailPage({
   const canManageSprint = hasMinAccessLevel(effectiveAccessLevel, "manager");
   const isGuest = !hasMinAccessLevel(effectiveAccessLevel, "builder");
   // Settings é gerencial. Guest não vê.
-  const visibleTabs = isGuest
-    ? TABS.filter((t) => t.key !== "settings")
-    : TABS;
+  // Forge também é gerencial (manager+).
+  const visibleTabs = TABS.filter((tab) => {
+    if (isGuest && tab.key === "settings") return false;
+    if (tab.minAccessLevel && !hasMinAccessLevel(effectiveAccessLevel, tab.minAccessLevel)) {
+      return false;
+    }
+    return true;
+  });
 
   const router = useRouter();
   const pathname = usePathname();
@@ -525,6 +532,24 @@ export default function ProjectDetailPage({
       {/* Tabs — mobile: só ícones, distribuídos, sem scroll. Desktop: ícone + label + badge. */}
       <div className="flex border-b -mx-3 px-3 md:mx-0 md:px-0 md:gap-1">
         {visibleTabs.map((tab) => {
+          // Forge tab navigates to separate route
+          if (tab.key === "forge") {
+            return (
+              <Link
+                key={tab.key}
+                href={`/projects/${id}/forge`}
+                className={`flex flex-1 shrink-0 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap md:flex-none md:justify-start md:px-4 md:py-2 ${
+                  pathname.includes("/forge")
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <tab.icon className="size-5 md:size-4" />
+                <span className="hidden md:inline">{tab.label}</span>
+              </Link>
+            );
+          }
+
           const node = (
             <button
               key={tab.key}
