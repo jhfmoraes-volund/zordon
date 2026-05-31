@@ -131,7 +131,7 @@
         "scripts/forge/exec-prd.ts"
       ],
       "agentProfile": "code",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ESS-005",

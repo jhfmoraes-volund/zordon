@@ -25,6 +25,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve, dirname, basename, join } from "node:path";
 import { ensureForgeHome, getRunPath } from "../../src/lib/forge/paths.js";
+import { createEmitter } from "../../src/lib/forge/runtime/event-writer.js";
 
 const [, , autorunId, prdSlug, maxStoriesArg] = process.argv;
 const maxStories = Number.parseInt(maxStoriesArg ?? "20", 10);
@@ -52,18 +53,12 @@ const eventsPath = resolve(autorunDir, "events.jsonl");
 const memoryPath = resolve(autorunDir, "memory.jsonl");
 mkdirSync(autorunDir, { recursive: true });
 
-let seq = 0;
-function emit(kind: string, payload: Record<string, unknown> = {}) {
-  seq += 1;
-  const event = {
-    runId: autorunId,
-    seq,
-    ts: new Date().toISOString(),
-    kind,
-    payload,
-  };
-  appendFileSync(eventsPath, JSON.stringify(event) + "\n");
-}
+const emitter = createEmitter({
+  runId: autorunId,
+  agentId: null,
+  taskId: null,
+  jsonlPath: eventsPath,
+});
 
 // ── Load prd.json ────────────────────────────────────────────────────────
 
@@ -103,8 +98,9 @@ async function bootstrapPrdSource() {
   } else {
     prdJsonPath = resolve(repoRoot, "scripts", "ralph", "features", prdSlug, "prd.json");
     if (!existsSync(prdJsonPath)) {
-      emit("error", { message: `prd.json not found: ${prdJsonPath}` });
-      emit("autorun_done", { ok: false, reason: "no_prd_json" });
+      emitter.emit("error", { message: `prd.json not found: ${prdJsonPath}` });
+      emitter.emit("autorun_done", { ok: false, reason: "no_prd_json" });
+      await emitter.close();
       process.exit(2);
     }
   }
@@ -119,8 +115,9 @@ async function bootstrapFromManifest(runId: string, outPath: string) {
     .eq("id", runId)
     .maybeSingle();
   if (error || !data) {
-    emit("error", { message: `ForgeRun ${runId} not found: ${error?.message ?? "missing"}` });
-    emit("autorun_done", { ok: false, reason: "no_forge_run" });
+    emitter.emit("error", { message: `ForgeRun ${runId} not found: ${error?.message ?? "missing"}` });
+    emitter.emit("autorun_done", { ok: false, reason: "no_forge_run" });
+    await emitter.close();
     process.exit(2);
   }
   const manifest = data.manifest as {
@@ -135,8 +132,9 @@ async function bootstrapFromManifest(runId: string, outPath: string) {
     }>;
   };
   if (!manifest?.prds) {
-    emit("error", { message: `ForgeRun ${runId} manifest has no prds` });
-    emit("autorun_done", { ok: false, reason: "empty_manifest" });
+    emitter.emit("error", { message: `ForgeRun ${runId} manifest has no prds` });
+    emitter.emit("autorun_done", { ok: false, reason: "empty_manifest" });
+    await emitter.close();
     process.exit(2);
   }
   // Achata todas as stories. dependsOn governa ordem entre stories da mesma
@@ -183,7 +181,7 @@ async function bootstrapFromManifest(runId: string, outPath: string) {
     writeFileSync(resolve(autorunDir, "project-id"), data.projectId);
   }
 
-  emit("manifest_bootstrapped", {
+  emitter.emit("manifest_bootstrapped", {
     runId,
     storyCount: userStories.length,
     prdCount: manifest.prds.length,
@@ -259,7 +257,7 @@ function movePrdState(targetState: string): { from: string; to: string } | null 
     renameSync(found.path, targetPath);
     return { from: found.state, to: targetState };
   } catch (err) {
-    emit("prd_move_error", { from: found.state, to: targetState, message: String(err) });
+    emitter.emit("prd_move_error", { from: found.state, to: targetState, message: String(err) });
     return null;
   }
 }
@@ -303,7 +301,7 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
   const eventsOffsetStart = existsSync(eventsPath)
     ? readFileSync(eventsPath, "utf-8").length
     : 0;
-  emit("story_picked", {
+  emitter.emit("story_picked", {
     storyId: story.id,
     title: story.title,
     profile: story.agentProfile,
@@ -333,7 +331,7 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
   const exitCode: number | null = await new Promise((res) => {
     child.on("close", (code) => res(code));
     child.on("error", (err) => {
-      emit("story_spawn_error", { storyId: story.id, message: err.message });
+      emitter.emit("story_spawn_error", { storyId: story.id, message: err.message });
       res(-1);
     });
   });
@@ -392,9 +390,6 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
 
   // Mirror REMOVIDO — exec-story escreve direto no events.jsonl do autorun
   // (compartilhado). Duplicar prefixando com "story:" só inflava o arquivo.
-  // Manter seq local do exec-prd sincronizado com o que exec-story escreveu
-  // pra próxima emit() não colidir:
-  seq += storyEvents.length;
 
   const entry: MemoryEntry = {
     story: story.id,
@@ -418,7 +413,7 @@ async function main() {
   const stories: Story[] = data.userStories ?? [];
   const initialPasses = stories.filter((s) => s.passes).length;
 
-  emit("autorun_started", {
+  emitter.emit("autorun_started", {
     prdSlug,
     totalStories: stories.length,
     alreadyPassing: initialPasses,
@@ -428,7 +423,7 @@ async function main() {
   // Ensure PRD is in in-progress/ — kanban reflects state immediately
   const moveToProgress = movePrdState("in-progress");
   if (moveToProgress) {
-    emit("prd_state_change", moveToProgress);
+    emitter.emit("prd_state_change", moveToProgress);
   }
 
   let executed = 0;
@@ -440,18 +435,18 @@ async function main() {
     const fresh = readPrdJson();
     const ready = pickNextReady(fresh.userStories);
     if (!ready) {
-      emit("autorun_no_more_ready", { executed });
+      emitter.emit("autorun_no_more_ready", { executed });
       break;
     }
 
-    emit("story_running", { storyId: ready.id, executed: executed + 1, of: maxStories });
+    emitter.emit("story_running", { storyId: ready.id, executed: executed + 1, of: maxStories });
     const { ok, entry } = await runStory(ready);
     appendMemory(entry);
     executed += 1;
 
     if (ok) {
       markStoryPasses(ready.id, true);
-      emit("story_done", {
+      emitter.emit("story_done", {
         storyId: ready.id,
         passes: true,
         durationMs: entry.durationMs,
@@ -460,7 +455,7 @@ async function main() {
       consecutiveFailures = 0;
       lastFailedId = null;
     } else {
-      emit("story_failed", {
+      emitter.emit("story_failed", {
         storyId: ready.id,
         durationMs: entry.durationMs,
         exitCode: entry.exitCode,
@@ -472,7 +467,7 @@ async function main() {
         lastFailedId = ready.id;
       }
       if (consecutiveFailures >= 2) {
-        emit("autorun_pivot", {
+        emitter.emit("autorun_pivot", {
           storyId: ready.id,
           message: "2 consecutive failures on same story — pivot required",
         });
@@ -487,14 +482,16 @@ async function main() {
             `Last memory entry:\n\`\`\`json\n${JSON.stringify(entry, null, 2)}\n\`\`\`\n`,
         );
         const moveBlocked = movePrdState("blocked");
-        if (moveBlocked) emit("prd_state_change", moveBlocked);
-        emit("autorun_done", { ok: false, reason: "pivot_required", executed });
+        if (moveBlocked) emitter.emit("prd_state_change", moveBlocked);
+        emitter.emit("autorun_done", { ok: false, reason: "pivot_required", executed });
+        await emitter.close();
         process.exit(0);
       }
       // Otherwise: stop on first failure of a story (conservative default)
       const moveBlockedFail = movePrdState("blocked");
-      if (moveBlockedFail) emit("prd_state_change", moveBlockedFail);
-      emit("autorun_done", { ok: false, reason: "story_failed", executed });
+      if (moveBlockedFail) emitter.emit("prd_state_change", moveBlockedFail);
+      emitter.emit("autorun_done", { ok: false, reason: "story_failed", executed });
+      await emitter.close();
       process.exit(0);
     }
   }
@@ -507,20 +504,22 @@ async function main() {
   // PRD lifecycle: all passing → done; partial → keep in-progress (idempotent retry possible)
   if (allDone) {
     const moveDone = movePrdState("done");
-    if (moveDone) emit("prd_state_change", moveDone);
+    if (moveDone) emitter.emit("prd_state_change", moveDone);
   }
 
-  emit("autorun_done", {
+  emitter.emit("autorun_done", {
     ok: true,
     reason: allDone ? "all_passed" : executed >= maxStories ? "max_reached" : "no_more_ready",
     executed,
     finalPasses,
     totalStories: finalData.userStories.length,
   });
+  await emitter.close();
   process.exit(0);
 }
 
-main().catch((err) => {
-  emit("autorun_crash", { message: String(err), stack: err?.stack });
+main().catch(async (err) => {
+  emitter.emit("autorun_crash", { message: String(err), stack: err?.stack });
+  await emitter.close();
   process.exit(1);
 });
