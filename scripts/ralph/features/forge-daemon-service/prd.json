@@ -19,14 +19,24 @@
         "shellcheck passa"
       ],
       "verifiable": [
-        { "kind": "lint", "command_or_query": "test -x scripts/forge/daemon-ctl.sh && echo OK", "expected": "OK" },
-        { "kind": "lint", "command_or_query": "shellcheck scripts/forge/daemon-ctl.sh 2>&1 | wc -l", "expected": "0" }
+        {
+          "kind": "lint",
+          "command_or_query": "test -x scripts/forge/daemon-ctl.sh && echo OK",
+          "expected": "OK"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "shellcheck scripts/forge/daemon-ctl.sh 2>&1 | wc -l",
+          "expected": "0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 30,
-      "touches": ["scripts/forge/daemon-ctl.sh"],
+      "touches": [
+        "scripts/forge/daemon-ctl.sh"
+      ],
       "agentProfile": "ops",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FDS-002",
@@ -38,12 +48,24 @@
         "shellcheck passa"
       ],
       "verifiable": [
-        { "kind": "lint", "command_or_query": "grep -cE 'logs\\)|restart\\)' scripts/forge/daemon-ctl.sh", "expected": "2" },
-        { "kind": "lint", "command_or_query": "shellcheck scripts/forge/daemon-ctl.sh 2>&1 | wc -l", "expected": "0" }
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'logs\\)|restart\\)' scripts/forge/daemon-ctl.sh",
+          "expected": "2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "shellcheck scripts/forge/daemon-ctl.sh 2>&1 | wc -l",
+          "expected": "0"
+        }
       ],
-      "dependsOn": ["FDS-001"],
+      "dependsOn": [
+        "FDS-001"
+      ],
       "estimateMinutes": 15,
-      "touches": ["scripts/forge/daemon-ctl.sh"],
+      "touches": [
+        "scripts/forge/daemon-ctl.sh"
+      ],
       "agentProfile": "ops",
       "passes": false
     },
@@ -57,12 +79,22 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/daemon.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -c 'shutdown signal received' scripts/forge/daemon.ts", "expected": "1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit scripts/forge/daemon.ts",
+          "expected": ""
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'shutdown signal received' scripts/forge/daemon.ts",
+          "expected": "1"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 10,
-      "touches": ["scripts/forge/daemon.ts"],
+      "touches": [
+        "scripts/forge/daemon.ts"
+      ],
       "agentProfile": "code",
       "passes": false
     },
@@ -76,11 +108,19 @@
         "Aponta pra ~/.forge/daemon.log e ~/.forge/daemon.pid"
       ],
       "verifiable": [
-        { "kind": "lint", "command_or_query": "grep -l 'daemon-ctl.sh' docs/runbooks/forge-daemon-runbook.md AGENTS.md 2>/dev/null | wc -l", "expected": "1" }
+        {
+          "kind": "lint",
+          "command_or_query": "grep -l 'daemon-ctl.sh' docs/runbooks/forge-daemon-runbook.md AGENTS.md 2>/dev/null | wc -l",
+          "expected": "1"
+        }
       ],
-      "dependsOn": ["FDS-002"],
+      "dependsOn": [
+        "FDS-002"
+      ],
       "estimateMinutes": 10,
-      "touches": ["docs/runbooks/forge-daemon-runbook.md"],
+      "touches": [
+        "docs/runbooks/forge-daemon-runbook.md"
+      ],
       "agentProfile": "docs",
       "passes": false
     },
@@ -96,11 +136,19 @@
         "Cleanup: stop daemon ao final"
       ],
       "verifiable": [
-        { "kind": "manual_browser", "command_or_query": "bash scripts/forge/test-smoke-daemon-detach.sh", "expected": "PASS" }
+        {
+          "kind": "manual_browser",
+          "command_or_query": "bash scripts/forge/test-smoke-daemon-detach.sh",
+          "expected": "PASS"
+        }
       ],
-      "dependsOn": ["FDS-001"],
+      "dependsOn": [
+        "FDS-001"
+      ],
       "estimateMinutes": 20,
-      "touches": ["scripts/forge/test-smoke-daemon-detach.sh"],
+      "touches": [
+        "scripts/forge/test-smoke-daemon-detach.sh"
+      ],
       "agentProfile": "ops",
       "passes": false
     }

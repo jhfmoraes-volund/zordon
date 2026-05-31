@@ -1,0 +1,3 @@
+iter 2026-05-31T$(date -u +%H:%M:%S)Z: PASS FDS-001
+  files: scripts/forge/daemon-ctl.sh
+  learnings: daemon-ctl.sh usa nohup+disown pra detach do shell; shellcheck instalado via brew; PID file em ~/.forge/daemon.pid permite status check idempotente
