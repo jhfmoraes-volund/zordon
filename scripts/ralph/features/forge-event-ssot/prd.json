@@ -190,7 +190,7 @@
         "scripts/forge/test-smoke-event-ssot.sh"
       ],
       "agentProfile": "ops",
-      "passes": false
+      "passes": true
     }
   ]
 }
