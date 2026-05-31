@@ -110,25 +110,24 @@ export default async function ProjectPrdsPage({
   return (
     <PageContainer>
       <div className="flex flex-col gap-6 py-6">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-start gap-3">
           <Link
             href={`/projects/${projectId}`}
-            className="inline-flex items-center gap-1 hover:text-foreground"
+            aria-label={`Voltar para ${project.name}`}
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
-            {project.name}
           </Link>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <FileText className="size-5 text-muted-foreground" />
-            <h1 className="text-2xl font-bold">PRDs do projeto</h1>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <FileText className="size-5 text-muted-foreground" />
+              <h1 className="text-2xl font-bold">PRDs do projeto</h1>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Product Requirement Documents gerados pelo Vitor a partir das
+              Design Sessions. Após aprovação, Vitoria materializa em Tasks.
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Product Requirement Documents gerados pelo Vitor a partir das
-            Design Sessions. Após aprovação, Vitoria materializa em Tasks.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

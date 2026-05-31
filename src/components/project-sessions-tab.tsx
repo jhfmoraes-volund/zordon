@@ -8,9 +8,10 @@ import {
   Lightbulb,
   Play,
   Plus,
+  Sparkles,
   Star,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { SuperSessionModal } from "@/components/design-session/super-session-modal";
 import {
   SessionDetailSheet,
@@ -192,7 +193,8 @@ export function ProjectSessionsTab({
   }, [projectId, setSessions]);
 
   useEffect(() => {
-    load();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional initial load on mount
+    void load();
   }, [load]);
 
   function remove(id: string) {
@@ -303,10 +305,19 @@ export function ProjectSessionsTab({
             );
           })}
         </div>
-        <Button size="sm" className="ml-auto" onClick={() => setSuperOpen(true)}>
-          <Plus className="size-3.5" />
-          Inception
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            href={`/projects/${projectId}/planning`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <Sparkles className="size-3.5" />
+            Planning
+          </Link>
+          <Button size="sm" onClick={() => setSuperOpen(true)}>
+            <Plus className="size-3.5" />
+            Inception
+          </Button>
+        </div>
       </div>
 
       <SuperSessionModal

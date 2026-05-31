@@ -1,0 +1,207 @@
+{
+  "feature": "forge-autopilot",
+  "title": "Forge Autopilot — gates + memory + HITL sobre engine core",
+  "prd_path": "docs/prd/backlog/prd-forge-autopilot.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "FAP-001",
+      "title": "Memory.jsonl writer + sliding-window injector",
+      "description": "src/lib/forge/memory.ts: appendMemory + loadMemoryWindow. Sliding window: 5 entries + extras com learnings, cap 3000 tokens. Worker prompt builder injeta asPromptString como header.",
+      "acceptanceCriteria": [
+        "src/lib/forge/memory.ts exporta appendMemory + loadMemoryWindow",
+        "Memory file path: .forge/<runId>/memory.jsonl",
+        "MemoryEntry shape documentado em type export",
+        "Sliding window: 10 entries appended → loadMemoryWindow retorna 5 mais recentes + extras com learnings",
+        "Cap absoluto: força truncate de summary se total > 3000 tokens",
+        "asPromptString começa com 'CONTEXT FROM PREVIOUS STORIES IN THIS PRD:'",
+        "Entries com learnings: [] não-vazias aparecem mesmo se >5 atrás",
+        "Test: append 10 entries (2 com learnings) → loadMemoryWindow retorna 5 + 2 dedup",
+        "appendMemory idempotente por (runId, story) — re-append substitui"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/memory.ts",
+        "src/lib/forge/memory.test.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FAP-002",
+      "title": "Cost caps com kill mid-flight (CostGuard class)",
+      "description": "src/lib/forge/cost-caps.ts: CostGuard class. watchWorker emite cap_hit_story + SIGTERM+10s+SIGKILL + worktree remove. checkPrdCap antes de spawn. Defaults $1/$10. Flags --cost-cap-story / --cost-cap-prd + env.",
+      "acceptanceCriteria": [
+        "CostGuard class em src/lib/forge/cost-caps.ts",
+        "watchWorker emite event 'cap_hit_story' quando excede",
+        "SIGTERM enviado primeiro; SIGKILL após 10s sem exit",
+        "Worktree removed via git worktree remove --force após kill",
+        "Memory entry persiste { killed: true, cost: final accumulated }",
+        "Orchestrator pausa autorun quando PRD cap atingido",
+        "CLI flag --cost-cap-story=X aplica override",
+        "Env FORGE_COST_CAP_PRD aplica override",
+        "Warn event emit em 80% do cap (story OU prd)",
+        "Test smoke: cap=$0.05, mock cost stream excedendo → cap_hit_story emit + child SIGTERM called"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["FAP-001"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/forge/cost-caps.ts",
+        "src/lib/forge/cost-caps.test.ts",
+        "src/lib/forge/orchestrator.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FAP-003",
+      "title": "Smoke gate tsc + rollback strategy",
+      "description": "src/lib/forge/gates/smoke.ts: runSmokeGate. tsc --noEmit --incremental, timeout 60s. Fail → safety check HEAD~1 message match 'forge — <storyId>' → git reset --hard HEAD~1 + worktree remove. Flag --skip-smoke.",
+      "acceptanceCriteria": [
+        "src/lib/forge/gates/smoke.ts exporta runSmokeGate",
+        "Default timeout 60s; override FORGE_SMOKE_TIMEOUT_MS ou --smoke-timeout-ms",
+        "On tsc fail: verifica HEAD~1 message match 'forge — <storyId>' antes de reset",
+        "Safety check fail: emit 'rollback_aborted_safety_check', NÃO reset",
+        "Safety check pass + tsc fail: git reset --hard HEAD~1 + worktree remove",
+        "Output field: tail 500 chars do tsc output",
+        "Flag --skip-smoke pula gate, emit smoke_skipped warning",
+        "Success NÃO emit (silent); fail emit smoke_fail + smoke_rollback"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["FAP-002"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/forge/gates/smoke.ts",
+        "src/lib/forge/gates/smoke.test.ts",
+        "src/lib/forge/orchestrator.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FAP-004",
+      "title": "HITL strategy switch (conservative/retry-once/full-auto)",
+      "description": "src/lib/forge/hitl.ts: applyStrategy(strategy, ctx). Retry-once default: 1 retry com diagnosticHint, depois stop. Conservative stop em 1ª fail. Full-auto delega pivot a FE-004 D21. CLI flag --hitl. Meta persistida.",
+      "acceptanceCriteria": [
+        "src/lib/forge/hitl.ts exporta applyStrategy + tipos",
+        ".forge/<runId>/meta.json contém { hitlStrategy } no início",
+        "Default = retry-once se flag ausente",
+        "Retry-once: attemptIndex=1 retorna retry; attemptIndex=2 retorna stop",
+        "Conservative: qualquer fail retorna stop",
+        "Full-auto: sempre continue",
+        "diagnosticHint inclui failureKind + tail output (limit 200 chars)",
+        "Retry header injetado no prompt do worker re-spawn",
+        "Event 'hitl_retry' emit no re-spawn com { storyId, attempt, diagnosticHint }",
+        "Event 'hitl_strategy_set' emit no início"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["FAP-003"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/hitl.ts",
+        "src/lib/forge/hitl.test.ts",
+        "src/lib/forge/orchestrator.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FAP-005",
+      "title": "Diff size + touches mismatch reporters",
+      "description": "src/lib/forge/gates/diff-review.ts: runDiffReview. Stats via git diff --stat. Oversize → pausa needs-human-review. Mismatches SÓ em arquivos novos (--diff-filter=A). Warning não bloqueia. Flags --max-loc / --max-files.",
+      "acceptanceCriteria": [
+        "src/lib/forge/gates/diff-review.ts exporta runDiffReview",
+        "oversize=true se loc>500 OR files>20 (defaults)",
+        "Mismatches: SÓ arquivos novos (--diff-filter=A)",
+        "Pause em oversize: orchestrator marca run status='needs-human-review'",
+        "touches_mismatch event lista expected + actual + extraCreated",
+        "Memory entry inclui diffStats: { loc, files, mismatches }",
+        "Flags --max-loc, --max-files override defaults",
+        "Env FORGE_MAX_LOC override default",
+        "Mismatches.length=0: NÃO emit (silent)",
+        "Test: story.touches=[a.ts], worker criou a.ts + b.ts → mismatches=['b.ts']"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["FAP-004"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/gates/diff-review.ts",
+        "src/lib/forge/gates/diff-review.test.ts",
+        "src/lib/forge/orchestrator.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "FAP-006",
+      "title": "CLI flag surface + UI Memory tab + E2E smoke + docs",
+      "description": "CLI flags (--hitl, --cost-cap-*, --max-*, --skip-smoke). Zod schema extension em api-schemas.ts. UI aba Memory render via existing tab pattern. Smoke E2E test:autopilot-e2e. Docs em forge-runbook.md.",
+      "acceptanceCriteria": [
+        "forge run --help lista todas flags (hitl, cost-cap-story, cost-cap-prd, max-loc, max-files, skip-smoke, smoke-timeout-ms)",
+        "src/lib/forge/api-schemas.ts Zod schema aceita campos novos",
+        "src/app/(dashboard)/forge/_components/memory-tab.tsx renderiza memory.jsonl entries",
+        "Tab Memory aparece no PRD detail",
+        "Smoke script:test:autopilot-e2e roda sem erro fatal",
+        "Smoke: cap=$0.01 → cap_hit_story event presente em events.jsonl",
+        "Smoke: max-loc=10 → diff_oversize_review_needed event presente",
+        "docs/runbooks/forge-runbook.md ganha seção 'Autopilot gates' (≥3 parágrafos)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "npx tsx scripts/forge/cli.ts run --help 2>&1 | grep -cE 'hitl|cost-cap-story|max-loc'",
+          "expected": "≥ 3"
+        }
+      ],
+      "dependsOn": ["FAP-005"],
+      "estimateMinutes": 30,
+      "touches": [
+        "scripts/forge/cli.ts",
+        "src/lib/forge/api-schemas.ts",
+        "src/app/(dashboard)/forge/_components/memory-tab.tsx",
+        "package.json",
+        "docs/runbooks/forge-runbook.md"
+      ],
+      "agentProfile": "wiring",
+      "passes": false
+    }
+  ]
+}

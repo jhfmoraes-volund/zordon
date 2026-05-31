@@ -66,26 +66,24 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb + header */}
-      <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-start gap-3">
         <Link
           href="/agents"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          aria-label="Voltar para Agentes"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          <ArrowLeft className="h-3 w-3" />
-          Agentes
+          <ArrowLeft className="size-4" />
         </Link>
-        <div className="flex items-start gap-3">
-          <AgentTile slug={slug} />
-          <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-bold">{agent?.name ?? slug}</h1>
-            {agent?.description && (
-              <p className="text-sm text-muted-foreground">{agent.description}</p>
-            )}
-            {agent?.modelId && (
-              <p className="text-xs text-muted-foreground/70 font-mono mt-1">{agent.modelId}</p>
-            )}
-          </div>
+        <AgentTile slug={slug} />
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold">{agent?.name ?? slug}</h1>
+          {agent?.description && (
+            <p className="text-sm text-muted-foreground">{agent.description}</p>
+          )}
+          {agent?.modelId && (
+            <p className="text-xs text-muted-foreground/70 font-mono mt-1">{agent.modelId}</p>
+          )}
         </div>
       </div>
 

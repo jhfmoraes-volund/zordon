@@ -1,0 +1,250 @@
+{
+  "feature": "forge-from-vitor",
+  "title": "Forge from Vitor — bridge ProductRequirement → Forge engine",
+  "prd_path": "docs/prd/backlog/prd-forge-from-vitor.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "VTF-001",
+      "title": "Parser §16 yaml block (markdown → structured stories)",
+      "description": "Função parseStoriesYaml(markdown): { stories[], errors[] }. Localiza §16, extrai bloco yaml interno, parseia, retorna erros com line:col. Não valida semântica (VTF-002 faz).",
+      "acceptanceCriteria": [
+        "src/lib/forge/spec/parse-prd-stories.ts exporta parseStoriesYaml(md: string)",
+        "Detecta §16 com regex matching '## §?16' ou '## Stories implementáveis' (case-insensitive)",
+        "Erros têm shape { line, col?, message }",
+        "Markdown sem §16 retorna stories: [], errors: [{line: 0, message: 'section §16 not found'}]",
+        "yaml malformado retorna errors com line do erro",
+        "Test: parse de docs/prd/backlog/prd-forge-engine.md retorna 14 stories, 0 errors",
+        "Test: markdown vazio retorna errors com 'no markdown content'"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "npx tsx -e \"import('./src/lib/forge/spec/parse-prd-stories.ts').then(m=>{const fs=require('fs');const md=fs.readFileSync('docs/prd/backlog/prd-forge-engine.md','utf8');const r=m.parseStoriesYaml(md);console.log(JSON.stringify({n:r.stories.length,errors:r.errors.length}))})\"",
+          "expected": "{\"n\":14,\"errors\":0}"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/spec/parse-prd-stories.ts",
+        "src/lib/forge/spec/parse-prd-stories.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VTF-002",
+      "title": "Validator de stories (regras AGENTS.md)",
+      "description": "validateForgeStories(stories): { ok, errors[], warnings[] }. Errors fatais: id ausente/duplicado, verifiable vazio, deps inexistentes, ciclo no DAG. Warnings: estimate>30, <5 stories, >80% manual_browser, touches/agentProfile ausentes.",
+      "acceptanceCriteria": [
+        "src/lib/forge/spec/validate-stories.ts exporta validateForgeStories(stories)",
+        "Cycle detection via DFS: erro contém 'cycle: A → B → A'",
+        "Id duplicado: error com storyId + 'duplicate id'",
+        "verifiable vazio: error (não warning)",
+        "<5 stories: warning 'only N stories; AGENTS.md recommends ≥5'",
+        ">80% manual_browser: warning 'X of N stories verifiable is manual_browser only'",
+        "Test: stories do prd-forge-engine.md retornam ok=true, errors=[]",
+        "Test: stories com ciclo retornam ok=false, errors contém 'cycle'"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "npx tsx -e \"Promise.all([import('./src/lib/forge/spec/parse-prd-stories.ts'),import('./src/lib/forge/spec/validate-stories.ts')]).then(([p,v])=>{const fs=require('fs');const md=fs.readFileSync('docs/prd/backlog/prd-forge-engine.md','utf8');const r=v.validateForgeStories(p.parseStoriesYaml(md).stories);console.log(JSON.stringify({ok:r.ok,errs:r.errors.length}))})\"",
+          "expected": "{\"ok\":true,\"errs\":0}"
+        }
+      ],
+      "dependsOn": ["VTF-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/spec/validate-stories.ts",
+        "src/lib/forge/spec/validate-stories.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VTF-003",
+      "title": "DAL forge-bridge — emitToForge orchestrator",
+      "description": "src/lib/dal/forge-bridge.ts: emitToForge(prdId, opts?). Pipeline: read PRD → assert approved → parseStoriesYaml → validate → slug derive → uniqueness check → specHash idempotency → merge passes:true do prd.json existente → write FS. dryRun pula write.",
+      "acceptanceCriteria": [
+        "src/lib/dal/forge-bridge.ts exporta emitToForge",
+        "slugify('Forge Engine v2!') === 'forge-engine-v2'",
+        "Throws 'PRD not approved' se status='draft'",
+        "Slug conflito throws com suggestion '<slug>-2'",
+        "Re-emit com mesmo specHash: result.unchanged === true, FS intacto",
+        "Merge: passes:true de stories existentes mantém após re-emit",
+        "Stories removidas no v2 não aparecem no prd.json final",
+        "Stories novas no v2 aparecem com passes: false",
+        "Frontmatter do mirror md contém productRequirementId + version + specHash + emittedAt",
+        "dryRun=true: fs.existsSync(prdJsonPath) state inalterado"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["VTF-002"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/dal/forge-bridge.ts",
+        "src/lib/dal/forge-bridge.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VTF-004",
+      "title": "API routes — POST emit + GET preview",
+      "description": "POST /api/forge/specs/from-prd/[prdId] (body Zod {slug?}) + GET /api/forge/specs/from-prd/[prdId]/preview (dryRun). Auth via proxy.ts; permissão can_edit_project OR is_manager. Erro mapping: 400 (Zod), 403 (perm), 404 (PRD), 409 (slug), 422 (not approved OR §16 invalid).",
+      "acceptanceCriteria": [
+        "src/app/api/forge/specs/from-prd/[prdId]/route.ts exporta POST",
+        "src/app/api/forge/specs/from-prd/[prdId]/preview/route.ts exporta GET",
+        "POST body inválido → 400 + { error, issues[] }",
+        "POST com PRD não-approved → 422 + { error: 'PRD must be approved' }",
+        "POST sem permissão → 403",
+        "POST com slug em uso → 409 + { error, suggestion }",
+        "GET preview retorna stories + warnings sem efeitos colaterais",
+        "Schemas Zod em src/lib/forge/api-schemas.ts (importadas, não inline)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/forge/specs/from-prd/00000000-0000-0000-0000-000000000000",
+          "expected": "401"
+        }
+      ],
+      "dependsOn": ["VTF-003"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/api/forge/specs/from-prd/[prdId]/route.ts",
+        "src/app/api/forge/specs/from-prd/[prdId]/preview/route.ts",
+        "src/lib/forge/api-schemas.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VTF-005",
+      "title": "Vitor tool emit_to_forge + system prompt update",
+      "description": "Tool emit_to_forge em src/lib/agent/agents/vitor/tools.ts com schema Zod { productRequirementId: uuid, slug?: string }. Implementação fetch interno. Vitor's prompt menciona emit_to_forge no pós-approve_prd flow. NÃO auto-chama — Vitor sugere, builder confirma.",
+      "acceptanceCriteria": [
+        "buildVitorTools() retorna toolset incluindo emit_to_forge",
+        "Schema Zod valida productRequirementId como uuid",
+        "Tool description menciona pré-req status=approved",
+        "Erro 4xx mapeado pra { ok: false, error } (não throw raw)",
+        "Sucesso: { ok: true, prdJsonPath, storiesCount, warnings }",
+        "Vitor's system prompt menciona emit_to_forge no flow pós-approve_prd",
+        "Tool NÃO é chamada automaticamente"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "grep -c 'emit_to_forge' src/lib/agent/agents/vitor/tools.ts",
+          "expected": "≥ 1"
+        }
+      ],
+      "dependsOn": ["VTF-004"],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/lib/agent/agents/vitor/tools.ts",
+        "src/lib/agent/agents/vitor/index.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VTF-006",
+      "title": "UI Forge Status card no PRD detail",
+      "description": "src/components/prd/forge-status-card.tsx: 3 estados (não-emitido/emitido/erro). Preview via ResponsiveDialog. useOptimisticCollection pro state. Errors via Sonner toast. Integrar no PRD detail page.",
+      "acceptanceCriteria": [
+        "src/components/prd/forge-status-card.tsx existe",
+        "Card só renderiza se prd.status === 'approved'",
+        "Preview modal usa ResponsiveDialog (não Dialog raw)",
+        "PreviewTable mostra id, title, estimateMinutes, verifiable kinds",
+        "Send com loading state durante POST",
+        "Errors via Sonner toast",
+        "Optimistic: clicar Send muda estado local-first; reconcilia após response",
+        "Re-emit: warning toast 'unchanged' se response.unchanged === true",
+        "Page PRD detail importa ForgeStatusCard e renderiza"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "grep -r 'ForgeStatusCard' 'src/app/(dashboard)/projects' | head -1",
+          "expected": "non-empty match"
+        }
+      ],
+      "dependsOn": ["VTF-005"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/prd/forge-status-card.tsx",
+        "src/components/prd/forge-preview-modal.tsx",
+        "src/app/(dashboard)/projects/[id]/prds/[prdId]/page.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "VTF-007",
+      "title": "CLI fallback + smoke E2E",
+      "description": "scripts/forge/emit-from-prd.ts <prdId> [--slug=<x>] [--dry-run] [--json]: chama emitToForge diretamente. package.json script. Smoke E2E em test:bridge-e2e. Docs em forge-runbook.md.",
+      "acceptanceCriteria": [
+        "scripts/forge/emit-from-prd.ts compila + responde a --help",
+        "package.json adicionou script 'forge:emit-from-prd'",
+        "CLI --dry-run NÃO modifica filesystem",
+        "CLI --json output é JSON parseável",
+        "Smoke script:test:bridge-e2e roda + asserta prd.json shape",
+        "docs/runbooks/forge-runbook.md ganha seção 'Bridge from Vitor' (≥3 parágrafos)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "npx tsx scripts/forge/emit-from-prd.ts --help 2>&1 | grep -c 'dry-run'",
+          "expected": "≥ 1"
+        }
+      ],
+      "dependsOn": ["VTF-006"],
+      "estimateMinutes": 20,
+      "touches": [
+        "scripts/forge/emit-from-prd.ts",
+        "package.json",
+        "docs/runbooks/forge-runbook.md"
+      ],
+      "agentProfile": "wiring",
+      "passes": false
+    }
+  ]
+}

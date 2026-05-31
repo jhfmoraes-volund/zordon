@@ -154,3 +154,57 @@ export async function listPrds(
   if (error) throw error;
   return data ?? [];
 }
+
+// ─── CRUD: PlanningSessionContextLink ─────────────────────────────────────────
+
+export type PlanningSessionContextLinkRow =
+  Tables["PlanningSessionContextLink"]["Row"];
+export type PlanningSessionContextLinkInsert =
+  Tables["PlanningSessionContextLink"]["Insert"];
+
+/**
+ * Link a ContextSource to a PlanningSession
+ */
+export async function linkContextSource(
+  planningSessionId: string,
+  contextSourceId: string,
+  linkedBy: string,
+): Promise<PlanningSessionContextLinkRow> {
+  const { data, error } = await db()
+    .from("PlanningSessionContextLink")
+    .insert({
+      planningSessionId,
+      contextSourceId,
+      linkedBy,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Unlink a ContextSource from a PlanningSession
+ */
+export async function unlinkContextSource(linkId: string): Promise<void> {
+  const { error } = await db()
+    .from("PlanningSessionContextLink")
+    .delete()
+    .eq("id", linkId);
+  if (error) throw error;
+}
+
+/**
+ * List all linked ContextSources for a PlanningSession
+ */
+export async function listLinkedContextSources(
+  planningSessionId: string,
+): Promise<PlanningSessionContextLinkRow[]> {
+  const { data, error } = await db()
+    .from("PlanningSessionContextLink")
+    .select("*")
+    .eq("planningSessionId", planningSessionId)
+    .order("linkedAt", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}

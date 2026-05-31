@@ -127,22 +127,24 @@ export default function MemoriaPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <Link
-          href={`/design-sessions/${id}/steps/0`}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Voltar para a session
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-muted-foreground" />
-            Memória — {session.title}
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Tudo que o Vitor lembra desta session e do projeto. Mantido pelo agente —
-            se algo estiver errado, peça ajuste no chat.
-          </p>
+        <div className="flex items-start gap-3">
+          <Link
+            href={`/design-sessions/${id}/steps/0`}
+            aria-label="Voltar para a session"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-muted-foreground" />
+              Memória — {session.title}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Tudo que o Vitor lembra desta session e do projeto. Mantido pelo agente —
+              se algo estiver errado, peça ajuste no chat.
+            </p>
+          </div>
         </div>
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
           <strong className="text-amber-600 dark:text-amber-400">Read-only.</strong>{" "}

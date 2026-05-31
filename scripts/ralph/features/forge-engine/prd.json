@@ -18,14 +18,27 @@
         "Spec com seção upstream apontando pra DS/PRD/meeting é aceita (refs tipadas)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js spec validate docs/specs/example.md", "expected": "exit 0, prints ✓" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "node scripts/forge/cli.js spec validate docs/specs/example.md",
+          "expected": "exit 0, prints ✓"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 25,
-      "touches": ["src/lib/forge/spec/schema.ts", "src/lib/forge/spec/validator.ts", "scripts/forge/cli.ts", "docs/specs/example.md"],
+      "touches": [
+        "src/lib/forge/spec/schema.ts",
+        "src/lib/forge/spec/validator.ts",
+        "scripts/forge/cli.ts",
+        "docs/specs/example.md"
+      ],
       "agentProfile": "doc",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-002",
@@ -41,14 +54,27 @@
         "CLI 'forge plan <slug>' invoca e grava em .forge/<slug>/plan.jsonl"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js plan example && cat .forge/example/plan.jsonl | jq '.[0].id'", "expected": "string non-empty" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "node scripts/forge/cli.js plan example && cat .forge/example/plan.jsonl | jq '.[0].id'",
+          "expected": "string non-empty"
+        }
       ],
-      "dependsOn": ["FE-001"],
+      "dependsOn": [
+        "FE-001"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/forge/planner.ts", "scripts/forge/cli.ts"],
+      "touches": [
+        "src/lib/forge/planner.ts",
+        "scripts/forge/cli.ts"
+      ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FE-003",
@@ -64,13 +90,31 @@
         "RLS smoke: usuário A não consegue SELECT em ForgeRun de usuário B (privacy ownerId)"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeSpec'", "expected": "1" },
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='ForgeTask' AND column_name IN ('specId','agentProfile','worktreePath','dependsOn','verifiable','passes')", "expected": "6" },
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeSpec'",
+          "expected": "1"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='ForgeTask' AND column_name IN ('specId','agentProfile','worktreePath','dependsOn','verifiable','passes')",
+          "expected": "6"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 25,
-      "touches": ["supabase/migrations/20260530a_create_forge_spec.sql", "supabase/migrations/20260530b_forge_task_engine_fields.sql", "supabase/migrations/20260530c_forge_run_cost_agg.sql", "supabase/migrations/20260530d_forge_cost_aggregate_trigger.sql", "src/lib/supabase/database.types.ts"],
+      "touches": [
+        "supabase/migrations/20260530a_create_forge_spec.sql",
+        "supabase/migrations/20260530b_forge_task_engine_fields.sql",
+        "supabase/migrations/20260530c_forge_run_cost_agg.sql",
+        "supabase/migrations/20260530d_forge_cost_aggregate_trigger.sql",
+        "src/lib/supabase/database.types.ts"
+      ],
       "agentProfile": "db",
       "passes": false
     },
@@ -88,12 +132,27 @@
         "SIGINT graceful: termina workers ativos, marca status='aborted'"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js run example --dry-run", "expected": "lista de tasks a executar, sem spawnar" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "node scripts/forge/cli.js run example --dry-run",
+          "expected": "lista de tasks a executar, sem spawnar"
+        }
       ],
-      "dependsOn": ["FE-002", "FE-003"],
+      "dependsOn": [
+        "FE-002",
+        "FE-003"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/forge/orchestrator.ts", "src/lib/forge/dal/run.ts", "scripts/forge/cli.ts"],
+      "touches": [
+        "src/lib/forge/orchestrator.ts",
+        "src/lib/forge/dal/run.ts",
+        "scripts/forge/cli.ts"
+      ],
       "agentProfile": "wiring",
       "passes": false
     },
@@ -109,12 +168,24 @@
         "Falha de worker remove worktree mas preserva log em error.log"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "git worktree list | grep .forge", "expected": "list contains worktree paths after a test run" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "git worktree list | grep .forge",
+          "expected": "list contains worktree paths after a test run"
+        }
       ],
-      "dependsOn": ["FE-004"],
+      "dependsOn": [
+        "FE-004"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/lib/forge/worker.ts"],
+      "touches": [
+        "src/lib/forge/worker.ts"
+      ],
       "agentProfile": "wiring",
       "passes": false
     },
@@ -133,12 +204,30 @@
         "DB profile prompt menciona: psql DIRECT_URL, atomic migrations, RLS via helpers"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "node -e \"console.log(require('./src/lib/forge/profiles/index.ts').getProfile('ui').systemPrompt.length)\"", "expected": "number > 500" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "node -e \"console.log(require('./src/lib/forge/profiles/index.ts').getProfile('ui').systemPrompt.length)\"",
+          "expected": "number > 500"
+        }
       ],
-      "dependsOn": ["FE-005"],
+      "dependsOn": [
+        "FE-005"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/forge/profiles/index.ts", "src/lib/forge/profiles/db.ts", "src/lib/forge/profiles/api.ts", "src/lib/forge/profiles/ui.ts", "src/lib/forge/profiles/wiring.ts", "src/lib/forge/profiles/test.ts", "src/lib/forge/profiles/doc.ts"],
+      "touches": [
+        "src/lib/forge/profiles/index.ts",
+        "src/lib/forge/profiles/db.ts",
+        "src/lib/forge/profiles/api.ts",
+        "src/lib/forge/profiles/ui.ts",
+        "src/lib/forge/profiles/wiring.ts",
+        "src/lib/forge/profiles/test.ts",
+        "src/lib/forge/profiles/doc.ts"
+      ],
       "agentProfile": "wiring",
       "passes": false
     },
@@ -156,12 +245,27 @@
         "Sem run ativo: hook é no-op (não falha)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"ForgeEvent\" WHERE \"runId\" = (SELECT id FROM \"ForgeRun\" ORDER BY \"createdAt\" DESC LIMIT 1)", "expected": "> 0 after a run completes" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM \"ForgeEvent\" WHERE \"runId\" = (SELECT id FROM \"ForgeRun\" ORDER BY \"createdAt\" DESC LIMIT 1)",
+          "expected": "> 0 after a run completes"
+        }
       ],
-      "dependsOn": ["FE-005", "FE-003"],
+      "dependsOn": [
+        "FE-005",
+        "FE-003"
+      ],
       "estimateMinutes": 25,
-      "touches": [".claude/hooks/forge-event-emit.ts", ".claude/settings.json", "src/lib/forge/event-uploader.ts"],
+      "touches": [
+        ".claude/hooks/forge-event-emit.ts",
+        ".claude/settings.json",
+        "src/lib/forge/event-uploader.ts"
+      ],
       "agentProfile": "wiring",
       "passes": false
     },
@@ -177,12 +281,27 @@
         "Trigger SQL agregou ForgeRun.costUsdTotal corretamente"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "SELECT \"costUsdTotal\" FROM \"ForgeRun\" WHERE id=(SELECT \"runId\" FROM \"ForgeTask\" WHERE \"costUsd\">0 LIMIT 1)", "expected": "value > 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT \"costUsdTotal\" FROM \"ForgeRun\" WHERE id=(SELECT \"runId\" FROM \"ForgeTask\" WHERE \"costUsd\">0 LIMIT 1)",
+          "expected": "value > 0"
+        }
       ],
-      "dependsOn": ["FE-005", "FE-003"],
+      "dependsOn": [
+        "FE-005",
+        "FE-003"
+      ],
       "estimateMinutes": 20,
-      "touches": ["src/lib/forge/cost-parser.ts", "src/lib/forge/pricing.ts", "src/lib/forge/worker.ts"],
+      "touches": [
+        "src/lib/forge/cost-parser.ts",
+        "src/lib/forge/pricing.ts",
+        "src/lib/forge/worker.ts"
+      ],
       "agentProfile": "wiring",
       "passes": false
     },
@@ -198,12 +317,27 @@
         "`forge done` invoca gh pr create com título correto"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js --help", "expected": "lista todos os subcomandos" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "node scripts/forge/cli.js --help",
+          "expected": "lista todos os subcomandos"
+        }
       ],
-      "dependsOn": ["FE-004", "FE-007", "FE-008"],
+      "dependsOn": [
+        "FE-004",
+        "FE-007",
+        "FE-008"
+      ],
       "estimateMinutes": 30,
-      "touches": ["scripts/forge/cli.ts", "package.json"],
+      "touches": [
+        "scripts/forge/cli.ts",
+        "package.json"
+      ],
       "agentProfile": "wiring",
       "passes": false
     },
@@ -222,12 +356,26 @@
         "Rota /projects/[id]/forge (aba do projeto) usa o source automático e respeita RLS ownerId"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "http", "command_or_query": "curl -I http://localhost:3000/forge", "expected": "200" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -I http://localhost:3000/forge",
+          "expected": "200"
+        }
       ],
-      "dependsOn": ["FE-007"],
+      "dependsOn": [
+        "FE-007"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/forge/sources/realtime.ts", "src/lib/forge/sources/index.ts", "src/hooks/use-forge-store.tsx"],
+      "touches": [
+        "src/lib/forge/sources/realtime.ts",
+        "src/lib/forge/sources/index.ts",
+        "src/hooks/use-forge-store.tsx"
+      ],
       "agentProfile": "ui",
       "passes": false
     },
@@ -243,12 +391,25 @@
         "Aba só aparece se task.status != 'queued'"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "http", "command_or_query": "curl -I http://localhost:3000/api/forge/tasks/test-id/diff", "expected": "200 or 404 (route exists)" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -I http://localhost:3000/api/forge/tasks/test-id/diff",
+          "expected": "200 or 404 (route exists)"
+        }
       ],
-      "dependsOn": ["FE-010"],
+      "dependsOn": [
+        "FE-010"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/app/(dashboard)/forge/_components/task-sheet/diff-tab.tsx", "src/app/api/forge/tasks/[id]/diff/route.ts"],
+      "touches": [
+        "src/app/(dashboard)/forge/_components/task-sheet/diff-tab.tsx",
+        "src/app/api/forge/tasks/[id]/diff/route.ts"
+      ],
       "agentProfile": "ui",
       "passes": false
     },
@@ -265,12 +426,29 @@
         "Header global mostra badge 🟢/🔵 baseado em ping (polling 5s)"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "http", "command_or_query": "curl -X POST http://localhost:3000/api/forge/runs -d '{\"taskId\":\"test\"}' -H 'Content-Type: application/json'", "expected": "200 with runId field" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -X POST http://localhost:3000/api/forge/runs -d '{\"taskId\":\"test\"}' -H 'Content-Type: application/json'",
+          "expected": "200 with runId field"
+        }
       ],
-      "dependsOn": ["FE-004", "FE-005"],
+      "dependsOn": [
+        "FE-004",
+        "FE-005"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/app/api/forge/ping/route.ts", "src/app/api/forge/runs/route.ts", "src/components/sprint/task-row.tsx", "src/components/layout/forge-badge.tsx", "scripts/forge/exec.ts"],
+      "touches": [
+        "src/app/api/forge/ping/route.ts",
+        "src/app/api/forge/runs/route.ts",
+        "src/components/sprint/task-row.tsx",
+        "src/components/layout/forge-badge.tsx",
+        "scripts/forge/exec.ts"
+      ],
       "agentProfile": "wiring",
       "passes": false
     },
@@ -286,12 +464,27 @@
         "Após 2 runs no mesmo profile, learning de run 1 aparece no prompt do run 2"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeLearning'", "expected": "1" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ForgeLearning'",
+          "expected": "1"
+        }
       ],
-      "dependsOn": ["FE-003"],
+      "dependsOn": [
+        "FE-003"
+      ],
       "estimateMinutes": 25,
-      "touches": ["supabase/migrations/20260530e_forge_learning.sql", "src/lib/forge/dal/learning.ts", "src/lib/forge/profiles/index.ts", "src/lib/forge/planner.ts"],
+      "touches": [
+        "supabase/migrations/20260530e_forge_learning.sql",
+        "src/lib/forge/dal/learning.ts",
+        "src/lib/forge/profiles/index.ts",
+        "src/lib/forge/planner.ts"
+      ],
       "agentProfile": "db",
       "passes": false
     },
@@ -307,12 +500,26 @@
         "CLI 'forge done <id>' executa todos os steps com confirmação"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" },
-        { "kind": "manual_browser", "command_or_query": "node scripts/forge/cli.js done --dry-run <test-run-id>", "expected": "lista ações sem executar" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "node scripts/forge/cli.js done --dry-run <test-run-id>",
+          "expected": "lista ações sem executar"
+        }
       ],
-      "dependsOn": ["FE-009", "FE-011"],
+      "dependsOn": [
+        "FE-009",
+        "FE-011"
+      ],
       "estimateMinutes": 20,
-      "touches": ["src/lib/forge/closeout.ts", "scripts/forge/cli.ts"],
+      "touches": [
+        "src/lib/forge/closeout.ts",
+        "scripts/forge/cli.ts"
+      ],
       "agentProfile": "wiring",
       "passes": false
     }

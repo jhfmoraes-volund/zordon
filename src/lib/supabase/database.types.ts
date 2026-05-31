@@ -4489,6 +4489,254 @@ export type Database = {
           },
         ]
       }
+      PlanningSession: {
+        Row: {
+          agentOutputsJsonb: Json | null
+          approvedAt: string | null
+          approvedBy: string | null
+          codebaseIndexSha: string | null
+          costUsd: number
+          createdAt: string
+          draftRoadmapJsonb: Json | null
+          errorMessage: string | null
+          facilitatorId: string | null
+          id: string
+          orchestrateJobId: string | null
+          prdIndexSha: string | null
+          projectId: string
+          sprintCount: number
+          status: string
+          title: string
+          tokensUsed: number
+          updatedAt: string
+        }
+        Insert: {
+          agentOutputsJsonb?: Json | null
+          approvedAt?: string | null
+          approvedBy?: string | null
+          codebaseIndexSha?: string | null
+          costUsd?: number
+          createdAt?: string
+          draftRoadmapJsonb?: Json | null
+          errorMessage?: string | null
+          facilitatorId?: string | null
+          id?: string
+          orchestrateJobId?: string | null
+          prdIndexSha?: string | null
+          projectId: string
+          sprintCount?: number
+          status?: string
+          title: string
+          tokensUsed?: number
+          updatedAt?: string
+        }
+        Update: {
+          agentOutputsJsonb?: Json | null
+          approvedAt?: string | null
+          approvedBy?: string | null
+          codebaseIndexSha?: string | null
+          costUsd?: number
+          createdAt?: string
+          draftRoadmapJsonb?: Json | null
+          errorMessage?: string | null
+          facilitatorId?: string | null
+          id?: string
+          orchestrateJobId?: string | null
+          prdIndexSha?: string | null
+          projectId?: string
+          sprintCount?: number
+          status?: string
+          title?: string
+          tokensUsed?: number
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PlanningSession_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_approvedBy_fkey"
+            columns: ["approvedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_facilitatorId_fkey"
+            columns: ["facilitatorId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      PlanningSessionContextLink: {
+        Row: {
+          contextSourceId: string
+          id: string
+          linkedAt: string
+          linkedBy: string
+          planningSessionId: string
+        }
+        Insert: {
+          contextSourceId: string
+          id?: string
+          linkedAt?: string
+          linkedBy: string
+          planningSessionId: string
+        }
+        Update: {
+          contextSourceId?: string
+          id?: string
+          linkedAt?: string
+          linkedBy?: string
+          planningSessionId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PlanningSessionContextLink_contextSourceId_fkey"
+            columns: ["contextSourceId"]
+            isOneToOne: false
+            referencedRelation: "ContextSource"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSessionContextLink_linkedBy_fkey"
+            columns: ["linkedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSessionContextLink_linkedBy_fkey"
+            columns: ["linkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSessionContextLink_linkedBy_fkey"
+            columns: ["linkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSessionContextLink_linkedBy_fkey"
+            columns: ["linkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSessionContextLink_planningSessionId_fkey"
+            columns: ["planningSessionId"]
+            isOneToOne: false
+            referencedRelation: "PlanningSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      PlanningSessionPRD: {
+        Row: {
+          agentJustification: string | null
+          assignedSquadId: string | null
+          createdAt: string
+          id: string
+          order: number
+          ownerOverride: string | null
+          planningSessionId: string
+          prdSlug: string
+          sprintCount: number
+          sprintStart: number
+        }
+        Insert: {
+          agentJustification?: string | null
+          assignedSquadId?: string | null
+          createdAt?: string
+          id?: string
+          order: number
+          ownerOverride?: string | null
+          planningSessionId: string
+          prdSlug: string
+          sprintCount?: number
+          sprintStart: number
+        }
+        Update: {
+          agentJustification?: string | null
+          assignedSquadId?: string | null
+          createdAt?: string
+          id?: string
+          order?: number
+          ownerOverride?: string | null
+          planningSessionId?: string
+          prdSlug?: string
+          sprintCount?: number
+          sprintStart?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PlanningSessionPRD_assignedSquadId_fkey"
+            columns: ["assignedSquadId"]
+            isOneToOne: false
+            referencedRelation: "Squad"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSessionPRD_planningSessionId_fkey"
+            columns: ["planningSessionId"]
+            isOneToOne: false
+            referencedRelation: "PlanningSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       PlanningTranscriptLink: {
         Row: {
           id: string
@@ -6990,145 +7238,6 @@ export type Database = {
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      PlanningSession: {
-        Row: {
-          id: string
-          projectId: string
-          status: "draft" | "orchestrating" | "in-review" | "approved" | "aborted" | "error"
-          title: string
-          facilitatorId: string | null
-          sprintCount: number
-          codebaseIndexSha: string | null
-          prdIndexSha: string | null
-          draftRoadmapJsonb: Json | null
-          agentOutputsJsonb: Json | null
-          orchestrateJobId: string | null
-          tokensUsed: number
-          costUsd: number
-          errorMessage: string | null
-          approvedAt: string | null
-          approvedBy: string | null
-          createdAt: string
-          updatedAt: string
-        }
-        Insert: {
-          id?: string
-          projectId: string
-          status?: "draft" | "orchestrating" | "in-review" | "approved" | "aborted" | "error"
-          title: string
-          facilitatorId?: string | null
-          sprintCount?: number
-          codebaseIndexSha?: string | null
-          prdIndexSha?: string | null
-          draftRoadmapJsonb?: Json | null
-          agentOutputsJsonb?: Json | null
-          orchestrateJobId?: string | null
-          tokensUsed?: number
-          costUsd?: number
-          errorMessage?: string | null
-          approvedAt?: string | null
-          approvedBy?: string | null
-          createdAt?: string
-          updatedAt?: string
-        }
-        Update: {
-          id?: string
-          projectId?: string
-          status?: "draft" | "orchestrating" | "in-review" | "approved" | "aborted" | "error"
-          title?: string
-          facilitatorId?: string | null
-          sprintCount?: number
-          codebaseIndexSha?: string | null
-          prdIndexSha?: string | null
-          draftRoadmapJsonb?: Json | null
-          agentOutputsJsonb?: Json | null
-          orchestrateJobId?: string | null
-          tokensUsed?: number
-          costUsd?: number
-          errorMessage?: string | null
-          approvedAt?: string | null
-          approvedBy?: string | null
-          createdAt?: string
-          updatedAt?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "PlanningSession_projectId_fkey"
-            columns: ["projectId"]
-            isOneToOne: false
-            referencedRelation: "Project"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningSession_facilitatorId_fkey"
-            columns: ["facilitatorId"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningSession_approvedBy_fkey"
-            columns: ["approvedBy"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      PlanningSessionPRD: {
-        Row: {
-          id: string
-          planningSessionId: string
-          prdSlug: string
-          sprintStart: number
-          sprintCount: number
-          order: number
-          assignedSquadId: string | null
-          agentJustification: string | null
-          ownerOverride: string | null
-          createdAt: string
-        }
-        Insert: {
-          id?: string
-          planningSessionId: string
-          prdSlug: string
-          sprintStart: number
-          sprintCount?: number
-          order: number
-          assignedSquadId?: string | null
-          agentJustification?: string | null
-          ownerOverride?: string | null
-          createdAt?: string
-        }
-        Update: {
-          id?: string
-          planningSessionId?: string
-          prdSlug?: string
-          sprintStart?: number
-          sprintCount?: number
-          order?: number
-          assignedSquadId?: string | null
-          agentJustification?: string | null
-          ownerOverride?: string | null
-          createdAt?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "PlanningSessionPRD_planningSessionId_fkey"
-            columns: ["planningSessionId"]
-            isOneToOne: false
-            referencedRelation: "PlanningSession"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningSessionPRD_assignedSquadId_fkey"
-            columns: ["assignedSquadId"]
-            isOneToOne: false
-            referencedRelation: "Squad"
             referencedColumns: ["id"]
           },
         ]
