@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
+import { hostname as osHostname } from "node:os";
 import { db } from "../../src/lib/db";
 import {
   claimNextJob,
@@ -25,6 +26,40 @@ import {
   heartbeat,
   type ForgeJobRow,
 } from "../../src/lib/forge/dal/job";
+
+// ── ForgeRun lifecycle helpers ────────────────────────────────────────────
+
+async function markForgeRunRunning(runId: string): Promise<void> {
+  const { error } = await db()
+    .from("ForgeRun")
+    .update({ status: "running", startedAt: new Date().toISOString() })
+    .eq("id", runId)
+    .eq("status", "queued");
+  if (error) {
+    console.error(red(`  [!] Failed to mark ForgeRun ${runId} as running: ${error.message}`));
+  }
+}
+
+async function markForgeRunFinished(
+  runId: string,
+  finalStatus: "done" | "error",
+): Promise<void> {
+  const { error } = await db()
+    .from("ForgeRun")
+    .update({ status: finalStatus, endedAt: new Date().toISOString() })
+    .eq("id", runId)
+    .in("status", ["queued", "running"]);
+  if (error) {
+    console.error(red(`  [!] Failed to mark ForgeRun ${runId} as ${finalStatus}: ${error.message}`));
+  }
+}
+import {
+  registerDaemon,
+  heartbeatDaemon,
+  unregisterDaemon,
+} from "../../src/lib/forge/dal/daemon";
+import { ensureForgeHome } from "../../src/lib/forge/paths";
+import { startUploaderForRun } from "./event-uploader";
 
 // ── Colors ────────────────────────────────────────────────────────────────
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -75,6 +110,7 @@ type JobExecution = {
   process: ChildProcess;
   heartbeatInterval: NodeJS.Timeout;
   startedAt: Date;
+  uploader: { stop: () => Promise<void> } | null;
 };
 
 async function executeJob(
@@ -98,6 +134,11 @@ async function executeJob(
   // Update job status to 'running'
   await updateJobStatus(job.id, "running", { runId: job.runId ?? null });
 
+  // Cascade pro ForgeRun: queued → running + startedAt.
+  if (job.runId) {
+    await markForgeRunRunning(job.runId);
+  }
+
   // Spawn exec-prd.ts
   const autorunId = job.runId ?? randomUUID();
   const child = spawn("npx", ["tsx", execPrdPath, autorunId, prdSlug, "20"], {
@@ -107,10 +148,20 @@ async function executeJob(
     env: {
       ...process.env,
       FORGE_JOB_ID: job.id,
+      // Quando runId está setado, exec-prd.ts lê manifest do ForgeRun (banco)
+      // em vez de scripts/ralph/features/<slug>/prd.json. Veja exec-prd.ts.
+      ...(job.runId ? { FORGE_RUN_ID: job.runId } : {}),
     },
   });
 
   console.log(green(`  ✓ Spawned exec-prd.ts (PID ${child.pid})`));
+
+  // Start event uploader (tails events.jsonl, batch uploads pro ForgeEvent).
+  let uploader: { stop: () => Promise<void> } | null = null;
+  if (job.runId) {
+    uploader = startUploaderForRun(job.runId);
+    console.log(dim(`  ↑ Event uploader started for run ${job.runId.slice(0, 8)}`));
+  }
 
   // Setup heartbeat loop (every 30s)
   const heartbeatInterval = setInterval(async () => {
@@ -132,6 +183,7 @@ async function executeJob(
     process: child,
     heartbeatInterval,
     startedAt: new Date(),
+    uploader,
   };
 }
 
@@ -139,15 +191,26 @@ async function waitForJobCompletion(
   execution: JobExecution,
 ): Promise<{ ok: boolean; exitCode: number | null }> {
   return new Promise((resolve) => {
-    execution.process.on("close", (code) => {
+    const finish = async (ok: boolean, code: number | null) => {
       clearInterval(execution.heartbeatInterval);
-      resolve({ ok: code === 0, exitCode: code });
+      if (execution.uploader) {
+        try {
+          await execution.uploader.stop();
+          console.log(dim(`  ↑ Event uploader stopped (final flush done)`));
+        } catch (err) {
+          console.error(red(`  [!] Uploader stop error: ${err}`));
+        }
+      }
+      resolve({ ok, exitCode: code });
+    };
+
+    execution.process.on("close", (code) => {
+      void finish(code === 0, code);
     });
 
     execution.process.on("error", (err) => {
       console.error(red(`✗ Job process error: ${err.message}`));
-      clearInterval(execution.heartbeatInterval);
-      resolve({ ok: false, exitCode: -1 });
+      void finish(false, -1);
     });
   });
 }
@@ -161,13 +224,48 @@ async function runDaemon() {
   mkdirSync(DAEMON_CONFIG_DIR, { recursive: true });
   writeFileSync(DAEMON_PID_PATH, String(process.pid));
 
+  // Resolve + valida FORGE_HOME (default: ~/.volund-forge). Fail-fast aqui
+  // pra evitar runs sem destino de workspace/eventos.
+  let forgeHome: string;
+  try {
+    forgeHome = ensureForgeHome();
+  } catch (err) {
+    console.error(red(`✗ FORGE_HOME setup failed: ${err}`));
+    process.exit(1);
+  }
+
   console.log("");
   console.log(cyan("═══ Forge Daemon ═══"));
   console.log("");
-  console.log(`  Daemon ID: ${dim(config.daemonId)}`);
-  console.log(`  Member ID: ${dim(config.memberId)}`);
-  console.log(`  PID: ${dim(String(process.pid))}`);
+  console.log(`  Daemon ID:  ${dim(config.daemonId)}`);
+  console.log(`  Member ID:  ${dim(config.memberId)}`);
+  console.log(`  PID:        ${dim(String(process.pid))}`);
+  console.log(`  Forge home: ${dim(forgeHome)}`);
   console.log("");
+  // Register presence (idempotent upsert)
+  try {
+    await registerDaemon({
+      daemonId: config.daemonId,
+      memberId:
+        config.memberId === "00000000-0000-0000-0000-000000000000"
+          ? null
+          : config.memberId,
+      hostname: osHostname(),
+    });
+    console.log(green(`✓ Registered in ForgeDaemon registry`));
+  } catch (err) {
+    console.error(red(`✗ Failed to register daemon presence: ${err}`));
+  }
+
+  // Presence heartbeat (independent of job heartbeat)
+  const presenceInterval = setInterval(async () => {
+    try {
+      await heartbeatDaemon(config.daemonId);
+    } catch (err) {
+      console.warn(yellow(`  [!] Presence heartbeat error: ${err}`));
+    }
+  }, 30_000);
+
   console.log(yellow("→ Listening for jobs..."));
   console.log(dim("  Press Ctrl+C to stop gracefully"));
   console.log("");
@@ -230,9 +328,11 @@ async function runDaemon() {
 
         if (ok) {
           await updateJobStatus(job.id, "done");
+          if (job.runId) await markForgeRunFinished(job.runId, "done");
           console.log(green(`✓ Job ${job.id} completed successfully (${durationSec}s)`));
         } else {
           await updateJobStatus(job.id, "failed");
+          if (job.runId) await markForgeRunFinished(job.runId, "error");
           console.error(
             red(`✗ Job ${job.id} failed (exit code: ${exitCode}, ${durationSec}s)`),
           );
@@ -255,6 +355,12 @@ async function runDaemon() {
   }
 
   // Cleanup
+  clearInterval(presenceInterval);
+  try {
+    await unregisterDaemon(config.daemonId);
+  } catch (err) {
+    console.warn(yellow(`  [!] Failed to unregister daemon: ${err}`));
+  }
   await channel.unsubscribe();
 
   // Remove PID file

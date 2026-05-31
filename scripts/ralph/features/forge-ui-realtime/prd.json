@@ -1,0 +1,128 @@
+{
+  "feature": "forge-ui-realtime",
+  "prdPath": "docs/prd/backlog/prd-forge-ui-realtime.md",
+  "createdAt": "2026-05-31",
+  "owner": "joao",
+  "userStories": [
+    {
+      "id": "FUI-001",
+      "title": "Garantir ForgeEvent + ForgeRun na publication Realtime",
+      "description": "Migration idempotente ALTER PUBLICATION supabase_realtime ADD TABLE.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260601n_forge_realtime_publication.sql existe",
+        "ForgeEvent aparece em pg_publication_tables",
+        "ForgeRun aparece em pg_publication_tables",
+        "Migration roda sem erro mesmo se já estiver na publication"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_publication_tables WHERE tablename IN ('ForgeEvent','ForgeRun')", "expected": "2" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 10,
+      "touches": ["supabase/migrations/20260601n_forge_realtime_publication.sql"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "FUI-002",
+      "title": "Implementar RunEventStream client component",
+      "description": "Initial fetch + Realtime subscribe + fallback poll + badge de estado. Hard cap 5000. Auto-scroll.",
+      "acceptanceCriteria": [
+        "src/components/forge/run-event-stream.tsx existe (\"use client\")",
+        "Exporta RunEventStream(props: { runId, maxRendered? })",
+        "useEffect: initial fetch + subscribe + cleanup",
+        "Estado connectionState com 4 valores (connecting/realtime/polling/disconnected)",
+        "Fallback poll dispara se canal não SUBSCRIBED em 5s",
+        "Cap 5000 eventos com banner",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/components/forge/run-event-stream.tsx", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -c 'postgres_changes' src/components/forge/run-event-stream.tsx", "expected": "1" }
+      ],
+      "dependsOn": ["FUI-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/components/forge/run-event-stream.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "FUI-003",
+      "title": "Migrar page.tsx pra server thin + client island",
+      "description": "Server fetch meta do run + render <RunEventStream>. Remove SSE inline.",
+      "acceptanceCriteria": [
+        "page.tsx é server component (sem \"use client\")",
+        "Faz await supabase.from('ForgeRun').select().eq('id',id).maybeSingle()",
+        "Renderiza header com status + <RunEventStream runId={id} />",
+        "Código SSE / EventSource removido",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/app/forge-spike/runs/[id]/page.tsx", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -cE 'EventSource|text/event-stream' src/app/forge-spike/runs/[id]/page.tsx", "expected": "0" },
+        { "kind": "lint", "command_or_query": "grep -c 'RunEventStream' src/app/forge-spike/runs/[id]/page.tsx", "expected": "1" }
+      ],
+      "dependsOn": ["FUI-002"],
+      "estimateMinutes": 20,
+      "touches": ["src/app/forge-spike/runs/[id]/page.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "FUI-004",
+      "title": "Deletar rotas SSE e autoruns/[id]",
+      "description": "Remover arquivos. Grep não acha referência viva.",
+      "acceptanceCriteria": [
+        "src/app/api/forge/runs/[id]/stream/route.ts não existe",
+        "src/app/api/forge/autoruns/[id]/route.ts não existe",
+        "Tipecheck passa após remoção"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit -p .", "expected": "" },
+        { "kind": "lint", "command_or_query": "test -e src/app/api/forge/runs/[id]/stream/route.ts && echo EXISTS || echo OK", "expected": "OK" }
+      ],
+      "dependsOn": ["FUI-003"],
+      "estimateMinutes": 10,
+      "touches": ["src/app/api/forge/runs/[id]/stream/route.ts", "src/app/api/forge/autoruns/[id]/route.ts"],
+      "agentProfile": "code",
+      "passes": false
+    },
+    {
+      "id": "FUI-005",
+      "title": "Smoke browser test",
+      "description": "Dev server + run + abrir página + ver eventos chegando.",
+      "acceptanceCriteria": [
+        "Página abre sem erro no console",
+        "Lista cresce mid-run em ≤500ms após emit",
+        "Badge realtime fica verde ≥95% do tempo",
+        "Nenhum 'Controller is already closed' no log do Next"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "bash scripts/forge/test-smoke-ui-realtime.sh", "expected": "PASS" }
+      ],
+      "dependsOn": ["FUI-004"],
+      "estimateMinutes": 25,
+      "touches": ["scripts/forge/test-smoke-ui-realtime.sh"],
+      "agentProfile": "ops",
+      "passes": false
+    },
+    {
+      "id": "FUI-006",
+      "title": "Sweep referências mortas",
+      "description": "Achar e remover qualquer link/import pra rotas deletadas.",
+      "acceptanceCriteria": [
+        "grep -rE '/api/forge/runs/.*/stream|/api/forge/autoruns/' src/ retorna 0",
+        "Tipecheck passa após sweep"
+      ],
+      "verifiable": [
+        { "kind": "lint", "command_or_query": "grep -rE '/api/forge/runs/.*/stream|/api/forge/autoruns/' src/ | wc -l", "expected": "0" },
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit -p .", "expected": "" }
+      ],
+      "dependsOn": ["FUI-004"],
+      "estimateMinutes": 15,
+      "touches": ["src/"],
+      "agentProfile": "code",
+      "passes": false
+    }
+  ]
+}

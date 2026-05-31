@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getPrdById } from "@/lib/dal/product-requirements";
 import { PageContainer } from "@/components/app-shell";
 import { PrdDetail } from "@/components/prd/prd-detail";
+import { PrdExecutionPanel } from "@/components/forge/prd-execution-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,20 @@ export default async function PrdDetailPage({
         }))}
         canEdit={canEdit}
       />
+
+      <section className="mt-8 space-y-3">
+        <header>
+          <h2 className="text-base font-semibold">Execução na Forja</h2>
+          <p className="text-xs text-muted-foreground">
+            Runs que cobrem este PRD, AC checklist e stream live do servidor.
+          </p>
+        </header>
+        <PrdExecutionPanel
+          projectId={projectId}
+          prdId={prdId}
+          backHref={`/projects/${projectId}/prds/${prdId}`}
+        />
+      </section>
     </PageContainer>
   );
 }

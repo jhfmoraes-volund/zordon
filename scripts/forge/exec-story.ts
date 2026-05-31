@@ -12,6 +12,10 @@ import { mkdirSync, appendFileSync, readFileSync, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { ensureWorkspace } from "../../src/lib/forge/workspace.js";
+import {
+  ensureForgeHome,
+  getRunPath,
+} from "../../src/lib/forge/paths.js";
 import { db } from "../../src/lib/db.js";
 import type { Database } from "../../src/lib/supabase/database.types.js";
 
@@ -25,8 +29,19 @@ if (!runId || !prdSlug || !storyId) {
 }
 
 const repoRoot = process.cwd();
-const eventsPath = resolve(repoRoot, ".forge", runId, "events.jsonl");
-mkdirSync(dirname(eventsPath), { recursive: true});
+
+// Eventos vão pra $FORGE_HOME/runs/<autorunId>/events.jsonl quando o autorun
+// rodou em manifest mode (paths consistentes com exec-prd). Fallback legacy:
+// .forge/<runId>/events.jsonl local pra Ralph.
+const autorunId = process.env.FORGE_AUTORUN_ID ?? runId;
+let eventsPath: string;
+try {
+  ensureForgeHome();
+  eventsPath = resolve(getRunPath(autorunId), "events.jsonl");
+} catch {
+  eventsPath = resolve(repoRoot, ".forge", autorunId, "events.jsonl");
+}
+mkdirSync(dirname(eventsPath), { recursive: true });
 
 let seq = 0;
 function emit(kind: string, payload: Record<string, unknown> = {}) {
@@ -61,7 +76,16 @@ type Story = {
   agentProfile?: string;
 };
 
-const prdJsonPath = resolve(repoRoot, "scripts", "ralph", "features", prdSlug, "prd.json");
+// Modo manifest (banco como SSOT): exec-prd materializou prd.json sintético
+// em $FORGE_HOME/runs/<autorunId>/manifest-prd.json. Preferimos ele.
+// Fallback legacy Ralph: scripts/ralph/features/<slug>/prd.json no repo.
+let prdJsonPath: string;
+const manifestPrdPath = resolve(getRunPath(autorunId), "manifest-prd.json");
+if (existsSync(manifestPrdPath)) {
+  prdJsonPath = manifestPrdPath;
+} else {
+  prdJsonPath = resolve(repoRoot, "scripts", "ralph", "features", prdSlug, "prd.json");
+}
 if (!existsSync(prdJsonPath)) {
   emit("error", { message: `prd.json not found: ${prdJsonPath}` });
   emit("done", { ok: false, totalEvents: seq + 1 });
@@ -92,14 +116,20 @@ emit("story_loaded", {
   estimateMinutes: story.estimateMinutes,
 });
 
-// Find PRD markdown
-const states = ["backlog", "ready", "in-progress", "blocked", "done"] as const;
+// Find PRD markdown — preferimos prd.md sintético do manifest se existir,
+// senão fallback Ralph (docs/prd/<state>/prd-<slug>.md).
 let prdMd = "";
-for (const state of states) {
-  const candidate = resolve(repoRoot, "docs", "prd", state, `prd-${prdSlug}.md`);
-  if (existsSync(candidate)) {
-    prdMd = readFileSync(candidate, "utf-8");
-    break;
+const manifestMdPath = resolve(getRunPath(autorunId), "prd.md");
+if (existsSync(manifestMdPath)) {
+  prdMd = readFileSync(manifestMdPath, "utf-8");
+} else {
+  const states = ["backlog", "ready", "in-progress", "blocked", "done"] as const;
+  for (const state of states) {
+    const candidate = resolve(repoRoot, "docs", "prd", state, `prd-${prdSlug}.md`);
+    if (existsSync(candidate)) {
+      prdMd = readFileSync(candidate, "utf-8");
+      break;
+    }
   }
 }
 
@@ -234,13 +264,22 @@ if (projectId && projectId !== STUB_PROJECT_ID) {
     process.exit(6);
   }
 
-  // Ensure workspace exists
+  // Ensure workspace exists. IMPORTANTE: usamos autorunId aqui (não o
+  // storyRunId individual) pra que TODAS as stories de um mesmo autorun
+  // commitem na MESMA branch. ensureWorkspace é idempotente: a primeira story
+  // faz reset+branch new; as subsequentes detectam (via sentinel) e só fazem
+  // checkout, preservando o trabalho das stories anteriores.
   emit("status", { message: `setting up workspace for ${project.name}` });
   try {
-    const { workspacePath, branch } = ensureWorkspace({
-      runId,
+    const { workspacePath, branch, freshClone } = ensureWorkspace({
+      runId: autorunId,
       prdSlug,
       project: project as ProjectRow,
+    });
+    emit("status", {
+      message: freshClone
+        ? `workspace cloned fresh in ${workspacePath}`
+        : `workspace reused at ${workspacePath}`,
     });
 
     workingDir = workspacePath;

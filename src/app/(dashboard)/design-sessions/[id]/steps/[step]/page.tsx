@@ -12,6 +12,7 @@ import { RiskGapBoard } from "@/components/design-session/risk-gap-board";
 import { BoardLayout, BoardSection, StepHeader } from "@/components/design-session/board";
 import { PreWorkStep } from "@/components/design-session/pre-work-step";
 import { BriefingTaskChat } from "@/components/design-session/briefing-task-chat";
+import { PrdBriefingStep } from "@/components/sessions/prd-session/prd-briefing-step";
 import {
   DesignSessionTree,
   type TreeAction,
@@ -121,11 +122,11 @@ export default function StepPage({
         }}
         onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
         onStepClick={navigate}
-        hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing"}
+        hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing" || currentStepDef.key === "prd_briefing"}
         backHref={`/projects/${session.projectId}?tab=sessions`}
         memoriaHref={`/design-sessions/${id}/memoria`}
       >
-        <StepContent stepKey={currentStepDef.key} sessionId={id} />
+        <StepContent stepKey={currentStepDef.key} sessionId={id} projectId={session.projectId} />
       </WizardLayout>
     </DesignSessionProvider>
     </div>
@@ -137,9 +138,11 @@ export default function StepPage({
 function StepContent({
   stepKey,
   sessionId,
+  projectId,
 }: {
   stepKey: string;
   sessionId: string;
+  projectId: string;
 }) {
   switch (stepKey) {
     case "pre_work":
@@ -162,6 +165,8 @@ function StepContent({
       return <HypothesesStep sessionId={sessionId} />;
     case "briefing":
       return <BriefingStep sessionId={sessionId} />;
+    case "prd_briefing":
+      return <PrdBriefingStep sessionId={sessionId} projectId={projectId} />;
     // CI steps
     case "retrospective":
     case "new_demands":

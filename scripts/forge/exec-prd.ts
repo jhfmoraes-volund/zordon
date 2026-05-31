@@ -24,6 +24,7 @@ import { mkdirSync, appendFileSync, readFileSync, writeFileSync, existsSync, ren
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve, dirname, basename, join } from "node:path";
+import { ensureForgeHome, getRunPath } from "../../src/lib/forge/paths.js";
 
 const [, , autorunId, prdSlug, maxStoriesArg] = process.argv;
 const maxStories = Number.parseInt(maxStoriesArg ?? "20", 10);
@@ -33,8 +34,20 @@ if (!autorunId || !prdSlug) {
   process.exit(64);
 }
 
+// repoRoot é onde a CLI foi disparada (cwd do daemon). Usado pra path absoluto
+// de modules do Volund (db, paths). O workspace do código do CLIENTE vive em
+// $FORGE_HOME/workspaces/<slug>/ — resolvido por exec-story.ts via ensureWorkspace.
 const repoRoot = process.cwd();
-const autorunDir = resolve(repoRoot, ".forge", autorunId);
+
+// Artifacts do run (eventos, memória, manifest) vivem em $FORGE_HOME/runs/<id>/.
+// Fallback: se FORGE_HOME não-escrevível, cai em .forge/<id>/ local (Ralph-style).
+let autorunDir: string;
+try {
+  ensureForgeHome();
+  autorunDir = getRunPath(autorunId);
+} catch {
+  autorunDir = resolve(repoRoot, ".forge", autorunId);
+}
 const eventsPath = resolve(autorunDir, "events.jsonl");
 const memoryPath = resolve(autorunDir, "memory.jsonl");
 mkdirSync(autorunDir, { recursive: true });
@@ -67,11 +80,127 @@ type Story = {
   passes?: boolean;
 };
 
-const prdJsonPath = resolve(repoRoot, "scripts", "ralph", "features", prdSlug, "prd.json");
-if (!existsSync(prdJsonPath)) {
-  emit("error", { message: `prd.json not found: ${prdJsonPath}` });
-  emit("autorun_done", { ok: false, reason: "no_prd_json" });
-  process.exit(2);
+// ── PRD source: filesystem (Ralph legacy) OR ForgeRun.manifest (DB) ───────
+//
+// Modo banco: quando FORGE_RUN_ID está setado, materializamos o manifest
+// imutável do ForgeRun pra um prd.json local efêmero em .forge/<runId>/
+// — o resto do código (markStoryPasses, pickNextReady, etc.) continua igual,
+// só apontando pro arquivo novo. Eventos sobem normalmente pra ForgeEvent.
+//
+// Modo FS: comportamento Ralph original — lê scripts/ralph/features/<slug>/prd.json.
+
+const forgeRunId = process.env.FORGE_RUN_ID ?? null;
+const isManifestMode = !!forgeRunId;
+
+// Resolvido em main() — bootstrap do manifest precisa de await, que não pode
+// ficar no top-level (tsx compila pra CJS neste repo). Ver bootstrapPrdSource().
+let prdJsonPath: string = "";
+
+async function bootstrapPrdSource() {
+  if (isManifestMode) {
+    prdJsonPath = resolve(autorunDir, "manifest-prd.json");
+    await bootstrapFromManifest(forgeRunId!, prdJsonPath);
+  } else {
+    prdJsonPath = resolve(repoRoot, "scripts", "ralph", "features", prdSlug, "prd.json");
+    if (!existsSync(prdJsonPath)) {
+      emit("error", { message: `prd.json not found: ${prdJsonPath}` });
+      emit("autorun_done", { ok: false, reason: "no_prd_json" });
+      process.exit(2);
+    }
+  }
+}
+
+async function bootstrapFromManifest(runId: string, outPath: string) {
+  const { db } = await import(resolve(repoRoot, "src/lib/db.ts"));
+  const supabase = db();
+  const { data, error } = await supabase
+    .from("ForgeRun")
+    .select("manifest, projectId")
+    .eq("id", runId)
+    .maybeSingle();
+  if (error || !data) {
+    emit("error", { message: `ForgeRun ${runId} not found: ${error?.message ?? "missing"}` });
+    emit("autorun_done", { ok: false, reason: "no_forge_run" });
+    process.exit(2);
+  }
+  const manifest = data.manifest as {
+    version?: number;
+    prds?: Array<{
+      reference?: string;
+      title?: string;
+      problem?: string;
+      goal?: string;
+      oneLiner?: string;
+      stories?: Story[];
+    }>;
+  };
+  if (!manifest?.prds) {
+    emit("error", { message: `ForgeRun ${runId} manifest has no prds` });
+    emit("autorun_done", { ok: false, reason: "empty_manifest" });
+    process.exit(2);
+  }
+  // Achata todas as stories. dependsOn governa ordem entre stories da mesma
+  // PRD; entre PRDs distintos, ordem é a do manifest (snapshot order).
+  const userStories: Story[] = [];
+  for (const prd of manifest.prds) {
+    for (const story of prd.stories ?? []) {
+      userStories.push({ ...story, passes: false });
+    }
+  }
+  writeFileSync(
+    outPath,
+    JSON.stringify({ userStories, _source: { runId, version: manifest.version } }, null, 2) + "\n",
+  );
+
+  // Gera prd.md sintético pra exec-story.ts consumir como contexto.
+  // Sem isso, o prompt do Claude perde o "porquê" dos PRDs.
+  const mdLines: string[] = [
+    `# Forge Run Manifest`,
+    ``,
+    `Run: ${runId}`,
+    `Snapshot of ${manifest.prds.length} PRD${manifest.prds.length > 1 ? "s" : ""}.`,
+    ``,
+  ];
+  for (const prd of manifest.prds) {
+    mdLines.push(`## ${prd.reference ?? "(no ref)"} — ${prd.title ?? "(no title)"}`);
+    mdLines.push("");
+    if (prd.oneLiner) mdLines.push(`> ${prd.oneLiner}`, "");
+    if (prd.problem) mdLines.push(`### Problema`, "", prd.problem, "");
+    if (prd.goal) mdLines.push(`### Objetivo`, "", prd.goal, "");
+    if (prd.stories?.length) {
+      mdLines.push(`### Stories (${prd.stories.length})`, "");
+      for (const s of prd.stories) {
+        mdLines.push(`- **${s.id}** — ${s.title}`);
+      }
+      mdLines.push("");
+    }
+  }
+  const mdPath = resolve(autorunDir, "prd.md");
+  writeFileSync(mdPath, mdLines.join("\n"));
+
+  // Persiste projectId pra exec-story usar (workspace setup precisa dele).
+  if (data.projectId) {
+    writeFileSync(resolve(autorunDir, "project-id"), data.projectId);
+  }
+
+  emit("manifest_bootstrapped", {
+    runId,
+    storyCount: userStories.length,
+    prdCount: manifest.prds.length,
+    projectId: data.projectId,
+  });
+}
+
+function readProjectIdEnv(): Record<string, string> {
+  const path = resolve(autorunDir, "project-id");
+  if (!existsSync(path)) return {};
+  try {
+    const id = readFileSync(path, "utf-8").trim();
+    if (id) return { FORGE_PROJECT_ID: id };
+  } catch {
+    // ignore
+  }
+  return {};
 }
 
 function readPrdJson(): { userStories: Story[]; [k: string]: unknown } {
@@ -117,6 +246,9 @@ function findPrdFile(slug: string): { state: string; path: string } | null {
 }
 
 function movePrdState(targetState: string): { from: string; to: string } | null {
+  // Em modo manifest, o "estado" do PRD vive em ForgeRun.status (banco), não
+  // no filesystem. Skip silencioso pra não mexer em docs/prd/ do repo host.
+  if (isManifestMode) return null;
   const found = findPrdFile(prdSlug);
   if (!found) return null;
   if (found.state === targetState) return null;
@@ -164,7 +296,13 @@ function appendMemory(entry: MemoryEntry) {
 
 async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry }> {
   const storyRunId = randomUUID();
-  const storyEventsPath = resolve(repoRoot, ".forge", storyRunId, "events.jsonl");
+  // Marca offset do events.jsonl ANTES de spawnar exec-story. Tudo que ele
+  // appendar daqui pra frente até o close pertence a esta story (filtramos
+  // depois por runId==storyRunId pra ser preciso quando stories rodam em
+  // paralelo no futuro). Hoje rodam sequenciais — offset basta.
+  const eventsOffsetStart = existsSync(eventsPath)
+    ? readFileSync(eventsPath, "utf-8").length
+    : 0;
   emit("story_picked", {
     storyId: story.id,
     title: story.title,
@@ -184,6 +322,9 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
         ...process.env,
         FORGE_AUTORUN_ID: autorunId,
         FORGE_MEMORY_PATH: memoryPath,
+        // Em modo manifest, propaga projectId pro exec-story spinar workspace.
+        // Lido do arquivo escrito no bootstrap (acima).
+        ...(isManifestMode ? readProjectIdEnv() : {}),
       },
     },
   );
@@ -198,14 +339,26 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
   });
   const durationMs = Date.now() - startedAt;
 
-  // Read story events to extract metadata
-  let storyEvents: Array<{ kind?: string; payload?: Record<string, unknown> }> = [];
-  if (existsSync(storyEventsPath)) {
+  // Read story events do events.jsonl COMPARTILHADO do autorun, filtrando
+  // por runId==storyRunId (cada linha que exec-story escreveu tem esse campo).
+  // Ler só o que foi appendado depois do offset acelera + filtra cross-stories.
+  type StoryEvent = {
+    runId?: string;
+    taskId?: string;
+    kind?: string;
+    payload?: Record<string, unknown>;
+  };
+  let storyEvents: StoryEvent[] = [];
+  if (existsSync(eventsPath)) {
     try {
-      const lines = readFileSync(storyEventsPath, "utf-8")
-        .split("\n")
-        .filter((l) => l.trim());
-      storyEvents = lines.map((l) => JSON.parse(l));
+      const fullText = readFileSync(eventsPath, "utf-8");
+      const newText = fullText.slice(eventsOffsetStart);
+      const lines = newText.split("\n").filter((l) => l.trim());
+      storyEvents = lines
+        .map((l) => {
+          try { return JSON.parse(l) as StoryEvent; } catch { return null; }
+        })
+        .filter((e): e is StoryEvent => !!e && e.runId === storyRunId);
     } catch {
       // ignore
     }
@@ -237,18 +390,11 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
     .pop() ?? "";
   const summary = finalText.slice(0, 400);
 
-  // Mirror story events into autorun events.jsonl with prefix
-  for (const ev of storyEvents) {
-    seq += 1;
-    const mirrored = {
-      runId: autorunId,
-      seq,
-      ts: new Date().toISOString(),
-      kind: `story:${ev.kind}`,
-      payload: { storyId: story.id, ...ev.payload },
-    };
-    appendFileSync(eventsPath, JSON.stringify(mirrored) + "\n");
-  }
+  // Mirror REMOVIDO — exec-story escreve direto no events.jsonl do autorun
+  // (compartilhado). Duplicar prefixando com "story:" só inflava o arquivo.
+  // Manter seq local do exec-prd sincronizado com o que exec-story escreveu
+  // pra próxima emit() não colidir:
+  seq += storyEvents.length;
 
   const entry: MemoryEntry = {
     story: story.id,
@@ -267,6 +413,7 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
 // ── Main loop ────────────────────────────────────────────────────────────
 
 async function main() {
+  await bootstrapPrdSource();
   const data = readPrdJson();
   const stories: Story[] = data.userStories ?? [];
   const initialPasses = stories.filter((s) => s.passes).length;

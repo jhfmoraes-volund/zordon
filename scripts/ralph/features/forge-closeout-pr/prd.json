@@ -1,0 +1,134 @@
+{
+  "feature": "forge-closeout-pr",
+  "prdPath": "docs/prd/backlog/prd-forge-closeout-pr.md",
+  "createdAt": "2026-05-31",
+  "owner": "joao",
+  "userStories": [
+    {
+      "id": "FCO-001",
+      "title": "Migration prUrl + prNumber em ForgeRun",
+      "description": "ALTER TABLE adiciona 2 colunas + índice + comments.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260601o_forge_run_pr_fields.sql existe e roda",
+        "Colunas prUrl (text NULL) e prNumber (integer NULL) existem",
+        "Index ForgeRun_pr_idx existe",
+        "database.types.ts atualizado"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='ForgeRun' AND column_name IN ('prUrl','prNumber')", "expected": "2" },
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_indexes WHERE indexname='ForgeRun_pr_idx'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/20260601o_forge_run_pr_fields.sql", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "FCO-002",
+      "title": "Implementar closeoutRun() em closeout.ts",
+      "description": "Orquestra commit + branch + push + gh pr create + UPDATE. Idempotente. Captura falha em stage.",
+      "acceptanceCriteria": [
+        "src/lib/forge/runtime/closeout.ts existe",
+        "Exporta closeoutRun(runId): Promise<CloseoutResult>",
+        "Check idempotency via SELECT prUrl",
+        "Usa execFile (não shell raw)",
+        "Usa gh CLI subprocess pra PR",
+        "Falha em qualquer stage não throw — retorna { ok: false, stage, message }",
+        "UPDATE ForgeRun na sucesso",
+        "Emite 5 eventos via createEmitter",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/closeout.ts", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -cE 'closeoutRun|CloseoutResult' src/lib/forge/runtime/closeout.ts", "expected": "2" }
+      ],
+      "dependsOn": ["FCO-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/forge/runtime/closeout.ts"],
+      "agentProfile": "code",
+      "passes": false
+    },
+    {
+      "id": "FCO-003",
+      "title": "Helper buildCommitMessage(runId)",
+      "description": "Lê memory.jsonl + manifest e monta subject + body.",
+      "acceptanceCriteria": [
+        "Função buildCommitMessage em closeout.ts",
+        "Subject: forge(<prdSlug>): N stories",
+        "Body: bullet list de stories passing + sumário",
+        "Trata memory.jsonl ausente (body genérico)",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/closeout.ts", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -c 'buildCommitMessage' src/lib/forge/runtime/closeout.ts", "expected": "1" }
+      ],
+      "dependsOn": ["FCO-002"],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/forge/runtime/closeout.ts"],
+      "agentProfile": "code",
+      "passes": false
+    },
+    {
+      "id": "FCO-004",
+      "title": "Plumb closeoutRun no exec-prd.ts",
+      "description": "Chamada após markRunDone(reason='all_passed'). Respeita FORGE_SKIP_CLOSEOUT.",
+      "acceptanceCriteria": [
+        "exec-prd.ts importa closeoutRun",
+        "Chama await closeoutRun(autorunId) só após markRunDone com reason='all_passed'",
+        "Skip se process.env.FORGE_SKIP_CLOSEOUT==='1'",
+        "Falha não muda exit code do exec-prd",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -c 'closeoutRun' scripts/forge/exec-prd.ts", "expected": "1" }
+      ],
+      "dependsOn": ["FCO-002"],
+      "estimateMinutes": 15,
+      "touches": ["scripts/forge/exec-prd.ts"],
+      "agentProfile": "code",
+      "passes": false
+    },
+    {
+      "id": "FCO-005",
+      "title": "UI mostra prUrl como link no header do run",
+      "description": "page.tsx ou run-event-stream renderiza link PR #N se prUrl preenchido.",
+      "acceptanceCriteria": [
+        "Renderiza <a href={run.prUrl}>PR #{run.prNumber}</a> se prUrl NOT NULL",
+        "Sem prUrl, header não quebra",
+        "Link abre em nova aba",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/app/forge-spike/runs/[id]/page.tsx", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -lE 'prUrl|prNumber' src/app/forge-spike/runs/[id]/page.tsx src/components/forge/run-event-stream.tsx 2>/dev/null | wc -l", "expected": "1" }
+      ],
+      "dependsOn": ["FCO-001"],
+      "estimateMinutes": 15,
+      "touches": ["src/app/forge-spike/runs/[id]/page.tsx", "src/components/forge/run-event-stream.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "FCO-006",
+      "title": "Smoke test closeout end-to-end",
+      "description": "Run completo até PR aberto. Verifica prUrl populado, gh pr view confirma.",
+      "acceptanceCriteria": [
+        "Após run: ForgeRun.prUrl NOT NULL",
+        "gh pr view <prUrl> retorna exit 0 com state=OPEN",
+        "Workspace tem branch local forge/<short>",
+        "Eventos closeout_started, commit_done, push_done, pr_opened em ForgeEvent"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "bash scripts/forge/test-smoke-closeout.sh", "expected": "PASS" }
+      ],
+      "dependsOn": ["FCO-003", "FCO-004"],
+      "estimateMinutes": 25,
+      "touches": ["scripts/forge/test-smoke-closeout.sh"],
+      "agentProfile": "ops",
+      "passes": false
+    }
+  ]
+}

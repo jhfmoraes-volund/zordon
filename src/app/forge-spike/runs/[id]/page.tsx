@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, use } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type ForgeEvent = {
   runId?: string;
@@ -63,13 +64,26 @@ function formatPayloadSummary(kind: string, payload?: Record<string, unknown>): 
   return JSON.stringify(payload).slice(0, 200);
 }
 
-export default function RunViewerPage({ params }: { params: Promise<{ runId: string }> }) {
-  const { runId } = use(params);
+export default function RunViewerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: runId } = use(params);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const backHref = searchParams.get("back");
   const [events, setEvents] = useState<ForgeEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isDone, setIsDone] = useState(false);
   const esRef = useRef<EventSource | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
+
+  const handleBack = (e: React.MouseEvent) => {
+    if (backHref) return; // Link normal navega pro backHref
+    e.preventDefault();
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  };
 
   useEffect(() => {
     const es = new EventSource(`/api/forge/runs/${runId}/stream`);
@@ -113,8 +127,12 @@ export default function RunViewerPage({ params }: { params: Promise<{ runId: str
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", padding: 24, maxWidth: 1100, margin: "0 auto" }}>
-      <Link href="/forge-spike/prds" style={{ color: "#0066cc", fontSize: 13, textDecoration: "none" }}>
-        ← PRDs
+      <Link
+        href={backHref ?? "#"}
+        onClick={handleBack}
+        style={{ color: "#0066cc", fontSize: 13, textDecoration: "none" }}
+      >
+        ← voltar
       </Link>
 
       <div style={{ marginTop: 16, marginBottom: 16 }}>

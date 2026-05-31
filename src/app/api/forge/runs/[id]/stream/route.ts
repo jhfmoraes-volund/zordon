@@ -1,6 +1,7 @@
 import { existsSync, watch as fsWatch } from "node:fs";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
+import { homedir } from "node:os";
 import type { FSWatcher } from "node:fs";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: runId } = await params;
-  const eventsPath = resolve(process.cwd(), ".forge", runId, "events.jsonl");
+
+  // FORGE_HOME default: ~/.volund-forge (daemon escreve aqui).
+  // Fallback legacy: <repo>/.forge/<runId>/events.jsonl (modo Ralph).
+  const forgeHome =
+    process.env.FORGE_HOME?.trim() || resolve(homedir(), ".volund-forge");
+  const primaryPath = resolve(forgeHome, "runs", runId, "events.jsonl");
+  const legacyPath = resolve(process.cwd(), ".forge", runId, "events.jsonl");
+  const eventsPath = existsSync(primaryPath) ? primaryPath : legacyPath;
 
   const encoder = new TextEncoder();
 

@@ -1,0 +1,259 @@
+{
+  "feature": "vitor-prd-authoring-quality",
+  "title": "Vitor produz PRDs prontos pra Forja, em todos os caminhos",
+  "prd_path": "docs/prd/backlog/prd-vitor-prd-authoring-quality.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "VRD-001",
+      "title": "forge-ready validator + DAG check",
+      "description": "Função pura assertForgeReady(prd) com 11 checks de densidade (oneLiner, problem, goal, journey, AC, metrics, outOfScope, risks, technicalNotes, personaIds, DAG-no-cycle). DAG check via Kahn em set de PRDs da mesma DS. Função pura (sem I/O).",
+      "acceptanceCriteria": [
+        "Arquivo src/lib/agent/agents/vitor/forge-ready.ts exporta assertForgeReady e hasDependencyCycle",
+        "Teste vitest cobre 11 cenários (1 por campo) + 3 cenários de DAG (linear, branch, cycle)",
+        "Função é pura (sem I/O, sem await); recebe ProductRequirementLike + opcional set de irmãos",
+        "Retorna { ok: true } ou { ok: false, missing: string[] } com slugs estáveis (ex: 'AC≥5')"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm vitest run src/lib/agent/agents/vitor/forge-ready.test.ts",
+          "expected": "all tests pass"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitor/forge-ready.ts",
+        "src/lib/agent/agents/vitor/forge-ready.test.ts",
+        "src/lib/agent/agents/vitor/dag.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VRD-002",
+      "title": "Reference PRD library (3 PRDs gold-standard)",
+      "description": "Criar docs/agents/vitor/reference-prds/ com 3 PRDs (calendly-auth, calendly-booking, zelar-matching). Conteúdo derivado dos PRDs ricos do DB (VOLU-PRD-001, VOLU-PRD-005 e 1 Zelar). Frontmatter com slug + jsonb fields serializáveis. Loader em runtime via fs.readFileSync no boot.",
+      "acceptanceCriteria": [
+        "Diretório docs/agents/vitor/reference-prds/ contém 3 arquivos .md com frontmatter válido",
+        "Loader src/lib/agent/agents/vitor/reference-loader.ts lê os 3 e retorna ParsedReferencePrd[]",
+        "Snapshot test garante que cada reference passa assertForgeReady com ok=true"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm vitest run src/lib/agent/agents/vitor/reference-loader.test.ts",
+          "expected": "all 3 references pass forge-ready"
+        }
+      ],
+      "dependsOn": ["VRD-001"],
+      "estimateMinutes": 30,
+      "touches": [
+        "docs/agents/vitor/reference-prds/calendly-auth.md",
+        "docs/agents/vitor/reference-prds/calendly-booking.md",
+        "docs/agents/vitor/reference-prds/zelar-matching.md",
+        "src/lib/agent/agents/vitor/reference-loader.ts",
+        "src/lib/agent/agents/vitor/reference-loader.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VRD-003",
+      "title": "Deepen prompt + Stage B (Sonnet)",
+      "description": "Prompt Sonnet em src/lib/agent/vitor/prompts/prd-deepen.ts: recebe outline + contexto (brief OU brainstorm bundle) + 1 reference PRD (rotacionado por idx), devolve ProposePrdInput completo. Cache breakpoint na reference (Anthropic prompt-caching).",
+      "acceptanceCriteria": [
+        "Função deepenPrd({outline, context, referenceIdx}) retorna Promise<ProposePrdInput>",
+        "Prompt inclui reference PRD via system message com cache_control={type:'ephemeral'}",
+        "Output passa Zod ProposePrdInput sem throw em smoke test (1 PRD calendly real)",
+        "Timeout 90s; se exceder, throw DeepenTimeoutError"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "pnpm tsx scripts/smoke/deepen-prd.ts",
+          "expected": "saída JSON válida, forge-ready=true"
+        }
+      ],
+      "dependsOn": ["VRD-001", "VRD-002"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/vitor/prompts/prd-deepen.ts",
+        "scripts/smoke/deepen-prd.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VRD-004",
+      "title": "Quick-Ask refatorado em 2-stage (outline + parallel deepen)",
+      "description": "Reescrever src/lib/agent/vitor/prompts/prd-quickask.ts em duas fases. Stage A devolve Outline[]; Stage B roda deepenPrd em paralelo (Promise.allSettled, limit 10); persistência usa o resultado de Stage B (com fallback pra outline se Stage B falhar com flag needs_deepening=true).",
+      "acceptanceCriteria": [
+        "Função generatePrdsFromBrief retorna ProposePrdInput[] (não mais ParsedPrd[])",
+        "Stage B roda em paralelo via Promise.allSettled; falhas não derrubam outros PRDs",
+        "Latência total < 120s p95 medida em smoke com brief 'clonar calendly'",
+        "Cada PRD persistido tem forgeReady=true (≥80% dos 10) OU flag needs_deepening=true"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Quick-Ask em /design-sessions/new com brief 'clonar calendly'",
+          "expected": "10 PRDs criados, ≥8 com assertForgeReady=ok em < 120s"
+        }
+      ],
+      "dependsOn": ["VRD-003"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/vitor/prompts/prd-quickask.ts",
+        "src/lib/sessions/prd-session/jobs.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VRD-005",
+      "title": "Zod refinement em ProposePrdInput + tool approve_prd gate",
+      "description": "Adicionar superRefine em ProposePrdInput → assertForgeReady; tool approve_prd chama assertForgeReady antes de UPDATE status=approved (retorna 422 com missing[]); tool approve_prd_force adicionado pra bypass (registra dismissedAt+reason).",
+      "acceptanceCriteria": [
+        "ProposePrdInput.parse() rejeita PRD shell com mensagem específica",
+        "approve_prd retorna 422 quando assertForgeReady falha (testado via Supertest)",
+        "approve_prd_force aceita {prdId, reason: string.min(20)}; grava dismissedAt e reason",
+        "update_prd NÃO roda assertForgeReady (refine não bloqueia drafts em progresso)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "POST /api/agent/tool/approve_prd com PRD shell",
+          "expected": "status 422 com { error: 'forge_not_ready', missing: [...] }"
+        }
+      ],
+      "dependsOn": ["VRD-001"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitor/prd-schemas.ts",
+        "src/lib/agent/tools/manage-prds.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VRD-006",
+      "title": "UI badge + deepen action",
+      "description": "Componente PrdStatusBadge (src/components/prd/prd-status-badge.tsx) com 3 estados visuais (forge-ready ✓ / shell — deepen / incomplete). Endpoint POST /api/prds/[id]/deepen retorna 202+jobId e roda Stage B em background. Badge 'Deepen' chama esse endpoint e exibe progress.",
+      "acceptanceCriteria": [
+        "Badge renderiza 3 estados com cores distintas (verde/amarelo/vermelho)",
+        "Tooltip no estado 'incomplete' lista missing[] preciso",
+        "POST /api/prds/[id]/deepen retorna 202 + jobId; client polla GET /api/jobs/[jobId]",
+        "Após deepen com sucesso, badge atualiza otimisticamente via useOptimisticCollection"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir /design-sessions/f3488548-a2d1-4fe4-94fd-adede0a9f30c/steps/0 e clicar 'Deepen' num PRD shell",
+          "expected": "badge muda amarelo→verde em <120s sem reload"
+        }
+      ],
+      "dependsOn": ["VRD-003", "VRD-005"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/prd/prd-status-badge.tsx",
+        "src/app/api/prds/[id]/deepen/route.ts",
+        "src/app/api/prds/[id]/forge-ready/route.ts"
+      ],
+      "agentProfile": "frontend",
+      "passes": false
+    },
+    {
+      "id": "VRD-007",
+      "title": "Inception PRD_DRAFTING prompt update + auto-bind persona",
+      "description": "Sub-fase PRD_DRAFTING em src/lib/agent/prompt.ts ganha few-shot inline apontando pra reference-loader (não inline literal — carregar via cache breakpoint). Helper inferPersonasFromBrief(brief, projectPersonas) chamado se Vitor produzir PRD com personaIds vazio.",
+      "acceptanceCriteria": [
+        "Prompt PRD_DRAFTING inclui reference PRDs via cache_control",
+        "Função inferPersonasFromBrief retorna uuid[] válidos da ProjectPersona",
+        "Em smoke (DS Inception fresh), Vitor gera PRD com personaIds.length≥1 100% das vezes"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT COUNT(*) FILTER (WHERE array_length(\"personaIds\",1)>=1)::float / COUNT(*) FROM \"ProductRequirement\" WHERE \"createdAt\" > now() - interval '1 day'",
+          "expected": ">= 1.0 em smoke"
+        }
+      ],
+      "dependsOn": ["VRD-002", "VRD-005"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/prompt.ts",
+        "src/lib/agent/agents/vitor/infer-personas.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VRD-008",
+      "title": "Telemetria + calibration loop integration",
+      "description": "Em assertForgeReady, quando ok=false durante uma operação real (não dry-run), inserir row em AgentCalibrationCapture com category='prd-shallow-output', sintomas=missing[], evidência=prd snapshot. Dashboard simples /admin/agent-quality consulta rate de Forge-Ready últimos 7d.",
+      "acceptanceCriteria": [
+        "Helper recordShallowOutput(prd, missing) insere row em AgentCalibrationCapture",
+        "Página /admin/agent-quality lista metric: PRDs forge-ready / total (último 7d)",
+        "Categoria 'prd-shallow-output' adicionada em docs/runbooks/agent-audits/README.md"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "pnpm tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT 1 FROM \"AgentCalibrationCapture\" WHERE category='prd-shallow-output' LIMIT 1",
+          "expected": "≥1 row após smoke"
+        }
+      ],
+      "dependsOn": ["VRD-005"],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitor/forge-ready.ts",
+        "src/app/(admin)/admin/agent-quality/page.tsx",
+        "docs/runbooks/agent-audits/README.md"
+      ],
+      "agentProfile": "fullstack",
+      "passes": false
+    }
+  ]
+}

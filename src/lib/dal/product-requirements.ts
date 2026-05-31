@@ -66,6 +66,19 @@ export async function getPrdsForProject(
   return data ?? [];
 }
 
+export async function getPrdsForSession(
+  designSessionId: string,
+): Promise<ProductRequirementRow[]> {
+  const { data, error } = await db()
+    .from("ProductRequirement")
+    .select("*")
+    .eq("designSessionId", designSessionId)
+    .is("dismissedAt", null)
+    .order("createdAt", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getPrdById(
   id: string,
 ): Promise<ProductRequirementRow | null> {

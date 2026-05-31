@@ -49,6 +49,7 @@ function showHelp() {
   console.log("options:");
   console.log("  --help, -h                   — show help for a subcommand");
   console.log("  --project <projectId>        — associate run with a Project (UUID)");
+  console.log("  --home <path>                — override FORGE_HOME (default ~/.volund-forge)");
   console.log("");
   console.log("examples:");
   console.log("  forge spec validate docs/specs/active/my-feature.md");
@@ -61,7 +62,30 @@ function showHelp() {
 }
 
 // ── Argument parsing ──────────────────────────────────────────────────────
-const [, , subcommand, ...args] = process.argv;
+const [, , subcommand, ...rawArgs] = process.argv;
+
+// Global flag --home <path> propaga via env pra todo subprocesso/módulo que
+// resolve FORGE_HOME (workspace.ts, paths.ts). Removido do args antes do
+// dispatch dos subcomandos.
+const args: string[] = [];
+for (let i = 0; i < rawArgs.length; i++) {
+  const arg = rawArgs[i];
+  if (arg === "--home") {
+    const next = rawArgs[i + 1];
+    if (!next || next.startsWith("--")) {
+      console.error("--home requires a path argument");
+      process.exit(64);
+    }
+    process.env.FORGE_HOME = next;
+    i += 1;
+    continue;
+  }
+  if (arg.startsWith("--home=")) {
+    process.env.FORGE_HOME = arg.slice("--home=".length);
+    continue;
+  }
+  args.push(arg);
+}
 
 if (!subcommand || subcommand === "--help" || subcommand === "-h") {
   showHelp();

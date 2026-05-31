@@ -74,6 +74,7 @@ import { useStoryActions } from "./_hooks/use-story-actions";
 import { useTaskActions } from "./_hooks/use-task-actions";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
+import { ForgeTab } from "./_tabs/forge-tab";
 
 const TABS: { key: TabKey; label: string; icon: typeof BookOpen; minAccessLevel?: "manager" | "builder" }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
@@ -112,13 +113,10 @@ export default function ProjectDetailPage({
   const searchParams = useSearchParams();
   const rawTabParam = searchParams.get("tab");
   // Legacy: `?tab=tasks` agora aponta pra Sprints → Todas. Mantém deep-links antigos vivos.
-  // Legacy: `?tab=forge` foi removido (Forge virou sandbox em /dev/forge-sandbox).
   const tabParam: TabKey | null =
     rawTabParam === "tasks"
       ? "sprints"
-      : rawTabParam === "forge"
-        ? "stories"
-        : (rawTabParam as TabKey | null);
+      : (rawTabParam as TabKey | null);
   const sprintParam = searchParams.get("sprint");
   const viewParam = searchParams.get("view");
   const taskParam = searchParams.get("task");
@@ -532,24 +530,6 @@ export default function ProjectDetailPage({
       {/* Tabs — mobile: só ícones, distribuídos, sem scroll. Desktop: ícone + label + badge. */}
       <div className="flex border-b -mx-3 px-3 md:mx-0 md:px-0 md:gap-1">
         {visibleTabs.map((tab) => {
-          // Forge tab navigates to separate route
-          if (tab.key === "forge") {
-            return (
-              <Link
-                key={tab.key}
-                href={`/projects/${id}/forge`}
-                className={`flex flex-1 shrink-0 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap md:flex-none md:justify-start md:px-4 md:py-2 ${
-                  pathname.includes("/forge")
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <tab.icon className="size-5 md:size-4" />
-                <span className="hidden md:inline">{tab.label}</span>
-              </Link>
-            );
-          }
-
           const node = (
             <button
               key={tab.key}
@@ -645,6 +625,8 @@ export default function ProjectDetailPage({
           projectName={project.name}
           canManage={canManageSprint}
         />
+      ) : activeTab === "forge" ? (
+        <ForgeTab projectId={id} />
       ) : activeTab === "wiki" ? (
         <ProjectWiki projectId={id} />
       ) : activeTab === "settings" ? (

@@ -2738,6 +2738,59 @@ export type Database = {
           },
         ]
       }
+      ForgeDaemon: {
+        Row: {
+          daemonId: string
+          hostname: string | null
+          lastHeartbeatAt: string
+          memberId: string | null
+          startedAt: string
+        }
+        Insert: {
+          daemonId: string
+          hostname?: string | null
+          lastHeartbeatAt?: string
+          memberId?: string | null
+          startedAt?: string
+        }
+        Update: {
+          daemonId?: string
+          hostname?: string | null
+          lastHeartbeatAt?: string
+          memberId?: string | null
+          startedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ForgeDaemon_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeDaemon_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeDaemon_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeDaemon_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ForgeEvent: {
         Row: {
           agentId: string | null
@@ -2955,14 +3008,18 @@ export type Database = {
       }
       ForgeRun: {
         Row: {
+          branchName: string | null
           costUsdTotal: number
           createdAt: string
+          designSessionId: string | null
           endedAt: string | null
           id: string
+          manifest: Json
           meta: Json
           ownerId: string
           progress: number
           projectId: string
+          repoUrl: string | null
           specId: string | null
           startedAt: string | null
           status: string
@@ -2973,14 +3030,18 @@ export type Database = {
           triggerRef: string | null
         }
         Insert: {
+          branchName?: string | null
           costUsdTotal?: number
           createdAt?: string
+          designSessionId?: string | null
           endedAt?: string | null
           id?: string
+          manifest?: Json
           meta?: Json
           ownerId: string
           progress?: number
           projectId: string
+          repoUrl?: string | null
           specId?: string | null
           startedAt?: string | null
           status: string
@@ -2991,14 +3052,18 @@ export type Database = {
           triggerRef?: string | null
         }
         Update: {
+          branchName?: string | null
           costUsdTotal?: number
           createdAt?: string
+          designSessionId?: string | null
           endedAt?: string | null
           id?: string
+          manifest?: Json
           meta?: Json
           ownerId?: string
           progress?: number
           projectId?: string
+          repoUrl?: string | null
           specId?: string | null
           startedAt?: string | null
           status?: string
@@ -3009,6 +3074,20 @@ export type Database = {
           triggerRef?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ForgeRun_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ForgeRun_designSessionId_fkey"
+            columns: ["designSessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ForgeRun_ownerId_fkey"
             columns: ["ownerId"]
@@ -5950,6 +6029,7 @@ export type Database = {
           createdAt: string
           definitionOfDone: Json
           endDate: string | null
+          forgeSourceSessionId: string | null
           githubDefaultBranch: string
           githubPat: string | null
           githubRepoName: string | null
@@ -5976,6 +6056,7 @@ export type Database = {
           createdAt?: string
           definitionOfDone?: Json
           endDate?: string | null
+          forgeSourceSessionId?: string | null
           githubDefaultBranch?: string
           githubPat?: string | null
           githubRepoName?: string | null
@@ -6002,6 +6083,7 @@ export type Database = {
           createdAt?: string
           definitionOfDone?: Json
           endDate?: string | null
+          forgeSourceSessionId?: string | null
           githubDefaultBranch?: string
           githubPat?: string | null
           githubRepoName?: string | null
@@ -6035,6 +6117,20 @@ export type Database = {
             columns: ["clientId"]
             isOneToOne: false
             referencedRelation: "client_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Project_forgeSourceSessionId_fkey"
+            columns: ["forgeSourceSessionId"]
+            isOneToOne: false
+            referencedRelation: "design_session_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Project_forgeSourceSessionId_fkey"
+            columns: ["forgeSourceSessionId"]
+            isOneToOne: false
+            referencedRelation: "DesignSession"
             referencedColumns: ["id"]
           },
           {

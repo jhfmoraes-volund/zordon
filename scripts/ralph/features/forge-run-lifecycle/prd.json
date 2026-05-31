@@ -1,0 +1,92 @@
+{
+  "feature": "forge-run-lifecycle",
+  "prdPath": "docs/prd/backlog/prd-forge-run-lifecycle.md",
+  "createdAt": "2026-05-31",
+  "owner": "joao",
+  "userStories": [
+    {
+      "id": "FRL-001",
+      "title": "Implementar run-state.ts com 4 helpers idempotentes",
+      "description": "markRunRunning, updateRunProgress, markRunDone, markRunError. supabase-js service-role. UPDATEs filtram estado terminal.",
+      "acceptanceCriteria": [
+        "src/lib/forge/runtime/run-state.ts existe",
+        "Exporta 4 funções com assinaturas do §8 do PRD",
+        "Todas usam UPDATE com WHERE status NOT IN ('done','error') exceto markRunRunning (WHERE status='queued')",
+        "markRunDone/Error preenchem meta.reason / meta.errorReason via jsonb_set",
+        "markRunDone preenche meta.eventCounts via subquery em ForgeEvent",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit src/lib/forge/runtime/run-state.ts", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -cE 'markRunRunning|updateRunProgress|markRunDone|markRunError' src/lib/forge/runtime/run-state.ts", "expected": "8" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/forge/runtime/run-state.ts"],
+      "agentProfile": "code",
+      "passes": false
+    },
+    {
+      "id": "FRL-002",
+      "title": "Plumb markRunRunning + updateRunProgress em exec-prd.ts",
+      "description": "Chamada no autorun_started + a cada story_done. Falhas logam warning, não abortam.",
+      "acceptanceCriteria": [
+        "exec-prd.ts importa markRunRunning, updateRunProgress de run-state",
+        "main() chama await markRunRunning(autorunId) logo após autorun_started",
+        "Após cada markStoryPasses(true), chama updateRunProgress(autorunId, passedCount, totalStories)",
+        "Falha do UPDATE só loga via console.warn",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -cE 'markRunRunning|updateRunProgress' scripts/forge/exec-prd.ts", "expected": "2" }
+      ],
+      "dependsOn": ["FRL-001"],
+      "estimateMinutes": 15,
+      "touches": ["scripts/forge/exec-prd.ts"],
+      "agentProfile": "code",
+      "passes": false
+    },
+    {
+      "id": "FRL-003",
+      "title": "Plumb markRunDone + markRunError em exec-prd.ts",
+      "description": "Chamadas nos 5 caminhos de saída + no main().catch.",
+      "acceptanceCriteria": [
+        "markRunDone chamado em autorun_done(ok:true) com reason correto",
+        "markRunError chamado em autorun_done(ok:false), autorun_pivot, autorun_crash, no_prd_json, no_forge_run",
+        "Cada caminho passa reason / errorReason de catálogo fixo",
+        "Helpers chamados ANTES de process.exit",
+        "Tipecheck passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -cE 'markRunDone|markRunError' scripts/forge/exec-prd.ts", "expected": "6" }
+      ],
+      "dependsOn": ["FRL-001"],
+      "estimateMinutes": 20,
+      "touches": ["scripts/forge/exec-prd.ts"],
+      "agentProfile": "code",
+      "passes": false
+    },
+    {
+      "id": "FRL-004",
+      "title": "Smoke test lifecycle end-to-end",
+      "description": "Run completo. Verificar ForgeRun atravessou queued→running→done. startedAt/endedAt populados. progress=100. meta.reason+eventCounts populados.",
+      "acceptanceCriteria": [
+        "Antes: status=queued, startedAt=null",
+        "Durante: status=running, startedAt NOT NULL, progress crescendo",
+        "Após: status=done OR error, endedAt NOT NULL, progress=100 (se done)",
+        "meta tem reason / errorReason",
+        "meta.eventCounts é jsonb não vazio"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "bash scripts/forge/test-smoke-run-lifecycle.sh", "expected": "PASS" }
+      ],
+      "dependsOn": ["FRL-002", "FRL-003"],
+      "estimateMinutes": 20,
+      "touches": ["scripts/forge/test-smoke-run-lifecycle.sh"],
+      "agentProfile": "ops",
+      "passes": false
+    }
+  ]
+}

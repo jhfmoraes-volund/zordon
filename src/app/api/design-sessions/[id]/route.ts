@@ -13,7 +13,7 @@ export async function GET(
     .from("DesignSession")
     .select(`
       *,
-      project:Project(name, client:Client(name)),
+      project:Project!DesignSession_projectId_fkey(name, client:Client(name)),
       participants:DesignSessionParticipant(*, member:Member(name)),
       stepData:DesignSessionStepData(*),
       items:DesignSessionItem(*)
@@ -23,8 +23,9 @@ export async function GET(
   if (!session) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Sort items by orderIndex
-  if ((session as any).items) {
-    (session as any).items.sort((a: any, b: any) => a.orderIndex - b.orderIndex);
+  const sessionWithItems = session as { items?: { orderIndex: number }[] };
+  if (sessionWithItems.items) {
+    sessionWithItems.items.sort((a, b) => a.orderIndex - b.orderIndex);
   }
 
   return NextResponse.json(session);
