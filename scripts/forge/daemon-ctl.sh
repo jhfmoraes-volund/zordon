@@ -156,6 +156,57 @@ show_status() {
   exit 0
 }
 
+show_logs() {
+  # Default to showing last 50 lines, allow override with -n <number>
+  local lines=50
+  local follow=false
+
+  # Parse args
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -n)
+        shift
+        lines="$1"
+        ;;
+      -f|--follow)
+        follow=true
+        ;;
+      *)
+        shift
+        ;;
+    esac
+    shift
+  done
+
+  if [[ ! -f "$DAEMON_LOG_PATH" ]]; then
+    yellow "⚠ log file not found: $DAEMON_LOG_PATH"
+    exit 2
+  fi
+
+  if [[ "$follow" == true ]]; then
+    dim "→ following logs (Ctrl+C to exit)..."
+    tail -F -n "$lines" "$DAEMON_LOG_PATH"
+  else
+    tail -n "$lines" "$DAEMON_LOG_PATH"
+  fi
+}
+
+restart_daemon() {
+  yellow "→ restarting daemon..."
+
+  # Stop daemon (block until dead)
+  local pid
+  pid="$(get_pid)"
+
+  if [[ -n "$pid" ]] && is_running "$pid"; then
+    stop_daemon
+  fi
+
+  # Start daemon (block until new PID)
+  sleep 1
+  start_daemon
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 case "${1:-}" in
   start)
@@ -167,8 +218,15 @@ case "${1:-}" in
   status)
     show_status
     ;;
+  logs)
+    shift
+    show_logs "$@"
+    ;;
+  restart)
+    restart_daemon
+    ;;
   *)
-    echo "Usage: bash scripts/forge/daemon-ctl.sh {start|stop|status}"
+    echo "Usage: bash scripts/forge/daemon-ctl.sh {start|stop|status|logs|restart}"
     exit 64
     ;;
 esac

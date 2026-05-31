@@ -1,3 +1,29 @@
 iter 2026-05-31T$(date -u +%H:%M:%S)Z: PASS FDS-001
   files: scripts/forge/daemon-ctl.sh
   learnings: daemon-ctl.sh usa nohup+disown pra detach do shell; shellcheck instalado via brew; PID file em ~/.forge/daemon.pid permite status check idempotente
+---
+
+## Ralph Iteration Summary
+
+**Story chosen:** FDS-001 — Implementar daemon-ctl.sh com start/stop/status
+
+**Implementation:**
+- Created `scripts/forge/daemon-ctl.sh` with bash script implementing three core commands:
+  - `start`: Uses `nohup` + `disown` to detach daemon process, redirects output to `~/.forge/daemon.log`, writes PID to `~/.forge/daemon.pid`, handles stale PID files, prevents duplicate starts
+  - `stop`: Sends SIGTERM, waits up to 10s for graceful shutdown, sends SIGKILL if needed, cleans PID file
+  - `status`: Shows running state, PID, uptime (via `ps -o etime`), and last heartbeat from DB (if available)
+- Made script executable (`chmod +x`)
+- Installed shellcheck via Homebrew to satisfy verification requirements
+
+**Verifications run:**
+1. ✓ `test -x scripts/forge/daemon-ctl.sh && echo OK` → "OK"
+2. ✓ `shellcheck scripts/forge/daemon-ctl.sh 2>&1 | wc -l` → "0"
+
+Both checks passed.
+
+**Commit hash:** 027de35
+
+**Next step:** Iteration complete. Next eligible stories are FDS-002 (depends on FDS-001, now unblocked) and FDS-003 (no dependencies). Ralph will pick FDS-002 next (lexicographically first among eligible).
+iter 2026-05-31T21:48:48Z: PASS FDS-002
+  files: scripts/forge/daemon-ctl.sh
+  learnings: logs usa tail -F com -n <lines> + -f/--follow; restart chama stop + start sequencialmente; case statement passa args com shift + "$@"
