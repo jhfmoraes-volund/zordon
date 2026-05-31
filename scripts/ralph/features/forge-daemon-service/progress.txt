@@ -79,3 +79,30 @@ Ambos os checks passaram.
 iter $(date -u +%Y-%m-%dT%H:%M:%S)Z: PASS FDS-004
   files: docs/runbooks/forge-daemon-runbook.md
   learnings: Runbook específico criado (não bloco em AGENTS.md) — padrão: doc nova vai em subpasta certa de docs/runbooks/, nunca solto na raiz
+---
+
+## Ralph Iteration 4 — Report
+
+**Story escolhida:** FDS-004 — Documentação do daemon-ctl
+
+**Implementação:**
+- Criado `docs/runbooks/forge-daemon-runbook.md` com documentação completa do daemon:
+  - Tabela de localização (CLI, source, PID file, logs, DB heartbeat)
+  - Exemplos de todos os comandos (start/stop/status/logs/restart)
+  - Descrição detalhada do comportamento de cada comando (exit codes, timeout, detach, etc.)
+  - Troubleshooting table (PID stale, crashes, DB unavailable, permissões, SIGKILL)
+  - Smoke test example
+  - Convenções de desenvolvimento (migrations, linting, typecheck, commit)
+  - Referências pra outros runbooks
+
+**Verificações executadas:**
+1. ✓ `grep -l 'daemon-ctl.sh' docs/runbooks/forge-daemon-runbook.md AGENTS.md 2>/dev/null | wc -l` → "1" (esperado: 1)
+
+Check passou.
+
+**Commit hash:** 5710162
+
+**Próximo passo:** FDS-005 agora é a única story com `passes=false`. Depende de FDS-001 (já passou). Next iter executará FDS-005 (smoke test de detach + sobrevivência).
+iter 2026-05-31T21:55:10Z: PASS FDS-005
+  files: scripts/forge/test-smoke-daemon-detach.sh
+  learnings: smoke test subshell detach usa wait + trap cleanup; heartbeat DB check com retry loop 10s; daemon sobrevive exit do parent shell via nohup+disown

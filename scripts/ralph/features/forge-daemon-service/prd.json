@@ -150,7 +150,7 @@
         "scripts/forge/test-smoke-daemon-detach.sh"
       ],
       "agentProfile": "ops",
-      "passes": false
+      "passes": true
     }
   ]
 }
