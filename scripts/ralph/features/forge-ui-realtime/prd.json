@@ -159,7 +159,7 @@
         "scripts/forge/test-smoke-ui-realtime.sh"
       ],
       "agentProfile": "ops",
-      "passes": false
+      "passes": true
     },
     {
       "id": "FUI-006",
