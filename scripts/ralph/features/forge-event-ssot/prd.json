@@ -163,7 +163,7 @@
         "scripts/forge/exec-story.ts"
       ],
       "agentProfile": "code",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ESS-006",

@@ -8,7 +8,7 @@
  *
  * Usage: tsx scripts/forge/exec-story.ts <runId> <prdSlug> <storyId>
  */
-import { mkdirSync, appendFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { ensureWorkspace } from "../../src/lib/forge/workspace.js";
@@ -18,6 +18,7 @@ import {
 } from "../../src/lib/forge/paths.js";
 import { db } from "../../src/lib/db.js";
 import type { Database } from "../../src/lib/supabase/database.types.js";
+import { createEmitter } from "../../src/lib/forge/runtime/event-writer.js";
 
 type ProjectRow = Database["public"]["Tables"]["Project"]["Row"];
 
@@ -25,7 +26,7 @@ const [, , runId, prdSlug, storyId] = process.argv;
 
 if (!runId || !prdSlug || !storyId) {
   console.error("usage: exec-story.ts <runId> <prdSlug> <storyId>");
-  process.exit(64);
+  process.exit(64); // Early exit before emitter creation - no need to close
 }
 
 const repoRoot = process.cwd();
@@ -43,24 +44,18 @@ try {
 }
 mkdirSync(dirname(eventsPath), { recursive: true });
 
-let seq = 0;
-function emit(kind: string, payload: Record<string, unknown> = {}) {
-  seq += 1;
-  const event = {
-    runId,
-    taskId: storyId,
-    seq,
-    ts: new Date().toISOString(),
-    kind,
-    payload,
-  };
-  appendFileSync(eventsPath, JSON.stringify(event) + "\n");
-}
+// Create emitter for dual-write (jsonl + DB)
+const emitter = createEmitter({
+  runId,
+  agentId: null,
+  taskId: storyId,
+  jsonlPath: eventsPath,
+});
 
 // Main async function to support await
 async function main() {
 
-emit("started", { pid: process.pid, prdSlug, storyId });
+emitter.emit("started", { pid: process.pid, prdSlug, storyId });
 
 // ── Load PRD + story ──────────────────────────────────────────────────────
 
@@ -87,8 +82,9 @@ if (existsSync(manifestPrdPath)) {
   prdJsonPath = resolve(repoRoot, "scripts", "ralph", "features", prdSlug, "prd.json");
 }
 if (!existsSync(prdJsonPath)) {
-  emit("error", { message: `prd.json not found: ${prdJsonPath}` });
-  emit("done", { ok: false, totalEvents: seq + 1 });
+  emitter.emit("error", { message: `prd.json not found: ${prdJsonPath}` });
+  emitter.emit("done", { ok: false});
+  await emitter.close();
   process.exit(2);
 }
 
@@ -97,19 +93,21 @@ try {
   const parsed = JSON.parse(readFileSync(prdJsonPath, "utf-8"));
   stories = parsed.userStories ?? [];
 } catch (err) {
-  emit("error", { message: `failed to parse prd.json: ${err}` });
-  emit("done", { ok: false, totalEvents: seq + 1 });
+  emitter.emit("error", { message: `failed to parse prd.json: ${err}` });
+  emitter.emit("done", { ok: false});
+  await emitter.close();
   process.exit(3);
 }
 
 const story = stories.find((s) => s.id === storyId);
 if (!story) {
-  emit("error", { message: `story ${storyId} not found in ${prdSlug}` });
-  emit("done", { ok: false, totalEvents: seq + 1 });
+  emitter.emit("error", { message: `story ${storyId} not found in ${prdSlug}` });
+  emitter.emit("done", { ok: false});
+  await emitter.close();
   process.exit(4);
 }
 
-emit("story_loaded", {
+emitter.emit("story_loaded", {
   id: story.id,
   title: story.title,
   profile: story.agentProfile,
@@ -172,9 +170,9 @@ if (memPath && existsSync(memPath)) {
         ),
       ].join("\n");
     }
-    emit("memory_loaded", { passedStories: passed.length });
+    emitter.emit("memory_loaded", { passedStories: passed.length });
   } catch (err) {
-    emit("memory_load_error", { message: String(err) });
+    emitter.emit("memory_load_error", { message: String(err) });
   }
 }
 
@@ -234,7 +232,7 @@ const prompt = [
   .filter(Boolean)
   .join("\n");
 
-emit("prompt_built", { promptLength: prompt.length, profile: story.agentProfile });
+emitter.emit("prompt_built", { promptLength: prompt.length, profile: story.agentProfile });
 
 // ── Workspace setup (if projectId provided) ───────────────────────────────────
 
@@ -243,7 +241,7 @@ const projectId = process.env.FORGE_PROJECT_ID;
 let workingDir = repoRoot; // Default: dogfood mode (Zordon)
 
 if (projectId && projectId !== STUB_PROJECT_ID) {
-  emit("status", { message: `fetching project ${projectId} for workspace setup` });
+  emitter.emit("status", { message: `fetching project ${projectId} for workspace setup` });
 
   // Fetch project from database
   const { data: project, error: projectError } = await db()
@@ -253,14 +251,16 @@ if (projectId && projectId !== STUB_PROJECT_ID) {
     .maybeSingle();
 
   if (projectError) {
-    emit("error", { message: `failed to fetch project: ${projectError.message}` });
-    emit("done", { ok: false, totalEvents: seq + 1 });
+    emitter.emit("error", { message: `failed to fetch project: ${projectError.message}` });
+    emitter.emit("done", { ok: false});
+    await emitter.close();
     process.exit(5);
   }
 
   if (!project) {
-    emit("error", { message: `project ${projectId} not found` });
-    emit("done", { ok: false, totalEvents: seq + 1 });
+    emitter.emit("error", { message: `project ${projectId} not found` });
+    emitter.emit("done", { ok: false});
+    await emitter.close();
     process.exit(6);
   }
 
@@ -269,14 +269,14 @@ if (projectId && projectId !== STUB_PROJECT_ID) {
   // commitem na MESMA branch. ensureWorkspace é idempotente: a primeira story
   // faz reset+branch new; as subsequentes detectam (via sentinel) e só fazem
   // checkout, preservando o trabalho das stories anteriores.
-  emit("status", { message: `setting up workspace for ${project.name}` });
+  emitter.emit("status", { message: `setting up workspace for ${project.name}` });
   try {
     const { workspacePath, branch, freshClone } = ensureWorkspace({
       runId: autorunId,
       prdSlug,
       project: project as ProjectRow,
     });
-    emit("status", {
+    emitter.emit("status", {
       message: freshClone
         ? `workspace cloned fresh in ${workspacePath}`
         : `workspace reused at ${workspacePath}`,
@@ -284,7 +284,7 @@ if (projectId && projectId !== STUB_PROJECT_ID) {
 
     workingDir = workspacePath;
 
-    emit("workspace_ready", {
+    emitter.emit("workspace_ready", {
       path: workspacePath,
       branch,
       repoUrl: project.repoUrl,
@@ -293,12 +293,13 @@ if (projectId && projectId !== STUB_PROJECT_ID) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    emit("error", { message: `workspace setup failed: ${message}` });
-    emit("done", { ok: false, totalEvents: seq + 1 });
+    emitter.emit("error", { message: `workspace setup failed: ${message}` });
+    emitter.emit("done", { ok: false});
+    await emitter.close();
     process.exit(7);
   }
 } else {
-  emit("status", {
+  emitter.emit("status", {
     message: projectId === STUB_PROJECT_ID
       ? "projectId is stub — using dogfood mode (cwd=Zordon)"
       : "no projectId — using dogfood mode (cwd=Zordon)"
@@ -307,7 +308,7 @@ if (projectId && projectId !== STUB_PROJECT_ID) {
 
 // ── Spawn Claude with stream-json output ─────────────────────────────────
 
-emit("status", { message: "spawning claude -p with stream-json output" });
+emitter.emit("status", { message: "spawning claude -p with stream-json output" });
 
 const claudeArgs = [
   "-p",
@@ -342,7 +343,7 @@ claude.stdout?.on("data", (chunk) => {
       const ev = JSON.parse(line);
       handleClaudeEvent(ev);
     } catch {
-      emit("raw_stdout", { line: line.slice(0, 500) });
+      emitter.emit("raw_stdout", { line: line.slice(0, 500) });
     }
   }
 });
@@ -352,7 +353,7 @@ claude.stderr?.on("data", (chunk) => {
   stderrBuffer += text;
   // Only emit stderr as event in chunks to avoid spam
   if (text.trim()) {
-    emit("stderr", { text: text.slice(0, 500) });
+    emitter.emit("stderr", { text: text.slice(0, 500) });
   }
 });
 
@@ -363,7 +364,7 @@ function handleClaudeEvent(ev: { type?: string; subtype?: string; message?: unkn
   const t = ev.type ?? "unknown";
 
   if (t === "system") {
-    emit("claude_system", { subtype: ev.subtype, summary: summarize(ev) });
+    emitter.emit("claude_system", { subtype: ev.subtype, summary: summarize(ev) });
     return;
   }
 
@@ -373,9 +374,9 @@ function handleClaudeEvent(ev: { type?: string; subtype?: string; message?: unkn
     for (const block of blocks) {
       if (block.type === "text" && block.text) {
         lastAssistantText = block.text;
-        emit("assistant_text", { text: block.text.slice(0, 600) });
+        emitter.emit("assistant_text", { text: block.text.slice(0, 600) });
       } else if (block.type === "tool_use") {
-        emit("tool_use", {
+        emitter.emit("tool_use", {
           tool: block.name,
           inputSummary: summarizeToolInput(block.name, block.input),
         });
@@ -389,7 +390,7 @@ function handleClaudeEvent(ev: { type?: string; subtype?: string; message?: unkn
     const blocks = msg?.content ?? [];
     for (const block of blocks) {
       if (block.type === "tool_result") {
-        emit("tool_result", {
+        emitter.emit("tool_result", {
           isError: !!block.is_error,
           preview: typeof block.content === "string" ? block.content.slice(0, 300) : "<structured>",
         });
@@ -399,14 +400,14 @@ function handleClaudeEvent(ev: { type?: string; subtype?: string; message?: unkn
   }
 
   if (t === "result") {
-    emit("claude_result", {
+    emitter.emit("claude_result", {
       subtype: ev.subtype,
       summary: summarize(ev),
     });
     return;
   }
 
-  emit("claude_other", { type: t, summary: summarize(ev) });
+  emitter.emit("claude_other", { type: t, summary: summarize(ev) });
 }
 
 function summarize(obj: unknown): string {
@@ -434,35 +435,39 @@ function summarizeToolInput(tool: string | undefined, input: unknown): string {
   return summarize(input).slice(0, 120);
 }
 
-claude.on("close", (code) => {
-  emit("claude_closed", {
+claude.on("close", async (code) => {
+  emitter.emit("claude_closed", {
     exitCode: code,
     stderrTail: stderrBuffer.slice(-500),
     finalAssistantPreview: lastAssistantText.slice(0, 800),
   });
-  emit("done", { ok: code === 0, totalEvents: seq + 1, exitCode: code });
+  emitter.emit("done", { ok: code === 0, exitCode: code });
+  await emitter.close();
   process.exit(code ?? 0);
 });
 
-claude.on("error", (err) => {
-  emit("error", { message: err.message });
-  emit("done", { ok: false, totalEvents: seq + 1 });
+claude.on("error", async (err) => {
+  emitter.emit("error", { message: err.message });
+  emitter.emit("done", { ok: false});
+  await emitter.close();
   process.exit(1);
 });
 
 // Safety: hard kill after 10 minutes
-setTimeout(() => {
-  emit("error", { message: "timeout 600s — killing claude" });
+setTimeout(async () => {
+  emitter.emit("error", { message: "timeout 600s — killing claude" });
   claude.kill("SIGKILL");
-  emit("done", { ok: false, totalEvents: seq + 1, killed: true });
+  emitter.emit("done", { ok: false, killed: true });
+  await emitter.close();
   process.exit(124);
 }, 600_000);
 
 } // close main()
 
 // Run main and catch errors
-main().catch((err) => {
-  emit("error", { message: `main() crashed: ${err instanceof Error ? err.message : String(err)}` });
-  emit("done", { ok: false, totalEvents: seq + 1 });
+main().catch(async (err) => {
+  emitter.emit("error", { message: `main() crashed: ${err instanceof Error ? err.message : String(err)}` });
+  emitter.emit("done", { ok: false});
+  await emitter.close();
   process.exit(1);
 });
