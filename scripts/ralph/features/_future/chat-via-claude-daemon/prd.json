@@ -1,0 +1,109 @@
+{
+  "feature": "chat-via-claude-daemon",
+  "reference": "ZMC-CHAT",
+  "title": "Chat de agente via Claude Daemon (Vitor minimal)",
+  "prdPath": "docs/prd/backlog/prd-chat-via-claude-daemon.md",
+  "dependsOnFeature": ["zordon-mcp-extract"],
+  "stories": [
+    {
+      "id": "ZMC-CHAT-001",
+      "title": "Migration — ChatTurn + ChatTurnEvent + AgentMode + ForgeJob.kind",
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('ChatTurn','ChatTurnEvent','AgentMode')", "expected": "3" },
+        { "kind": "sql", "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='ForgeJob' AND column_name='kind'", "expected": "kind" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-002",
+      "title": "Endpoint POST /api/chat/turns",
+      "dependsOn": ["ZMC-CHAT-001"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-003",
+      "title": "Endpoints daemon — event + complete pra chat turns",
+      "dependsOn": ["ZMC-CHAT-002"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-004",
+      "title": "API AgentMode (GET/PUT) + hook",
+      "dependsOn": ["ZMC-CHAT-001"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-005",
+      "title": "exec-chat-turn.ts no zordon-mcp",
+      "dependsOn": ["ZMC-CHAT-003"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "cd ~/zordon-mcp && npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-006",
+      "title": "Hook useDaemonChat — Realtime subscribe",
+      "dependsOn": ["ZMC-CHAT-003"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-007",
+      "title": "DaemonStatusSheet — ResponsiveSheet com status + toggle",
+      "dependsOn": ["ZMC-CHAT-004"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-008",
+      "title": "ConversationPanel — ícone modo + branch por mode",
+      "dependsOn": ["ZMC-CHAT-006", "ZMC-CHAT-007"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-009",
+      "title": "Fallback automatic — daemon offline → openrouter",
+      "dependsOn": ["ZMC-CHAT-002"],
+      "estimateMinutes": 20,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-010",
+      "title": "Sweeper — running turn sem heartbeat 5min → aborted",
+      "dependsOn": ["ZMC-CHAT-003"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-CHAT-011",
+      "title": "Smoke end-to-end Vitor",
+      "dependsOn": ["ZMC-CHAT-005", "ZMC-CHAT-008", "ZMC-CHAT-009"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Ativar claude-daemon no chat Vitor, mandar 3 mensagens", "expected": "stream funcionando" }
+      ]
+    }
+  ]
+}

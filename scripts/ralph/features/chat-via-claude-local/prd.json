@@ -1,0 +1,126 @@
+{
+  "feature": "chat-via-claude-local",
+  "reference": "ZMC-LOCAL",
+  "title": "Chat via Claude Code local (MVP)",
+  "prdPath": "docs/prd/backlog/prd-chat-via-claude-local.md",
+  "stories": [
+    {
+      "id": "ZMC-LOCAL-001",
+      "title": "Migration ChatTurn + ChatTurnEvent + AgentMode + ForgeJob.kind",
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('ChatTurn','ChatTurnEvent','AgentMode')", "expected": "3" },
+        { "kind": "sql", "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='ForgeJob' AND column_name='kind'", "expected": "kind" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-002",
+      "title": "Endpoint POST /api/chat/turns + DAL",
+      "dependsOn": ["ZMC-LOCAL-001"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-003",
+      "title": "Endpoints daemon — event + complete",
+      "dependsOn": ["ZMC-LOCAL-002"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-004",
+      "title": "API + hook AgentMode",
+      "dependsOn": ["ZMC-LOCAL-001"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-005",
+      "title": "scripts/forge/exec-chat-turn.ts — Claude CLI puro",
+      "dependsOn": ["ZMC-LOCAL-003"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-006",
+      "title": "Daemon loop kind dispatch",
+      "dependsOn": ["ZMC-LOCAL-005"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-007",
+      "title": "Hook useDaemonChat — Realtime subscribe",
+      "dependsOn": ["ZMC-LOCAL-003"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-008",
+      "title": "Página /settings/agents",
+      "dependsOn": ["ZMC-LOCAL-004"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-009",
+      "title": "ConversationPanel branch por mode",
+      "dependsOn": ["ZMC-LOCAL-007", "ZMC-LOCAL-008"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-010",
+      "title": "scripts/forge/mcp-server.ts stdio skeleton",
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "AGENT_SLUG=vitor npx tsx scripts/forge/mcp-server.ts < scripts/forge/tests/initialize.json", "expected": "capabilities + tools list válida" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-011",
+      "title": "Daemon spawn MCP long-lived + exec-chat-turn --mcp-config",
+      "dependsOn": ["ZMC-LOCAL-005", "ZMC-LOCAL-010"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-012",
+      "title": "Tool router + 5 tools Vitor",
+      "dependsOn": ["ZMC-LOCAL-001"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-LOCAL-013",
+      "title": "Smoke end-to-end — Vitor cria PRD via chat",
+      "dependsOn": ["ZMC-LOCAL-006", "ZMC-LOCAL-009", "ZMC-LOCAL-011", "ZMC-LOCAL-012"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Configurar Vitor=claude-daemon, mandar 'crie PRD pra notificações push' no chat", "expected": "PRD criado + streaming visível" }
+      ]
+    }
+  ]
+}

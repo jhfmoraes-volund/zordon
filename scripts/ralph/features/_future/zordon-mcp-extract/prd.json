@@ -1,0 +1,117 @@
+{
+  "feature": "zordon-mcp-extract",
+  "reference": "ZMC-EXT",
+  "title": "Extrair daemon + auth pra repo zordon-mcp",
+  "prdPath": "docs/prd/backlog/prd-zordon-mcp-extract.md",
+  "stories": [
+    {
+      "id": "ZMC-EXT-001",
+      "title": "Criar tabela DaemonToken + RLS",
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name = 'DaemonToken'", "expected": "1" },
+        { "kind": "sql", "command_or_query": "SELECT relrowsecurity FROM pg_class WHERE relname = 'DaemonToken'", "expected": "t" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-002",
+      "title": "API CRUD para DaemonToken",
+      "dependsOn": ["ZMC-EXT-001"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-003",
+      "title": "Middleware Bearer token p/ /api/daemon/**",
+      "dependsOn": ["ZMC-EXT-001"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-004",
+      "title": "Endpoints /api/daemon/** (6 endpoints)",
+      "dependsOn": ["ZMC-EXT-003"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-005",
+      "title": "UI /settings/daemon",
+      "dependsOn": ["ZMC-EXT-002"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-006",
+      "title": "Criar repo volund-ia/zordon-mcp + esqueleto",
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "http", "command_or_query": "gh repo view volund-ia/zordon-mcp --json name", "expected": "{\"name\":\"zordon-mcp\"}" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-007",
+      "title": "CLI zordon-mcp com subcomandos",
+      "dependsOn": ["ZMC-EXT-004", "ZMC-EXT-006"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "cd ~/zordon-mcp && npm install && ./bin/zordon-mcp test", "expected": "exit 0" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-008",
+      "title": "Migrar scripts/forge/* → zordon-mcp",
+      "dependsOn": ["ZMC-EXT-007"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "lint", "command_or_query": "grep -r 'SUPABASE_SERVICE_ROLE_KEY' ~/zordon-mcp/src ~/zordon-mcp/scripts || echo 'clean'", "expected": "clean" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-009",
+      "title": "Rename FORGE_HOME → TERRAFORMING_HOME",
+      "dependsOn": ["ZMC-EXT-008"],
+      "estimateMinutes": 20,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "TERRAFORMING_HOME=/tmp/zt npx tsx -e 'import {getTerraformingHome} from \"./src/runtime/paths\"; console.log(getTerraformingHome())'", "expected": "/tmp/zt" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-010",
+      "title": "Bin/sync-mcp-types.ts no Zordon",
+      "dependsOn": ["ZMC-EXT-008"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npm run sync:mcp-types && cd ~/zordon-mcp && npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-011",
+      "title": "Smoke end-to-end",
+      "dependsOn": ["ZMC-EXT-005", "ZMC-EXT-009", "ZMC-EXT-010"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Disparar PRD-002 via UI", "expected": "PRD vira CONCLUÍDO" }
+      ]
+    },
+    {
+      "id": "ZMC-EXT-012",
+      "title": "Thin wrapper deprecation em scripts/forge/daemon.ts",
+      "dependsOn": ["ZMC-EXT-011"],
+      "estimateMinutes": 10,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "npx tsx scripts/forge/daemon.ts 2>&1 | head -3", "expected": "contém 'use zordon-mcp daemon'" }
+      ]
+    }
+  ]
+}

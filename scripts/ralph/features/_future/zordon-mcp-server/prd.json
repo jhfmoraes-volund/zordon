@@ -1,0 +1,117 @@
+{
+  "feature": "zordon-mcp-server",
+  "reference": "ZMC-SRV",
+  "title": "Zordon MCP Server — tools dos 3 agentes via MCP",
+  "prdPath": "docs/prd/backlog/prd-zordon-mcp-server.md",
+  "dependsOnFeature": ["chat-via-claude-daemon"],
+  "stories": [
+    {
+      "id": "ZMC-SRV-001",
+      "title": "Migration — tabela ToolInvocation",
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='ToolInvocation'", "expected": "1" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-002",
+      "title": "Endpoint GET /api/agents/:slug/capabilities",
+      "dependsOn": ["ZMC-SRV-001"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-003",
+      "title": "MCP server stdio skeleton",
+      "dependsOn": ["ZMC-SRV-002"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "cd ~/zordon-mcp && AGENT_SLUG=vitor DAEMON_TOKEN=test node src/mcp/server.ts < tests/initialize-handshake.json", "expected": "capabilities válidas" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-004",
+      "title": "Daemon spawn MCP server long-lived",
+      "dependsOn": ["ZMC-SRV-003"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "cd ~/zordon-mcp && npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-005",
+      "title": "Endpoint genérico POST /api/agents/tools/:toolName",
+      "dependsOn": ["ZMC-SRV-001"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-006",
+      "title": "Vitor tools — 5 endpoints específicos",
+      "dependsOn": ["ZMC-SRV-005"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-007",
+      "title": "Smoke Vitor — gera PRD via chat",
+      "dependsOn": ["ZMC-SRV-004", "ZMC-SRV-006"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Chat com Vitor pedindo PRD", "expected": "ProductRequirement criado" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-008",
+      "title": "Vitoria tools — 4 endpoints",
+      "dependsOn": ["ZMC-SRV-005"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-009",
+      "title": "AgentDefinition.mcpAvailable + condicional toggle",
+      "dependsOn": ["ZMC-SRV-008"],
+      "estimateMinutes": 15,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-010",
+      "title": "Alpha tools — 6 endpoints",
+      "dependsOn": ["ZMC-SRV-005"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-011",
+      "title": "Debug panel — tools invoked",
+      "dependsOn": ["ZMC-SRV-006"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-SRV-012",
+      "title": "Smoke Vitoria + Alpha",
+      "dependsOn": ["ZMC-SRV-008", "ZMC-SRV-010", "ZMC-SRV-009"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Vitoria cria nota + Alpha cria task", "expected": "recursos no DB" }
+      ]
+    }
+  ]
+}

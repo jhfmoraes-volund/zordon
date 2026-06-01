@@ -1,0 +1,100 @@
+{
+  "feature": "zordon-mcp-polish",
+  "reference": "ZMC-DX",
+  "title": "Zordon MCP Polish & DX",
+  "prdPath": "docs/prd/backlog/prd-zordon-mcp-polish.md",
+  "dependsOnFeature": ["zordon-mcp-extract", "chat-via-claude-daemon", "zordon-mcp-server"],
+  "stories": [
+    {
+      "id": "ZMC-DX-001",
+      "title": "zordon-mcp test — smoke completo",
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "cd ~/zordon-mcp && ./bin/zordon-mcp test", "expected": "exit 0" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-002",
+      "title": "zordon-mcp doctor — diagnostic",
+      "dependsOn": ["ZMC-DX-001"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "./bin/zordon-mcp doctor", "expected": "exit 0" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-003",
+      "title": "zordon-mcp install-service — LaunchAgent macOS",
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "./bin/zordon-mcp install-service && launchctl list | grep zordon-mcp", "expected": "match" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-004",
+      "title": "View materializada chat_mode_metrics + refresh cron",
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.tables WHERE table_name='chat_mode_metrics'", "expected": "1" },
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM cron.job WHERE jobname='refresh_chat_mode_metrics'", "expected": "1" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-005",
+      "title": "Endpoint GET /api/admin/metrics/chat-mode",
+      "dependsOn": ["ZMC-DX-004"],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-006",
+      "title": "UI /admin/metrics — chat mode dashboard",
+      "dependsOn": ["ZMC-DX-005"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-007",
+      "title": "README completo do zordon-mcp (7 seções)",
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "PM novo segue Quickstart", "expected": "daemon rodando sem ajuda" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-008",
+      "title": "GitHub Action sync-mcp-types",
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Mudar event-kinds, push PR, checar Actions tab", "expected": "Action + PR criados" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-009",
+      "title": "X-Daemon-Version header + warn",
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "" }
+      ]
+    },
+    {
+      "id": "ZMC-DX-010",
+      "title": "Onboarding flow piloto — 2 PMs em <5min",
+      "dependsOn": ["ZMC-DX-001", "ZMC-DX-002", "ZMC-DX-003", "ZMC-DX-007"],
+      "estimateMinutes": 30,
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Time 2 PMs com screencast", "expected": "ambos onboarded ≤5min" }
+      ]
+    }
+  ]
+}
