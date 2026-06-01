@@ -298,8 +298,8 @@ async function filterUnimportedNotes(
   if (notes.length === 0) return [];
   const ids = notes.map((n) => n.id);
   const { data: existing } = await admin
-    .from("TranscriptRef")
-    .select("sourceId")
+    .from("ContextSource")
+    .select('"sourceId"')
     .eq("source", "granola")
     .in("sourceId", ids);
   const seen = new Set((existing ?? []).map((r) => r.sourceId as string));

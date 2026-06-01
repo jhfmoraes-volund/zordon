@@ -10,7 +10,7 @@ import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 type LinkedTranscript = {
   transcriptRefId: string;
   weight: "primary" | "supporting" | "background" | null;
-  transcript: { id: string; source: string; title: string | null; capturedAt: string | null } | null;
+  transcript: { id: string; source: string | null; title: string | null; capturedAt: string | null } | null;
 };
 
 type LinkedMeeting = { meetingId: string; meeting: { id: string; title: string | null; date: string } | null };

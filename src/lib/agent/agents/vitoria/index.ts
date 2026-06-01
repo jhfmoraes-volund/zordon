@@ -49,18 +49,20 @@ export const vitoriaAgent: AgentDefinition = {
         id, phase, projectId, sprintId,
         project:Project(id, name, referenceKey, status, repoUrl, githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifest, repoManifestUpdatedAt, client:Client(id, name)),
         sprint:Sprint(name),
-        linkedMeetings:PlanningMeetingLink(
+        linkedMeetings:EntityLink!EntityLink_planningCeremonyId_fkey(
           meetingId,
-          meeting:Meeting(id, title, date)
+          meeting:Meeting!EntityLink_meetingId_fkey(id, title, date)
         ),
-        linkedTranscripts:PlanningTranscriptLink(
-          transcriptRefId, weight,
-          transcript:TranscriptRef(id, title, source, capturedAt)
+        linkedTranscripts:EntityLink!EntityLink_planningCeremonyId_fkey(
+          contextSourceId, weight,
+          transcript:ContextSource!EntityLink_contextSourceId_fkey(id, title, source, capturedAt)
         ),
         notes:PlanningContextNote(id, kind, content, dismissedAt, priority)
         `,
       )
       .eq("id", planningId)
+      .not("linkedMeetings.meetingId", "is", null)
+      .not("linkedTranscripts.contextSourceId", "is", null)
       .single();
 
     if (!planning) throw new Error(`Planning ${planningId} não encontrada`);

@@ -1099,46 +1099,70 @@ export type Database = {
       }
       ContextSource: {
         Row: {
+          actionItems: Json | null
+          byline: string | null
           capturedAt: string | null
           createdAt: string
           createdBy: string | null
+          endedAt: string | null
           externalId: string | null
           externalUrl: string | null
           fullText: string | null
           id: string
           kind: Database["public"]["Enums"]["context_source_kind"]
+          meetingId: string | null
+          participants: Json | null
           payload: Json
           projectId: string | null
+          source: string | null
+          sourceId: string | null
+          storagePath: string | null
           summary: string | null
           title: string
           updatedAt: string
         }
         Insert: {
+          actionItems?: Json | null
+          byline?: string | null
           capturedAt?: string | null
           createdAt?: string
           createdBy?: string | null
+          endedAt?: string | null
           externalId?: string | null
           externalUrl?: string | null
           fullText?: string | null
           id?: string
           kind: Database["public"]["Enums"]["context_source_kind"]
+          meetingId?: string | null
+          participants?: Json | null
           payload?: Json
           projectId?: string | null
+          source?: string | null
+          sourceId?: string | null
+          storagePath?: string | null
           summary?: string | null
           title: string
           updatedAt?: string
         }
         Update: {
+          actionItems?: Json | null
+          byline?: string | null
           capturedAt?: string | null
           createdAt?: string
           createdBy?: string | null
+          endedAt?: string | null
           externalId?: string | null
           externalUrl?: string | null
           fullText?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["context_source_kind"]
+          meetingId?: string | null
+          participants?: Json | null
           payload?: Json
           projectId?: string | null
+          source?: string | null
+          sourceId?: string | null
+          storagePath?: string | null
           summary?: string | null
           title?: string
           updatedAt?: string
@@ -1170,6 +1194,13 @@ export type Database = {
             columns: ["createdBy"]
             isOneToOne: false
             referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ContextSource_meetingId_fkey"
+            columns: ["meetingId"]
+            isOneToOne: false
+            referencedRelation: "Meeting"
             referencedColumns: ["id"]
           },
           {
@@ -1407,6 +1438,7 @@ export type Database = {
       DesignSession: {
         Row: {
           actualDurationMin: number | null
+          archivedAt: string | null
           briefingFirstMessageAt: string | null
           briefingSubPhase: string | null
           briefingTargetStoryId: string | null
@@ -1435,6 +1467,7 @@ export type Database = {
         }
         Insert: {
           actualDurationMin?: number | null
+          archivedAt?: string | null
           briefingFirstMessageAt?: string | null
           briefingSubPhase?: string | null
           briefingTargetStoryId?: string | null
@@ -1463,6 +1496,7 @@ export type Database = {
         }
         Update: {
           actualDurationMin?: number | null
+          archivedAt?: string | null
           briefingFirstMessageAt?: string | null
           briefingSubPhase?: string | null
           briefingTargetStoryId?: string | null
@@ -1632,83 +1666,6 @@ export type Database = {
           {
             foreignKeyName: "DesignSessionBrainstormFeature_sessionId_fkey"
             columns: ["sessionId"]
-            isOneToOne: false
-            referencedRelation: "DesignSession"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      DesignSessionContextLink: {
-        Row: {
-          addedat: string
-          addedby: string | null
-          contextsourceid: string
-          designsessionid: string
-          id: string
-          weight: string | null
-        }
-        Insert: {
-          addedat?: string
-          addedby?: string | null
-          contextsourceid: string
-          designsessionid: string
-          id?: string
-          weight?: string | null
-        }
-        Update: {
-          addedat?: string
-          addedby?: string | null
-          contextsourceid?: string
-          designsessionid?: string
-          id?: string
-          weight?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "DesignSessionContextLink_addedby_fkey"
-            columns: ["addedby"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionContextLink_addedby_fkey"
-            columns: ["addedby"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionContextLink_addedby_fkey"
-            columns: ["addedby"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionContextLink_addedby_fkey"
-            columns: ["addedby"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionContextLink_contextsourceid_fkey"
-            columns: ["contextsourceid"]
-            isOneToOne: false
-            referencedRelation: "ContextSource"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionContextLink_designsessionid_fkey"
-            columns: ["designsessionid"]
-            isOneToOne: false
-            referencedRelation: "design_session_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionContextLink_designsessionid_fkey"
-            columns: ["designsessionid"]
             isOneToOne: false
             referencedRelation: "DesignSession"
             referencedColumns: ["id"]
@@ -2457,33 +2414,6 @@ export type Database = {
           },
         ]
       }
-      DesignSessionStepData_backup_20260512: {
-        Row: {
-          data: Json | null
-          id: string | null
-          sessionId: string | null
-          stepIndex: number | null
-          stepKey: string | null
-          updatedAt: string | null
-        }
-        Insert: {
-          data?: Json | null
-          id?: string | null
-          sessionId?: string | null
-          stepIndex?: number | null
-          stepKey?: string | null
-          updatedAt?: string | null
-        }
-        Update: {
-          data?: Json | null
-          id?: string | null
-          sessionId?: string | null
-          stepIndex?: number | null
-          stepKey?: string | null
-          updatedAt?: string | null
-        }
-        Relationships: []
-      }
       DesignSessionStepNote: {
         Row: {
           createdAt: string
@@ -2571,83 +2501,6 @@ export type Database = {
           },
         ]
       }
-      DesignSessionTranscriptLink: {
-        Row: {
-          designSessionId: string
-          id: string
-          linkedAt: string
-          linkedById: string | null
-          transcriptRefId: string
-          weight: string | null
-        }
-        Insert: {
-          designSessionId: string
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          transcriptRefId: string
-          weight?: string | null
-        }
-        Update: {
-          designSessionId?: string
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          transcriptRefId?: string
-          weight?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "DesignSessionTranscriptLink_designSessionId_fkey"
-            columns: ["designSessionId"]
-            isOneToOne: false
-            referencedRelation: "design_session_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscriptLink_designSessionId_fkey"
-            columns: ["designSessionId"]
-            isOneToOne: false
-            referencedRelation: "DesignSession"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "DesignSessionTranscriptLink_transcriptRefId_fkey"
-            columns: ["transcriptRefId"]
-            isOneToOne: false
-            referencedRelation: "TranscriptRef"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       EntityLink: {
         Row: {
           contextSourceId: string | null
@@ -2660,7 +2513,6 @@ export type Database = {
           planningCeremonyId: string | null
           planningSessionId: string | null
           pmReviewId: string | null
-          transcriptRefId: string | null
           weight: string | null
         }
         Insert: {
@@ -2674,7 +2526,6 @@ export type Database = {
           planningCeremonyId?: string | null
           planningSessionId?: string | null
           pmReviewId?: string | null
-          transcriptRefId?: string | null
           weight?: string | null
         }
         Update: {
@@ -2688,7 +2539,6 @@ export type Database = {
           planningCeremonyId?: string | null
           planningSessionId?: string | null
           pmReviewId?: string | null
-          transcriptRefId?: string | null
           weight?: string | null
         }
         Relationships: [
@@ -2767,13 +2617,6 @@ export type Database = {
             columns: ["pmReviewId"]
             isOneToOne: false
             referencedRelation: "PMReview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "EntityLink_transcriptRefId_fkey"
-            columns: ["transcriptRefId"]
-            isOneToOne: false
-            referencedRelation: "TranscriptRef"
             referencedColumns: ["id"]
           },
         ]
@@ -4830,7 +4673,7 @@ export type Database = {
             foreignKeyName: "Opportunity_sourceTranscriptRefId_fkey"
             columns: ["sourceTranscriptRefId"]
             isOneToOne: false
-            referencedRelation: "TranscriptRef"
+            referencedRelation: "ContextSource"
             referencedColumns: ["id"]
           },
         ]
@@ -5060,76 +4903,6 @@ export type Database = {
           },
         ]
       }
-      PlanningMeetingLink: {
-        Row: {
-          id: string
-          linkedAt: string
-          linkedById: string | null
-          meetingId: string
-          note: string | null
-          planningCeremonyId: string
-        }
-        Insert: {
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          meetingId: string
-          note?: string | null
-          planningCeremonyId: string
-        }
-        Update: {
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          meetingId?: string
-          note?: string | null
-          planningCeremonyId?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "PlanningMeetingLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningMeetingLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningMeetingLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningMeetingLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningMeetingLink_meetingId_fkey"
-            columns: ["meetingId"]
-            isOneToOne: false
-            referencedRelation: "Meeting"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningMeetingLink_planningCeremonyId_fkey"
-            columns: ["planningCeremonyId"]
-            isOneToOne: false
-            referencedRelation: "PlanningCeremony"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       PlanningSession: {
         Row: {
           agentOutputsJsonb: Json | null
@@ -5257,73 +5030,6 @@ export type Database = {
           },
         ]
       }
-      PlanningSessionContextLink: {
-        Row: {
-          contextSourceId: string
-          id: string
-          linkedAt: string
-          linkedBy: string
-          planningSessionId: string
-        }
-        Insert: {
-          contextSourceId: string
-          id?: string
-          linkedAt?: string
-          linkedBy: string
-          planningSessionId: string
-        }
-        Update: {
-          contextSourceId?: string
-          id?: string
-          linkedAt?: string
-          linkedBy?: string
-          planningSessionId?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "PlanningSessionContextLink_contextSourceId_fkey"
-            columns: ["contextSourceId"]
-            isOneToOne: false
-            referencedRelation: "ContextSource"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningSessionContextLink_linkedBy_fkey"
-            columns: ["linkedBy"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningSessionContextLink_linkedBy_fkey"
-            columns: ["linkedBy"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningSessionContextLink_linkedBy_fkey"
-            columns: ["linkedBy"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningSessionContextLink_linkedBy_fkey"
-            columns: ["linkedBy"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningSessionContextLink_planningSessionId_fkey"
-            columns: ["planningSessionId"]
-            isOneToOne: false
-            referencedRelation: "PlanningSession"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       PlanningSessionPRD: {
         Row: {
           agentJustification: string | null
@@ -5374,79 +5080,6 @@ export type Database = {
             columns: ["planningSessionId"]
             isOneToOne: false
             referencedRelation: "PlanningSession"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      PlanningTranscriptLink: {
-        Row: {
-          id: string
-          linkedAt: string
-          linkedById: string | null
-          note: string | null
-          planningCeremonyId: string
-          transcriptRefId: string
-          weight: string | null
-        }
-        Insert: {
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          note?: string | null
-          planningCeremonyId: string
-          transcriptRefId: string
-          weight?: string | null
-        }
-        Update: {
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          note?: string | null
-          planningCeremonyId?: string
-          transcriptRefId?: string
-          weight?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "PlanningTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningTranscriptLink_planningCeremonyId_fkey"
-            columns: ["planningCeremonyId"]
-            isOneToOne: false
-            referencedRelation: "PlanningCeremony"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PlanningTranscriptLink_transcriptRefId_fkey"
-            columns: ["transcriptRefId"]
-            isOneToOne: false
-            referencedRelation: "TranscriptRef"
             referencedColumns: ["id"]
           },
         ]
@@ -5532,146 +5165,6 @@ export type Database = {
           },
         ]
       }
-      PMReviewContextLink: {
-        Row: {
-          addedat: string
-          addedby: string | null
-          contextsourceid: string
-          id: string
-          pmreviewid: string
-          weight: string | null
-        }
-        Insert: {
-          addedat?: string
-          addedby?: string | null
-          contextsourceid: string
-          id?: string
-          pmreviewid: string
-          weight?: string | null
-        }
-        Update: {
-          addedat?: string
-          addedby?: string | null
-          contextsourceid?: string
-          id?: string
-          pmreviewid?: string
-          weight?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "PMReviewContextLink_addedby_fkey"
-            columns: ["addedby"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewContextLink_addedby_fkey"
-            columns: ["addedby"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewContextLink_addedby_fkey"
-            columns: ["addedby"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewContextLink_addedby_fkey"
-            columns: ["addedby"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewContextLink_contextsourceid_fkey"
-            columns: ["contextsourceid"]
-            isOneToOne: false
-            referencedRelation: "ContextSource"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewContextLink_pmreviewid_fkey"
-            columns: ["pmreviewid"]
-            isOneToOne: false
-            referencedRelation: "PMReview"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      PMReviewMeetingLink: {
-        Row: {
-          id: string
-          linkedAt: string
-          linkedById: string | null
-          meetingId: string
-          note: string | null
-          pmReviewId: string
-        }
-        Insert: {
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          meetingId: string
-          note?: string | null
-          pmReviewId: string
-        }
-        Update: {
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          meetingId?: string
-          note?: string | null
-          pmReviewId?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "PMReviewMeetingLink_createdById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewMeetingLink_createdById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewMeetingLink_createdById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewMeetingLink_createdById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewMeetingLink_meetingId_fkey"
-            columns: ["meetingId"]
-            isOneToOne: false
-            referencedRelation: "Meeting"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewMeetingLink_pmReviewId_fkey"
-            columns: ["pmReviewId"]
-            isOneToOne: false
-            referencedRelation: "PMReview"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       PMReviewNote: {
         Row: {
           content: string
@@ -5746,79 +5239,6 @@ export type Database = {
             columns: ["pmReviewId"]
             isOneToOne: false
             referencedRelation: "PMReview"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      PMReviewTranscriptLink: {
-        Row: {
-          id: string
-          linkedAt: string
-          linkedById: string | null
-          note: string | null
-          pmReviewId: string
-          transcriptRefId: string
-          weight: string | null
-        }
-        Insert: {
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          note?: string | null
-          pmReviewId: string
-          transcriptRefId: string
-          weight?: string | null
-        }
-        Update: {
-          id?: string
-          linkedAt?: string
-          linkedById?: string | null
-          note?: string | null
-          pmReviewId?: string
-          transcriptRefId?: string
-          weight?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "PMReviewTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewTranscriptLink_linkedById_fkey"
-            columns: ["linkedById"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewTranscriptLink_pmReviewId_fkey"
-            columns: ["pmReviewId"]
-            isOneToOne: false
-            referencedRelation: "PMReview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "PMReviewTranscriptLink_transcriptRefId_fkey"
-            columns: ["transcriptRefId"]
-            isOneToOne: false
-            referencedRelation: "TranscriptRef"
             referencedColumns: ["id"]
           },
         ]
@@ -7216,46 +6636,6 @@ export type Database = {
           },
         ]
       }
-      TaskAcceptanceCriterion: {
-        Row: {
-          acceptanceCriterionId: string
-          createdAt: string
-          taskId: string
-        }
-        Insert: {
-          acceptanceCriterionId: string
-          createdAt?: string
-          taskId: string
-        }
-        Update: {
-          acceptanceCriterionId?: string
-          createdAt?: string
-          taskId?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "TaskAcceptanceCriterion_acceptanceCriterionId_fkey"
-            columns: ["acceptanceCriterionId"]
-            isOneToOne: false
-            referencedRelation: "AcceptanceCriterion"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "TaskAcceptanceCriterion_acceptanceCriterionId_fkey"
-            columns: ["acceptanceCriterionId"]
-            isOneToOne: false
-            referencedRelation: "task_coverage_v"
-            referencedColumns: ["ac_id"]
-          },
-          {
-            foreignKeyName: "TaskAcceptanceCriterion_taskId_fkey"
-            columns: ["taskId"]
-            isOneToOne: false
-            referencedRelation: "Task"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       TaskActivity: {
         Row: {
           actorMemberId: string | null
@@ -7740,96 +7120,6 @@ export type Database = {
           },
         ]
       }
-      TranscriptRef: {
-        Row: {
-          actionItems: Json
-          byline: string | null
-          capturedAt: string | null
-          endedAt: string | null
-          fullText: string | null
-          id: string
-          importedAt: string
-          importedById: string | null
-          meetingId: string | null
-          participants: Json
-          source: string
-          sourceId: string | null
-          storagePath: string | null
-          summary: string | null
-          title: string | null
-        }
-        Insert: {
-          actionItems?: Json
-          byline?: string | null
-          capturedAt?: string | null
-          endedAt?: string | null
-          fullText?: string | null
-          id?: string
-          importedAt?: string
-          importedById?: string | null
-          meetingId?: string | null
-          participants?: Json
-          source: string
-          sourceId?: string | null
-          storagePath?: string | null
-          summary?: string | null
-          title?: string | null
-        }
-        Update: {
-          actionItems?: Json
-          byline?: string | null
-          capturedAt?: string | null
-          endedAt?: string | null
-          fullText?: string | null
-          id?: string
-          importedAt?: string
-          importedById?: string | null
-          meetingId?: string | null
-          participants?: Json
-          source?: string
-          sourceId?: string | null
-          storagePath?: string | null
-          summary?: string | null
-          title?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "TranscriptRef_importedById_fkey"
-            columns: ["importedById"]
-            isOneToOne: false
-            referencedRelation: "Member"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "TranscriptRef_importedById_fkey"
-            columns: ["importedById"]
-            isOneToOne: false
-            referencedRelation: "member_capacity_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "TranscriptRef_importedById_fkey"
-            columns: ["importedById"]
-            isOneToOne: false
-            referencedRelation: "member_commitment_overview"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "TranscriptRef_importedById_fkey"
-            columns: ["importedById"]
-            isOneToOne: false
-            referencedRelation: "member_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "TranscriptRef_meetingId_fkey"
-            columns: ["meetingId"]
-            isOneToOne: false
-            referencedRelation: "Meeting"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       UserStory: {
         Row: {
           acValidatedAt: string | null
@@ -8248,39 +7538,6 @@ export type Database = {
           sprintId: string | null
         }
         Relationships: []
-      }
-      task_coverage_v: {
-        Row: {
-          ac_id: string | null
-          ac_order: number | null
-          ac_preview: string | null
-          api_tasks: number | null
-          data_tasks: number | null
-          designSessionId: string | null
-          layers_covered: string[] | null
-          ops_tasks: number | null
-          realtime_tasks: number | null
-          story_ref: string | null
-          story_title: string | null
-          total_tasks: number | null
-          ui_tasks: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "UserStory_designSessionId_fkey"
-            columns: ["designSessionId"]
-            isOneToOne: false
-            referencedRelation: "design_session_summary"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "UserStory_designSessionId_fkey"
-            columns: ["designSessionId"]
-            isOneToOne: false
-            referencedRelation: "DesignSession"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       user_story_overview: {
         Row: {

@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight,
   DollarSign,
   ExternalLink,
   FileText,
   Flame,
   Lightbulb,
   Loader2,
+  Maximize2,
   Play,
   RotateCcw,
   Square,
@@ -46,6 +46,8 @@ import type {
 } from "@/lib/dal/forge-project";
 import type { ChipTone } from "@/lib/status-chips";
 import type { PrdState } from "@/lib/forge/prd-fs";
+import { forgeRunChip } from "@/lib/forge/run-state";
+import { PrdDetailSheet } from "@/components/prd/prd-detail-sheet";
 
 type ProjectInfo = {
   id: string;
@@ -99,21 +101,6 @@ function prdStateTone(state: PrdState): ChipTone {
   }
 }
 
-function dbPrdStatusTone(status: string): ChipTone {
-  switch (status) {
-    case "approved":
-    case "ready":
-      return "green";
-    case "review":
-      return "amber";
-    case "draft":
-      return "slate";
-    case "superseded":
-      return "muted";
-    default:
-      return "muted";
-  }
-}
 
 function runStatusTone(status: string): ChipTone {
   switch (status) {
@@ -179,15 +166,9 @@ export function ForgeProjectCard({
                 Nenhum PRD ou run neste projeto ainda
               </p>
               <p className="text-xs text-muted-foreground">
-                Carregue uma PRD Session acima ou use o Forge Spike (legacy).
+                Carregue uma PRD Session acima para começar.
               </p>
             </div>
-            <Link href={`/forge-spike?projectId=${project.id}`}>
-              <Button variant="outline" size="sm">
-                <Play className="size-4" />
-                Abrir Forge Spike (legacy)
-              </Button>
-            </Link>
           </div>
         ) : (
           <>
@@ -246,7 +227,7 @@ export function ForgeProjectCard({
                   {runs.map((run) => (
                     <Link
                       key={run.id}
-                      href={`/forge-spike/runs/${run.id}`}
+                      href={`/projects/${project.id}/forge/runs/${run.id}`}
                       className="group flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm hover:bg-accent/40 transition-colors"
                     >
                       <div className="min-w-0 flex-1">
@@ -277,17 +258,6 @@ export function ForgeProjectCard({
               </div>
             )}
 
-            {/* CTA legacy (sem session carregada) */}
-            {!isDbMode && (
-              <div className="flex justify-center pt-2">
-                <Link href={`/forge-spike?projectId=${project.id}`}>
-                  <Button variant="outline" size="sm">
-                    Abrir Forge Spike (legacy)
-                    <ArrowRight className="size-4" />
-                  </Button>
-                </Link>
-              </div>
-            )}
           </>
         )}
       </CardContent>
@@ -493,6 +463,7 @@ function DbPrdList({
   lastFinishedRunFailedPrdRefs: string[];
   onChanged?: () => void;
 }) {
+  const [specPrdId, setSpecPrdId] = useState<string | null>(null);
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
@@ -518,8 +489,7 @@ function DbPrdList({
         {prds.map((prd) => (
           <Link
             key={prd.id}
-            href={`/projects/${project.id}/prds/${prd.id}`}
-            target="_blank"
+            href={`/projects/${project.id}/forge/prds/${prd.id}`}
             className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm hover:bg-accent/40 transition-colors"
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -533,13 +503,44 @@ function DbPrdList({
               <span className="text-[10px] text-muted-foreground tabular-nums">
                 {prd.acCount} AC
               </span>
-              <StatusChip tone={dbPrdStatusTone(prd.status)} size="sm">
-                {prd.status}
-              </StatusChip>
+              {(() => {
+                const chip = forgeRunChip(prd.runState);
+                return (
+                  <StatusChip tone={chip.tone} size="sm">
+                    {chip.label}
+                  </StatusChip>
+                );
+              })()}
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSpecPrdId(prd.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSpecPrdId(prd.id);
+                  }
+                }}
+                aria-label="Ver spec do PRD"
+                className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <Maximize2 className="size-3.5" />
+              </span>
             </div>
           </Link>
         ))}
       </div>
+
+      <PrdDetailSheet
+        prdId={specPrdId}
+        onOpenChange={(open) => !open && setSpecPrdId(null)}
+        onChanged={() => onChanged?.()}
+      />
     </div>
   );
 }

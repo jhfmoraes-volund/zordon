@@ -16,12 +16,12 @@ export function createReadTranscriptContentTool() {
     }),
     execute: async ({ transcriptRefId }) => {
       const { data: ref } = await db()
-        .from("TranscriptRef")
-        .select("id, title, source, sourceId, capturedAt, meetingId, fullText")
+        .from("ContextSource")
+        .select('id, title, source, "sourceId", "capturedAt", "meetingId", "fullText"')
         .eq("id", transcriptRefId)
         .single();
 
-      if (!ref) return { ok: false, error: "TranscriptRef não encontrado" };
+      if (!ref) return { ok: false, error: "ContextSource não encontrado" };
 
       if (ref.fullText) {
         return {

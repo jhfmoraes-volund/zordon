@@ -623,6 +623,16 @@ export async function GET(req: NextRequest) {
 
 ### 3.2 UI — list + detail
 
+> ⚠️ **Superseded (2026-06).** As rotas standalone `/projects/[id]/prds` e
+> `/projects/[id]/prds/[prdId]` foram **removidas**. PRD é artefato de sessão:
+> a spec é vista/editada **dentro da Design Session** via `PrdDetailSheet`
+> (`src/components/prd/prd-detail-sheet.tsx`), aberto da lista de PRDs em
+> `session-detail-sheet.tsx` e no step `prd_briefing`. O `PrdDetail` continua o
+> mesmo componente; só passou a viver num sheet (props `onBack`/`onChanged`,
+> dados via `GET /api/prds/[id]/detail`). A visão de **execução** do PRD (AC +
+> stream) vive na Forja: `/projects/[id]/forge/prds/[prdId]`. O texto abaixo
+> descreve a UI antiga e fica como referência histórica.
+
 **Rota lista:** `src/app/(dashboard)/projects/[id]/prds/page.tsx`
 
 Layout (server component, lê via DAL diretamente):

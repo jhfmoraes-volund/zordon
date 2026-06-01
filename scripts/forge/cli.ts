@@ -49,7 +49,7 @@ function showHelp() {
   console.log("options:");
   console.log("  --help, -h                   — show help for a subcommand");
   console.log("  --project <projectId>        — associate run with a Project (UUID)");
-  console.log("  --home <path>                — override FORGE_HOME (default ~/.volund-forge)");
+  console.log("  --home <path>                — override FORGE_HOME (default ~/volund-forge)");
   console.log("");
   console.log("examples:");
   console.log("  forge spec validate docs/specs/active/my-feature.md");

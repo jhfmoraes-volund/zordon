@@ -90,7 +90,7 @@ export type PMReviewDetail = PMReviewSummary & {
     note: string | null;
     transcript: {
       id: string;
-      source: string;
+      source: string | null;
       sourceId: string | null;
       title: string | null;
       capturedAt: string | null;
@@ -157,7 +157,7 @@ export async function listPMReviewsForProject(
       .from("EntityLink")
       .select("pmReviewId")
       .in("pmReviewId", ids)
-      .not("transcriptRefId", "is", null),
+      .not("contextSourceId", "is", null),
     supabase
       .from("PMReviewNote")
       .select("pmReviewId, kind")
@@ -227,10 +227,10 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
     supabase
       .from("EntityLink")
       .select(
-        'id, "transcriptRefId", "linkedAt", "linkedById", weight, note, transcript:TranscriptRef!EntityLink_transcriptRefId_fkey(id, source, "sourceId", title, "capturedAt", "meetingId")',
+        'id, "contextSourceId", "linkedAt", "linkedById", weight, note, transcript:ContextSource!EntityLink_contextSourceId_fkey(id, source, "sourceId", title, "capturedAt", "meetingId")',
       )
       .eq("pmReviewId", id)
-      .not("transcriptRefId", "is", null)
+      .not("contextSourceId", "is", null)
       .order("linkedAt", { ascending: false }),
     supabase
       .from("PMReviewNote")
@@ -294,9 +294,9 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
         meeting: l.meeting as PMReviewDetail["linkedMeetings"][number]["meeting"],
       })),
     linkedTranscripts: (transcriptsRes.data ?? [])
-      .filter((l) => l.transcriptRefId !== null)
+      .filter((l) => l.contextSourceId !== null)
       .map((l) => ({
-        transcriptRefId: l.transcriptRefId as string,
+        transcriptRefId: l.contextSourceId as string,
         linkedAt: l.linkedAt,
         linkedById: l.linkedById,
         weight: (l.weight as TranscriptWeight | null) ?? null,
@@ -449,7 +449,7 @@ export async function linkTranscriptToPMReview(params: {
     .from("EntityLink")
     .select("id")
     .eq("pmReviewId", params.pmReviewId)
-    .eq("transcriptRefId", params.transcriptRefId)
+    .eq("contextSourceId", params.transcriptRefId)
     .maybeSingle();
   if (existing) return { id: existing.id, created: false };
 
@@ -457,7 +457,7 @@ export async function linkTranscriptToPMReview(params: {
     .from("EntityLink")
     .insert({
       pmReviewId: params.pmReviewId,
-      transcriptRefId: params.transcriptRefId,
+      contextSourceId: params.transcriptRefId,
       linkedById: params.linkedById ?? null,
       weight: params.weight ?? "primary",
       note: params.note ?? null,
@@ -477,7 +477,7 @@ export async function unlinkTranscriptFromPMReview(params: {
     .from("EntityLink")
     .delete()
     .eq("pmReviewId", params.pmReviewId)
-    .eq("transcriptRefId", params.transcriptRefId);
+    .eq("contextSourceId", params.transcriptRefId);
   if (error) throw error;
 }
 

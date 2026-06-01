@@ -98,6 +98,18 @@ Maioria é tabela pequena (irrelevante hoje). Subset que importa por volume:
 
 Resto (<50 linhas) pode esperar, mas vale uma convenção: **toda FK ganha índice na migration que a cria.**
 
+## 5.5. 🔴 Achado — duplicação ContextSource ↔ TranscriptRef (investigado 2026-06-01)
+
+Investigação das "sobreposições no modelo" revelou duplicação real de dados:
+
+- `ContextSource` (19 linhas) é a abstração **guarda-chuva** de "fonte de contexto". Enum `kind`: `transcript | meeting | spreadsheet_csv | spreadsheet_gsheets | github_repo | github_pr | github_issue`.
+- `TranscriptRef` (18 linhas) é o SSOT de transcrições (campos ricos: `participants`, `actionItems`, `meetingId`, `storagePath`, `byline`).
+- **18 de 18 `TranscriptRef` compartilham `id` com um `ContextSource`** de `kind='transcript'` — **sem FK**, só convenção. `fullText` é idêntico em 18/18, `summary` em 13/18.
+
+**Conclusão:** o texto da transcrição está guardado **duas vezes** (`TranscriptRef.fullText` E `ContextSource.fullText`), sincronizado por id compartilhado, sem garantia de banco. Risco de divergência silenciosa. A `EntityLink` herdou isso: tem FK pra ambos `contextSourceId` e `transcriptRefId`, e um host pode linkar "a mesma transcrição" por dois caminhos.
+
+**Direção (não executada — migração grande, delicada):** consolidar num único conceito. Opções: (a) `ContextSource` vira o umbrella e ganha extensão 1:1 `TranscriptDetail` pros campos transcript-específicos; (b) FK explícita `ContextSource.transcriptRefId` + parar de copiar `fullText`. Decisão pendente.
+
 ## 6. 🟡 Achado — fragmentação do Design Session
 
 `DesignSession` tem ~20 tabelas-filha. Várias guardam **1 linha por sessão** (`DesignSessionProductVision`: 5 linhas / `DesignSessionTechnicalSpecs`: 4 / `DesignSessionScope`: 6). Essas seriam colunas/JSONB num `DesignSessionStepData`, não tabelas próprias. Não-bloqueante; revisitar caso a caso.

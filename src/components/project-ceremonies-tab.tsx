@@ -23,6 +23,10 @@ import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { toast } from "sonner";
 import { PlanningSheet } from "@/components/planning/planning-sheet";
 import { PMReviewSheet } from "@/components/pm-review/pm-review-sheet";
+import {
+  RitualPickerModal,
+  type RitualType,
+} from "@/components/ceremonies/ritual-picker-modal";
 
 // ─── Tab Rituais (user-facing) ──────────────────────────────────────────
 // Conceito user-facing: "Ritual" — engloba Planning + PM Review. No banco
@@ -44,6 +48,14 @@ type PhasePlanning =
   | "archived";
 
 type PMReviewStatus = "draft" | "published" | "archived";
+
+type ReleaseStatus =
+  | "draft"
+  | "orchestrating"
+  | "in-review"
+  | "approved"
+  | "aborted"
+  | "error";
 
 type RitualPlanning = {
   kind: "planning";
@@ -90,7 +102,20 @@ type RitualPMReview = {
   facilitatorName: string | null;
 };
 
-type RitualItem = RitualPlanning | RitualPMReview;
+type RitualReleasePlanning = {
+  kind: "release_planning";
+  id: string;
+  title: string;
+  status: ReleaseStatus;
+  scheduledFor: string | null;
+  sortKey: string;
+  href: string;
+  badges: { linkedCount: number; noteCount: number };
+  facilitatorId: string | null;
+  facilitatorName: string | null;
+};
+
+type RitualItem = RitualPlanning | RitualPMReview | RitualReleasePlanning;
 
 type RitualsResponse = {
   items: RitualItem[];
@@ -113,6 +138,15 @@ const PM_REVIEW_STATUS_LABEL: Record<PMReviewStatus, string> = {
   archived: "Arquivado",
 };
 
+const RELEASE_STATUS_LABEL: Record<ReleaseStatus, string> = {
+  draft: "Rascunho",
+  orchestrating: "Orquestrando",
+  "in-review": "Em revisão",
+  approved: "Aprovado",
+  aborted: "Abortado",
+  error: "Erro",
+};
+
 function planningTone(p: PhasePlanning): ChipTone {
   if (p === "closed") return "green";
   if (p === "archived") return "muted";
@@ -125,11 +159,18 @@ function pmReviewTone(s: PMReviewStatus): ChipTone {
   return "blue";
 }
 
-type FilterKey = "all" | "planning" | "pm_review";
+function releaseTone(s: ReleaseStatus): ChipTone {
+  if (s === "approved") return "green";
+  if (s === "error" || s === "aborted") return "muted";
+  return "blue";
+}
+
+type FilterKey = "all" | "planning" | "pm_review" | "release_planning";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "Todas" },
-  { key: "planning", label: "Planning" },
+  { key: "planning", label: "Sprint Planning" },
+  { key: "release_planning", label: "Release Planning" },
   { key: "pm_review", label: "PM Review" },
 ];
 
@@ -154,6 +195,7 @@ export function ProjectCeremoniesTab({
   const [filter, setFilter] = useState<FilterKey>("all");
   const [creatingPlanning, setCreatingPlanning] = useState(false);
   const [creatingPMReview, setCreatingPMReview] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [planningSheetOpen, setPlanningSheetOpen] = useState(false);
   const [pmReviewSheetOpen, setPMReviewSheetOpen] = useState(false);
   const [editingPlanning, setEditingPlanning] = useState<RitualPlanning | null>(
@@ -163,15 +205,30 @@ export function ProjectCeremoniesTab({
     null,
   );
 
-  const handleEdit = useCallback((item: RitualItem) => {
-    if (item.kind === "planning") {
-      setEditingPlanning(item);
-      setPlanningSheetOpen(true);
-    } else {
-      setEditingPMReview(item);
-      setPMReviewSheetOpen(true);
-    }
-  }, []);
+  const handleEdit = useCallback(
+    (item: RitualItem) => {
+      if (item.kind === "planning") {
+        setEditingPlanning(item);
+        setPlanningSheetOpen(true);
+      } else if (item.kind === "pm_review") {
+        setEditingPMReview(item);
+        setPMReviewSheetOpen(true);
+      } else {
+        // Release Planning não tem sheet de edição — abre o command center.
+        router.push(item.href);
+      }
+    },
+    [router],
+  );
+
+  const handlePickRitual = useCallback(
+    (type: RitualType) => {
+      if (type === "pm_review") setPMReviewSheetOpen(true);
+      else if (type === "sprint_planning") setPlanningSheetOpen(true);
+      else router.push(`/projects/${projectId}/planning`);
+    },
+    [router, projectId],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -191,17 +248,25 @@ export function ProjectCeremoniesTab({
   }, [projectId]);
 
   useEffect(() => {
-    load();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional initial load on mount
+    void load();
   }, [load]);
 
   const counts = useMemo(() => {
     let planning = 0;
     let pmReview = 0;
+    let release = 0;
     for (const it of items) {
       if (it.kind === "planning") planning++;
+      else if (it.kind === "release_planning") release++;
       else pmReview++;
     }
-    return { all: items.length, planning, pm_review: pmReview };
+    return {
+      all: items.length,
+      planning,
+      release_planning: release,
+      pm_review: pmReview,
+    };
   }, [items]);
 
   const visible = useMemo(() => {
@@ -216,7 +281,9 @@ export function ProjectCeremoniesTab({
       const isPublished =
         it.kind === "planning"
           ? it.status === "closed" || it.status === "archived"
-          : it.status === "published" || it.status === "archived";
+          : it.kind === "release_planning"
+            ? it.status === "approved"
+            : it.status === "published" || it.status === "archived";
       (isPublished ? pub : stg).push(it);
     }
     return { published: pub, staging: stg };
@@ -303,29 +370,26 @@ export function ProjectCeremoniesTab({
           })}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {canManage && (
+          {(canManage || canCreatePMReview) && (
             <Button
               size="sm"
-              variant="outline"
-              onClick={() => setPlanningSheetOpen(true)}
-              disabled={creatingPlanning}
+              onClick={() => setPickerOpen(true)}
+              disabled={creatingPlanning || creatingPMReview}
             >
               <Plus className="size-3.5" />
-              {creatingPlanning ? "Criando…" : "Nova Planning"}
-            </Button>
-          )}
-          {canCreatePMReview && (
-            <Button
-              size="sm"
-              onClick={() => setPMReviewSheetOpen(true)}
-              disabled={creatingPMReview}
-            >
-              <Plus className="size-3.5" />
-              {creatingPMReview ? "Criando…" : "Novo PM Review"}
+              Novo Ritual
             </Button>
           )}
         </div>
       </div>
+
+      <RitualPickerModal
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={handlePickRitual}
+        canManage={canManage}
+        canPMReview={canCreatePMReview}
+      />
 
       {/* Zona 3 — Colunas: Publicado vs Em rascunho */}
       {loading ? (
@@ -499,12 +563,20 @@ function RitualColumn({
 // do ícone, chip de tipo.
 const KIND_VISUAL = {
   planning: {
-    label: "Planning",
+    label: "Sprint Planning",
     Icon: CalendarClock,
     iconBox:
       "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900/50",
     chip:
       "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-300",
+  },
+  release_planning: {
+    label: "Release Planning",
+    Icon: Sparkles,
+    iconBox:
+      "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/50",
+    chip:
+      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300",
   },
   pm_review: {
     label: "PM Review",
@@ -520,6 +592,9 @@ const KIND_VISUAL = {
 function cleanTitle(item: RitualItem): string {
   if (item.kind === "planning") {
     return item.title.replace(/^Planning(\s*·\s*)?/, "").trim() || "—";
+  }
+  if (item.kind === "release_planning") {
+    return item.title.trim() || "—";
   }
   return item.title.replace(/^PM Review(\s*·\s*)?/, "").trim() || "—";
 }
@@ -562,11 +637,15 @@ function RitualRow({
   const tone =
     item.kind === "planning"
       ? planningTone(item.status)
-      : pmReviewTone(item.status);
+      : item.kind === "release_planning"
+        ? releaseTone(item.status)
+        : pmReviewTone(item.status);
   const label =
     item.kind === "planning"
       ? PLANNING_STATUS_LABEL[item.status]
-      : PM_REVIEW_STATUS_LABEL[item.status];
+      : item.kind === "release_planning"
+        ? RELEASE_STATUS_LABEL[item.status]
+        : PM_REVIEW_STATUS_LABEL[item.status];
 
   const visual = KIND_VISUAL[item.kind];
   const Icon = visual.Icon;

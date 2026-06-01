@@ -10,9 +10,12 @@ import {
 import { hasMinAccessLevel } from "@/lib/roles";
 import { validateSuperSteps } from "@/lib/design-session-steps";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
+  const includeArchived =
+    req.nextUrl.searchParams.get("includeArchived") === "1";
 
   const supabase = db();
   const accessLevel = await getAccessLevel();
@@ -22,8 +25,11 @@ export async function GET() {
   // db() runs as service_role (bypasses RLS), so we filter here.
   let sessionQuery = supabase
     .from("DesignSession")
-    .select("*, project:Project(name, client:Client(name))")
+    .select("*, project:Project!DesignSession_projectId_fkey(name, client:Client(name))")
     .order("createdAt", { ascending: false });
+  if (!includeArchived) {
+    sessionQuery = sessionQuery.is("archivedAt", null);
+  }
   if (!isManager) {
     const accessible = await getAccessibleProjectIds();
     if (accessible.length === 0) return NextResponse.json([]);
@@ -86,7 +92,7 @@ export async function POST(req: NextRequest) {
       totalSteps,
       selectedSteps,
     })
-    .select("*, project:Project(name)")
+    .select("*, project:Project!DesignSession_projectId_fkey(name)")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

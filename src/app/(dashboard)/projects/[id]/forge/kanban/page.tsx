@@ -243,7 +243,7 @@ export default function ProjectForgeKanbanPage({
             </span>
           </div>
           <Link
-            href={`/forge-spike/runs/${activeRunId}`}
+            href={`/projects/${projectId}/forge/runs/${activeRunId}`}
             className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-amber-700 hover:underline dark:text-amber-300"
           >
             <ExternalLink className="size-3" />
@@ -347,7 +347,7 @@ function PrdCard({
 
   return (
     <Link
-      href={`/projects/${projectId}/prds/${prd.id}/run`}
+      href={`/projects/${projectId}/forge/prds/${prd.id}`}
       className={cn(
         "block rounded-md border bg-background p-3 transition-colors hover:bg-accent/40",
         isRunning && "border-amber-300/60 dark:border-amber-900/70",
@@ -357,7 +357,9 @@ function PrdCard({
         <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
           {prd.reference}
         </span>
-        {!isRunning && !isDone && !isFailed && (
+        {/* Spec status (draft/review) só importa no Inbox; nas outras colunas
+            o run-state já é a própria coluna, então o chip seria ruído. */}
+        {columnKey === "inbox" && (
           <StatusChip tone={statusTone(prd.status)} size="sm">
             {prd.status}
           </StatusChip>
@@ -408,7 +410,7 @@ function PrdCard({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                window.open(`/forge-spike/runs/${prd.runId}`, "_blank");
+                window.open(`/projects/${projectId}/forge/runs/${prd.runId}`, "_blank");
               }}
               className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:underline dark:text-blue-400"
             >
@@ -439,7 +441,7 @@ function PrdCard({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                window.open(`/forge-spike/runs/${prd.runId}`, "_blank");
+                window.open(`/projects/${projectId}/forge/runs/${prd.runId}`, "_blank");
               }}
               className="ml-auto inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline dark:text-blue-400"
             >

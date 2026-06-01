@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ChartLine, Edit3, Send, Link2 } from "lucide-react";
+import { ArrowLeft, ChartLine, Edit3, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
+import { InsumosButton } from "@/components/agent/context-import";
 
 type PMReviewStatus = "draft" | "published" | "archived";
 
@@ -98,18 +99,11 @@ export function PMReviewRibbon({
       </div>
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onOpenContext}
-          className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs hover:bg-accent"
-          title="Contexto linkado (reuniões + transcripts)"
-        >
-          <Link2 className="size-3" />
-          <span className="font-mono tabular-nums">
-            {linkedMeetingCount + linkedTranscriptCount}
-          </span>
-          <span className="hidden sm:inline text-muted-foreground">contexto</span>
-        </button>
+        <InsumosButton
+          count={linkedMeetingCount + linkedTranscriptCount}
+          onClick={() => onOpenContext?.()}
+          variant="outline"
+        />
 
         <span
           className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs"

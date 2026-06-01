@@ -296,7 +296,7 @@ function appendMemory(entry: MemoryEntry) {
 
 // ── Spawn a story worker ──────────────────────────────────────────────────
 
-async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry }> {
+async function runStory(story: Story): Promise<{ ok: boolean; partial: boolean; entry: MemoryEntry }> {
   const storyRunId = randomUUID();
   // Marca offset do events.jsonl ANTES de spawnar exec-story. Tudo que ele
   // appendar daqui pra frente até o close pertence a esta story (filtramos
@@ -341,10 +341,12 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
   });
   const durationMs = Date.now() - startedAt;
 
-  // Read story events do events.jsonl COMPARTILHADO do autorun, filtrando
-  // por runId==storyRunId (cada linha que exec-story escreveu tem esse campo).
-  // Ler só o que foi appendado depois do offset acelera + filtra cross-stories.
+  // Read story events do events.jsonl COMPARTILHADO do autorun, a partir do
+  // offset que marcamos antes do spawn. Tudo que foi appendado é evento desta
+  // story (rodam sequencial). F1 (createEmitter) não inclui runId no jsonl —
+  // o offset é o que delimita o range desta story.
   type StoryEvent = {
+    seq?: number;
     runId?: string;
     taskId?: string;
     kind?: string;
@@ -360,13 +362,18 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
         .map((l) => {
           try { return JSON.parse(l) as StoryEvent; } catch { return null; }
         })
-        .filter((e): e is StoryEvent => !!e && e.runId === storyRunId);
+        .filter((e): e is StoryEvent => !!e);
     } catch {
       // ignore
     }
   }
   const doneEv = [...storyEvents].reverse().find((e) => e.kind === "done");
   const ok = doneEv?.payload?.ok === true && exitCode === 0;
+  // partial = Claude bateu max_turns mas fez trabalho (filesTouched > 0).
+  // Permite auto-resume na main loop em vez de marcar story_failed direto.
+  const partial =
+    doneEv?.payload?.partial === true ||
+    doneEv?.payload?.reason === "max_turns";
 
   // Extract files touched via Edit/Write tool_use events
   const filesTouched = Array.from(
@@ -406,7 +413,7 @@ async function runStory(story: Story): Promise<{ ok: boolean; entry: MemoryEntry
     exitCode,
   };
 
-  return { ok, entry };
+  return { ok, partial, entry };
 }
 
 // ── Main loop ────────────────────────────────────────────────────────────
@@ -449,8 +456,33 @@ async function main() {
     }
 
     emitter.emit("story_running", { storyId: ready.id, executed: executed + 1, of: maxStories });
-    const { ok, entry } = await runStory(ready);
-    appendMemory(entry);
+    // Auto-resume: se Claude bater max_turns mas tiver criado/editado arquivos,
+    // re-spawnar no mesmo workspace (Claude vê estado prévio e continua). Cap
+    // de 3 retries por story pra evitar custo runaway.
+    const MAX_PARTIAL_RETRIES = Number.parseInt(
+      process.env.FORGE_MAX_PARTIAL_RETRIES ?? "3",
+      10,
+    );
+    let attempt = 0;
+    let last: { ok: boolean; partial: boolean; entry: MemoryEntry };
+    while (true) {
+      attempt += 1;
+      last = await runStory(ready);
+      appendMemory(last.entry);
+      if (last.ok) break;
+      if (last.partial && last.entry.filesTouched.length > 0 && attempt < MAX_PARTIAL_RETRIES) {
+        emitter.emit("story_partial_retry", {
+          storyId: ready.id,
+          attempt,
+          maxAttempts: MAX_PARTIAL_RETRIES,
+          filesTouchedSoFar: last.entry.filesTouched.length,
+        });
+        continue; // re-spawn no mesmo workspace
+      }
+      break; // story falhou de vez (sem partial OU sem files OU max retries)
+    }
+    const ok = last.ok;
+    const entry = last.entry;
     executed += 1;
 
     if (ok) {

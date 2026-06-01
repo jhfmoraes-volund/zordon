@@ -70,6 +70,13 @@ type Props = {
   personas: { id: string; name: string }[];
   activity: ActivityEntry[];
   canEdit: boolean;
+  /**
+   * When rendered inside a sheet (in-session), provide a back/close handler.
+   * Replaces the breadcrumb link to the (removed) standalone PRD list.
+   */
+  onBack?: () => void;
+  /** Notify parent (e.g. in-session PRD list) after the PRD changes. */
+  onChanged?: (prd: ProductRequirementRow) => void;
 };
 
 const STATUS_TONE: Record<PrdStatus, ChipTone> = {
@@ -148,6 +155,7 @@ export function PrdDetail(props: Props) {
     });
     const json = (await res.json()) as { data: ProductRequirementRow };
     setPrd(json.data);
+    props.onChanged?.(json.data);
     router.refresh();
   }
 
@@ -174,6 +182,7 @@ export function PrdDetail(props: Props) {
             }
             const json = (await res.json()) as { data: ProductRequirementRow };
             setPrd(json.data);
+            props.onChanged?.(json.data);
             toast.success("PRD aprovado.");
             router.refresh();
           } catch (error) {
@@ -192,15 +201,18 @@ export function PrdDetail(props: Props) {
 
   return (
     <div className="flex flex-col gap-6 py-6">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link
-          href={`/projects/${project.id}/prds`}
-          className="inline-flex items-center gap-1 hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          PRDs · {project.name}
-        </Link>
-      </div>
+      {props.onBack ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <button
+            type="button"
+            onClick={props.onBack}
+            className="inline-flex items-center gap-1 hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Voltar · {project.name}
+          </button>
+        </div>
+      ) : null}
 
       {/* 1. Header */}
       <Card>
@@ -381,12 +393,18 @@ export function PrdDetail(props: Props) {
                 <Badge variant="outline" className="mr-2">
                   {d.kind}
                 </Badge>
-                <Link
-                  href={`/projects/${project.id}/prds/${d.prdId}`}
-                  className="font-mono text-xs hover:underline"
-                >
-                  {d.prdId.slice(0, 8)}…
-                </Link>
+                {props.onBack ? (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {d.prdId.slice(0, 8)}…
+                  </span>
+                ) : (
+                  <Link
+                    href={`/projects/${project.id}/prds/${d.prdId}`}
+                    className="font-mono text-xs hover:underline"
+                  >
+                    {d.prdId.slice(0, 8)}…
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

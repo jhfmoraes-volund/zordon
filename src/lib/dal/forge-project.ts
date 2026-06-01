@@ -8,6 +8,7 @@ import {
 } from "@/lib/forge/prd-fs";
 import { getPrdsForSession } from "@/lib/dal/product-requirements";
 import { createJob } from "@/lib/forge/dal/job";
+import type { PrdRunState } from "@/lib/forge/run-state";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 type Tables = Database["public"]["Tables"];
@@ -24,10 +25,213 @@ export type ForgePrdItem = {
   id: string;
   reference: string;
   title: string;
+  /** Spec status (draft/review/approved/superseded) — session world. */
   status: string;
   oneLiner: string;
   acCount: number;
+  /** Execution state in the Forge — what the Forge UI shows instead of `status`. */
+  runState: PrdRunState;
 };
+
+export type PrdRunInfo = {
+  runState: PrdRunState;
+  runId: string | null;
+  currentPhase: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  lastEvents: Array<{ kind: string; ts: string; summary: string }>;
+};
+
+type ManifestPrdRef = { reference?: string };
+type RunEventRow = {
+  kind: string;
+  ts: string;
+  payload: Record<string, unknown> | null;
+};
+
+/** Human-readable one-liner for a run event, used in card previews. */
+export function summarizeForgeEvent(
+  kind: string,
+  payload: Record<string, unknown> | null,
+): string {
+  if (!payload) return "";
+  if (kind === "tool_use") {
+    const tool = payload.tool ?? payload.name ?? "?";
+    const input = payload.inputSummary ?? "";
+    return `${tool}${input ? `: ${input}` : ""}`;
+  }
+  if (kind === "tool_result") {
+    return payload.isError
+      ? `error: ${String(payload.preview ?? "").slice(0, 80)}`
+      : String(payload.preview ?? "").slice(0, 80);
+  }
+  if (kind === "assistant_text") {
+    return String(payload.text ?? "").slice(0, 120);
+  }
+  if (kind === "story_picked") return `picked: ${payload.storyId ?? ""}`;
+  if (kind === "story_done") return payload.ok ? `✓ done` : `✗ failed`;
+  if (kind === "error") return `error: ${String(payload.message ?? "")}`;
+  return "";
+}
+
+/**
+ * Maps each PRD reference to its Forge run state by finding the run that covers
+ * it (active run > last finished) and replaying that run's story events.
+ *
+ * Single source of truth for run-state derivation — shared by the kanban
+ * endpoint (`/api/forge/projects/[id]/prds`) and `getProjectForgeSummary` (the
+ * Forge tab PRD list). Returns a Map keyed by PRD reference; references with no
+ * covering run get `runState: "idle"`.
+ */
+export async function derivePrdRunInfo(
+  supabase: ReturnType<typeof db>,
+  projectId: string,
+  references: string[],
+): Promise<Map<string, PrdRunInfo>> {
+  const result = new Map<string, PrdRunInfo>();
+  for (const ref of references) {
+    result.set(ref, {
+      runState: "idle",
+      runId: null,
+      currentPhase: null,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      lastEvents: [],
+    });
+  }
+  if (references.length === 0) return result;
+
+  const { data: activeRuns } = await supabase
+    .from("ForgeRun")
+    .select("id, status, manifest, createdAt")
+    .eq("projectId", projectId)
+    .in("status", ["queued", "running"])
+    .order("createdAt", { ascending: false })
+    .limit(1);
+
+  const { data: lastRuns } = await supabase
+    .from("ForgeRun")
+    .select("id, status, manifest, createdAt")
+    .eq("projectId", projectId)
+    .in("status", ["done", "error", "aborted"])
+    .order("createdAt", { ascending: false })
+    .limit(1);
+
+  const activeRun = activeRuns?.[0] ?? null;
+  const lastRun = lastRuns?.[0] ?? null;
+  const candidates = [activeRun, lastRun].filter(
+    (r): r is NonNullable<typeof activeRun> => !!r,
+  );
+  if (candidates.length === 0) return result;
+
+  // Which PRD references each candidate run covers, via its manifest.
+  const refsByRun = new Map<string, Set<string>>();
+  for (const run of candidates) {
+    const manifest = run.manifest as { prds?: ManifestPrdRef[] } | null;
+    refsByRun.set(
+      run.id,
+      new Set(
+        (manifest?.prds ?? [])
+          .map((p) => p.reference)
+          .filter((r): r is string => !!r),
+      ),
+    );
+  }
+
+  // Events for the candidate runs, grouped by run → story (PRD reference).
+  const runIds = candidates.map((r) => r.id);
+  const eventsByRunByStory = new Map<string, Map<string, RunEventRow[]>>();
+  const { data: rawEvents } = await supabase
+    .from("ForgeEvent")
+    .select("runId, taskId, kind, ts, payload")
+    .in("runId", runIds)
+    .order("seq", { ascending: true });
+
+  for (const ev of (rawEvents ?? []) as Array<
+    RunEventRow & { runId: string; taskId: string | null }
+  >) {
+    const storyId =
+      (ev.payload &&
+      typeof (ev.payload as { storyId?: unknown }).storyId === "string"
+        ? (ev.payload as { storyId: string }).storyId
+        : null) ??
+      ev.taskId ??
+      null;
+    if (!storyId) continue;
+    const runMap = eventsByRunByStory.get(ev.runId) ?? new Map();
+    const list = runMap.get(storyId) ?? [];
+    list.push({ kind: ev.kind, ts: ev.ts, payload: ev.payload });
+    runMap.set(storyId, list);
+    eventsByRunByStory.set(ev.runId, runMap);
+  }
+
+  for (const reference of references) {
+    let coveringRun: (typeof candidates)[number] | null = null;
+    for (const run of candidates) {
+      if (refsByRun.get(run.id)?.has(reference)) {
+        coveringRun = run;
+        break;
+      }
+    }
+    if (!coveringRun) continue;
+
+    const evs = eventsByRunByStory.get(coveringRun.id)?.get(reference) ?? [];
+    const isActive =
+      coveringRun.status === "queued" || coveringRun.status === "running";
+
+    let runState: PrdRunState = isActive ? "pending" : "idle";
+    let currentPhase: string | null = null;
+    let startedAt: string | null = null;
+    let finishedAt: string | null = null;
+
+    for (const ev of evs) {
+      if (ev.kind === "story_picked") {
+        runState = "running";
+        startedAt = startedAt ?? ev.ts;
+      } else if (ev.kind === "story_done") {
+        const pl = ev.payload as { ok?: unknown; passes?: unknown } | null;
+        const ok = pl?.passes === true || pl?.ok === true;
+        runState = ok ? "done" : "failed";
+        finishedAt = ev.ts;
+      } else if (ev.kind === "story_failed") {
+        runState = "failed";
+        finishedAt = ev.ts;
+      }
+      currentPhase = ev.kind;
+    }
+
+    const lastEvents = evs
+      .slice(-15)
+      .map((ev) => ({
+        kind: ev.kind,
+        ts: ev.ts,
+        summary: summarizeForgeEvent(ev.kind, ev.payload),
+      }))
+      .filter((e) => e.summary.length > 0)
+      .slice(-5);
+
+    const durationMs =
+      startedAt && finishedAt
+        ? new Date(finishedAt).getTime() - new Date(startedAt).getTime()
+        : startedAt && runState === "running"
+          ? Date.now() - new Date(startedAt).getTime()
+          : null;
+
+    result.set(reference, {
+      runState,
+      runId: coveringRun.id,
+      currentPhase,
+      startedAt,
+      finishedAt,
+      durationMs,
+      lastEvents,
+    });
+  }
+
+  return result;
+}
 
 export type ProjectForgeSummary = {
   /** PRDs do filesystem (modo legado/Ralph). Vazio quando forgeSourceSessionId está setado. */
@@ -146,7 +350,14 @@ export async function getProjectForgeSummary(
 
   if (project.forgeSourceSessionId) {
     const rows = await getPrdsForSession(project.forgeSourceSessionId);
-    dbPrds = rows.map(prdRowToItem);
+    const runInfo = await derivePrdRunInfo(
+      supabase,
+      projectId,
+      rows.map((r) => r.reference),
+    );
+    dbPrds = rows.map((r) =>
+      prdRowToItem(r, runInfo.get(r.reference)?.runState ?? "idle"),
+    );
   } else {
     // Fallback: PRDs do FS (Ralph) por slug-match com o nome do projeto.
     const allPrds = await listPrds();
@@ -253,7 +464,10 @@ export async function getProjectForgeSummary(
   };
 }
 
-function prdRowToItem(p: ProductRequirementRow): ForgePrdItem {
+function prdRowToItem(
+  p: ProductRequirementRow,
+  runState: PrdRunState = "idle",
+): ForgePrdItem {
   const ac = Array.isArray(p.acceptanceCriteria)
     ? (p.acceptanceCriteria as unknown[])
     : [];
@@ -264,6 +478,7 @@ function prdRowToItem(p: ProductRequirementRow): ForgePrdItem {
     status: p.status,
     oneLiner: p.oneLiner ?? "",
     acCount: ac.length,
+    runState,
   };
 }
 

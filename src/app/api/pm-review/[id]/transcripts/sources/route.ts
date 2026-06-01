@@ -66,9 +66,9 @@ export async function GET(
     getMemberIntegrationToken(member.id, "granola"),
     db()
       .from("EntityLink")
-      .select('"transcriptRefId", transcript:TranscriptRef!EntityLink_transcriptRefId_fkey("sourceId", source)')
+      .select('"contextSourceId", transcript:ContextSource!EntityLink_contextSourceId_fkey("sourceId", source)')
       .eq("pmReviewId", pmReviewId)
-      .not("transcriptRefId", "is", null),
+      .not("contextSourceId", "is", null),
   ]);
 
   const importedSet = new Set<string>();

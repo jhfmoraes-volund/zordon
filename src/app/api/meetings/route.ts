@@ -23,7 +23,7 @@ const MEETING_SELECT = `
   projectLinks:MeetingProjectLink(
     *, project:Project(id, name, status, pmId)
   ),
-  transcriptRefs:TranscriptRef!TranscriptRef_meetingId_fkey(
+  transcriptRefs:ContextSource!ContextSource_meetingId_fkey(
     id, source, sourceId, title, fullText, capturedAt
   )
 `;

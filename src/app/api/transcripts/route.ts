@@ -24,8 +24,9 @@ export async function GET(req: NextRequest) {
   );
 
   let query = db()
-    .from("TranscriptRef")
-    .select("id, source, sourceId, title, byline, capturedAt, meetingId")
+    .from("ContextSource")
+    .select('id, source, "sourceId", title, byline, "capturedAt", "meetingId"')
+    .eq("kind", "transcript")
     .order("capturedAt", { ascending: false, nullsFirst: false })
     .limit(limit);
 

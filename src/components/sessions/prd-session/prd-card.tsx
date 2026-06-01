@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronRight, Maximize2 } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { cn } from "@/lib/utils";
 import type { ChipTone } from "@/lib/status-chips";
@@ -34,6 +33,8 @@ const STATUS_LABEL: Record<string, string> = {
 type Props = {
   prd: ProductRequirementRow;
   projectId: string;
+  /** Open the full PRD detail in an in-session sheet (owned by the parent). */
+  onOpenDetail?: (id: string) => void;
 };
 
 function asArray<T>(v: unknown): T[] {
@@ -49,7 +50,7 @@ function formatAc(ac: AcceptanceCriterion, idx: number): string {
   return parts.length > 0 ? parts.join(", ") : `Critério ${idx + 1}`;
 }
 
-export function PrdCard({ prd, projectId }: Props) {
+export function PrdCard({ prd, onOpenDetail }: Props) {
   const [expanded, setExpanded] = useState(false);
   const acs = asArray<AcceptanceCriterion>(prd.acceptanceCriteria);
   const status = prd.status as keyof typeof STATUS_TONE;
@@ -77,16 +78,27 @@ export function PrdCard({ prd, projectId }: Props) {
         <StatusChip tone={tone} className="shrink-0 text-[10px]">
           {label}
         </StatusChip>
-        <Link
-          href={`/projects/${projectId}/prds/${prd.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Abrir PRD em nova aba"
-          className="shrink-0 inline-flex size-6 items-center justify-center rounded-sm hover:bg-accent text-muted-foreground hover:text-foreground"
-        >
-          <ExternalLink className="size-3" />
-        </Link>
+        {onOpenDetail && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetail(prd.id);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                e.preventDefault();
+                onOpenDetail(prd.id);
+              }
+            }}
+            aria-label="Abrir detalhe do PRD"
+            className="shrink-0 inline-flex size-6 cursor-pointer items-center justify-center rounded-sm hover:bg-accent text-muted-foreground hover:text-foreground"
+          >
+            <Maximize2 className="size-3" />
+          </span>
+        )}
       </button>
 
       <div

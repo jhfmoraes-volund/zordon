@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Check, FileText, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/ui/status-chip";
 import { fmtDate } from "@/lib/date-utils";
 import type { PlanningDetail } from "@/lib/dal/planning";
 import { PlanningCostBadge } from "@/components/planning/planning-cost-badge";
+import { InsumosButton } from "@/components/agent/context-import";
 
 type Props = {
   planning: PlanningDetail;
@@ -87,15 +87,12 @@ export function PlanningRibbon({
           <Pencil className="h-3.5 w-3.5" />
         </Button>
 
-        <Button size="sm" variant="outline" onClick={onOpenContext}>
-          <FileText className="h-3.5 w-3.5 mr-1.5" />
-          Contexto
-          {planning.linkedTranscriptCount > 0 && (
-            <Badge className="ml-1.5 h-4 px-1 text-[10px]">
-              {planning.linkedTranscriptCount}
-            </Badge>
-          )}
-        </Button>
+        <InsumosButton
+          count={planning.linkedTranscriptCount}
+          onClick={onOpenContext}
+          variant="outline"
+          className="h-8"
+        />
 
         {!isClosed && (
           <Button size="sm" disabled={concluding} onClick={onConclude}>

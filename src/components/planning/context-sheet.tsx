@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import {
-  FileSpreadsheet,
-  FileText,
   GitBranch,
   RefreshCw,
   Loader2,
@@ -21,7 +19,7 @@ interface LinkedTranscript {
   transcript: {
     id: string;
     title: string | null;
-    source: string;
+    source: string | null;
     capturedAt: string | null;
   } | null;
   weight: string;
@@ -115,7 +113,7 @@ export function ContextSheet({
     id: l.transcriptRefId,
     kind: (l.transcript?.source === "spreadsheet" ? "spreadsheet" : "transcript") as "transcript" | "spreadsheet" | "github",
     title: l.transcript?.title ?? null,
-    source: l.transcript?.source,
+    source: l.transcript?.source ?? undefined,
     capturedAt: l.transcript?.capturedAt,
     weight: l.weight,
   }));
@@ -179,7 +177,7 @@ export function ContextSheet({
       <ContextSheetPrimitive
         open={open}
         onOpenChange={onOpenChange}
-        ritualLabel="planning"
+        ritualLabel="Planning"
         linkedItems={linkedItems}
         capabilities={{
           transcript: true,

@@ -280,8 +280,16 @@ function resetIncremental(
     execGit(workspacePath, `git remote add origin "${desiredUrl}"`);
   }
 
-  execGit(workspacePath, `git fetch origin "${baseBranch}" --depth 1`);
-  execGit(workspacePath, `git checkout "${baseBranch}"`);
+  // Refspec explícito: senão `git fetch origin <branch> --depth 1` só atualiza
+  // FETCH_HEAD, NÃO cria/atualiza refs/remotes/origin/<branch>. Daí o checkout
+  // -B abaixo falha com "origin/main is not a commit".
+  execGit(
+    workspacePath,
+    `git fetch origin "${baseBranch}:refs/remotes/origin/${baseBranch}" --depth 1`,
+  );
+  // -B cria OU reseta a branch local apontando pra origin/<base>. Robusto
+  // ao caso onde workspace tem só branch forge/* (não tem main local ainda).
+  execGit(workspacePath, `git checkout -B "${baseBranch}" "origin/${baseBranch}"`);
   execGit(workspacePath, `git reset --hard "origin/${baseBranch}"`);
 
   const excludes = PRESERVED_CACHE_PATTERNS.map((p) => `-e "${p}"`).join(" ");

@@ -146,7 +146,7 @@ function StepContent({
 }) {
   switch (stepKey) {
     case "pre_work":
-      return <PreWorkStep sessionId={sessionId} />;
+      return <PreWorkStep sessionId={sessionId} projectId={projectId} />;
     case "product_vision":
       return <ProductVisionStep sessionId={sessionId} />;
     case "scope_definition":

@@ -218,7 +218,7 @@ export async function loadClientInsightContext(
     ? await client
         .from("Meeting")
         .select(
-          "id, date, type, title, notes, transcriptRefs:TranscriptRef!TranscriptRef_meetingId_fkey(fullText)",
+          "id, date, type, title, notes, transcriptRefs:ContextSource!ContextSource_meetingId_fkey(fullText)",
         )
         .in("id", meetingIds)
         .neq("type", "private")

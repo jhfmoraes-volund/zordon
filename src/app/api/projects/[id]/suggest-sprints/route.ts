@@ -50,7 +50,7 @@ type TaskRow = {
     moduleId: string | null;
     module: { id: string; name: string } | null;
   } | null;
-  acs: Array<{ acceptanceCriterionId: string }>;
+  acs: Array<{ id: string }>;
   tags: Array<{ tag: TaskTagLite | null }>;
 };
 
@@ -80,7 +80,7 @@ export async function POST(
     .select(
       `id, reference, title, description, layer, status, "userStoryId", "functionPoints", "sprintId",
        story:UserStory(id, title, reference, "moduleId", module:Module(id, name)),
-       acs:TaskAcceptanceCriterion("acceptanceCriterionId"),
+       acs:AcceptanceCriterion!AcceptanceCriterion_taskId_fkey(id),
        tags:TaskTagAssignment(tag:TaskTag(id, name, tone))`,
     )
     .eq("projectId", projectId)

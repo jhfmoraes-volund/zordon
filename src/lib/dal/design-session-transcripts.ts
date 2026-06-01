@@ -39,7 +39,7 @@ const FULL_SELECT = `
   "linkedAt",
   "linkedById",
   weight,
-  transcript:TranscriptRef!EntityLink_transcriptRefId_fkey(
+  transcript:ContextSource!EntityLink_contextSourceId_fkey(
     id, source, "sourceId", title, "capturedAt", "endedAt",
     participants, summary, "actionItems", "fullText"
   )
@@ -120,7 +120,7 @@ export async function listSessionTranscripts(
     .from("EntityLink")
     .select(FULL_SELECT)
     .eq("designSessionId", sessionId)
-    .not("transcriptRefId", "is", null);
+    .not("contextSourceId", "is", null);
   if (error) throw error;
   const rows = (data ?? []) as unknown as LinkRow[];
   const items = rows
@@ -153,7 +153,7 @@ export async function linkTranscriptToSession(
     .from("EntityLink")
     .select("id")
     .eq("designSessionId", params.sessionId)
-    .eq("transcriptRefId", params.transcriptRefId)
+    .eq("contextSourceId", params.transcriptRefId)
     .maybeSingle();
   if (lookupErr) throw lookupErr;
   if (existing) return { id: existing.id as string, created: false };
@@ -162,7 +162,7 @@ export async function linkTranscriptToSession(
     .from("EntityLink")
     .insert({
       designSessionId: params.sessionId,
-      transcriptRefId: params.transcriptRefId,
+      contextSourceId: params.transcriptRefId,
       linkedById: params.linkedById ?? null,
       weight: params.weight ?? "primary",
     })

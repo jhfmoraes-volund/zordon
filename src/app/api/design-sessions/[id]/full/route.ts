@@ -22,7 +22,7 @@ export async function GET(
   const { data: session } = await db()
     .from("DesignSession")
     .select(
-      "*, project:Project(id, name)",
+      "*, project:Project!DesignSession_projectId_fkey(id, name)",
     )
     .eq("id", id)
     .maybeSingle();

@@ -14,6 +14,7 @@ import {
   listPMReviewsForProject,
   type PMReviewNoteKind,
 } from "@/lib/dal/pm-review";
+import { listForProject as listPlanningSessionsForProject } from "@/lib/dal/planning-session";
 import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
 
 type RitualItem =
@@ -46,6 +47,18 @@ type RitualItem =
         noteByKind: Partial<Record<PMReviewNoteKind, number>>;
         reportGenerated: boolean;
       };
+      facilitatorId: string | null;
+      facilitatorName: string | null;
+    }
+  | {
+      kind: "release_planning";
+      id: string;
+      title: string;
+      status: string;
+      scheduledFor: string | null;
+      sortKey: string;
+      href: string;
+      badges: { linkedCount: number; noteCount: number };
       facilitatorId: string | null;
       facilitatorName: string | null;
     };
@@ -83,13 +96,33 @@ export async function GET(
   const denied = await requireProjectViewApi(projectId);
   if (denied) return denied;
 
-  const [plannings, pmReviews, canCreatePMReview] = await Promise.all([
-    listPlanningsForProject(projectId),
-    listPMReviewsForProject(projectId),
-    canCreatePMReviewForProject(projectId),
-  ]);
+  const [plannings, pmReviews, planningSessions, canCreatePMReview] =
+    await Promise.all([
+      listPlanningsForProject(projectId),
+      listPMReviewsForProject(projectId),
+      listPlanningSessionsForProject(projectId),
+      canCreatePMReviewForProject(projectId),
+    ]);
 
   const items: RitualItem[] = [];
+
+  // Release Planning é singleton por projeto: surface só o mais recente
+  // (listForProject vem desc por createdAt).
+  const releasePlanning = planningSessions[0];
+  if (releasePlanning) {
+    items.push({
+      kind: "release_planning",
+      id: releasePlanning.id,
+      title: `${releasePlanning.sprintCount ?? 6} sprints`,
+      status: releasePlanning.status,
+      scheduledFor: releasePlanning.createdAt,
+      sortKey: releasePlanning.createdAt ?? "0",
+      href: `/projects/${projectId}/planning`,
+      badges: { linkedCount: 0, noteCount: 0 },
+      facilitatorId: releasePlanning.facilitatorId,
+      facilitatorName: null,
+    });
+  }
 
   for (const p of plannings) {
     const baseDate = p.scheduledFor ?? p.startedAt ?? null;

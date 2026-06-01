@@ -1,11 +1,8 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { FileText } from "lucide-react";
 import { canViewProject } from "@/lib/dal";
 import { getPrdById } from "@/lib/dal/product-requirements";
 import { db } from "@/lib/db";
 import { PageContainer, PageTitle } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PrdExecutionPanel } from "@/components/forge/prd-execution-panel";
 import type { ChipTone } from "@/lib/status-chips";
@@ -28,7 +25,13 @@ function statusTone(status: string): ChipTone {
   }
 }
 
-export default async function PrdRunPage({
+/**
+ * Forge PRD deep-dive — execution view (AC checklist + live run stream + run
+ * history) for a single PRD in the Forge context. The PRD *spec* lives in its
+ * design session (in-session sheet); this page is the "PRD turning into code"
+ * surface. Reached from the Forge kanban.
+ */
+export default async function ForgePrdDeepDivePage({
   params,
 }: {
   params: Promise<{ id: string; prdId: string }>;
@@ -42,8 +45,7 @@ export default async function PrdRunPage({
   const prd = await getPrdById(prdId);
   if (!prd || prd.projectId !== projectId) notFound();
 
-  const supabase = db();
-  const { data: project } = await supabase
+  const { data: project } = await db()
     .from("Project")
     .select("id, name")
     .eq("id", projectId)
@@ -51,41 +53,33 @@ export default async function PrdRunPage({
 
   if (!project) notFound();
 
+  const backHref = `/projects/${projectId}/forge/kanban`;
+
   return (
     <PageContainer>
       <PageTitle
         title={`${prd.reference} · Execução`}
         subtitle={prd.title}
-        backHref={`/projects/${projectId}/forge/kanban`}
+        backHref={backHref}
       />
 
       <div className="space-y-4">
-        {/* Header compacto com link pra spec completa */}
-        <header className="flex items-center justify-between gap-3 rounded-lg border bg-card p-4 flex-wrap">
+        <header className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span className="font-mono text-[11px] tabular-nums text-muted-foreground shrink-0">
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
               {prd.reference}
             </span>
-            <h2 className="text-sm font-semibold truncate">{prd.title}</h2>
+            <h2 className="truncate text-sm font-semibold">{prd.title}</h2>
             <StatusChip tone={statusTone(prd.status)} size="sm">
               {prd.status}
             </StatusChip>
           </div>
-          <Link
-            href={`/projects/${projectId}/prds/${prdId}`}
-            className="shrink-0"
-          >
-            <Button variant="outline" size="sm" className="h-8">
-              <FileText className="size-3.5 mr-1.5" />
-              Ver spec completa
-            </Button>
-          </Link>
         </header>
 
         <PrdExecutionPanel
           projectId={projectId}
           prdId={prdId}
-          backHref={`/projects/${projectId}/prds/${prdId}/run`}
+          backHref={`/projects/${projectId}/forge/prds/${prdId}`}
         />
       </div>
     </PageContainer>

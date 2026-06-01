@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Upsert idempotente em `TranscriptRef` — ponto único de escrita de transcrição.
+ * Upsert idempotente em `ContextSource` — ponto único de escrita de transcrição.
+ *
+ * (Migração Jeito A: escreve ContextSource, o SSOT unificado. `source` mapeia
+ * pra `kind`: spreadsheet→'spreadsheet_csv', resto→'transcript'. Nome da função
+ * mantido pros callers; ver docs/platform/context-source-unification-plan.md.)
  *
  * Toda feature que ingere transcript (Granola cron, import modal de Roam,
  * upload de planilha, criação manual) **deve** passar por aqui. Garante:
@@ -13,12 +17,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * ser NULL para `source='manual'` — UNIQUE index é parcial, e o cliente JS
  * não expressa `ON CONFLICT WHERE`. Ler primeiro é correto e barato.
  *
- * Retorna o `id` do `TranscriptRef` (criado ou pré-existente).
+ * Retorna o `id` do `ContextSource` (criado ou pré-existente).
  */
 
 type SupabaseClientLike = Pick<SupabaseClient, "from">;
 
 export type TranscriptSource = "roam" | "granola" | "manual" | "spreadsheet";
+
+/** source → ContextSource.kind. Planilha vira fonte própria (não "transcript"). */
+function kindForSource(source: TranscriptSource): "transcript" | "spreadsheet_csv" {
+  return source === "spreadsheet" ? "spreadsheet_csv" : "transcript";
+}
 
 export type UpsertTranscriptRefInput = {
   source: TranscriptSource;
@@ -38,8 +47,8 @@ export async function upsertTranscriptRef(
 ): Promise<string> {
   if (input.sourceId) {
     const { data: existing, error: lookupErr } = await client
-      .from("TranscriptRef")
-      .select("id, fullText, title, byline, capturedAt, meetingId")
+      .from("ContextSource")
+      .select('id, "fullText", title, byline, "capturedAt", "meetingId"')
       .eq("source", input.source)
       .eq("sourceId", input.sourceId)
       .maybeSingle();
@@ -51,12 +60,11 @@ export async function upsertTranscriptRef(
       const patch: Record<string, unknown> = {};
       if (input.meetingId && !existing.meetingId) patch.meetingId = input.meetingId;
       if (input.fullText && !existing.fullText) patch.fullText = input.fullText;
-      if (input.title && !existing.title) patch.title = input.title;
       if (input.byline && !existing.byline) patch.byline = input.byline;
       if (input.capturedAt && !existing.capturedAt) patch.capturedAt = input.capturedAt;
       if (Object.keys(patch).length > 0) {
         const { error: updErr } = await client
-          .from("TranscriptRef")
+          .from("ContextSource")
           .update(patch)
           .eq("id", existing.id);
         if (updErr) throw updErr;
@@ -66,16 +74,18 @@ export async function upsertTranscriptRef(
   }
 
   const { data: inserted, error: insErr } = await client
-    .from("TranscriptRef")
+    .from("ContextSource")
     .insert({
+      kind: kindForSource(input.source),
       source: input.source,
       sourceId: input.sourceId ?? null,
       meetingId: input.meetingId ?? null,
       fullText: input.fullText ?? null,
-      title: input.title ?? null,
+      // title é NOT NULL em ContextSource — fallback pro byline ou placeholder.
+      title: input.title ?? input.byline ?? "Transcript sem título",
       byline: input.byline ?? null,
       capturedAt: input.capturedAt ?? null,
-      importedById: input.importedById ?? null,
+      createdBy: input.importedById ?? null,
     })
     .select("id")
     .single();
@@ -101,9 +111,10 @@ export async function getTranscriptRefForMeeting(
   capturedAt: string | null;
 } | null> {
   const { data, error } = await client
-    .from("TranscriptRef")
-    .select("id, source, sourceId, fullText, title, byline, capturedAt")
+    .from("ContextSource")
+    .select('id, source, "sourceId", "fullText", title, byline, "capturedAt"')
     .eq("meetingId", meetingId)
+    .eq("kind", "transcript")
     .maybeSingle();
   if (error) throw error;
   return (data as {

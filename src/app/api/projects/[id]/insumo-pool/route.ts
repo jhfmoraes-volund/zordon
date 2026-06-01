@@ -59,17 +59,19 @@ export async function GET(
   const { data: planningsRes } = await supabase
     .from("PlanningCeremony")
     .select(
-      'id, sprint:Sprint(name), links:PlanningTranscriptLink("transcriptRefId", transcript:TranscriptRef(id, source, "sourceId", title, "capturedAt"))',
+      'id, sprint:Sprint(name), links:EntityLink!EntityLink_planningCeremonyId_fkey("contextSourceId", transcript:ContextSource!EntityLink_contextSourceId_fkey(id, source, "sourceId", title, "capturedAt"))',
     )
-    .eq("projectId", projectId);
+    .eq("projectId", projectId)
+    .not("links.contextSourceId", "is", null);
 
   // PM Review side: pega pm reviews do projeto + links.
   const { data: pmReviewsRes } = await supabase
     .from("PMReview")
     .select(
-      'id, "referenceWeek", links:PMReviewTranscriptLink("transcriptRefId", transcript:TranscriptRef(id, source, "sourceId", title, "capturedAt"))',
+      'id, "referenceWeek", links:EntityLink!EntityLink_pmReviewId_fkey("contextSourceId", transcript:ContextSource!EntityLink_contextSourceId_fkey(id, source, "sourceId", title, "capturedAt"))',
     )
-    .eq("projectId", projectId);
+    .eq("projectId", projectId)
+    .not("links.contextSourceId", "is", null);
 
   // Dedup por transcriptRefId; preserva a primeira origem encontrada.
   const transcriptMap = new Map<string, PoolTranscript>();
@@ -77,12 +79,12 @@ export async function GET(
   for (const p of planningsRes ?? []) {
     const sprintName = (p.sprint as { name: string } | null)?.name ?? null;
     for (const l of (p.links ?? []) as Array<{
-      transcriptRefId: string;
+      contextSourceId: string;
       transcript: unknown;
     }>) {
       const t = (l as { transcript: PoolTranscript & { id: string } | null }).transcript;
       if (!t) continue;
-      const refId = (l as { transcriptRefId: string }).transcriptRefId;
+      const refId = (l as { contextSourceId: string }).contextSourceId;
       if (transcriptMap.has(refId)) continue;
       transcriptMap.set(refId, {
         transcriptRefId: refId,
@@ -103,12 +105,12 @@ export async function GET(
     // Se for o PM Review corrente, ignora — itens já linkados a ele não entram no pool.
     if (excludePMReviewId && r.id === excludePMReviewId) continue;
     for (const l of (r.links ?? []) as Array<{
-      transcriptRefId: string;
+      contextSourceId: string;
       transcript: unknown;
     }>) {
       const t = (l as { transcript: PoolTranscript & { id: string } | null }).transcript;
       if (!t) continue;
-      const refId = (l as { transcriptRefId: string }).transcriptRefId;
+      const refId = (l as { contextSourceId: string }).contextSourceId;
       if (transcriptMap.has(refId)) continue;
       transcriptMap.set(refId, {
         transcriptRefId: refId,
@@ -129,11 +131,11 @@ export async function GET(
   if (excludePMReviewId) {
     const { data: alreadyLinked } = await supabase
       .from("EntityLink")
-      .select("transcriptRefId")
+      .select("contextSourceId")
       .eq("pmReviewId", excludePMReviewId)
-      .not("transcriptRefId", "is", null);
+      .not("contextSourceId", "is", null);
     for (const l of alreadyLinked ?? []) {
-      if (l.transcriptRefId) transcriptMap.delete(l.transcriptRefId);
+      if (l.contextSourceId) transcriptMap.delete(l.contextSourceId);
     }
   }
 
@@ -147,7 +149,7 @@ export async function GET(
   const { data: meetingLinks } = await supabase
     .from("MeetingProjectLink")
     .select(
-      'meetingId, meeting:Meeting(id, title, date, notes, transcriptRefs:TranscriptRef!TranscriptRef_meetingId_fkey(id, "fullText"))',
+      'meetingId, meeting:Meeting(id, title, date, notes, transcriptRefs:ContextSource!ContextSource_meetingId_fkey(id, "fullText"))',
     )
     .eq("projectId", projectId);
 

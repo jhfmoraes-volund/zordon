@@ -85,7 +85,7 @@ async function main() {
       id, phase, projectId, sprintId,
       project:Project(id, name, referenceKey),
       sprint:Sprint(id, name, startDate, endDate),
-      linkedTranscripts:PlanningTranscriptLink(transcriptRefId),
+      linkedTranscripts:EntityLink!EntityLink_planningCeremonyId_fkey(contextSourceId),
       pendingCount:MeetingTaskAction(count)
       `,
     )
@@ -96,7 +96,10 @@ async function main() {
 
   const project = planning.project as { id: string; name: string; referenceKey: string | null } | null;
   const sprint = planning.sprint as { id: string; name: string; startDate: string; endDate: string } | null;
-  const transcriptCount = (planning.linkedTranscripts ?? []).length;
+  // EntityLink unifica meeting/contexto — conta os que têm contextSourceId.
+  const transcriptCount = (planning.linkedTranscripts ?? []).filter(
+    (l: { contextSourceId: string | null }) => l.contextSourceId,
+  ).length;
 
   console.log(yellow("▸ Planning:"), planning.id);
   console.log(yellow("▸ Project:"), project ? `${project.name} (${project.referenceKey ?? "?"})` : "?");

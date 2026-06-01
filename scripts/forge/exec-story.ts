@@ -44,13 +44,28 @@ try {
 }
 mkdirSync(dirname(eventsPath), { recursive: true });
 
-// Create emitter for dual-write (jsonl + DB)
-const emitter = createEmitter({
-  runId,
+// Create emitter for dual-write (jsonl + DB).
+// runId aqui DEVE ser o autorunId (compartilhado com exec-prd) pra que
+// ForgeEvent.runId case com ForgeRun.id e a UI ache os eventos. Antes
+// estava passando o storyRunId (uuid local sem vínculo no DB).
+// taskId fica NULL porque ForgeTask.id é UUID e storyId é text ("VOLU-PRD-000");
+// o storyId real vai no payload via wrap abaixo.
+const rawEmitter = createEmitter({
+  runId: autorunId,
   agentId: null,
-  taskId: storyId,
+  taskId: null,
   jsonlPath: eventsPath,
 });
+
+// Wrap: garante que TODO evento tem storyId no payload — UI filtra por isso
+// pra agrupar eventos por PRD na visão de execução.
+const emitter = {
+  emit(kind: string, payload: Record<string, unknown> = {}) {
+    rawEmitter.emit(kind, { storyId, ...payload });
+  },
+  flush: () => rawEmitter.flush(),
+  close: () => rawEmitter.close(),
+};
 
 // Main async function to support await
 async function main() {
@@ -310,6 +325,10 @@ if (projectId && projectId !== STUB_PROJECT_ID) {
 
 emitter.emit("status", { message: "spawning claude -p with stream-json output" });
 
+// FORGE_MAX_TURNS override (default 80). PRD-grandes precisam mais que 30
+// pra criar+verificar. Aumentar não resolve runaway, só dá margem; pivot por
+// 2 falhas consecutivas continua atuando (autopilot future).
+const maxTurns = process.env.FORGE_MAX_TURNS ?? "80";
 const claudeArgs = [
   "-p",
   prompt,
@@ -317,10 +336,12 @@ const claudeArgs = [
   "stream-json",
   "--verbose",
   "--max-turns",
-  "30",
+  maxTurns,
   "--permission-mode",
   "acceptEdits",
 ];
+
+emitter.emit("status", { message: `max_turns=${maxTurns}` });
 
 const claude = spawn("claude", claudeArgs, {
   cwd: workingDir,
@@ -331,6 +352,7 @@ const claude = spawn("claude", claudeArgs, {
 let stdoutBuffer = "";
 let stderrBuffer = "";
 let lastAssistantText = "";
+let lastResultSubtype: string | null = null;
 
 claude.stdout?.on("data", (chunk) => {
   stdoutBuffer += chunk.toString();
@@ -404,6 +426,8 @@ function handleClaudeEvent(ev: { type?: string; subtype?: string; message?: unkn
       subtype: ev.subtype,
       summary: summarize(ev),
     });
+    // Lembra subtype final pro close handler decidir ok/partial.
+    lastResultSubtype = ev.subtype ?? null;
     return;
   }
 
@@ -441,7 +465,20 @@ claude.on("close", async (code) => {
     stderrTail: stderrBuffer.slice(-500),
     finalAssistantPreview: lastAssistantText.slice(0, 800),
   });
-  emitter.emit("done", { ok: code === 0, exitCode: code });
+  // Distingue "completou bem" (ok=true) de "atingiu max_turns" (ok=false +
+  // reason=max_turns: parcial, vale revisar). Cancellation / outros errors
+  // tambem viram ok=false. Sem subtype no result, assume success se exit 0.
+  const subtype = lastResultSubtype;
+  const hitMaxTurns = subtype === "error_max_turns";
+  const claudeOkBySubtype =
+    subtype === null || subtype === "success" || subtype === "end_turn";
+  const ok = code === 0 && claudeOkBySubtype && !hitMaxTurns;
+  emitter.emit("done", {
+    ok,
+    exitCode: code,
+    ...(hitMaxTurns ? { reason: "max_turns", partial: true } : {}),
+    ...(subtype ? { subtype } : {}),
+  });
   await emitter.close();
   process.exit(code ?? 0);
 });

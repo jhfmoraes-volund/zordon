@@ -64,12 +64,20 @@ export function GitHubSourceModal({ open, onOpenChange, onImported, apiUrl, proj
 
     setImporting(true);
     try {
+      const m = trimmed.match(
+        /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/(?:pull|issues)\/(\d+))?\/?$/i,
+      );
+      const title = m
+        ? `${m[1]}/${m[2]}${m[3] ? `#${m[3]}` : ""}`
+        : trimmed;
+
       const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kind,
           projectId,
+          title,
           externalUrl: trimmed,
         }),
       });

@@ -34,17 +34,19 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
       `
       id, status, projectId, referenceWeek, reportMarkdown, reportGeneratedAt,
       project:Project(id, name, referenceKey, status, repoUrl, githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifest, repoManifestUpdatedAt, memoryMd, memoryVersion, memoryUpdatedAt),
-      linkedMeetings:PMReviewMeetingLink(
-        meetingId, meeting:Meeting(id, title, date)
+      linkedMeetings:EntityLink!EntityLink_pmReviewId_fkey(
+        meetingId, meeting:Meeting!EntityLink_meetingId_fkey(id, title, date)
       ),
-      linkedTranscripts:PMReviewTranscriptLink(
-        transcriptRefId, weight,
-        transcript:TranscriptRef(id, title, source, capturedAt)
+      linkedTranscripts:EntityLink!EntityLink_pmReviewId_fkey(
+        contextSourceId, weight,
+        transcript:ContextSource!EntityLink_contextSourceId_fkey(id, title, source, capturedAt)
       ),
       notes:PMReviewNote(id, kind, content, dismissedAt, priority, sourceTranscriptIds, sourceMeetingIds)
       `,
     )
     .eq("id", pmReviewId)
+    .not("linkedMeetings.meetingId", "is", null)
+    .not("linkedTranscripts.contextSourceId", "is", null)
     .single();
 
   if (!pm) throw new Error(`PMReview ${pmReviewId} não encontrado`);
@@ -470,11 +472,11 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
       }),
       execute: async ({ transcriptRefId }) => {
         const { data: ref } = await db()
-          .from("TranscriptRef")
-          .select("id, title, source, sourceId, capturedAt, meetingId, fullText")
+          .from("ContextSource")
+          .select('id, title, source, "sourceId", "capturedAt", "meetingId", "fullText"')
           .eq("id", transcriptRefId)
           .single();
-        if (!ref) return { ok: false, error: "TranscriptRef não encontrado" };
+        if (!ref) return { ok: false, error: "ContextSource não encontrado" };
         if (ref.fullText) {
           return {
             ok: true,

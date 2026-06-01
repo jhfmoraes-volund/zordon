@@ -31,7 +31,6 @@ export type PlanningCeremonyRow = Tables["PlanningCeremony"]["Row"];
 export type PlanningMeetingLinkRow = Tables["EntityLink"]["Row"];
 export type PlanningTranscriptLinkRow = Tables["EntityLink"]["Row"];
 export type PlanningContextNoteRow = Tables["PlanningContextNote"]["Row"];
-export type TranscriptRefRow = Tables["TranscriptRef"]["Row"];
 
 /** Weight de um transcript linkado — guia o Alpha sobre relevância. */
 export type TranscriptWeight = "primary" | "supporting" | "background";
@@ -95,7 +94,7 @@ export type PlanningDetail = PlanningSummary & {
     note: string | null;
     transcript: {
       id: string;
-      source: string;
+      source: string | null;
       sourceId: string | null;
       title: string | null;
       capturedAt: string | null;
@@ -145,7 +144,7 @@ export async function listPlanningsForProject(
       .from("EntityLink")
       .select("planningCeremonyId")
       .in("planningCeremonyId", ids)
-      .not("transcriptRefId", "is", null),
+      .not("contextSourceId", "is", null),
     supabase
       .from("PlanningContextNote")
       .select("planningCeremonyId, dismissedAt")
@@ -222,9 +221,9 @@ export async function getPlanningById(
       facilitator:Member!PlanningCeremony_facilitatorId_fkey(name),
       project:Project(githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifestUpdatedAt),
       links:EntityLink!EntityLink_planningCeremonyId_fkey(
-        meetingId, transcriptRefId, linkedAt, linkedById, weight, note,
+        meetingId, contextSourceId, linkedAt, linkedById, weight, note,
         meeting:Meeting!EntityLink_meetingId_fkey(id, title, date, visibility, kind),
-        transcript:TranscriptRef!EntityLink_transcriptRefId_fkey(id, source, sourceId, title, capturedAt, meetingId)
+        transcript:ContextSource!EntityLink_contextSourceId_fkey(id, source, sourceId, title, capturedAt, meetingId)
       ),
       notes:PlanningContextNote(*)
       `,
@@ -245,7 +244,7 @@ export async function getPlanningById(
   // Cast helpers — Supabase JS infere joins como possivelmente arrays/objects.
   type EntityLinkEmbed = {
     meetingId: string | null;
-    transcriptRefId: string | null;
+    contextSourceId: string | null;
     linkedAt: string;
     linkedById: string | null;
     weight: string | null;
@@ -279,14 +278,14 @@ export async function getPlanningById(
       meeting: l.meeting,
     }));
   const linkedTranscripts: PlanningDetail["linkedTranscripts"] = allLinks
-    .filter((l) => l.transcriptRefId !== null)
+    .filter((l) => l.contextSourceId !== null)
     .map((l) => ({
-      transcriptRefId: l.transcriptRefId as string,
+      transcriptRefId: l.contextSourceId as string,
       linkedAt: l.linkedAt,
       linkedById: l.linkedById,
       weight: (l.weight as TranscriptWeight | null) ?? "supporting",
       note: l.note,
-      transcript: l.transcript,
+      transcript: l.transcript as unknown as PlanningDetail["linkedTranscripts"][number]["transcript"],
     }));
 
   const notesActive = r.notes.filter((n) => n.dismissedAt === null);
@@ -341,7 +340,7 @@ export async function getPlanningPhaseContext(
       .from("EntityLink")
       .select("id", { count: "exact", head: true })
       .eq("planningCeremonyId", id)
-      .not("transcriptRefId", "is", null),
+      .not("contextSourceId", "is", null),
     supabase
       .from("PlanningContextNote")
       .select("id", { count: "exact", head: true })
@@ -579,7 +578,7 @@ export async function linkTranscriptToPlanning(input: {
     .from("EntityLink")
     .insert({
       planningCeremonyId: input.planningCeremonyId,
-      transcriptRefId: input.transcriptRefId,
+      contextSourceId: input.transcriptRefId,
       linkedById: input.linkedById,
       linkedAt: new Date().toISOString(),
       weight: input.weight ?? "supporting",
@@ -599,7 +598,7 @@ export async function unlinkTranscriptFromPlanning(
     .from("EntityLink")
     .delete()
     .eq("planningCeremonyId", planningCeremonyId)
-    .eq("transcriptRefId", transcriptRefId);
+    .eq("contextSourceId", transcriptRefId);
   if (error) throw error;
 }
 
@@ -619,31 +618,32 @@ export async function findOrCreateTranscriptRef(input: {
   meetingId?: string | null;
   importedById?: string | null;
   storagePath?: string | null;
-}): Promise<TranscriptRefRow> {
+}): Promise<Tables["ContextSource"]["Row"]> {
   const supabase = db();
+  // Escreve ContextSource (SSOT unificado). Planilha → kind='spreadsheet_csv'.
+  const kind = input.source === "spreadsheet" ? "spreadsheet_csv" : "transcript";
   // Tenta select primeiro (mais cache-friendly que upsert quando já existe).
   const { data: existing } = await supabase
-    .from("TranscriptRef")
+    .from("ContextSource")
     .select("*")
     .eq("source", input.source)
     .eq("sourceId", input.sourceId)
     .maybeSingle();
   if (existing) return existing;
 
-  const now = new Date().toISOString();
   const { data, error } = await supabase
-    .from("TranscriptRef")
+    .from("ContextSource")
     .insert({
+      kind,
       source: input.source,
       sourceId: input.sourceId,
       fullText: input.fullText ?? null,
-      title: input.title ?? null,
+      title: input.title ?? input.byline ?? "Transcript sem título",
       byline: input.byline ?? null,
       capturedAt: input.capturedAt ?? null,
       meetingId: input.meetingId ?? null,
-      importedById: input.importedById ?? null,
+      createdBy: input.importedById ?? null,
       storagePath: input.storagePath ?? null,
-      importedAt: now,
     })
     .select("*")
     .single();

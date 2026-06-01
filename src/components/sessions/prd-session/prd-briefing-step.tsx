@@ -20,13 +20,14 @@ import {
   TranscriptModal,
   type ImportedTranscript,
 } from "@/components/agent/context-import";
-import ContextSheet from "@/components/agent/context-import/context-sheet";
+import { DesignSessionContextSheet } from "@/components/design-session/design-session-context-sheet";
 import {
   useSessionFiles,
   type SessionFileRow,
 } from "@/hooks/design-session/use-session-files";
 import { PrdBriefingRibbon } from "@/components/sessions/prd-session/prd-briefing-ribbon";
 import { PrdCard } from "@/components/sessions/prd-session/prd-card";
+import { PrdDetailSheet } from "@/components/prd/prd-detail-sheet";
 import type { ProductRequirementRow } from "@/lib/dal/product-requirements";
 
 const WELCOME_TEXT =
@@ -76,6 +77,7 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
 
   const [prds, setPrds] = useState<ProductRequirementRow[]>([]);
   const [prdsLoading, setPrdsLoading] = useState(true);
+  const [selectedPrdId, setSelectedPrdId] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<SessionFileRow[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [inputText, setInputText] = useState("");
@@ -83,6 +85,8 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
   const [roamModalOpen, setRoamModalOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<ImportedTranscript[]>([]);
   const [insumosOpen, setInsumosOpen] = useState(false);
+  const [insumosCount, setInsumosCount] = useState(0);
+  const [insumosRefresh, setInsumosRefresh] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const threadIdRef = useRef<string | null>(threadId);
@@ -200,6 +204,17 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
     };
   }, [sessionId]);
 
+  const loadTranscripts = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/design-sessions/${sessionId}/transcripts`);
+      if (!r.ok) return;
+      const json = await r.json();
+      setTranscripts((json.imported as ImportedTranscript[]) ?? []);
+    } catch {
+      /* silencioso */
+    }
+  }, [sessionId]);
+
   const handleUnlinkTranscript = useCallback(
     async (transcriptId: string) => {
       const prev = transcripts;
@@ -209,20 +224,9 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
         { method: "DELETE" },
       );
       if (!res.ok) setTranscripts(prev);
+      else setInsumosRefresh((k) => k + 1);
     },
     [sessionId, transcripts],
-  );
-
-  const linkedItems = useMemo(
-    () =>
-      transcripts.map((t) => ({
-        id: t.id,
-        kind: "transcript" as const,
-        title: t.meetingTitle,
-        source: t.source,
-        capturedAt: t.meetingStart,
-      })),
-    [transcripts],
   );
 
   const uploadFiles = useCallback(
@@ -388,7 +392,6 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
     (!inputText.trim() && !pendingFiles.length) || uploading;
 
   const stats = computeStats(prds);
-  const insumosCount = transcripts.length + pendingFiles.length;
 
   const handleApproveAll = useCallback(async () => {
     const pending = prds.filter(
@@ -451,7 +454,12 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
               </p>
             ) : (
               prds.map((prd) => (
-                <PrdCard key={prd.id} prd={prd} projectId={projectId} />
+                <PrdCard
+                  key={prd.id}
+                  prd={prd}
+                  projectId={projectId}
+                  onOpenDetail={setSelectedPrdId}
+                />
               ))
             )}
           </div>
@@ -508,19 +516,31 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
         apiUrl={`/api/design-sessions/${sessionId}/transcripts`}
         open={roamModalOpen}
         onOpenChange={setRoamModalOpen}
-        onImported={(t) => setTranscripts((cur) => [t, ...cur])}
+        onImported={(t) => {
+          setTranscripts((cur) => [t, ...cur]);
+          setInsumosRefresh((k) => k + 1);
+        }}
       />
 
-      <ContextSheet
+      <DesignSessionContextSheet
+        sessionId={sessionId}
+        projectId={projectId}
         open={insumosOpen}
         onOpenChange={setInsumosOpen}
         ritualLabel="PRD"
-        linkedItems={linkedItems}
-        capabilities={{ transcript: true }}
-        handlers={{
-          onUnlink: handleUnlinkTranscript,
-          onImportTranscript: () => setRoamModalOpen(true),
-        }}
+        refreshKey={insumosRefresh}
+        onChanged={loadTranscripts}
+        onCountChange={setInsumosCount}
+      />
+
+      <PrdDetailSheet
+        prdId={selectedPrdId}
+        onOpenChange={(open) => !open && setSelectedPrdId(null)}
+        onChanged={(updated) =>
+          setPrds((prev) =>
+            prev.map((p) => (p.id === updated.id ? updated : p)),
+          )
+        }
       />
     </div>
   );

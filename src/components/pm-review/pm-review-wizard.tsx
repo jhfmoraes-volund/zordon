@@ -96,7 +96,7 @@ type LinkedTranscript = {
   transcript: {
     id: string;
     title: string | null;
-    source: string;
+    source: string | null;
     capturedAt: string | null;
   } | null;
 };
@@ -196,16 +196,16 @@ export function PMReviewWizard({
 
   return (
     <div className="space-y-4">
-      {/* ─── STEP 1 — CONTEXTO ────────────────────────────────────────────── */}
+      {/* ─── STEP 1 — INSUMOS ─────────────────────────────────────────────── */}
       <StepCard
         index={1}
-        title="Contexto"
+        title="Insumos"
         subtitle="Material que a Vitoria vai ler pra sintetizar"
         done={step1Done}
       >
         {linkedCount === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Nenhum contexto linkado ainda. Adicione transcripts ou reuniões do{" "}
+            Nenhum insumo linkado ainda. Adicione transcripts ou reuniões do{" "}
             <strong>pool do projeto</strong> ou importe novos do Roam/Granola.
           </p>
         ) : (

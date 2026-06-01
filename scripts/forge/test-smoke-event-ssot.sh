@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-FORGE_HOME="${HOME}/.volund-forge"  # Match getForgeHome() default
+FORGE_HOME="${HOME}/volund-forge"  # Match getForgeHome() default
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # ── Colors ────────────────────────────────────────────────────────────────────

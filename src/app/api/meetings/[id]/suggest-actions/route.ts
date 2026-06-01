@@ -68,7 +68,7 @@ async function handle(params: Promise<{ id: string }>) {
   const { data: meetingRaw, error: meetingErr } = await supabase
     .from("Meeting")
     .select(
-      "id, type, notes, transcriptRefs:TranscriptRef!TranscriptRef_meetingId_fkey(source, sourceId, fullText), projectLinks:MeetingProjectLink(project:Project(id, name))",
+      "id, type, notes, transcriptRefs:ContextSource!ContextSource_meetingId_fkey(source, sourceId, fullText), projectLinks:MeetingProjectLink(project:Project(id, name))",
     )
     .eq("id", meetingId)
     .maybeSingle();

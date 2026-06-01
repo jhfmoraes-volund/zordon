@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  Archive,
   Download,
   ExternalLink,
   Eye,
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PrdDetailSheet } from "@/components/prd/prd-detail-sheet";
 import { createClient } from "@/lib/supabase/client";
 import { DESIGN_SESSION_STATUS, lookupChip } from "@/lib/status-chips";
 import { getStepsForSession, type StepDef } from "@/lib/design-session-steps";
@@ -93,6 +95,8 @@ type Props = {
   onClose: () => void;
   onExport?: (id: string) => void;
   onDelete?: (id: string) => void;
+  /** Archive instead of delete — required for sessions that have PRDs vinculados. */
+  onArchive?: (id: string) => void;
   /** Called after a successful visibility change so the parent list can re-fetch. */
   onVisibilityChanged?: (id: string, visibility: "public" | "internal") => void;
   /** Called after a successful main toggle — parent re-fetches to dedupe per (project, type). */
@@ -106,6 +110,7 @@ export function SessionDetailSheet({
   onClose,
   onExport,
   onDelete,
+  onArchive,
   onVisibilityChanged,
   onMainChanged,
 }: Props) {
@@ -124,6 +129,7 @@ export function SessionDetailSheet({
             onClose={onClose}
             onExport={onExport}
             onDelete={onDelete}
+            onArchive={onArchive}
             onVisibilityChanged={onVisibilityChanged}
             onMainChanged={onMainChanged}
           />
@@ -140,22 +146,35 @@ function Inner({
   onClose,
   onExport,
   onDelete,
+  onArchive,
   onVisibilityChanged,
   onMainChanged,
 }: Props & { session: SessionDetailSummary }) {
   const [participants, setParticipants] = useState<Participant[] | null>(null);
   const [steps, setSteps] = useState<StepDef[] | null>(null);
   const [prds, setPrds] = useState<Prd[] | null>(null);
+  const [selectedPrdId, setSelectedPrdId] = useState<string | null>(null);
   const [facilitator, setFacilitator] = useState<{ name: string } | null>(null);
   const [visibility, setVisibility] = useState(session.visibility);
   const [savingVisibility, setSavingVisibility] = useState(false);
   const [isMain, setIsMain] = useState(session.isMain);
   const [savingMain, setSavingMain] = useState(false);
 
-  useEffect(() => {
+  // Re-sync local state when the parent pushes new prop values for the same
+  // session (e.g. after a visibility/main toggle). Adjusting during render is
+  // React's recommended alternative to a setState-in-effect.
+  const [syncedProps, setSyncedProps] = useState({
+    visibility: session.visibility,
+    isMain: session.isMain,
+  });
+  if (
+    syncedProps.visibility !== session.visibility ||
+    syncedProps.isMain !== session.isMain
+  ) {
+    setSyncedProps({ visibility: session.visibility, isMain: session.isMain });
     setVisibility(session.visibility);
     setIsMain(session.isMain);
-  }, [session.id, session.visibility, session.isMain]);
+  }
 
   async function toggleMain() {
     if (visibility !== "public") return;
@@ -518,9 +537,10 @@ function Inner({
                 const label = PRD_STATUS_LABEL[prd.status] ?? prd.status;
                 return (
                   <li key={prd.id}>
-                    <Link
-                      href={`/projects/${session.projectId}/prds/${prd.id}`}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPrdId(prd.id)}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
                     >
                       <span className="font-mono text-xs text-muted-foreground">
                         {prd.reference}
@@ -531,7 +551,7 @@ function Inner({
                       <StatusChip tone={tone} dot>
                         {label}
                       </StatusChip>
-                    </Link>
+                    </button>
                   </li>
                 );
               })}
@@ -568,6 +588,17 @@ function Inner({
       </ResponsiveSheetBody>
 
       <ResponsiveSheetFooter className="flex-wrap gap-2">
+        {onArchive && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => onArchive(session.id)}
+          >
+            <Archive className="size-4" />
+            Arquivar
+          </Button>
+        )}
         {onDelete && (
           <Button
             variant="ghost"
@@ -602,6 +633,26 @@ function Inner({
           </Link>
         </div>
       </ResponsiveSheetFooter>
+
+      <PrdDetailSheet
+        prdId={selectedPrdId}
+        onOpenChange={(open) => !open && setSelectedPrdId(null)}
+        onChanged={(updated) =>
+          setPrds(
+            (prev) =>
+              prev?.map((p) =>
+                p.id === updated.id
+                  ? {
+                      ...p,
+                      title: updated.title,
+                      status: updated.status,
+                      reference: updated.reference,
+                    }
+                  : p,
+              ) ?? prev,
+          )
+        }
+      />
     </>
   );
 }

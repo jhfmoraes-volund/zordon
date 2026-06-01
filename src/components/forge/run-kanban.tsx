@@ -318,8 +318,7 @@ function PrdCardItem({
     return (
       <li>
         <Link
-          href={`/projects/${projectId}/prds/${prd.id}`}
-          target="_blank"
+          href={`/projects/${projectId}/forge/prds/${prd.id}`}
           className="block"
         >
           {inner}

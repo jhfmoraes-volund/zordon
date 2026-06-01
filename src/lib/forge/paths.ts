@@ -3,8 +3,9 @@
  *
  * Decisões (`Dn` referenciados nos AGENTS.md e PRD da Forja):
  *
- *   D1  FORGE_HOME default ~/.volund-forge. Override via env FORGE_HOME ou
- *       CLI flag --home. Resolvido aqui em runtime; nada hard-codeado a cwd().
+ *   D1  FORGE_HOME default ~/volund-forge (visível no Finder, sem ponto).
+ *       Override via env FORGE_HOME ou CLI flag --home. Resolvido aqui em
+ *       runtime; nada hard-codeado a cwd().
  *
  *   D2  Workspace por projeto. Slug derivado de:
  *         project.referenceKey (lowercase) → slugify(name) → id.slice(0,8).
@@ -40,11 +41,11 @@ export type ForgeProjectLike = {
   referenceKey: string | null;
 };
 
-/** Resolve FORGE_HOME. Default ~/.volund-forge. */
+/** Resolve FORGE_HOME. Default ~/volund-forge (visível no Finder). */
 export function getForgeHome(): string {
   const fromEnv = process.env.FORGE_HOME?.trim();
   if (fromEnv) return resolve(fromEnv);
-  return resolve(homedir(), ".volund-forge");
+  return resolve(homedir(), "volund-forge");
 }
 
 /** Ensure FORGE_HOME directory tree exists + writable. Idempotente. */

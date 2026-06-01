@@ -38,7 +38,7 @@ export async function POST(
     return NextResponse.json({ error: "member_not_found" }, { status: 403 });
   }
 
-  let body: { retryFailed?: boolean } = {};
+  let body: { retryFailed?: boolean; prdRefs?: string[] } = {};
   try {
     body = await req.json();
   } catch {
@@ -55,6 +55,9 @@ export async function POST(
       );
     }
     prdRefsFilter = summary.lastFinishedRunFailedPrdRefs;
+  } else if (body.prdRefs && Array.isArray(body.prdRefs) && body.prdRefs.length > 0) {
+    // Disparo direto de N PRDs específicos (botão "Disparar" no painel da PRD).
+    prdRefsFilter = body.prdRefs;
   }
 
   try {

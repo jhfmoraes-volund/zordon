@@ -56,6 +56,29 @@ export async function DELETE(
   const { id } = await params;
   const denied = await requireSessionEditApi(id);
   if (denied) return denied;
+
+  // PRDs são artefatos da sessão e são a única casa de spec deles (além de poderem
+  // ter ForgeRun referenciando). Deletar a sessão os orfanaria. Sessão com PRD só
+  // pode ser arquivada (PUT { archivedAt }), nunca deletada.
+  const { count: prdCount, error: countErr } = await db()
+    .from("ProductRequirement")
+    .select("id", { count: "exact", head: true })
+    .eq("designSessionId", id)
+    .is("dismissedAt", null);
+  if (countErr)
+    return NextResponse.json({ error: countErr.message }, { status: 500 });
+  if ((prdCount ?? 0) > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Esta sessão tem PRDs vinculados e não pode ser deletada. Arquive-a em vez disso.",
+        code: "session_has_prds",
+        prdCount,
+      },
+      { status: 409 },
+    );
+  }
+
   const { error } = await db().from("DesignSession").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

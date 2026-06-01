@@ -1,14 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { CheckCheck, FileText, Link2 } from "lucide-react";
+import { CheckCheck, FileText } from "lucide-react";
+import { InsumosButton } from "@/components/agent/context-import";
 
 /**
  * Ribbon enxuto pro PrdBriefingStep.
@@ -74,20 +74,12 @@ export function PrdBriefingRibbon({
         <div className="h-4 w-px bg-border" />
 
         {/* Insumos */}
-        <Button
-          variant="ghost"
-          size="sm"
+        <InsumosButton
+          count={insumosCount}
           onClick={onOpenInsumos}
-          className="h-7 text-xs gap-1.5"
-        >
-          <Link2 className="h-3.5 w-3.5" />
-          Insumos
-          {insumosCount > 0 && (
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-              {insumosCount}
-            </Badge>
-          )}
-        </Button>
+          variant="ghost"
+          className="h-7 text-xs"
+        />
 
         <div className="ml-auto flex items-center gap-2">
           {onApproveAll && (

@@ -5,7 +5,7 @@ import { fmtDateNumeric } from "@/lib/date-utils";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
-import { File, Link2, Loader2, Mic, Paperclip, X } from "lucide-react";
+import { File, Loader2, Mic, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ConversationFab,
@@ -15,9 +15,10 @@ import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   TranscriptModal,
+  InsumosButton,
   type ImportedTranscript,
 } from "@/components/agent/context-import";
-import ContextSheet from "@/components/agent/context-import/context-sheet";
+import { DesignSessionContextSheet } from "./design-session-context-sheet";
 import { StepActions } from "./ribbon";
 import {
   useSessionFiles,
@@ -33,7 +34,13 @@ function formatSize(bytes: number) {
 const WELCOME_TEXT =
   "Olá! Sou o Vitor, seu assistente de design de produto. Me conte sobre o projeto — pode descrever em texto livre ou anexar documentos.";
 
-export function PreWorkStep({ sessionId }: { sessionId: string }) {
+export function PreWorkStep({
+  sessionId,
+  projectId,
+}: {
+  sessionId: string;
+  projectId: string;
+}) {
   const {
     uploading,
     uploadFiles: uploadFilesHook,
@@ -48,25 +55,25 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
   const [transcripts, setTranscripts] = useState<ImportedTranscript[]>([]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [insumosOpen, setInsumosOpen] = useState(false);
+  const [insumosCount, setInsumosCount] = useState(0);
+  const [insumosRefresh, setInsumosRefresh] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const threadIdRef = useRef<string | null>(threadId);
-  threadIdRef.current = threadId;
+  useEffect(() => {
+    threadIdRef.current = threadId;
+  }, [threadId]);
 
   const isMobile = useIsMobile();
   const { planMode, setPlanMode } = useChatPlanMode("vitor");
 
   const stepActionNode = (
-    <button
-      type="button"
+    <InsumosButton
+      count={insumosCount}
       onClick={() => setInsumosOpen(true)}
-      className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs hover:bg-accent"
-      title="Insumos da DS (transcripts linkados)"
-    >
-      <Link2 className="size-3" />
-      <span className="font-mono tabular-nums">{transcripts.length}</span>
-      <span className="hidden text-muted-foreground sm:inline">insumos</span>
-    </button>
+      variant="outline"
+      className="h-7 text-xs"
+    />
   );
 
   const transport = useMemo(
@@ -150,8 +157,19 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
     };
   }, [sessionId]);
 
+  const loadTranscripts = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/design-sessions/${sessionId}/transcripts`);
+      if (!r.ok) return;
+      const json = await r.json();
+      setTranscripts((json.imported as ImportedTranscript[]) ?? []);
+    } catch {
+      /* silencioso */
+    }
+  }, [sessionId]);
+
   const handleUnlinkTranscript = useCallback(
-    async (transcriptId: string, title: string) => {
+    async (transcriptId: string) => {
       const prev = transcripts;
       setTranscripts((cur) => cur.filter((t) => t.id !== transcriptId));
       const res = await fetch(
@@ -159,20 +177,9 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
         { method: "DELETE" },
       );
       if (!res.ok) setTranscripts(prev);
+      else setInsumosRefresh((k) => k + 1);
     },
     [sessionId, transcripts],
-  );
-
-  const linkedItems = useMemo(
-    () =>
-      transcripts.map((t) => ({
-        id: t.id,
-        kind: "transcript" as const,
-        title: t.meetingTitle,
-        source: t.source,
-        capturedAt: t.meetingStart,
-      })),
-    [transcripts],
   );
 
   const uploadFiles = useCallback(
@@ -296,7 +303,7 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
               </span>
               <button
                 type="button"
-                onClick={() => handleUnlinkTranscript(t.id, t.meetingTitle ?? "esta transcrição")}
+                onClick={() => handleUnlinkTranscript(t.id)}
                 aria-label="Remover transcrição"
               >
                 <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
@@ -378,7 +385,20 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
           apiUrl={`/api/design-sessions/${sessionId}/transcripts`}
           open={roamModalOpen}
           onOpenChange={setRoamModalOpen}
-          onImported={(t) => setTranscripts((cur) => [t, ...cur])}
+          onImported={(t) => {
+            setTranscripts((cur) => [t, ...cur]);
+            setInsumosRefresh((k) => k + 1);
+          }}
+        />
+        <DesignSessionContextSheet
+          sessionId={sessionId}
+          projectId={projectId}
+          open={insumosOpen}
+          onOpenChange={setInsumosOpen}
+          ritualLabel="DS"
+          refreshKey={insumosRefresh}
+          onChanged={loadTranscripts}
+          onCountChange={setInsumosCount}
         />
       </>
     );
@@ -421,21 +441,21 @@ export function PreWorkStep({ sessionId }: { sessionId: string }) {
         apiUrl={`/api/design-sessions/${sessionId}/transcripts`}
         open={roamModalOpen}
         onOpenChange={setRoamModalOpen}
-        onImported={(t) => setTranscripts((cur) => [t, ...cur])}
+        onImported={(t) => {
+          setTranscripts((cur) => [t, ...cur]);
+          setInsumosRefresh((k) => k + 1);
+        }}
       />
 
-      <ContextSheet
+      <DesignSessionContextSheet
+        sessionId={sessionId}
+        projectId={projectId}
         open={insumosOpen}
         onOpenChange={setInsumosOpen}
         ritualLabel="DS"
-        linkedItems={linkedItems}
-        capabilities={{
-          transcript: true,
-        }}
-        handlers={{
-          onUnlink: handleUnlinkTranscript,
-          onImportTranscript: () => setRoamModalOpen(true),
-        }}
+        refreshKey={insumosRefresh}
+        onChanged={loadTranscripts}
+        onCountChange={setInsumosCount}
       />
     </div>
   );

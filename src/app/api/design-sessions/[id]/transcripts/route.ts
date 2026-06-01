@@ -262,10 +262,10 @@ export async function POST(
       capturedAt: detail.start,
       importedById: member.id,
     });
-    // Patch dos campos novos (endedAt + participants + summary + actionItems)
-    // — upsertTranscriptRef cuida do core, mas não conhece os 4 extras de DS.
+    // Patch dos campos ricos (endedAt + participants + summary + actionItems)
+    // no ContextSource — upsertTranscriptRef cuida do core, este completa.
     await db()
-      .from("TranscriptRef")
+      .from("ContextSource")
       .update({
         endedAt: detail.end ?? detail.start,
         participants: detail.participants as unknown as never,

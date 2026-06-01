@@ -8,10 +8,9 @@ import {
   Lightbulb,
   Play,
   Plus,
-  Sparkles,
   Star,
 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { SuperSessionModal } from "@/components/design-session/super-session-modal";
 import {
   SessionDetailSheet,
@@ -27,7 +26,7 @@ import { PrdQuickAskSheet } from "@/components/sessions/prd-session/quick-ask-sh
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
-import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { fetchOrThrow, showErrorToast, HttpError } from "@/lib/optimistic/toast";
 import { getStepsForSession } from "@/lib/design-session-steps";
 import { cn } from "@/lib/utils";
 import { TONE_DOT, type ChipTone } from "@/lib/status-chips";
@@ -93,7 +92,6 @@ export function ProjectSessionsTab({
   const sessionsCollection = useOptimisticCollection<DesignSession>([]);
   const sessions = sessionsCollection.items;
   const setSessions = sessionsCollection.setCommitted;
-  const sessionMutate = sessionsCollection.mutate;
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [superOpen, setSuperOpen] = useState(false);
@@ -212,25 +210,50 @@ export function ProjectSessionsTab({
         "A session, items e participantes serão removidos permanentemente.",
       confirmLabel: "Excluir",
       destructive: true,
+      // Fetch direto (não optimistic) pra ramificar no 409: sessão com PRDs
+      // vinculados não pode ser deletada — o backend recusa e orienta a arquivar.
       onConfirm: async () => {
-        const result = await sessionMutate(
-          { type: "delete", id },
-          async (signal) => {
-            const res = await fetchOrThrow(`/api/design-sessions/${id}`, {
-              method: "DELETE",
-              signal,
-            });
-            return (await res.json().catch(() => ({}))) as { ok?: true };
-          },
-          {
-            errorLabel: "Falha ao remover session",
-            reconcile: (prev) => prev.filter((s) => s.id !== id),
-          },
-        );
-        if (result) {
-          setOpenSessionId((current) => (current === id ? null : current));
-          toast.success("Session excluída.");
+        try {
+          await fetchOrThrow(`/api/design-sessions/${id}`, { method: "DELETE" });
+        } catch (err) {
+          if (err instanceof HttpError && err.status === 409) {
+            toast.error(
+              'Esta sessão tem PRDs vinculados e não pode ser excluída. Use "Arquivar".',
+            );
+            return;
+          }
+          showErrorToast(err, { label: "Excluir session" });
+          return;
         }
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        setOpenSessionId((current) => (current === id ? null : current));
+        toast.success("Session excluída.");
+      },
+    });
+  }
+
+  function archive(id: string) {
+    const session = sessions.find((s) => s.id === id);
+    if (!session) return;
+    setConfirmState({
+      title: `Arquivar "${session.title}"?`,
+      description:
+        "A sessão sai das listas ativas mas continua acessível. PRDs vinculados são preservados.",
+      confirmLabel: "Arquivar",
+      onConfirm: async () => {
+        try {
+          await fetchOrThrow(`/api/design-sessions/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ archivedAt: new Date().toISOString() }),
+          });
+        } catch (err) {
+          showErrorToast(err, { label: "Arquivar session" });
+          return;
+        }
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        setOpenSessionId((current) => (current === id ? null : current));
+        toast.success("Session arquivada.");
       },
     });
   }
@@ -312,13 +335,6 @@ export function ProjectSessionsTab({
           })}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Link
-            href={`/projects/${projectId}/planning`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            <Sparkles className="size-3.5" />
-            Planning
-          </Link>
           <Button size="sm" onClick={() => setPickerOpen(true)}>
             <Plus className="size-3.5" />
             Nova Session
@@ -402,6 +418,7 @@ export function ProjectSessionsTab({
         onClose={() => setOpenSessionId(null)}
         onExport={canManage ? exportJson : undefined}
         onDelete={remove}
+        onArchive={canManage ? archive : undefined}
         onVisibilityChanged={(id, visibility) => {
           setSessions((prev) =>
             prev.map((s) =>

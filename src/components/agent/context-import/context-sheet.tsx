@@ -6,7 +6,6 @@ import {
   FileText,
   GitBranch,
   Unlink,
-  Loader2,
 } from "lucide-react";
 import {
   ResponsiveSheet,
@@ -176,7 +175,7 @@ export default function ContextSheet({
         <ResponsiveSheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            Contexto da {ritualLabel}
+            Insumos · {ritualLabel}
           </SheetTitle>
         </ResponsiveSheetHeader>
 

@@ -61,7 +61,7 @@ export function SpreadsheetModal({ open, onOpenChange, onImported, apiUrl, proje
             kind: "spreadsheet_csv",
             projectId,
             title: file.name.replace(/\.csv$/i, ""),
-            fileBase64: base64,
+            file: base64,
           }),
         });
 
@@ -87,6 +87,7 @@ export function SpreadsheetModal({ open, onOpenChange, onImported, apiUrl, proje
           body: JSON.stringify({
             kind: "spreadsheet_gsheets",
             projectId,
+            title: "Planilha Google Sheets",
             externalUrl: gsheetsUrl.trim(),
           }),
         });

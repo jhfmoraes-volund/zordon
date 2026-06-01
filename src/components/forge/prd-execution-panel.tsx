@@ -131,17 +131,19 @@ export function PrdExecutionPanel({
 }: {
   projectId: string;
   prdId: string;
-  /** Se passado, vira ?back=<backHref> nos links pro spike viewer pra preservar contexto. */
+  /** Se passado, vira ?back=<backHref> no link pro run viewer pra preservar contexto. */
   backHref?: string;
 }) {
-  const spikeHref = (runId: string) =>
+  const runHref = (runId: string) =>
     backHref
-      ? `/forge-spike/runs/${runId}?back=${encodeURIComponent(backHref)}`
-      : `/forge-spike/runs/${runId}`;
+      ? `/projects/${projectId}/forge/runs/${runId}?back=${encodeURIComponent(backHref)}`
+      : `/projects/${projectId}/forge/runs/${runId}`;
   const [data, setData] = useState<ExecutionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [now, setNow] = useState<number | null>(null);
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const streamRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -242,7 +244,7 @@ export function PrdExecutionPanel({
           icon={<Loader2 className="size-4 animate-spin" />}
           label="Em execução"
           runId={data.activeRun.id}
-          spikeHref={spikeHref(data.activeRun.id)}
+          runHref={runHref(data.activeRun.id)}
           metaText={
             data.activeRun.status === "queued"
               ? "Aguardando daemon claim"
@@ -267,7 +269,7 @@ export function PrdExecutionPanel({
               <Circle className="size-4" />
             )
           }
-          spikeHref={spikeHref(data.lastFinishedRun.id)}
+          runHref={runHref(data.lastFinishedRun.id)}
           label={
             data.lastFinishedRun.status === "done"
               ? "Último run: concluído"
@@ -277,14 +279,103 @@ export function PrdExecutionPanel({
           }
           runId={data.lastFinishedRun.id}
           metaText={`${fmtDuration(data.lastFinishedRun.durationMs)} · ${data.history.length} run${data.history.length === 1 ? "" : "s"} no total`}
+          actions={
+            <>
+              {dispatchError && (
+                <span className="text-xs text-rose-600 mr-1">
+                  ✗ {dispatchError}
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={dispatching}
+                onClick={async () => {
+                  setDispatching(true);
+                  setDispatchError(null);
+                  try {
+                    const res = await fetch(
+                      `/api/forge/projects/${projectId}/runs`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ prdRefs: [data.prd.reference] }),
+                      },
+                    );
+                    if (!res.ok) {
+                      const j = await res.json().catch(() => ({}));
+                      throw new Error(j.error ?? `HTTP ${res.status}`);
+                    }
+                  } catch (e) {
+                    setDispatchError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setDispatching(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-2.5 py-1 text-[11px] font-semibold text-background hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {dispatching ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin" /> Disparando…
+                  </>
+                ) : data.lastFinishedRun.status === "error" ? (
+                  <>↻ Retry</>
+                ) : (
+                  <>▶ Re-rodar</>
+                )}
+              </button>
+            </>
+          }
         />
       ) : (
-        <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-          Este PRD ainda não foi executado pela Forja.
+        <div className="rounded-lg border border-dashed bg-muted/20 p-4 flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-sm text-muted-foreground">
+            Este PRD ainda não foi executado pela Forja.
+          </span>
+          <button
+            type="button"
+            disabled={dispatching}
+            onClick={async () => {
+              setDispatching(true);
+              setDispatchError(null);
+              try {
+                const res = await fetch(
+                  `/api/forge/projects/${projectId}/runs`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prdRefs: [data.prd.reference] }),
+                  },
+                );
+                if (!res.ok) {
+                  const j = await res.json().catch(() => ({}));
+                  throw new Error(j.error ?? `HTTP ${res.status}`);
+                }
+                // refetch acontece via SWR automaticamente quando novo run aparece
+              } catch (e) {
+                setDispatchError(e instanceof Error ? e.message : String(e));
+              } finally {
+                setDispatching(false);
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold text-background hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {dispatching ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" /> Disparando…
+              </>
+            ) : (
+              <>▶ Disparar Forja</>
+            )}
+          </button>
+          {dispatchError && (
+            <span className="text-xs text-rose-600 w-full">
+              ✗ {dispatchError}
+            </span>
+          )}
         </div>
       )}
 
-      {/* AC checklist */}
+      {/* AC checklist — marca tudo ✓ quando ultimo run passou (PRD-grain hoje) */}
       {acList.length > 0 && (
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-2 flex items-center justify-between">
@@ -292,16 +383,27 @@ export function PrdExecutionPanel({
               Acceptance Criteria · {acList.length}
             </h3>
             <span className="text-[10px] text-muted-foreground/70 italic">
-              checklist estático — sem verificador automático
+              {data.lastFinishedRun?.status === "done"
+                ? "todos AC cobertos pelo último run ✓"
+                : "checklist estático — sem verificador por AC"}
             </span>
           </div>
           <ul className="space-y-1.5">
-            {acList.map((ac, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <Circle className="size-3.5 shrink-0 text-muted-foreground/60 mt-0.5" />
-                <span className="flex-1">{acText(ac)}</span>
-              </li>
-            ))}
+            {acList.map((ac, i) => {
+              const passed = data.lastFinishedRun?.status === "done";
+              return (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  {passed ? (
+                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                  ) : (
+                    <Circle className="size-3.5 shrink-0 text-muted-foreground/60 mt-0.5" />
+                  )}
+                  <span className={cn("flex-1", passed && "text-muted-foreground line-through decoration-muted-foreground/40")}>
+                    {acText(ac)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -335,7 +437,7 @@ export function PrdExecutionPanel({
             </label>
             {data.focusRunId && (
               <Link
-                href={spikeHref(data.focusRunId)}
+                href={runHref(data.focusRunId)}
                 target="_blank"
                 className="inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
               >
@@ -394,7 +496,7 @@ export function PrdExecutionPanel({
             {data.history.map((r) => (
               <Link
                 key={r.id}
-                href={spikeHref(r.id)}
+                href={runHref(r.id)}
                 target="_blank"
                 className="flex items-center gap-3 rounded-md border p-2 text-sm hover:bg-accent/40 transition-colors"
               >
@@ -432,14 +534,16 @@ function RunBanner({
   label,
   runId,
   metaText,
-  spikeHref,
+  runHref,
+  actions,
 }: {
   tone: "amber" | "green" | "red" | "slate";
   icon: React.ReactNode;
   label: string;
   runId: string;
   metaText: string;
-  spikeHref: string;
+  runHref: string;
+  actions?: React.ReactNode;
 }) {
   const TONE = {
     amber: {
@@ -483,17 +587,20 @@ function RunBanner({
           {metaText} · #{runId.slice(0, 8)}
         </span>
       </div>
-      <Link
-        href={spikeHref}
-        target="_blank"
-        className={cn(
-          "ml-auto inline-flex items-center gap-1 text-xs font-semibold hover:underline",
-          TONE.text,
-        )}
-      >
-        <ExternalLink className="size-3" />
-        stream cru
-      </Link>
+      <div className="ml-auto flex items-center gap-3">
+        {actions}
+        <Link
+          href={runHref}
+          target="_blank"
+          className={cn(
+            "inline-flex items-center gap-1 text-xs font-semibold hover:underline",
+            TONE.text,
+          )}
+        >
+          <ExternalLink className="size-3" />
+          ver run
+        </Link>
+      </div>
     </div>
   );
 }

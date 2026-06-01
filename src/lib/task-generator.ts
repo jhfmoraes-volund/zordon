@@ -76,7 +76,7 @@ export async function buildSessionContext(
 ): Promise<string> {
   const { data: session } = await db()
     .from("DesignSession")
-    .select("*, project:Project(name, id)")
+    .select("*, project:Project!DesignSession_projectId_fkey(name, id)")
     .eq("id", sessionId)
     .single();
 
