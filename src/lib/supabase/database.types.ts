@@ -5346,6 +5346,9 @@ export type Database = {
           dismissedAt: string | null
           goal: string
           id: string
+          lastRunFinishedAt: string | null
+          lastRunId: string | null
+          lastRunStatus: string | null
           markdown: string
           moduleId: string | null
           oneLiner: string
@@ -5374,6 +5377,9 @@ export type Database = {
           dismissedAt?: string | null
           goal?: string
           id?: string
+          lastRunFinishedAt?: string | null
+          lastRunId?: string | null
+          lastRunStatus?: string | null
           markdown?: string
           moduleId?: string | null
           oneLiner?: string
@@ -5402,6 +5408,9 @@ export type Database = {
           dismissedAt?: string | null
           goal?: string
           id?: string
+          lastRunFinishedAt?: string | null
+          lastRunId?: string | null
+          lastRunStatus?: string | null
           markdown?: string
           moduleId?: string | null
           oneLiner?: string
@@ -5461,6 +5470,13 @@ export type Database = {
             columns: ["designSessionId"]
             isOneToOne: false
             referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_lastRunId_fkey"
+            columns: ["lastRunId"]
+            isOneToOne: false
+            referencedRelation: "ForgeRun"
             referencedColumns: ["id"]
           },
           {

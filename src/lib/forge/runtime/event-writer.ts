@@ -63,12 +63,31 @@ const MAX_BACKOFF_MS = 60_000;
 export function createEmitter(config: EmitterConfig): Emitter {
   const { runId, agentId = null, taskId = null, jsonlPath } = config;
 
+  // `seq` aqui é local ao processo — escrito no jsonl (debug/recovery scope).
+  // O seq que vai pro DB é atribuído no flush (MAX(runId.seq)+1), pra evitar
+  // colisão de PK quando exec-prd e exec-story (sub-processo) usam o mesmo
+  // runId. Ver Bug A no PRD-forge-event-ssot follow-up.
   let seq = 0;
   const queue: QueuedEvent[] = [];
   let flushTimer: NodeJS.Timeout | null = null;
   let isFlushing = false;
   let backoffMs = MIN_BACKOFF_MS;
   let isClosed = false;
+
+  async function fetchNextDbSeq(): Promise<number> {
+    const { data, error } = await db()
+      .from("ForgeEvent")
+      .select("seq")
+      .eq("runId", runId)
+      .order("seq", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.warn("[event-writer] MAX(seq) lookup failed:", error);
+      return 0;
+    }
+    return data?.seq ?? 0;
+  }
 
   /**
    * Start periodic flush timer.
@@ -94,6 +113,11 @@ export function createEmitter(config: EmitterConfig): Emitter {
 
   /**
    * Flush pending events to DB.
+   *
+   * Renumera o batch com seqs frescos (MAX(runId.seq)+1) antes do INSERT — isso
+   * evita colisão de PK (runId, seq) quando múltiplos processos escrevem no
+   * mesmo runId. Em caso de unique violation (raça: dois processos pegam o
+   * mesmo MAX antes de qualquer um inserir), faz refetch e retenta uma vez.
    */
   async function flushQueue(): Promise<void> {
     if (isFlushing || queue.length === 0) return;
@@ -101,42 +125,52 @@ export function createEmitter(config: EmitterConfig): Emitter {
     isFlushing = true;
     const batch = queue.splice(0, FLUSH_BATCH_SIZE);
 
+    async function tryInsert(baseSeq: number): Promise<{ ok: boolean; conflict: boolean; error?: unknown }> {
+      const renumbered = batch.map((e, i) => ({
+        runId: e.runId,
+        seq: baseSeq + i + 1,
+        agentId: e.agentId,
+        taskId: e.taskId,
+        kind: e.kind,
+        payload: e.payload as never,
+      }));
+      const { error } = await db().from("ForgeEvent").insert(renumbered);
+      if (!error) return { ok: true, conflict: false };
+      // Postgres unique_violation = 23505. Supabase exposes via error.code.
+      const conflict =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "23505";
+      return { ok: false, conflict, error };
+    }
+
     try {
-      const { error } = await db().from("ForgeEvent").insert(
-        batch.map((e) => ({
-          runId: e.runId,
-          seq: e.seq,
-          agentId: e.agentId,
-          taskId: e.taskId,
-          kind: e.kind,
-          payload: e.payload as never,
-        }))
-      );
+      const baseSeq = await fetchNextDbSeq();
+      let result = await tryInsert(baseSeq);
 
-      if (error) {
-        // Put events back at front of queue
+      if (!result.ok && result.conflict) {
+        // Race: outro processo gravou nesse range. Refetch e tenta de novo.
+        const refreshed = await fetchNextDbSeq();
+        result = await tryInsert(refreshed);
+      }
+
+      if (!result.ok) {
         queue.unshift(...batch);
-        console.error("[event-writer] DB insert failed, will retry:", error);
-
-        // Exponential backoff
+        console.error("[event-writer] DB insert failed, will retry:", result.error);
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
         backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
       } else {
-        // Success: reset backoff
         backoffMs = MIN_BACKOFF_MS;
       }
     } catch (err) {
-      // Put events back at front of queue
       queue.unshift(...batch);
       console.error("[event-writer] DB insert exception, will retry:", err);
-
-      // Exponential backoff
       await new Promise((resolve) => setTimeout(resolve, backoffMs));
       backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
     } finally {
       isFlushing = false;
 
-      // If queue still has events, schedule another flush
       if (queue.length > 0 && !isClosed) {
         void flushQueue();
       }

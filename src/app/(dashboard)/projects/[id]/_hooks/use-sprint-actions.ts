@@ -86,6 +86,11 @@ export function useSprintActions(args: {
   async function handleUpdateSprint(targetId: string, form: SprintFormData) {
     setSprintEditingId(null);
     const goal = form.goal.trim();
+    // status só vai no PUT quando muda de verdade. Transições active/completed
+    // têm endpoints dedicados (/activate, /complete) e o PUT as rejeita — então
+    // reenviar o status atual de uma sprint ativa ao editar datas dispara 400.
+    const current = sprints.find((s) => s.id === targetId);
+    const statusChanged = !current || form.status !== current.status;
     try {
       await fetchOrThrow(`/api/sprints/${targetId}`, {
         method: "PUT",
@@ -94,7 +99,7 @@ export function useSprintActions(args: {
           name: form.name,
           startDate: form.startDate,
           endDate: form.endDate,
-          status: form.status,
+          ...(statusChanged ? { status: form.status } : {}),
           goal: goal === "" ? null : goal,
         }),
       });

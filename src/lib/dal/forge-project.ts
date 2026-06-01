@@ -76,13 +76,17 @@ export function summarizeForgeEvent(
 }
 
 /**
- * Maps each PRD reference to its Forge run state by finding the run that covers
- * it (active run > last finished) and replaying that run's story events.
+ * Maps each PRD reference to its Forge run state.
  *
- * Single source of truth for run-state derivation — shared by the kanban
- * endpoint (`/api/forge/projects/[id]/prds`) and `getProjectForgeSummary` (the
- * Forge tab PRD list). Returns a Map keyed by PRD reference; references with no
- * covering run get `runState: "idle"`.
+ * Strategy:
+ * 1. Baseline: lê `ProductRequirement.lastRun*` (mantido em sync por trigger AFTER UPDATE
+ *    em ForgeRun.status). Isso garante que PRDs concluídos em runs anteriores
+ *    NÃO esquecem o status (Bug B fix).
+ * 2. Overlay: pra PRDs cobertos pelo run ativo (queued/running) — sobrepõe com
+ *    estado live derivado dos eventos.
+ *
+ * Single source of truth para run-state — compartilhado entre o kanban endpoint
+ * e `getProjectForgeSummary` (Forge tab PRD list).
  */
 export async function derivePrdRunInfo(
   supabase: ReturnType<typeof db>,
@@ -103,6 +107,33 @@ export async function derivePrdRunInfo(
   }
   if (references.length === 0) return result;
 
+  // 1. Baseline: lastRun* persistido em ProductRequirement (mantido por trigger).
+  const { data: prdRows } = await supabase
+    .from("ProductRequirement")
+    .select('reference, "lastRunId", "lastRunStatus", "lastRunFinishedAt"')
+    .eq("projectId", projectId)
+    .in("reference", references);
+
+  for (const row of prdRows ?? []) {
+    if (!row.lastRunStatus) continue;
+    const runState: PrdRunState =
+      row.lastRunStatus === "done"
+        ? "done"
+        : row.lastRunStatus === "error" || row.lastRunStatus === "aborted"
+          ? "failed"
+          : "idle";
+    result.set(row.reference, {
+      runState,
+      runId: row.lastRunId,
+      currentPhase: null,
+      startedAt: null,
+      finishedAt: row.lastRunFinishedAt,
+      durationMs: null,
+      lastEvents: [],
+    });
+  }
+
+  // 2. Overlay: estado live do run ativo (se há um cobrindo o PRD).
   const { data: activeRuns } = await supabase
     .from("ForgeRun")
     .select("id, status, manifest, createdAt")
@@ -111,44 +142,23 @@ export async function derivePrdRunInfo(
     .order("createdAt", { ascending: false })
     .limit(1);
 
-  const { data: lastRuns } = await supabase
-    .from("ForgeRun")
-    .select("id, status, manifest, createdAt")
-    .eq("projectId", projectId)
-    .in("status", ["done", "error", "aborted"])
-    .order("createdAt", { ascending: false })
-    .limit(1);
-
   const activeRun = activeRuns?.[0] ?? null;
-  const lastRun = lastRuns?.[0] ?? null;
-  const candidates = [activeRun, lastRun].filter(
-    (r): r is NonNullable<typeof activeRun> => !!r,
+  if (!activeRun) return result;
+
+  const manifest = activeRun.manifest as { prds?: ManifestPrdRef[] } | null;
+  const activeRefs = new Set(
+    (manifest?.prds ?? [])
+      .map((p) => p.reference)
+      .filter((r): r is string => !!r),
   );
-  if (candidates.length === 0) return result;
 
-  // Which PRD references each candidate run covers, via its manifest.
-  const refsByRun = new Map<string, Set<string>>();
-  for (const run of candidates) {
-    const manifest = run.manifest as { prds?: ManifestPrdRef[] } | null;
-    refsByRun.set(
-      run.id,
-      new Set(
-        (manifest?.prds ?? [])
-          .map((p) => p.reference)
-          .filter((r): r is string => !!r),
-      ),
-    );
-  }
-
-  // Events for the candidate runs, grouped by run → story (PRD reference).
-  const runIds = candidates.map((r) => r.id);
-  const eventsByRunByStory = new Map<string, Map<string, RunEventRow[]>>();
   const { data: rawEvents } = await supabase
     .from("ForgeEvent")
     .select("runId, taskId, kind, ts, payload")
-    .in("runId", runIds)
+    .eq("runId", activeRun.id)
     .order("seq", { ascending: true });
 
+  const eventsByStory = new Map<string, RunEventRow[]>();
   for (const ev of (rawEvents ?? []) as Array<
     RunEventRow & { runId: string; taskId: string | null }
   >) {
@@ -160,28 +170,17 @@ export async function derivePrdRunInfo(
       ev.taskId ??
       null;
     if (!storyId) continue;
-    const runMap = eventsByRunByStory.get(ev.runId) ?? new Map();
-    const list = runMap.get(storyId) ?? [];
+    const list = eventsByStory.get(storyId) ?? [];
     list.push({ kind: ev.kind, ts: ev.ts, payload: ev.payload });
-    runMap.set(storyId, list);
-    eventsByRunByStory.set(ev.runId, runMap);
+    eventsByStory.set(storyId, list);
   }
 
   for (const reference of references) {
-    let coveringRun: (typeof candidates)[number] | null = null;
-    for (const run of candidates) {
-      if (refsByRun.get(run.id)?.has(reference)) {
-        coveringRun = run;
-        break;
-      }
-    }
-    if (!coveringRun) continue;
+    if (!activeRefs.has(reference)) continue;
 
-    const evs = eventsByRunByStory.get(coveringRun.id)?.get(reference) ?? [];
-    const isActive =
-      coveringRun.status === "queued" || coveringRun.status === "running";
+    const evs = eventsByStory.get(reference) ?? [];
 
-    let runState: PrdRunState = isActive ? "pending" : "idle";
+    let runState: PrdRunState = "pending";
     let currentPhase: string | null = null;
     let startedAt: string | null = null;
     let finishedAt: string | null = null;
@@ -221,7 +220,7 @@ export async function derivePrdRunInfo(
 
     result.set(reference, {
       runState,
-      runId: coveringRun.id,
+      runId: activeRun.id,
       currentPhase,
       startedAt,
       finishedAt,
