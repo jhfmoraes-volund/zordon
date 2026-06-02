@@ -15,27 +15,16 @@
 
 import { validateSpec } from "./spec/validator";
 import type { Spec, SpecStory } from "./spec/schema";
+import { ForgeStorySchema } from "./spec/story-schema";
 import { z } from "zod";
 
 /**
  * Extended story schema for planning (beyond the spec.md format).
- * Adds fields needed for execution: agentProfile, reuses, verifiable checks.
+ * Reusa o ForgeStorySchema canônico e adiciona `reuses` (file paths),
+ * específico do plan mode.
  */
-export const PlanStorySchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  description: z.string().optional(),
-  acceptanceCriteria: z.array(z.string()).min(1),
-  estimateMinutes: z.number().int().positive().max(30, "Stories must be ≤30min to fit in one context window"),
-  dependsOn: z.array(z.string()).default([]),
-  agentProfile: z.enum(["db", "api", "ui", "wiring", "test", "doc"]),
+export const PlanStorySchema = ForgeStorySchema.extend({
   reuses: z.array(z.string()).default([]), // file paths
-  verifiable: z.array(z.object({
-    kind: z.enum(["typecheck", "lint", "sql", "http", "manual_browser"]),
-    command_or_query: z.string(),
-    expected: z.string(),
-  })).min(1, "Each story needs ≥1 verifiable check"),
-  touches: z.array(z.string()).default([]), // predicted file paths
 });
 
 export type PlanStory = z.infer<typeof PlanStorySchema>;

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import ContextSheet from "@/components/agent/context-import/context-sheet";
-import { TranscriptModal } from "@/components/agent/context-import";
+import { TranscriptModal, GitHubSourceModal } from "@/components/agent/context-import";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { createDocumentSource } from "@/lib/context-sources/upload-document";
 
 type LinkedTranscript = {
   transcriptRefId: string;
@@ -14,6 +15,21 @@ type LinkedTranscript = {
 };
 
 type LinkedMeeting = { meetingId: string; meeting: { id: string; title: string | null; date: string } | null };
+
+// Documentos + GitHub vêm do /context (plural); transcripts chegam por prop.
+type ContextLinkRow = {
+  linkId: string;
+  sourceId: string;
+  weight: string | null;
+  source: {
+    id: string;
+    kind: string;
+    title: string | null;
+    externalUrl: string | null;
+    capturedAt: string | null;
+    summary: string | null;
+  } | null;
+};
 
 type Props = {
   pmReviewId: string;
@@ -25,21 +41,120 @@ type Props = {
   onChanged: () => void;
 };
 
-export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange, linkedTranscripts, linkedMeetings, onChanged }: Props) {
+function kindToPill(kind: string): "transcript" | "spreadsheet" | "github" | "document" {
+  if (kind === "document") return "document";
+  if (kind.startsWith("github")) return "github";
+  if (kind.startsWith("spreadsheet")) return "spreadsheet";
+  return "transcript";
+}
+
+export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange, linkedTranscripts, onChanged }: Props) {
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [githubModalOpen, setGithubModalOpen] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
-  // Map linked transcripts to ContextSheet format
-  const linkedItems = linkedTranscripts.map((l) => ({
-    id: l.transcriptRefId,
-    kind: "transcript" as const,
-    title: l.transcript?.title ?? null,
-    source: l.transcript?.source ?? "",
-    capturedAt: l.transcript?.capturedAt ?? null,
-    weight: l.weight ?? undefined,
-  }));
+  // Documentos / GitHub linkados via /context (transcripts vêm por prop, então
+  // filtramos os kinds não-transcript aqui pra não duplicar).
+  const [contextLinks, setContextLinks] = useState<ContextLinkRow[]>([]);
 
-  async function handleUnlink(itemId: string, itemTitle: string) {
+  const refetchContext = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/pm-reviews/${pmReviewId}/context`);
+      if (!r.ok) return;
+      const json = (await r.json()) as { contextLinks?: ContextLinkRow[] };
+      setContextLinks(
+        (json.contextLinks ?? []).filter(
+          (l) => l.source?.kind === "document" || l.source?.kind?.startsWith("github"),
+        ),
+      );
+    } catch {
+      /* silencioso */
+    }
+  }, [pmReviewId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/pm-reviews/${pmReviewId}/context`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { contextLinks?: ContextLinkRow[] } | null) => {
+        if (cancelled || !json) return;
+        setContextLinks(
+          (json.contextLinks ?? []).filter(
+            (l) => l.source?.kind === "document" || l.source?.kind?.startsWith("github"),
+          ),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [pmReviewId]);
+
+  const contextLinkIds = useMemo(
+    () => new Set(contextLinks.map((l) => l.linkId)),
+    [contextLinks],
+  );
+
+  const linkedItems = useMemo(
+    () => [
+      ...linkedTranscripts.map((l) => ({
+        id: l.transcriptRefId,
+        kind: "transcript" as const,
+        title: l.transcript?.title ?? null,
+        source: l.transcript?.source ?? "",
+        capturedAt: l.transcript?.capturedAt ?? null,
+        weight: l.weight ?? undefined,
+      })),
+      ...contextLinks.map((l) => ({
+        id: l.linkId,
+        kind: kindToPill(l.source?.kind ?? "document"),
+        title: l.source?.title ?? null,
+        source: l.source?.kind ?? undefined,
+        capturedAt: l.source?.capturedAt ?? null,
+        weight: l.weight ?? undefined,
+      })),
+    ],
+    [linkedTranscripts, contextLinks],
+  );
+
+  const linkSource = useCallback(
+    async (contextSourceId: string) => {
+      const r = await fetch(`/api/pm-reviews/${pmReviewId}/context/link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contextSourceId }),
+      });
+      if (!r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        toast.error(j.error ?? "Falha ao linkar fonte");
+        return;
+      }
+      await refetchContext();
+      onChanged();
+    },
+    [pmReviewId, refetchContext, onChanged],
+  );
+
+  const handleUploadFiles = useCallback(
+    async (fileList: FileList) => {
+      setUploadingFile(true);
+      try {
+        for (const file of Array.from(fileList)) {
+          const sourceId = await createDocumentSource(projectId, file);
+          await linkSource(sourceId);
+        }
+      } catch (e) {
+        showErrorToast(e, { label: "Falha ao enviar documento" });
+      } finally {
+        setUploadingFile(false);
+      }
+    },
+    [projectId, linkSource],
+  );
+
+  function handleUnlink(itemId: string, itemTitle: string) {
+    const isContextLink = contextLinkIds.has(itemId);
     setConfirmState({
       title: "Desvincular fonte?",
       description: `"${itemTitle}" será removida deste PM Review.`,
@@ -47,7 +162,12 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
       destructive: true,
       onConfirm: async () => {
         try {
-          await fetchOrThrow(`/api/pm-review/${pmReviewId}/transcripts/${itemId}`, { method: "DELETE" });
+          if (isContextLink) {
+            await fetchOrThrow(`/api/pm-reviews/${pmReviewId}/context/${itemId}`, { method: "DELETE" });
+            await refetchContext();
+          } else {
+            await fetchOrThrow(`/api/pm-review/${pmReviewId}/transcripts/${itemId}`, { method: "DELETE" });
+          }
           toast.success("Fonte desvinculada.");
           onChanged();
         } catch (err) {
@@ -55,10 +175,6 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
         }
       },
     });
-  }
-
-  function handleImportTranscript() {
-    setImportModalOpen(true);
   }
 
   return (
@@ -70,12 +186,15 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
         linkedItems={linkedItems}
         capabilities={{
           transcript: true,
-          spreadsheet: false,
-          github: false,
+          file: true,
+          github: true,
         }}
+        uploadingFile={uploadingFile}
         handlers={{
           onUnlink: handleUnlink,
-          onImportTranscript: handleImportTranscript,
+          onImportTranscript: () => setImportModalOpen(true),
+          onImportGitHub: () => setGithubModalOpen(true),
+          onUploadFiles: handleUploadFiles,
         }}
       />
 
@@ -85,6 +204,16 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
         onOpenChange={setImportModalOpen}
         onImported={() => {
           onChanged();
+        }}
+      />
+
+      <GitHubSourceModal
+        apiUrl="/api/context-sources"
+        projectId={projectId}
+        open={githubModalOpen}
+        onOpenChange={setGithubModalOpen}
+        onImported={(id) => {
+          void linkSource(id);
         }}
       />
 

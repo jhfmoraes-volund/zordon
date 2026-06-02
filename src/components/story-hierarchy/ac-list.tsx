@@ -9,8 +9,8 @@ import { acProgress } from "./helpers";
 
 /** Strip leading markdown checkbox markers ("- [ ]", "- [x]", "* [ ]", "[ ]") that
  *  legacy AC rows carry as literal text — the checkbox already conveys that state. */
-function stripAcMarker(text: string): string {
-  return text.replace(/^\s*(?:[-*]\s*)?\[[ xX]\]\s*/, "");
+function stripAcMarker(text: string | null | undefined): string {
+  return (text ?? "").replace(/^\s*(?:[-*]\s*)?\[[ xX]\]\s*/, "");
 }
 
 type ViewProps = {

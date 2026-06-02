@@ -287,11 +287,13 @@ export async function buildHierarchyTree(
   }
 
   // ── Step 4 — bucket de tasks por story ─────────────────────────────
+  // Tasks sem userStoryId (bugs/itens operacionais criados direto na sprint)
+  // vão pro bucket `looseTasks` — antes eram silenciosamente descartadas, o
+  // que fazia o header contar tasks que nunca apareciam na árvore.
   const tasksByStory = new Map<string, HierarchyTaskNode[]>();
+  const looseTasks: HierarchyTaskNode[] = [];
   for (const t of tasks) {
-    if (!t.userStoryId) continue;
-    const list = tasksByStory.get(t.userStoryId) ?? [];
-    list.push({
+    const node: HierarchyTaskNode = {
       id: t.id,
       reference: t.reference,
       title: t.title,
@@ -302,7 +304,13 @@ export async function buildHierarchyTree(
       acTechnicalCount: acByTask.get(t.id) ?? 0,
       sprintId: t.sprintId,
       membership: t.membership,
-    });
+    };
+    if (!t.userStoryId) {
+      looseTasks.push(node);
+      continue;
+    }
+    const list = tasksByStory.get(t.userStoryId) ?? [];
+    list.push(node);
     tasksByStory.set(t.userStoryId, list);
   }
 
@@ -381,16 +389,39 @@ export async function buildHierarchyTree(
     });
   }
 
-  // 5c. Filtra módulos vazios se solicitado (default pra sprint mode).
-  let treeEntries = Array.from(groupByKey.values());
-  if (!includeEmptyModules) {
-    treeEntries = treeEntries.filter((g) => g.stories.length > 0);
+  // 5c. Grupo sintético "(sem story)" pras tasks soltas — sempre por último.
+  if (looseTasks.length > 0) {
+    groupByKey.set("_loose_tasks_", {
+      key: "_loose_tasks_",
+      moduleId: null,
+      name: "(sem story)",
+      description: null,
+      approved: false,
+      approvedAt: null,
+      stories: [],
+      looseTasks,
+    });
   }
 
-  // 5d. Ordena: módulos aprovados primeiro (alpha), depois propostos (alpha), orphan último.
+  // 5d. Filtra módulos vazios se solicitado (default pra sprint mode).
+  //     Um grupo conta como não-vazio se tem stories OU tasks soltas.
+  let treeEntries = Array.from(groupByKey.values());
+  if (!includeEmptyModules) {
+    treeEntries = treeEntries.filter(
+      (g) => g.stories.length > 0 || (g.looseTasks?.length ?? 0) > 0,
+    );
+  }
+
+  // 5e. Ordena: módulos aprovados primeiro (alpha), propostos, orphan, loose por último.
   const tree = treeEntries.sort((a, b) => {
     const rank = (g: Group) =>
-      g.key.startsWith("module:") ? 0 : g.key.startsWith("proposed:") ? 1 : 2;
+      g.key === "_loose_tasks_"
+        ? 3
+        : g.key.startsWith("module:")
+          ? 0
+          : g.key.startsWith("proposed:")
+            ? 1
+            : 2;
     const r = rank(a) - rank(b);
     if (r !== 0) return r;
     return a.name.localeCompare(b.name);

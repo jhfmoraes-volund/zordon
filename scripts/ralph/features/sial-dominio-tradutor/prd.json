@@ -1,0 +1,77 @@
+{
+  "feature": "sial-dominio-tradutor",
+  "title": "SIAL Domínio Tradutor — tradutor juramentado",
+  "prd_path": "docs/prd/backlog/prd-sial-dominio-tradutor.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-TRA-001",
+      "title": "Seed — Metodo tradutor",
+      "description": "Insere o método tradutor com schemaFormulario de §7 (1).",
+      "acceptanceCriteria": [
+        "Existe Metodo com dominio='tradutor' ativo",
+        "schemaFormulario tem campo idiomas multiselect"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Metodo\" WHERE dominio='tradutor' AND ativo", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-TRA-002",
+      "title": "DynamicForm — suporte a campo multiselect",
+      "description": "Adiciona o tipo multiselect ao DynamicForm (do PRD requerimento), com chips de seleção.",
+      "acceptanceCriteria": [
+        "Campo multiselect renderiza e persiste lista no dados",
+        "Obrigatório vazio marca erro"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/components/sial/dynamic-form.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-TRA-003",
+      "title": "Validação de habilitação (stub) + DAL tradutor",
+      "description": "src/lib/sial/dominio/tradutor.ts com validate(dados) e HabilitacaoLookup (stub). Vincula Cadastro(tipo=tradutor).",
+      "acceptanceCriteria": [
+        "validate exige idiomas não vazio e numeroHabilitacao",
+        "HabilitacaoLookup stub determinístico"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/sial/dominio/tradutor.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-TRA-004",
+      "title": "API validação habilitação + integrar ao submit + smoke",
+      "description": "GET /api/validacao/habilitacao/:numero (stub); submit do tradutor roda validate; smoke ponta-a-ponta.",
+      "acceptanceCriteria": [
+        "GET retorna {valido}",
+        "submit sem idiomas retorna 422",
+        "Smoke: requerimento de tradutor → aguardando_pagamento"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Abrir requerimento de tradutor, preencher idiomas/habilitação, enviar", "expected": "processo em aguardando_pagamento" }
+      ],
+      "dependsOn": ["SIAL-TRA-001", "SIAL-TRA-002", "SIAL-TRA-003"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/validacao/habilitacao/[numero]/route.ts", "src/lib/sial/dal/requerimento.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

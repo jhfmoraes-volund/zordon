@@ -1,0 +1,79 @@
+{
+  "feature": "sial-relatorios",
+  "title": "SIAL Relatórios — customizáveis com filtros + export CSV + salvos",
+  "prd_path": "docs/prd/backlog/prd-sial-relatorios.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-REL-001",
+      "title": "Migration — RelatorioSalvo (+ RLS)",
+      "description": "Cria RelatorioSalvo conforme §7 com policy de servidor.",
+      "acceptanceCriteria": [
+        "Tabela RelatorioSalvo com filtros jsonb",
+        "Policy relatorio_servidor existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='RelatorioSalvo'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REL-002",
+      "title": "Queries de relatório (volume + tempo médio por etapa)",
+      "description": "src/lib/sial/relatorios.ts com geradores parametrizados sobre Processo/Analise/Evento.",
+      "acceptanceCriteria": [
+        "Tempo médio por etapa calculado de Evento",
+        "Volume por método/status/área",
+        "Filtros de período/método/área aplicados"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/relatorios.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REL-003",
+      "title": "API gerar + export CSV + salvos",
+      "description": "POST gerar, GET export (CSV), GET/POST salvos.",
+      "acceptanceCriteria": [
+        "gerar retorna {colunas, linhas}",
+        "export retorna CSV válido",
+        "salvar/reusar config funciona"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-REL-001", "SIAL-REL-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/relatorios/gerar/route.ts", "src/app/api/relatorios/export/route.ts", "src/app/api/relatorios/salvos/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REL-004",
+      "title": "UI de relatórios + smoke",
+      "description": "Tela com filtros, tabela e export; scripts/smoke/relatorios.ts gera com filtro e confere.",
+      "acceptanceCriteria": [
+        "Gerar mostra tabela",
+        "Export baixa CSV",
+        "Smoke: relatório de período retorna linhas"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-REL-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(backoffice)/relatorios/page.tsx", "scripts/smoke/relatorios.ts"],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

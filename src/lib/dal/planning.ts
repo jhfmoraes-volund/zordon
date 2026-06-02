@@ -376,10 +376,32 @@ export async function getPlanningPhaseContext(
 // ─── Mutations: PlanningCeremony core ─────────────────────────────────────
 
 /**
- * Cria uma planning nova em `phase='idle'`. Staging-commit: múltiplas
- * plannings por sprint são esperadas (cada uma é um commit do "branch"
- * sprint). UNIQUE(projectId, sprintId) foi removido na migration
- * 20260528f_planning_staging_model.sql.
+ * Retorna a planning ATIVA (não-arquivada) de um sprint, se existir.
+ * Garante "1 planning viva por sprint": o caller (POST /api/planning) usa isso
+ * pra bloquear duplicata e redirecionar pra existente. O índice único parcial
+ * `PlanningCeremony_one_active_per_sprint` é a garantia dura no banco.
+ */
+export async function findActivePlanningForSprint(
+  projectId: string,
+  sprintId: string,
+): Promise<{ id: string } | null> {
+  const { data } = await db()
+    .from("PlanningCeremony")
+    .select("id")
+    .eq("projectId", projectId)
+    .eq("sprintId", sprintId)
+    .neq("phase", "archived")
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
+/**
+ * Cria uma planning nova em `phase='idle'`. Modelo "1 planning viva por sprint":
+ * só pode existir UMA planning não-arquivada por (projectId, sprintId) — o
+ * índice único parcial `PlanningCeremony_one_active_per_sprint` trava no banco,
+ * e o caller checa antes via findActivePlanningForSprint pra dar resposta
+ * amigável (409 + redirect). Pra "começar do zero", arquive a atual primeiro.
  */
 export async function createPlanning(input: {
   projectId: string;
@@ -480,7 +502,10 @@ export async function updatePlanningPhase(
 }
 
 /**
- * Conclui uma planning (staging-commit). Append-only, irreversível.
+ * Conclui (publica) uma planning. Aplica as propostas pendentes e fecha.
+ * Diferente do antigo modelo append-only, agora é REVERSÍVEL: o PM pode
+ * reabrir (reopenPlanning) pra refinar e re-concluir — o re-apply é idempotente
+ * (só pega actions ainda pending).
  *
  * Sequência:
  *   1. Auto-aprova e aplica todas as MeetingTaskAction(decision=pending) via
@@ -528,6 +553,44 @@ export async function concludePlanning(
     planning,
     applied: { applied: applied.applied, failed: applied.failed, skipped: applied.skipped },
   };
+}
+
+/**
+ * Reabre uma planning concluída pra refino ("1 planning viva por sprint").
+ * Transiciona closed → proposing e ANULA closedAt (a planning deixa de estar
+ * concluída). Re-concluir depois é idempotente: applyPendingActionsForPlanning
+ * só aplica actions ainda pending, então tasks já criadas não duplicam.
+ *
+ * Não usa updatePlanningPhase porque PhaseStamps só seta valores — precisamos
+ * escrever closedAt=NULL explicitamente.
+ */
+export async function reopenPlanning(id: string): Promise<PlanningCeremonyRow> {
+  const supabase = db();
+
+  const { data: row, error: readErr } = await supabase
+    .from("PlanningCeremony")
+    .select("phase")
+    .eq("id", id)
+    .single();
+  if (readErr) throw readErr;
+  const current = row.phase as PlanningPhase;
+
+  const ctx = await getPlanningPhaseContext(id);
+  const result = transition(current, "proposing", ctx, "pm");
+  if (!result.ok) {
+    throw new Error(
+      `reopenPlanning: transição ${current} → proposing inválida (${result.reason}: ${result.detail})`,
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("PlanningCeremony")
+    .update({ phase: "proposing", closedAt: null, updatedAt: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 // ─── Mutations: links (meetings + transcripts) ────────────────────────────
@@ -583,6 +646,31 @@ export async function linkTranscriptToPlanning(input: {
       linkedAt: new Date().toISOString(),
       weight: input.weight ?? "supporting",
       note: input.note ?? null,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Linka um ContextSource qualquer (ex.: documento) a uma Planning Ceremony.
+ * Mesma mecânica de linkTranscriptToPlanning, nome genérico pra insumos.
+ */
+export async function linkContextSourceToPlanning(
+  planningCeremonyId: string,
+  contextSourceId: string,
+  linkedById: string,
+): Promise<PlanningTranscriptLinkRow> {
+  const supabase = db();
+  const { data, error } = await supabase
+    .from("EntityLink")
+    .insert({
+      planningCeremonyId,
+      contextSourceId,
+      linkedById,
+      linkedAt: new Date().toISOString(),
+      weight: "supporting",
     })
     .select("*")
     .single();

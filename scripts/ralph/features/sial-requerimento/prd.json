@@ -1,0 +1,181 @@
+{
+  "feature": "sial-requerimento",
+  "title": "SIAL Requerimento — motor de formulário por método + ficha assistida + rascunho",
+  "prd_path": "docs/prd/backlog/prd-sial-requerimento.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-REQ-001",
+      "title": "Migration — tabela Requerimento (1:1 Processo) + RLS",
+      "description": "Cria Requerimento conforme §7 (1) com CHECK de dominio e policy de SELECT.",
+      "acceptanceCriteria": [
+        "Requerimento.processoId é PK e FK ON DELETE CASCADE",
+        "Policy requerimento_select existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Requerimento'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-002",
+      "title": "Migration — Cadastro + FichaCadastralVersao",
+      "description": "Cria as duas tabelas de §7 (2,3) com índice por (cadastroId, vigente) e RLS on.",
+      "acceptanceCriteria": [
+        "Cadastro tem UNIQUE (tipo, documento)",
+        "FichaCadastralVersao tem coluna vigente boolean"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='FichaCadastralVersao' AND column_name='vigente'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-003",
+      "title": "DAL requerimento — create, get, updateDados, submit",
+      "description": "src/lib/sial/dal/requerimento.ts. create faz Processo+Protocolo+Requerimento numa transação; submit valida obrigatórios do schema e chama sial_transicao.",
+      "acceptanceCriteria": [
+        "createRequerimento cria as 3 entidades atomicamente",
+        "submit rejeita quando faltam campos obrigatórios do schema"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-REQ-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/dal/requerimento.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-004",
+      "title": "CadastroLookup — interface + stub",
+      "description": "Interface CadastroLookup com stub (retorna ficha vigente do Cadastro local; integração real em PRD Receita).",
+      "acceptanceCriteria": [
+        "src/lib/sial/cadastro-lookup.ts exporta a interface e um stub",
+        "Stub busca FichaCadastralVersao vigente por documento"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-REQ-002"],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/sial/cadastro-lookup.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-005",
+      "title": "API POST /api/requerimentos + GET /api/requerimentos/:id",
+      "description": "Cria o requerimento (rascunho) e lê processo+requerimento+schema+dados.",
+      "acceptanceCriteria": [
+        "POST retorna 201 com processoId+protocolo",
+        "GET retorna schema do método junto dos dados"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-REQ-003"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/requerimentos/route.ts", "src/app/api/requerimentos/[id]/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-006",
+      "title": "API PUT /api/requerimentos/:id (autosave) + submit",
+      "description": "PUT grava dados só em rascunho; POST submit valida e transiciona.",
+      "acceptanceCriteria": [
+        "PUT fora de rascunho retorna 409",
+        "submit com campo obrigatório faltando retorna 422",
+        "submit ok transiciona para aguardando_pagamento"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-REQ-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/requerimentos/[id]/route.ts", "src/app/api/requerimentos/[id]/submit/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-007",
+      "title": "API GET /api/cadastros/:documento (ficha assistida)",
+      "description": "Endpoint que usa CadastroLookup para retornar a ficha vigente.",
+      "acceptanceCriteria": [
+        "Documento existente retorna {dados}",
+        "Inexistente retorna 404"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-REQ-004"],
+      "estimateMinutes": 20,
+      "touches": ["src/app/api/cadastros/[documento]/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-008",
+      "title": "DynamicForm — renderer a partir do schemaFormulario",
+      "description": "Componente React que renderiza campos (text/number/date/select) do schema, com validação de obrigatórios. Usa Field/FormBody.",
+      "acceptanceCriteria": [
+        "Renderiza tipos text, number, date, select",
+        "Campo obrigatório marca erro ao submeter vazio",
+        "Schema desconhecido cai num campo genérico sem quebrar"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": ["src/components/sial/dynamic-form.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-009",
+      "title": "Tela de requerimento — autosave + ficha assistida + submit",
+      "description": "Página que monta DynamicForm, autosave com debounce (PUT), buscar ficha e enviar para análise.",
+      "acceptanceCriteria": [
+        "Autosave dispara após pausa de digitação",
+        "Buscar dados preenche campos da ficha",
+        "Enviar para análise chama submit e navega ao status"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-REQ-006", "SIAL-REQ-007", "SIAL-REQ-008"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(portal)/requerimentos/[id]/page.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-REQ-010",
+      "title": "Regenerar database.types.ts + smoke do fluxo",
+      "description": "Atualiza types; smoke: cria requerimento, autosave, busca ficha, submit → aguardando_pagamento.",
+      "acceptanceCriteria": [
+        "Types incluem Requerimento, Cadastro, FichaCadastralVersao",
+        "Fluxo cria processo e chega em aguardando_pagamento"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Criar requerimento de livro, preencher, enviar", "expected": "processo em aguardando_pagamento, sem perda de dados" }
+      ],
+      "dependsOn": ["SIAL-REQ-009"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/supabase/database.types.ts", "(end-to-end)"],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

@@ -88,8 +88,22 @@ export function BriefingRibbon({
   }, [sessionId]);
 
   useEffect(() => {
-    load();
-  }, [load, refreshKey]);
+    let cancelled = false;
+    (async () => {
+      const [sessionR, treeR] = await Promise.all([
+        fetch(`/api/design-sessions/${sessionId}`),
+        fetch(`/api/design-sessions/${sessionId}/tree`),
+      ]);
+      const sessionJson = await sessionR.json();
+      const treeJson = await treeR.json();
+      if (cancelled) return;
+      if (sessionR.ok) setStatus(sessionJson.status);
+      if (treeR.ok) setTreeData(treeJson);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, refreshKey]);
 
   const isCompleted = status === "completed";
   const stats = treeData?.stats;
@@ -193,7 +207,7 @@ export function BriefingRibbon({
 
   return (
     <TooltipProvider delay={150}>
-      <div className="border-b bg-card/40 px-4 py-2.5 flex items-center gap-3 flex-wrap">
+      <div className="border-b bg-card/40 px-6 py-2.5 flex items-center gap-3 flex-wrap">
         {/* Stats inline */}
         {stats && (
           <div className="flex items-center gap-3 text-xs text-muted-foreground">

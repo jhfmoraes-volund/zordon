@@ -33,6 +33,7 @@ export async function GET(
       "*, project:Project(id, name), sprint:Sprint(id, name), assignments:TaskAssignment(*, member:Member(id, name))"
     )
     .eq("designSessionId", sessionId)
+    .is("dismissedAt", null)
     .order("priority", { ascending: false })
     .order("createdAt", { ascending: true });
 

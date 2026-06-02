@@ -46,17 +46,22 @@ export async function listJobsForOwner(ownerId: string): Promise<ForgeJobRow[]> 
 /**
  * Atomic claim: picks the oldest queued job that the daemon can access.
  *
+ * `kind` filtra por tipo de job. Default 'forge' preserva comportamento legacy
+ * dos daemons forge-only. Daemon kind-aware (Story 6) passa explícito.
+ *
  * NOTE: Two-step (SELECT + UPDATE) — not fully atomic. For multi-daemon prod,
  * move to a Postgres function with FOR UPDATE SKIP LOCKED. See FDM-003.
  */
 export async function claimNextJob(
   daemonId: string,
   daemonMemberId: string,
+  kind: "forge" | "chat" = "forge",
 ): Promise<ForgeJobRow | null> {
   const { data: candidates, error: selectError } = await db()
     .from("ForgeJob")
     .select("id")
     .eq("status", "queued")
+    .eq("kind", kind)
     .or(`ownerId.eq.${daemonMemberId},assignToAnyone.eq.true`)
     .order("createdAt", { ascending: true })
     .limit(1);

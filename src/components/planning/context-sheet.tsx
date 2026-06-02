@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   GitBranch,
   RefreshCw,
@@ -10,8 +10,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import ContextSheetPrimitive from "@/components/agent/context-import/context-sheet";
 import { TranscriptModal } from "@/components/agent/context-import";
-import { SpreadsheetImportModal } from "@/components/planning/spreadsheet-import-modal";
 import { GitHubRepoModal } from "@/components/planning/github-repo-modal";
+import { createDocumentSource } from "@/lib/context-sources/upload-document";
+import { showErrorToast } from "@/lib/optimistic/toast";
 import { fmtDate } from "@/lib/date-utils";
 
 interface LinkedTranscript {
@@ -23,6 +24,18 @@ interface LinkedTranscript {
     capturedAt: string | null;
   } | null;
   weight: string;
+}
+
+interface DocumentLinkRow {
+  linkId: string;
+  sourceId: string;
+  weight: string | null;
+  source: {
+    id: string;
+    kind: string;
+    title: string | null;
+    capturedAt: string | null;
+  } | null;
 }
 
 interface ProjectRepo {
@@ -54,9 +67,95 @@ export function ContextSheet({
   onImported,
 }: PlanningContextSheetProps) {
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
-  const [spreadsheetModalOpen, setSpreadsheetModalOpen] = useState(false);
   const [githubModalOpen, setGithubModalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  // Documentos (ContextSource kind='document') vêm de /api/planning/[id]/context,
+  // paralelo aos transcripts que chegam por prop.
+  const [documentLinks, setDocumentLinks] = useState<DocumentLinkRow[]>([]);
+
+  const refetchDocuments = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/planning/${planningId}/context`);
+      if (!r.ok) return;
+      const json = (await r.json()) as { contextLinks?: DocumentLinkRow[] };
+      setDocumentLinks(
+        (json.contextLinks ?? []).filter(
+          (l) => l.source?.kind === "document",
+        ),
+      );
+    } catch {
+      /* silencioso */
+    }
+  }, [planningId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/planning/${planningId}/context`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { contextLinks?: DocumentLinkRow[] } | null) => {
+        if (cancelled || !json) return;
+        setDocumentLinks(
+          (json.contextLinks ?? []).filter((l) => l.source?.kind === "document"),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [planningId]);
+
+  const documentIds = useMemo(
+    () => new Set(documentLinks.map((l) => l.linkId)),
+    [documentLinks],
+  );
+
+  const handleUploadFiles = useCallback(
+    async (fileList: FileList) => {
+      setUploadingFile(true);
+      try {
+        for (const file of Array.from(fileList)) {
+          const sourceId = await createDocumentSource(projectId, file);
+          const r = await fetch(`/api/planning/${planningId}/context/link`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contextSourceId: sourceId }),
+          });
+          if (!r.ok) {
+            const j = (await r.json().catch(() => ({}))) as { error?: string };
+            toast.error(j.error ?? "Falha ao linkar documento");
+          }
+        }
+        await refetchDocuments();
+      } catch (e) {
+        showErrorToast(e, { label: "Falha ao enviar documento" });
+      } finally {
+        setUploadingFile(false);
+      }
+    },
+    [projectId, planningId, refetchDocuments],
+  );
+
+  // Unlink: documento via /context; transcript pelo handler do parent.
+  const handleUnlink = useCallback(
+    async (itemId: string, title: string) => {
+      if (documentIds.has(itemId)) {
+        const r = await fetch(
+          `/api/planning/${planningId}/context/${itemId}`,
+          { method: "DELETE" },
+        );
+        if (!r.ok) {
+          toast.error("Falha ao remover documento");
+          return;
+        }
+        await refetchDocuments();
+        return;
+      }
+      onUnlink(itemId, title);
+    },
+    [documentIds, planningId, refetchDocuments, onUnlink],
+  );
 
   const repoConfigured = Boolean(
     projectRepo && projectRepo.owner && projectRepo.name,
@@ -108,15 +207,30 @@ export function ContextSheet({
     }
   };
 
-  // Map linked transcripts to ContextSheet format
-  const linkedItems = linkedTranscripts.map((l) => ({
-    id: l.transcriptRefId,
-    kind: (l.transcript?.source === "spreadsheet" ? "spreadsheet" : "transcript") as "transcript" | "spreadsheet" | "github",
-    title: l.transcript?.title ?? null,
-    source: l.transcript?.source ?? undefined,
-    capturedAt: l.transcript?.capturedAt,
-    weight: l.weight,
-  }));
+  // Transcripts (via prop) + documentos (via /context) no mesmo formato do ContextSheet.
+  const linkedItems = useMemo(
+    () => [
+      ...linkedTranscripts.map((l) => ({
+        id: l.transcriptRefId,
+        kind: (l.transcript?.source === "spreadsheet"
+          ? "spreadsheet"
+          : "transcript") as "transcript" | "spreadsheet" | "github" | "document",
+        title: l.transcript?.title ?? null,
+        source: l.transcript?.source ?? undefined,
+        capturedAt: l.transcript?.capturedAt,
+        weight: l.weight,
+      })),
+      ...documentLinks.map((l) => ({
+        id: l.linkId,
+        kind: "document" as const,
+        title: l.source?.title ?? null,
+        source: undefined,
+        capturedAt: l.source?.capturedAt,
+        weight: l.weight ?? undefined,
+      })),
+    ],
+    [linkedTranscripts, documentLinks],
+  );
 
   // Custom GitHub panel with refresh + unlink controls
   const customGitHubPanel = repoConfigured ? (
@@ -181,14 +295,15 @@ export function ContextSheet({
         linkedItems={linkedItems}
         capabilities={{
           transcript: true,
-          spreadsheet: true,
+          file: true,
           github: true,
         }}
+        uploadingFile={uploadingFile}
         handlers={{
-          onUnlink,
+          onUnlink: handleUnlink,
           onImportTranscript: () => setTranscriptModalOpen(true),
-          onImportSpreadsheet: () => setSpreadsheetModalOpen(true),
           onImportGitHub: () => setGithubModalOpen(true),
+          onUploadFiles: handleUploadFiles,
         }}
         customGitHubPanel={customGitHubPanel}
       />
@@ -202,13 +317,6 @@ export function ContextSheet({
           setTranscriptModalOpen(false);
           onImported();
         }}
-      />
-
-      <SpreadsheetImportModal
-        planningId={planningId}
-        open={spreadsheetModalOpen}
-        onOpenChange={setSpreadsheetModalOpen}
-        onImported={onImported}
       />
 
       <GitHubRepoModal

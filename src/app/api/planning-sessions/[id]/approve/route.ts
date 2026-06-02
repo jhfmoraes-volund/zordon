@@ -91,7 +91,12 @@ export async function POST(
 
   const moveErrors: string[] = [];
 
-  for (const prd of prds) {
+  // Só PRDs slug-backed (output da cascata em docs/prd/) movem de arquivo.
+  // PRDs entity-backed (ProductRequirement vinculado conversacionalmente) são
+  // "aprovados" só pelo flip de status da session — não têm arquivo pra mover.
+  const slugPrds = prds.filter((prd) => !!prd.prdSlug);
+
+  for (const prd of slugPrds) {
     const filename = `prd-${prd.prdSlug}.md`;
     const sourcePath = path.join(backlogDir, filename);
     const destPath = path.join(readyDir, filename);
@@ -112,7 +117,7 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     hierarchyTreeUpdated: false, // v1 doesn't create hierarchy rows yet
-    filesMovedCount: prds.length - moveErrors.length,
+    filesMovedCount: slugPrds.length - moveErrors.length,
     moveErrors: moveErrors.length > 0 ? moveErrors : undefined,
   });
 }

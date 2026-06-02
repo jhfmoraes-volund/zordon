@@ -45,7 +45,7 @@ export function PrdBriefingRibbon({
 
   return (
     <TooltipProvider delay={150}>
-      <div className="border-b bg-card/40 px-4 py-2.5 flex items-center gap-3 flex-wrap">
+      <div className="border-b bg-card/40 px-6 py-2.5 flex items-center gap-3 flex-wrap">
         {/* Stats inline */}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">

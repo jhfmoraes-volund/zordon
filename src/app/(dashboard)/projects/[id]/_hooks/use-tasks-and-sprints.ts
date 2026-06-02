@@ -33,6 +33,7 @@ export function useTasksAndSprints(projectId: string) {
         )
         .eq("projectId", projectId)
         .neq("status", "draft")
+        .is("dismissedAt", null)
         .order("createdAt", { ascending: false }),
       supabase
         .from("Sprint")

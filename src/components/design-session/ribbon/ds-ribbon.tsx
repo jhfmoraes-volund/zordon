@@ -54,7 +54,7 @@ export function DSRibbon({
         className,
       )}
     >
-      <div className="flex items-center gap-1 px-3 py-2 md:px-4">
+      <div className="flex items-center gap-1 px-3 py-2 md:px-6">
         {leftSlot ? (
           <div className="flex shrink-0 items-center gap-1 pr-2">
             {leftSlot}

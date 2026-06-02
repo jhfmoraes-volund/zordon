@@ -1,0 +1,97 @@
+{
+  "feature": "sial-denuncia-cadastro",
+  "title": "SIAL Denúncia Cadastro — abertura de denúncia contra leiloeiro/tradutor",
+  "prd_path": "docs/prd/backlog/prd-sial-denuncia-cadastro.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-DEN-001",
+      "title": "Migration — tabela Denuncia (+ RLS)",
+      "description": "Cria Denuncia conforme §7 com CHECK de alvoTipo e policy de SELECT.",
+      "acceptanceCriteria": [
+        "Denuncia.processoId PK e FK CASCADE",
+        "alvoTipo CHECK ('leiloeiro','tradutor')",
+        "Policy denuncia_select existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Denuncia'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEN-002",
+      "title": "DAL denúncia — create + enviar",
+      "description": "src/lib/sial/dal/denuncia.ts. create faz Processo(tipo=denuncia)+Protocolo+Denuncia; enviar transiciona rascunho→pendente.",
+      "acceptanceCriteria": [
+        "create cria as 3 entidades atomicamente",
+        "enviar exige descrição e alvo válido"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DEN-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/dal/denuncia.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEN-003",
+      "title": "API denúncia (criar / obter / enviar)",
+      "description": "POST /api/denuncias, GET /:id, POST /:id/enviar.",
+      "acceptanceCriteria": [
+        "POST cria denúncia em rascunho",
+        "enviar transiciona para pendente",
+        "alvo inexistente retorna 422"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DEN-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/denuncias/route.ts", "src/app/api/denuncias/[id]/route.ts", "src/app/api/denuncias/[id]/enviar/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEN-004",
+      "title": "Tela de denúncia (busca alvo + descrição + provas)",
+      "description": "Página que recebe o alvo (do diretório), coleta descrição, anexa provas (documentos) e envia.",
+      "acceptanceCriteria": [
+        "Alvo pré-selecionado vindo do diretório",
+        "Anexo de provas via módulo de documentos",
+        "Enviar cria processo pendente"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DEN-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(portal)/denuncias/nova/page.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEN-005",
+      "title": "Smoke — abertura de denúncia + types",
+      "description": "scripts/smoke/denuncia-cadastro.ts cria e envia uma denúncia; regenera types.",
+      "acceptanceCriteria": [
+        "Processo(tipo=denuncia, status=pendente) criado",
+        "Denuncia ligada ao alvo",
+        "Prova anexada como Documento"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Processo\" WHERE tipo='denuncia' AND status='pendente'", "expected": ">=1" }
+      ],
+      "dependsOn": ["SIAL-DEN-004"],
+      "estimateMinutes": 20,
+      "touches": ["scripts/smoke/denuncia-cadastro.ts", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

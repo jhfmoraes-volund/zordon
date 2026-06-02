@@ -1,0 +1,115 @@
+{
+  "feature": "sial-pagamento",
+  "title": "SIAL Pagamento — boleto + confirmação de compensação + liberação para análise",
+  "prd_path": "docs/prd/backlog/prd-sial-pagamento.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-PAG-001",
+      "title": "Migration — tabela Boleto (+ RLS)",
+      "description": "Cria Boleto conforme §7 com CHECK de status, índices e policy de SELECT.",
+      "acceptanceCriteria": [
+        "Boleto.status CHECK ('emitido','pago','vencido')",
+        "nossoNumero é UNIQUE",
+        "Policy boleto_select existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Boleto'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PAG-002",
+      "title": "PagamentoGateway — interface + stub",
+      "description": "Interface emitir(processo)/consultar(nossoNumero) com stub determinístico. Real em PRD resiliência.",
+      "acceptanceCriteria": [
+        "src/lib/sial/pagamento-gateway.ts exporta interface + stub",
+        "Stub gera nossoNumero único e linhaDigitavel"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/sial/pagamento-gateway.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PAG-003",
+      "title": "DAL boleto — emitir, consultar, reemitir",
+      "description": "src/lib/sial/dal/boleto.ts. emitir bloqueia se já há boleto pago; reemitir marca vencido o atual e cria novo.",
+      "acceptanceCriteria": [
+        "emitir cria Boleto status=emitido",
+        "reemitir marca o anterior como vencido",
+        "não emite se já existe boleto pago no processo"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-PAG-001", "SIAL-PAG-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/sial/dal/boleto.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PAG-004",
+      "title": "API emitir/consultar/reemitir boleto",
+      "description": "POST /api/processos/:id/boleto, GET, POST .../reemitir.",
+      "acceptanceCriteria": [
+        "POST retorna 201 com boleto",
+        "POST quando já pago retorna 409",
+        "reemitir retorna novo boleto e marca vencido o antigo"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-PAG-003"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/processos/[id]/boleto/route.ts", "src/app/api/processos/[id]/boleto/reemitir/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PAG-005",
+      "title": "Webhook de pagamento idempotente + transição",
+      "description": "POST /api/webhooks/pagamento marca pago e transiciona aguardando_pagamento→enviado_analise; idempotente por nossoNumero.",
+      "acceptanceCriteria": [
+        "Chamada repetida não duplica transição",
+        "Só transiciona se processo ainda em aguardando_pagamento",
+        "Boleto.pagoEm preenchido"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-PAG-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/webhooks/pagamento/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PAG-006",
+      "title": "Tela de pagamento + regenerar types + smoke",
+      "description": "Página com linha digitável/PDF/status; types; smoke: emitir → webhook pago → processo em enviado_analise.",
+      "acceptanceCriteria": [
+        "Tela mostra status e linha digitável",
+        "Após webhook, processo fica enviado_analise",
+        "Webhook duplicado não re-transiciona"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT status FROM \"Processo\" WHERE id=(SELECT \"processoId\" FROM \"Boleto\" WHERE status='pago' ORDER BY \"pagoEm\" DESC LIMIT 1)", "expected": "enviado_analise" }
+      ],
+      "dependsOn": ["SIAL-PAG-004", "SIAL-PAG-005"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/(portal)/processos/[id]/pagamento/page.tsx", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

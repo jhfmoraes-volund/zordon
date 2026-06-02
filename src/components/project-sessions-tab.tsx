@@ -21,7 +21,6 @@ import {
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
 import { SessionPickerModal } from "@/components/sessions/session-picker-modal";
-import { PrdUploadSheet } from "@/components/sessions/prd-session/upload-sheet";
 import { PrdQuickAskSheet } from "@/components/sessions/prd-session/quick-ask-sheet";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -95,7 +94,6 @@ export function ProjectSessionsTab({
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [superOpen, setSuperOpen] = useState(false);
-  const [prdUploadOpen, setPrdUploadOpen] = useState(false);
   const [prdQuickAskOpen, setPrdQuickAskOpen] = useState(false);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
@@ -348,8 +346,6 @@ export function ProjectSessionsTab({
         onSelect={(type) => {
           if (type === "inception") {
             setSuperOpen(true);
-          } else if (type === "prd-upload") {
-            setPrdUploadOpen(true);
           } else if (type === "prd-quickask") {
             setPrdQuickAskOpen(true);
           }
@@ -362,12 +358,6 @@ export function ProjectSessionsTab({
         open={superOpen}
         onOpenChange={setSuperOpen}
         onCreated={load}
-      />
-
-      <PrdUploadSheet
-        projectId={projectId}
-        open={prdUploadOpen}
-        onOpenChange={setPrdUploadOpen}
       />
 
       <PrdQuickAskSheet
@@ -391,7 +381,7 @@ export function ProjectSessionsTab({
           Nenhuma session deste tipo.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
           <SessionColumn
             title="Publicado"
             tone="emerald"

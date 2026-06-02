@@ -1,6 +1,13 @@
 "use client";
 
-import { MoreVertical, Copy, FolderInput, Hash, Trash2 } from "lucide-react";
+import {
+  MoreVertical,
+  Copy,
+  FolderInput,
+  Hash,
+  Archive,
+  Trash2,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +22,10 @@ type TaskRowMenuProps = {
   onDuplicate: (taskRef: string) => void;
   onClone: (taskRef: string) => void;
   onCopyRef: (taskRef: string) => void;
+  /** Arquivar — soft delete (some das listas, histórico preservado). */
   onDelete: (taskRef: string) => void;
+  /** Excluir — hard delete (apaga de vez). */
+  onHardDelete: (taskRef: string) => void;
 };
 
 const stop = (e: React.MouseEvent | React.PointerEvent) =>
@@ -27,6 +37,7 @@ export function TaskRowMenu({
   onClone,
   onCopyRef,
   onDelete,
+  onHardDelete,
 }: TaskRowMenuProps) {
   return (
     <span onClick={stop} onPointerDown={stop} className="inline-flex">
@@ -57,12 +68,16 @@ export function TaskRowMenu({
             Copiar referência
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => onDelete(taskRef)}>
+            <Archive className="size-3.5" />
+            Arquivar
+          </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
-            onClick={() => onDelete(taskRef)}
+            onClick={() => onHardDelete(taskRef)}
           >
             <Trash2 className="size-3.5" />
-            Deletar
+            Excluir
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

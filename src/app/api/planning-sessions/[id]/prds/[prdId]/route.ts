@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getUser } from "@/lib/dal";
-import { updatePrdAssignment } from "@/lib/dal/planning-session";
+import { updatePrdAssignment, removeLinkedPrd } from "@/lib/dal/planning-session";
 
 const updateSchema = z.object({
   sprintStart: z.number().int().min(1).max(12).optional(),
@@ -33,6 +33,24 @@ export async function PUT(
     return NextResponse.json({ prd });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "update failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string; prdId: string }> },
+) {
+  const user = await getUser();
+  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+
+  const { prdId } = await params;
+
+  try {
+    await removeLinkedPrd(prdId);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "delete failed";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

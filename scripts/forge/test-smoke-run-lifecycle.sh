@@ -211,8 +211,8 @@ fi
 # Set FORGE_RUN_ID to enable manifest mode (exec-prd will fetch from ForgeRun.manifest)
 export FORGE_RUN_ID="${TEST_RUN_ID}"
 
-# Run exec-prd with the run ID and a slug (slug can be anything since manifest mode uses DB)
-npx tsx scripts/forge/exec-prd.ts "${TEST_RUN_ID}" smoke-test-lifecycle 1 > /tmp/smoke-test-lifecycle.log 2>&1 &
+# Run exec-forge-run with the run ID and a slug (slug can be anything since manifest mode uses DB)
+npx tsx scripts/daemon/exec-forge-run.ts "${TEST_RUN_ID}" smoke-test-lifecycle 1 > /tmp/smoke-test-lifecycle.log 2>&1 &
 EXEC_PID=$!
 
 # Wait up to 30s for completion

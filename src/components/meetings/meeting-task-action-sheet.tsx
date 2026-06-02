@@ -422,7 +422,7 @@ function RichTaskBody({
   const handleAcCreate = async (_ref: string, text: string) => {
     setPayload((prev) => {
       const list = Array.isArray(prev.acceptanceCriteria)
-        ? (prev.acceptanceCriteria as Array<{ id?: string; text: string }>)
+        ? coerceAcList(prev.acceptanceCriteria)
         : draftTask.acceptanceCriteria.map((a) => ({ id: a.id, text: a.text }));
       return {
         ...prev,
@@ -437,7 +437,7 @@ function RichTaskBody({
   ) => {
     setPayload((prev) => {
       const list = Array.isArray(prev.acceptanceCriteria)
-        ? (prev.acceptanceCriteria as Array<{ id?: string; text: string }>)
+        ? coerceAcList(prev.acceptanceCriteria)
         : draftTask.acceptanceCriteria.map((a) => ({ id: a.id, text: a.text }));
       return {
         ...prev,
@@ -453,7 +453,7 @@ function RichTaskBody({
   const handleAcDelete = async (_ref: string, acId: string) => {
     setPayload((prev) => {
       const list = Array.isArray(prev.acceptanceCriteria)
-        ? (prev.acceptanceCriteria as Array<{ id?: string; text: string }>)
+        ? coerceAcList(prev.acceptanceCriteria)
         : draftTask.acceptanceCriteria.map((a) => ({ id: a.id, text: a.text }));
       return {
         ...prev,
@@ -507,6 +507,25 @@ function RichTaskBody({
 
 // ─── Helpers — payload ↔ AdaptedTask ────────────────────────────────────────
 
+/**
+ * Normaliza `payload.acceptanceCriteria` pra `{ id?, text }[]`.
+ * A Vitoria (propose_task_action) grava ACs como array de STRINGS; o legado/UI
+ * usa objetos `{ text }`. Coerge ambos pra evitar `text` undefined (que
+ * quebrava stripAcMarker no TaskSheet).
+ */
+function coerceAcList(raw: unknown): Array<{ id?: string; text: string }> {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((a, i) => {
+    if (typeof a === "string") return { id: `tmp-${i}`, text: a };
+    if (a && typeof a === "object") {
+      const o = a as Record<string, unknown>;
+      const text = (o.text ?? o.criterion ?? o.description ?? "") as string;
+      return { id: o.id as string | undefined, text };
+    }
+    return { id: `tmp-${i}`, text: String(a ?? "") };
+  });
+}
+
 function buildVirtualCreateTask(
   payload: Record<string, unknown>,
   ctx: TaskSheetContext,
@@ -519,9 +538,7 @@ function buildVirtualCreateTask(
   const tagIds = Array.isArray(payload.tagIds) ? (payload.tagIds as string[]) : [];
   const tags = ctx.projectTags.filter((t) => tagIds.includes(t.id));
 
-  const acs = Array.isArray(payload.acceptanceCriteria)
-    ? (payload.acceptanceCriteria as Array<{ id?: string; text: string }>)
-    : [];
+  const acs = coerceAcList(payload.acceptanceCriteria);
 
   return {
     __id: "virtual-create",
@@ -585,15 +602,13 @@ function applyPayloadToTask(
     next.tags = ctx.projectTags.filter((t) => ids.includes(t.id));
   }
   if (Array.isArray(payload.acceptanceCriteria)) {
-    const list = payload.acceptanceCriteria as Array<{
-      id?: string;
-      text: string;
-    }>;
-    next.acceptanceCriteria = list.map((a, i) => ({
-      id: a.id ?? `tmp-${i}`,
-      text: a.text,
-      checked: false,
-    }));
+    next.acceptanceCriteria = coerceAcList(payload.acceptanceCriteria).map(
+      (a, i) => ({
+        id: a.id ?? `tmp-${i}`,
+        text: a.text,
+        checked: false,
+      }),
+    );
   }
   return next;
 }

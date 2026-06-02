@@ -8,8 +8,8 @@
 
 | Item | Path |
 |------|------|
-| **CLI de controle** | `scripts/forge/daemon-ctl.sh` |
-| **Daemon source** | `scripts/forge/daemon.ts` |
+| **CLI de controle** | `scripts/daemon/daemon-ctl.sh` |
+| **Daemon source** | `scripts/daemon/daemon.ts` |
 | **PID file** | `~/.forge/daemon.pid` |
 | **Logs** | `~/.forge/daemon.log` |
 | **DB heartbeat** | `ForgeDaemon` table → `lastHeartbeatAt` |
@@ -20,21 +20,21 @@
 
 ```bash
 # Start daemon (detach via nohup + disown)
-bash scripts/forge/daemon-ctl.sh start
+bash scripts/daemon/daemon-ctl.sh start
 
 # Stop daemon (SIGTERM → 10s → SIGKILL se preciso)
-bash scripts/forge/daemon-ctl.sh stop
+bash scripts/daemon/daemon-ctl.sh stop
 
 # Status check (PID + uptime + last heartbeat from DB)
-bash scripts/forge/daemon-ctl.sh status
+bash scripts/daemon/daemon-ctl.sh status
 
 # Show logs (default: last 50 lines)
-bash scripts/forge/daemon-ctl.sh logs
-bash scripts/forge/daemon-ctl.sh logs -n 100       # custom line count
-bash scripts/forge/daemon-ctl.sh logs -f           # follow mode (tail -F)
+bash scripts/daemon/daemon-ctl.sh logs
+bash scripts/daemon/daemon-ctl.sh logs -n 100       # custom line count
+bash scripts/daemon/daemon-ctl.sh logs -f           # follow mode (tail -F)
 
 # Restart (stop + start sequencial)
-bash scripts/forge/daemon-ctl.sh restart
+bash scripts/daemon/daemon-ctl.sh restart
 ```
 
 ---
@@ -43,7 +43,7 @@ bash scripts/forge/daemon-ctl.sh restart
 
 ### `start`
 - Cria `~/.forge/` se não existir
-- Usa `nohup npx tsx scripts/forge/daemon.ts > ~/.forge/daemon.log 2>&1 &` pra detach
+- Usa `nohup npx tsx scripts/daemon/daemon.ts > ~/.forge/daemon.log 2>&1 &` pra detach
 - Faz `disown` pra sobreviver ao shell exit
 - Escreve PID em `~/.forge/daemon.pid`
 - Verifica se processo está vivo após 2s
@@ -88,7 +88,7 @@ O daemon **sempre roda detached** quando disparado via `daemon-ctl.sh start`. Is
 
 Pra rodar em foreground (debug), execute direto:
 ```bash
-npx tsx scripts/forge/daemon.ts
+npx tsx scripts/daemon/daemon.ts
 ```
 
 ---
@@ -108,7 +108,7 @@ Isso aparece em `~/.forge/daemon.log` antes do daemon encerrar. Útil pra debug 
 
 | Sintoma | Diagnóstico | Fix |
 |---------|-------------|-----|
-| `start` retorna "already running" mas `status` mostra "not running" | PID file stale | `rm ~/.forge/daemon.pid && bash scripts/forge/daemon-ctl.sh start` |
+| `start` retorna "already running" mas `status` mostra "not running" | PID file stale | `rm ~/.forge/daemon.pid && bash scripts/daemon/daemon-ctl.sh start` |
 | Daemon para sozinho após X minutos | Crash ou exceção não tratada | `tail -n 100 ~/.forge/daemon.log` e busque stacktrace |
 | `status` mostra "DB unavailable" | DIRECT_URL não exportado ou DB offline | `source <(grep '^DIRECT_URL=' .env | sed 's/^/export /')` |
 | Logs não aparecem | Permissões em `~/.forge/` | `ls -la ~/.forge/` — deve ter owner = user rodando daemon |
@@ -122,15 +122,15 @@ Verifica se daemon sobrevive ao shell que disparou:
 
 ```bash
 # Em um subshell:
-(bash scripts/forge/daemon-ctl.sh start && sleep 2 && exit)
+(bash scripts/daemon/daemon-ctl.sh start && sleep 2 && exit)
 
 # Subshell morreu. Daemon ainda vivo?
-bash scripts/forge/daemon-ctl.sh status
+bash scripts/daemon/daemon-ctl.sh status
 # ✓ daemon running (PID <N>)
 #   uptime: <X>
 
 # Cleanup:
-bash scripts/forge/daemon-ctl.sh stop
+bash scripts/daemon/daemon-ctl.sh stop
 ```
 
 Ver `scripts/forge/test-smoke-daemon-detach.sh` pra script automatizado.
@@ -142,8 +142,8 @@ Ver `scripts/forge/test-smoke-daemon-detach.sh` pra script automatizado.
 Convenções:
 - **Migrations** de schema `ForgeDaemon` em `supabase/migrations/`, executar via `psql "$DIRECT_URL" -f ...`
 - **Tipos** regenerar com `npm run db:types` após migration
-- **Linting**: `shellcheck scripts/forge/daemon-ctl.sh` deve sair clean
-- **Typecheck**: `npx tsc --noEmit scripts/forge/daemon.ts` deve sair clean
+- **Linting**: `shellcheck scripts/daemon/daemon-ctl.sh` deve sair clean
+- **Typecheck**: `npx tsc --noEmit scripts/daemon/daemon.ts` deve sair clean
 - **Commit**: via `bash scripts/sync-main.sh -m "..."`
 
 ---

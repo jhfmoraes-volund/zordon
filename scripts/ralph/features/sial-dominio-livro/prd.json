@@ -1,0 +1,94 @@
+{
+  "feature": "sial-dominio-livro",
+  "title": "SIAL Domínio Livro — autenticação de livros empresariais/contábeis",
+  "prd_path": "docs/prd/backlog/prd-sial-dominio-livro.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-LIV-001",
+      "title": "Migration — tabela Livro (+ RLS)",
+      "description": "Cria Livro conforme §7 (1) com CHECK de folhas e policy de SELECT.",
+      "acceptanceCriteria": [
+        "Livro.processoId é PK e FK ON DELETE CASCADE",
+        "CHECK folhas > 0 quando preenchido",
+        "Policy livro_select existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Livro'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-LIV-002",
+      "title": "Seed — Metodo livro + schemaFormulario",
+      "description": "Insere o método Livro com os campos de §7 (2).",
+      "acceptanceCriteria": [
+        "Existe Metodo com dominio='livro' e ativo=true",
+        "schemaFormulario tem >=5 campos"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Metodo\" WHERE dominio='livro' AND ativo", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-LIV-003",
+      "title": "Validação de livro — período/folhas + NIRE stub",
+      "description": "src/lib/sial/dominio/livro.ts com validate(dados) e interface NireLookup (stub).",
+      "acceptanceCriteria": [
+        "validate rejeita período invertido e folhas<=0",
+        "NireLookup stub retorna {valido:true} determinístico"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/sial/dominio/livro.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-LIV-004",
+      "title": "Integrar Livro ao motor de requerimento (create + submit)",
+      "description": "Quando dominio=livro, create insere Livro; submit roda validação do livro além do schema.",
+      "acceptanceCriteria": [
+        "POST /api/requerimentos dominio=livro cria linha Livro",
+        "submit com período invertido retorna 422"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-LIV-001", "SIAL-LIV-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/dal/requerimento.ts", "src/app/api/livros/[processoId]/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-LIV-005",
+      "title": "API validação NIRE + types + smoke",
+      "description": "GET /api/validacao/nire/:valor (stub); regenera types; smoke de um livro até aguardando_pagamento.",
+      "acceptanceCriteria": [
+        "GET retorna {valido}",
+        "Smoke cria livro válido e chega em aguardando_pagamento"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Criar requerimento de livro Diário, preencher e enviar", "expected": "Livro criado, processo em aguardando_pagamento" }
+      ],
+      "dependsOn": ["SIAL-LIV-002", "SIAL-LIV-004"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/validacao/nire/[valor]/route.ts", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

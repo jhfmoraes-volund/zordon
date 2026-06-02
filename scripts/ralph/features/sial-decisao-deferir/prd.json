@@ -1,0 +1,114 @@
+{
+  "feature": "sial-decisao-deferir",
+  "title": "SIAL Decisão Deferir — autenticação, ficha, E2DOC, publicação, notificação",
+  "prd_path": "docs/prd/backlog/prd-sial-decisao-deferir.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-DEF-001",
+      "title": "Migration — tabela Autenticacao (+ RLS, código único)",
+      "description": "Cria Autenticacao conforme §7 com codigoValidacao UNIQUE e policy interna.",
+      "acceptanceCriteria": [
+        "Autenticacao.processoId UNIQUE e FK CASCADE",
+        "codigoValidacao UNIQUE com índice",
+        "Policy autenticacao_select existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_indexes WHERE indexname='Autenticacao_codigo_idx'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEF-002",
+      "title": "Interfaces TermoService + NotificacaoService (no-op default)",
+      "description": "src/lib/sial/services/{termo,notificacao}.ts com no-op seguro.",
+      "acceptanceCriteria": [
+        "TermoService.gerar e NotificacaoService.notificar existem e não quebram",
+        "Default no-op retorna sem efeito colateral"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/sial/services/termo.ts", "src/lib/sial/services/notificacao.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEF-003",
+      "title": "gerarCodigoValidacao — token não sequencial",
+      "description": "util que gera token aleatório legível e não adivinhável; checa colisão.",
+      "acceptanceCriteria": [
+        "Gera token >= 16 chars não sequencial",
+        "Regera em caso de colisão"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["src/lib/sial/codigo-validacao.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEF-004",
+      "title": "DAL deferir — cascata completa",
+      "description": "src/lib/sial/dal/deferir.ts orquestra transição + Autenticacao + ficha vigente + Termo/E2DOC/Notificação.",
+      "acceptanceCriteria": [
+        "Exige em_analise + Analise.parecer (senão erro)",
+        "Cria Autenticacao e nova FichaCadastralVersao vigente",
+        "Chama E2docGateway (mock) e os serviços (no-op) sem quebrar"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DEF-001", "SIAL-DEF-002", "SIAL-DEF-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/dal/deferir.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEF-005",
+      "title": "API deferir + autenticacao + types",
+      "description": "POST /api/processos/:id/decisao/deferir, GET autenticacao; regenera types.",
+      "acceptanceCriteria": [
+        "Deferir fora de em_analise retorna 409",
+        "Sem parecer retorna 422",
+        "Sucesso retorna 200 com autenticacao"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DEF-004"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/processos/[id]/decisao/deferir/route.ts", "src/app/api/processos/[id]/autenticacao/route.ts", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DEF-006",
+      "title": "Smoke — deferimento end-to-end (mock)",
+      "description": "scripts/smoke/decisao-deferir.ts defere um processo em_analise e valida a cascata essencial.",
+      "acceptanceCriteria": [
+        "Processo fica deferido",
+        "Autenticacao criada com codigoValidacao",
+        "Nova FichaCadastralVersao vigente"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Autenticacao\" a JOIN \"Processo\" p ON p.id=a.\"processoId\" WHERE p.status='deferido'", "expected": ">=1" }
+      ],
+      "dependsOn": ["SIAL-DEF-005"],
+      "estimateMinutes": 25,
+      "touches": ["scripts/smoke/decisao-deferir.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

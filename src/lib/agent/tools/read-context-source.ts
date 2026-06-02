@@ -6,6 +6,7 @@ import * as meetingAdapter from "@/lib/context-sources/adapters/meeting";
 import * as csvAdapter from "@/lib/context-sources/adapters/csv";
 import * as gsheetsAdapter from "@/lib/context-sources/adapters/gsheets";
 import * as githubAdapter from "@/lib/context-sources/adapters/github";
+import * as documentAdapter from "@/lib/context-sources/adapters/document";
 
 /**
  * Factory de tool read_context_source — compartilhada entre Vitoria e Vitor.
@@ -65,6 +66,12 @@ export function createReadContextSourceTool() {
           case "github_pr":
           case "github_issue":
             resolvedContent = await githubAdapter.resolveContent(
+              supabase,
+              source
+            );
+            break;
+          case "document":
+            resolvedContent = await documentAdapter.resolveContent(
               supabase,
               source
             );

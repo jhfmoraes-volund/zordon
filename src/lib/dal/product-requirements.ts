@@ -92,6 +92,21 @@ export async function getPrdById(
 }
 
 /**
+ * Batch-fetch PRDs por id. Usado pra hidratar PlanningSessionPRD entity-backed.
+ */
+export async function getPrdsByIds(
+  ids: string[],
+): Promise<ProductRequirementRow[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await db()
+    .from("ProductRequirement")
+    .select("*")
+    .in("id", ids);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
  * Reference no formato `<projectKey>-PRD-NNN` com NNN zero-padded a 3.
  * Conta PRDs do projeto (inclusive dismissed) + 1 — assume não-recicláveis.
  */
@@ -277,7 +292,8 @@ export async function listPrdsApprovedNotMaterialized(
   const { data: materialized, error: tErr } = await supabase
     .from("Task")
     .select("productRequirementId")
-    .in("productRequirementId", prdIds);
+    .in("productRequirementId", prdIds)
+    .is("dismissedAt", null);
   if (tErr) throw tErr;
 
   const materializedSet = new Set(

@@ -9,7 +9,7 @@
       "title": "Implementar daemon-ctl.sh com start/stop/status",
       "description": "Script bash. nohup detach, PID file, status que cruza PID + ps + DB.",
       "acceptanceCriteria": [
-        "scripts/forge/daemon-ctl.sh existe e é executável",
+        "scripts/daemon/daemon-ctl.sh existe e é executável",
         "Suporta start / stop / status",
         "start usa nohup + disown, redirect stdout/stderr pra ~/.forge/daemon.log",
         "start escreve PID em ~/.forge/daemon.pid",
@@ -21,19 +21,19 @@
       "verifiable": [
         {
           "kind": "lint",
-          "command_or_query": "test -x scripts/forge/daemon-ctl.sh && echo OK",
+          "command_or_query": "test -x scripts/daemon/daemon-ctl.sh && echo OK",
           "expected": "OK"
         },
         {
           "kind": "lint",
-          "command_or_query": "shellcheck scripts/forge/daemon-ctl.sh 2>&1 | wc -l",
+          "command_or_query": "shellcheck scripts/daemon/daemon-ctl.sh 2>&1 | wc -l",
           "expected": "0"
         }
       ],
       "dependsOn": [],
       "estimateMinutes": 30,
       "touches": [
-        "scripts/forge/daemon-ctl.sh"
+        "scripts/daemon/daemon-ctl.sh"
       ],
       "agentProfile": "ops",
       "passes": true
@@ -50,12 +50,12 @@
       "verifiable": [
         {
           "kind": "lint",
-          "command_or_query": "grep -cE 'logs\\)|restart\\)' scripts/forge/daemon-ctl.sh",
+          "command_or_query": "grep -cE 'logs\\)|restart\\)' scripts/daemon/daemon-ctl.sh",
           "expected": "2"
         },
         {
           "kind": "lint",
-          "command_or_query": "shellcheck scripts/forge/daemon-ctl.sh 2>&1 | wc -l",
+          "command_or_query": "shellcheck scripts/daemon/daemon-ctl.sh 2>&1 | wc -l",
           "expected": "0"
         }
       ],
@@ -64,7 +64,7 @@
       ],
       "estimateMinutes": 15,
       "touches": [
-        "scripts/forge/daemon-ctl.sh"
+        "scripts/daemon/daemon-ctl.sh"
       ],
       "agentProfile": "ops",
       "passes": true
@@ -81,19 +81,19 @@
       "verifiable": [
         {
           "kind": "typecheck",
-          "command_or_query": "npx tsc --noEmit scripts/forge/daemon.ts",
+          "command_or_query": "npx tsc --noEmit scripts/daemon/daemon.ts",
           "expected": ""
         },
         {
           "kind": "lint",
-          "command_or_query": "grep -c 'shutdown signal received' scripts/forge/daemon.ts",
+          "command_or_query": "grep -c 'shutdown signal received' scripts/daemon/daemon.ts",
           "expected": "1"
         }
       ],
       "dependsOn": [],
       "estimateMinutes": 10,
       "touches": [
-        "scripts/forge/daemon.ts"
+        "scripts/daemon/daemon.ts"
       ],
       "agentProfile": "code",
       "passes": true

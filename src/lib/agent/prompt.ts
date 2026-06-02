@@ -6,6 +6,7 @@ import {
   type BriefingSubPhase,
 } from "@/lib/design-sessions/constants";
 import { generateSchemaDocsForPrompt } from "./schemas";
+import { buildSetupStackPrd } from "./agents/vitor/setup-stack-template";
 import type {
   ActiveDecision,
   OpenQuestion,
@@ -671,6 +672,50 @@ Verifique o valor de briefingSubPhase no contexto da sessão.
 `;
 }
 
+/**
+ * Seção da 1ª análise do PRD Quick-Ask Launcher (step prd_briefing).
+ * Adaptativa (scaffold vs perguntar), sempre emite PRD-000 Setup & Stack como
+ * raiz do DAG. O conteúdo do PRD-000 vem do template canônico (single source).
+ */
+function buildPrdBriefingSection(): string {
+  const s = buildSetupStackPrd();
+  const acLines = s.acceptanceCriteria
+    .map((ac) => `    • Given ${ac.given} / When ${ac.when} / Then ${ac.then}`)
+    .join("\n");
+
+  return `
+## Modo PRD Briefing — 1ª análise do launcher
+
+Você recebeu uma PRD Session criada pelo Quick-Ask Launcher. Ela traz **insumos linkados** (reuniões, planilhas, GitHub) e, opcionalmente, um **brief curto** do PM. Seu trabalho aqui é fazer a **primeira análise** e propor o esqueleto de PRDs — depois refinar em conversa.
+
+### Passo 0 — Leia os insumos antes de qualquer coisa
+Os insumos NAO vêm inline. Liste-os e leia o conteúdo via \`read_context_source({ sourceId })\` antes de propor. Não invente o que não está nos insumos nem no brief.
+
+### Comportamento ADAPTATIVO (decida pela qualidade do contexto)
+- **Contexto rico** (insumos densos e/ou brief claro): **CRIE o scaffold inteiro JÁ, sem pedir confirmação.** Num ÚNICO call \`propose_prd({ prds: [...] })\` passe TODOS os PRDs de uma vez (PRD-000 + features). NÃO liste em texto e espere "pode criar" — isso desperdiça turno. NÃO faça um call por PRD — o turno para no meio. Depois de criar, faça o resumo curto + 1 pergunta de alinhamento (ver "Chat enxuto").
+- **Contexto ralo/ambíguo** (sem insumo e brief vago): **NAO** crie PRDs ainda. Faça 2-3 perguntas-chave (persona principal, plataforma, integrações críticas) e só monte o scaffold (também em UM \`propose_prd({ prds: [...] })\`) depois de alinhar.
+
+### REGRA DURA — PRD-000 Setup & Stack SEMPRE
+O **primeiro** PRD do scaffold é SEMPRE a fundação do projeto, como **raiz do DAG**. Use o conteúdo abaixo (stack-da-casa) como base, adaptando ao projeto. Se os insumos pedirem outra stack, troque e justifique no \`problem\`.
+
+PRD-000 (template-da-casa):
+  título: ${s.title}
+  oneLiner: ${s.oneLiner}
+  problem: ${s.problem}
+  goal: ${s.goal}
+  acceptanceCriteria:
+${acLines}
+
+O \`propose_prd\` retorna \`{ created: [{ id, reference, title, status }] }\`. Use esses ids: ligue CADA feature ao PRD-000 com \`link_prd_dependency({ fromPrdId: <id da feature>, toPrdId: <id do PRD-000>, kind: 'blocks' })\` — toda feature depende da fundação. NUNCA crie dependência de saída no PRD-000 (ele é a raiz).
+
+### Nível MACRO (não detalhe demais agora)
+O scaffold é macro: title, oneLiner, problem e acceptanceCriteria objetivos. Não quebre em stories nem encha de detalhe — isso vem no refino e no preparo pra Forja. O objetivo é dar ao PM uma leitura estruturada rápida.
+
+### Chat enxuto, banco rico
+Tudo que você cria via \`propose_prd\` aparece na árvore lateral. NÃO repita o conteúdo dos PRDs no chat. Sua resposta em texto tem no máximo ~8 linhas: a lista de títulos + uma pergunta de alinhamento.
+`;
+}
+
 export function buildSystemPrompt({
   sessionTitle,
   sessionType,
@@ -1092,6 +1137,9 @@ Use \`write_tech_specs({ action:'update', stack?, performance? })\` para campos 
 `
       : "";
 
+  const prdBriefingSection =
+    currentStepKey === "prd_briefing" ? buildPrdBriefingSection() : "";
+
   const memorySection = buildMemorySection({
     sessionTitle,
     sessionType,
@@ -1127,6 +1175,7 @@ Use \`write_tech_specs({ action:'update', stack?, performance? })\` para campos 
     hypotheses: hypothesesSection,
     technical_specs: technicalSpecsSection,
     briefing: briefingSection,
+    prd_briefing: prdBriefingSection,
   };
 
   // Pra inception/CI mantem ordem antiga (preWork, briefing, productVision...)
@@ -1145,7 +1194,9 @@ Use \`write_tech_specs({ action:'update', stack?, performance? })\` para campos 
     "technical_specs",
   ];
   const sectionOrder =
-    sessionType === "super" ? steps.map((s) => s.key) : FIXED_ORDER_LEGACY;
+    sessionType === "super" || sessionType === "prd_session"
+      ? steps.map((s) => s.key)
+      : FIXED_ORDER_LEGACY;
   const activeSections = sectionOrder
     .filter((key) => stepKeysSet.has(key))
     .map((key) => sectionByStep[key])
@@ -1335,14 +1386,6 @@ Execute conforme a Regra 0 (Confirmacao proporcional ao risco):
   // foi importado. Fora do cache do prompt (já que muda quando o user
   // adiciona/remove transcripts mid-session).
   const transcriptsBlock = buildTranscriptsBlock(transcripts ?? []);
-
-  // Diagnostic log — remover depois de confirmar que transcripts aparecem.
-  console.log("[Vitor buildSystemPrompt]", {
-    currentStepKey,
-    transcriptsCount: transcripts?.length ?? 0,
-    transcriptsBlockLen: transcriptsBlock.length,
-    firstTitle: transcripts?.[0]?.meetingTitle ?? null,
-  });
 
   const volatileSuffix = `${modeBlock}${projectMemorySection}${memorySection}${transcriptsBlock}
 

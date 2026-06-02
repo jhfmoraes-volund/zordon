@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Upload, MessageSquare, Sparkles } from "lucide-react";
+import { MessageSquare, Sparkles } from "lucide-react";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -11,7 +10,7 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { cn } from "@/lib/utils";
 
-type SessionType = "inception" | "prd-upload" | "prd-quickask";
+type SessionType = "inception" | "prd-quickask";
 
 type Props = {
   open: boolean;
@@ -25,12 +24,6 @@ const SESSION_OPTIONS = [
     icon: Sparkles,
     title: "Inception",
     description: "Sessão de imersão completa para investigar e validar novos produtos",
-  },
-  {
-    type: "prd-upload" as const,
-    icon: Upload,
-    title: "PRD Session (Upload)",
-    description: "Cole ou arraste markdowns de PRDs prontos",
   },
   {
     type: "prd-quickask" as const,

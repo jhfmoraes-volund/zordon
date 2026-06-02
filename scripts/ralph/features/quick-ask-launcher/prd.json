@@ -1,0 +1,230 @@
+{
+  "feature": "quick-ask-launcher",
+  "title": "Quick-Ask vira Launcher de Discovery com insumos + 1ª análise do Vitor no chat",
+  "prd_path": "docs/prd/done/prd-quick-ask-launcher.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "QAL-001",
+      "title": "Migration — campos launcherBrief + firstAnalysisStatus na DesignSession",
+      "description": "ALTER \"DesignSession\" adicionando launcherBrief (text, nullable) e firstAnalysisStatus (text NOT NULL default 'pending', CHECK in pending|done|skipped). Regenerar database.types.ts.",
+      "acceptanceCriteria": [
+        "supabase/migrations/20260601e_design_session_launcher_fields.sql aplicado via psql",
+        "Coluna launcherBrief existe (nullable text)",
+        "Coluna firstAnalysisStatus existe com CHECK (pending|done|skipped) e default 'pending'",
+        "src/lib/supabase/database.types.ts regenerado com os 2 campos"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='DesignSession' AND column_name IN ('launcherBrief','firstAnalysisStatus')",
+          "expected": "2"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "supabase/migrations/20260601e_design_session_launcher_fields.sql",
+        "src/lib/supabase/database.types.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
+    },
+    {
+      "id": "QAL-002",
+      "title": "Template Setup & Stack (PRD-000 da casa)",
+      "description": "src/lib/agent/agents/vitor/setup-stack-template.ts exporta buildSetupStackPrd(overrides?) retornando um ProposePrdInput macro com a stack-da-casa (Next + Supabase): title, oneLiner, problem, acceptanceCriteria, dependencies=[]. Overrides permitem trocar framework/db.",
+      "acceptanceCriteria": [
+        "buildSetupStackPrd() retorna objeto que passa o Zod de ProposePrdInput (parse sem throw)",
+        "dependencies é [] (raiz do DAG)",
+        "Override { framework: 'remix' } reflete no oneLiner/AC",
+        "Teste vitest cobre default + 1 override"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "npx tsx src/lib/agent/agents/vitor/setup-stack-template.test.ts",
+          "expected": "All setup-stack-template tests passed."
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitor/setup-stack-template.ts",
+        "src/lib/agent/agents/vitor/setup-stack-template.test.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
+    },
+    {
+      "id": "QAL-003",
+      "title": "Endpoints draft/finalize/delete + DAL da session launcher",
+      "description": "Ciclo de vida draft-no-open. dal.ts ganha createPrdDraftSession({projectId, actorMemberId}) (INSERT DesignSession type=prd_session, subKind=quick_ask, status='draft', firstAnalysisStatus='pending'), finalizePrdLauncherSession({sessionId, brief}) (valida brief>=10 OU >=1 insumo linkado; set launcherBrief + status='in_progress') e deletePrdDraftSession (só se status='draft'). Rotas: POST draft, PATCH [sessionId]/finalize, DELETE [sessionId].",
+      "acceptanceCriteria": [
+        "POST /api/sessions/prd/quick-ask/draft {projectId} retorna 202 + sessionId com status='draft'",
+        "PATCH .../[sessionId]/finalize com >=1 insumo linkado e sem brief retorna 202; status vira 'in_progress'",
+        "PATCH finalize sem brief e sem insumo retorna 422",
+        "DELETE .../[sessionId] em session draft retorna 204 e remove a session",
+        "DELETE em session já finalizada (status!='draft') é no-op/403",
+        "Nenhuma row em PrdQuickAskJob é criada"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "PATCH /api/sessions/prd/quick-ask/[id]/finalize {} em draft sem brief e sem insumo",
+          "expected": "status 422"
+        }
+      ],
+      "dependsOn": ["QAL-001"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/api/sessions/prd/quick-ask/draft/route.ts",
+        "src/app/api/sessions/prd/quick-ask/[sessionId]/route.ts",
+        "src/lib/sessions/prd-session/dal.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
+    },
+    {
+      "id": "QAL-004",
+      "title": "Launcher sheet refatorado (draft no open + insumos ao vivo + finalize)",
+      "description": "quick-ask-sheet.tsx remove polling/jobStatus/lista-de-PRDs. Ao abrir, cria session draft (POST draft) e usa o sessionId pra linkar insumos AO VIVO via context-import. Brief opcional. Botão 'Criar e abrir chat' habilita com >=1 insumo OU brief>=10; chama finalize e router.push pro chat. Cancelar/fechar sem finalizar chama DELETE.",
+      "acceptanceCriteria": [
+        "Shell preservado: continua o mesmo ResponsiveSheet size=lg (não trocar por dialog/página)",
+        "Abrir a sheet cria a session draft (POST draft) e a usa pra linkar insumos",
+        "Sheet exibe InsumosButton + textarea de brief marcado como opcional",
+        "Botão de submit desabilitado quando sem insumo E brief<10 chars",
+        "Submit chama PATCH finalize e navega pra /projects/[id]/sessions/[sessionId]",
+        "Cancelar/fechar sem finalizar chama DELETE da draft",
+        "Nenhum setInterval/poll remanescente no componente"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir launcher, anexar 1 transcript sem brief, clicar Criar e abrir chat",
+          "expected": "navega pro chat da session com o insumo linkado; fechar antes deleta a draft"
+        }
+      ],
+      "dependsOn": ["QAL-003"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/sessions/prd-session/quick-ask-sheet.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": true
+    },
+    {
+      "id": "QAL-005",
+      "title": "Prompt da 1ª análise adaptativa + regra PRD-000 sempre",
+      "description": "Step prd_briefing em src/lib/agent/prompt.ts ganha diretriz de 1ª análise: ler insumos via read_context_source; se ricos, propor scaffold macro (propose_prd + link_prd_dependency, todos dependsOn PRD-000); se ralos, perguntar 2-3 coisas antes. Regra dura: SEMPRE emitir PRD-000 Setup & Stack como raiz (base buildSetupStackPrd).",
+      "acceptanceCriteria": [
+        "Prompt prd_briefing instrui comportamento adaptativo (scaffold vs perguntar) explícito",
+        "Prompt obriga PRD-000 Setup & Stack como raiz do DAG, referenciando o template",
+        "Smoke: kickoff com insumo rico produz >=2 PRDs incluindo um PRD-000 com dependencies vazio",
+        "Smoke: kickoff sem insumo e brief curto produz perguntas (nenhum propose_prd no 1º turno)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Criar session via launcher com transcript rico e observar 1º turno do Vitor",
+          "expected": "scaffold com PRD-000 raiz + features dependsOn 000"
+        }
+      ],
+      "dependsOn": ["QAL-002"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/prompt.ts"
+      ],
+      "agentProfile": "agent",
+      "passes": true
+    },
+    {
+      "id": "QAL-006",
+      "title": "Kickoff trigger (chat auto-roda 1ª análise + marca status)",
+      "description": "prd-briefing-step.tsx: on mount, se thread vazio e firstAnalysisStatus==='pending', auto-submete kickoff pro /api/design-sessions/[id]/chat com kickoff=true (guard via useRef). A rota /chat trata kickoff=true: injeta launcherBrief + insumos no 1º turno, roda a análise e marca firstAnalysisStatus='done'.",
+      "acceptanceCriteria": [
+        "Mount de session pending com thread vazio dispara exatamente 1 kickoff (sem duplicar em re-render)",
+        "Rota /chat com kickoff=true injeta brief+insumos e roda 1ª análise",
+        "Ao concluir o turno, firstAnalysisStatus vira 'done' no DB",
+        "Re-abrir a session (status já 'done') NÃO re-dispara kickoff"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Criar session via launcher e observar: Vitor responde sozinho 1x; recarregar não re-dispara",
+          "expected": "1ª análise automática única; status=done após"
+        }
+      ],
+      "dependsOn": ["QAL-001", "QAL-004", "QAL-005"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/sessions/prd-session/prd-briefing-step.tsx",
+        "src/app/api/design-sessions/[id]/chat/route.ts"
+      ],
+      "agentProfile": "ui",
+      "passes": true
+    },
+    {
+      "id": "QAL-007",
+      "title": "Cleanup — aposentar caminho single-shot",
+      "description": "Remover generatePrdsFromBrief (prd-quickask.ts), o worker runPrdQuickAskJob/enqueuePrdQuickAskJob (jobs.ts) e as rotas antigas start/route.ts + jobs/[id]/route.ts, confirmando 0 call-sites após o fluxo novo. Não remover a tabela PrdQuickAskJob nesta story.",
+      "acceptanceCriteria": [
+        "grep por generatePrdsFromBrief|runPrdQuickAskJob|enqueuePrdQuickAskJob retorna 0 call-sites",
+        "Arquivos start/route.ts e jobs/[id]/route.ts removidos",
+        "Build e typecheck verdes após remoção"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -rn 'generatePrdsFromBrief\\|runPrdQuickAskJob\\|enqueuePrdQuickAskJob' src/ | wc -l",
+          "expected": "0"
+        }
+      ],
+      "dependsOn": ["QAL-006"],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/lib/sessions/prd-session/jobs.ts",
+        "src/lib/agent/vitor/prompts/prd-quickask.ts",
+        "src/app/api/sessions/prd/quick-ask/start/route.ts",
+        "src/app/api/sessions/prd/quick-ask/jobs/[id]/route.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
+    }
+  ]
+}

@@ -42,12 +42,17 @@ const ALLOWED_TRANSITIONS: ReadonlyArray<readonly [PlanningPhase, PlanningPhase]
   ["proposing", "approving"],
   ["proposing", "idle"], // reset briefing
   ["approving", "closed"],
-  // Staging-commit model: PM can conclude (close) from any active phase.
-  // The concludePlanning DAL applies pending actions as a side effect, so the
-  // shortcut is safe — no "0 pending" precondition needed.
+  // PM can conclude (close) from any active phase. The concludePlanning DAL
+  // applies pending actions as a side effect, so the shortcut is safe — no
+  // "0 pending" precondition needed.
   ["idle", "closed"],
   ["reading", "closed"],
   ["proposing", "closed"],
+  // "1 planning viva por sprint": uma planning concluída pode ser REABERTA pra
+  // refino. Volta pra `proposing` (estado de edição/proposta). O re-conclude é
+  // idempotente — applyPendingActionsForPlanning só pega actions ainda pending,
+  // então actions já aplicadas não duplicam tasks.
+  ["closed", "proposing"],
   ["closed", "archived"],
 ];
 
@@ -247,6 +252,22 @@ export function transition(
         };
       }
       stamps.closedAt = now();
+      break;
+    }
+
+    case "closed->proposing": {
+      // Reabrir planning concluída pra refino. Só PM. Não stampa nada aqui;
+      // o caller (reopenPlanning) anula closedAt no UPDATE — PhaseStamps só
+      // seta valores, não consegue expressar NULL.
+      if (actor !== "pm") {
+        return {
+          ok: false,
+          from,
+          to,
+          reason: "wrong_actor",
+          detail: "só PM reabre planning concluída",
+        };
+      }
       break;
     }
 

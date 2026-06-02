@@ -1,0 +1,77 @@
+{
+  "feature": "sial-diretorio-publico",
+  "title": "SIAL Diretório Público — profissionais habilitados (leiloeiro/tradutor)",
+  "prd_path": "docs/prd/backlog/prd-sial-diretorio-publico.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-DIR-001",
+      "title": "Migration — view sial_diretorio_publico (+ GRANT anon)",
+      "description": "Cria a view mínima de §7 com documento mascarado e situacao derivada.",
+      "acceptanceCriteria": [
+        "View existe e filtra tipo IN (leiloeiro,tradutor)",
+        "Documento aparece mascarado (não completo)",
+        "anon tem SELECT"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.views WHERE table_name='sial_diretorio_publico'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DIR-002",
+      "title": "API pública de busca de profissionais",
+      "description": "GET /api/publico/profissionais (?tipo=&q=) e GET /:id, sem auth, lendo a view.",
+      "acceptanceCriteria": [
+        "Busca por nome e filtro por tipo funcionam",
+        "Resposta traz documento mascarado, nunca completo"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DIR-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/publico/profissionais/route.ts", "src/app/api/publico/profissionais/[id]/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DIR-003",
+      "title": "Página pública do diretório + atalho denunciar",
+      "description": "Página em (publico) com busca, lista e botão denunciar que leva ao fluxo com o alvo pré-selecionado.",
+      "acceptanceCriteria": [
+        "Sem login, lista e busca funcionam",
+        "Botão denunciar passa o id do profissional ao fluxo de denúncia"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DIR-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(publico)/profissionais/page.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DIR-004",
+      "title": "Smoke — diretório sem dados sensíveis",
+      "description": "scripts/smoke/diretorio-publico.ts busca profissionais e garante ausência de documento completo.",
+      "acceptanceCriteria": [
+        "Busca retorna ao menos um profissional (mock-data)",
+        "Nenhum CPF/CNPJ completo na resposta"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='sial_diretorio_publico' AND column_name='documento'", "expected": "0" }
+      ],
+      "dependsOn": ["SIAL-DIR-003"],
+      "estimateMinutes": 20,
+      "touches": ["scripts/smoke/diretorio-publico.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

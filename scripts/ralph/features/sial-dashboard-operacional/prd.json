@@ -1,0 +1,77 @@
+{
+  "feature": "sial-dashboard-operacional",
+  "title": "SIAL Dashboard Operacional — cockpit em tempo quase real",
+  "prd_path": "docs/prd/backlog/prd-sial-dashboard-operacional.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-DASH-001",
+      "title": "Migration — view de métricas (sial_dashboard_metrics)",
+      "description": "Cria a view (ou materialized) de §7 agregando Processo por status.",
+      "acceptanceCriteria": [
+        "View sial_dashboard_metrics existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.views WHERE table_name='sial_dashboard_metrics'", "expected": ">=0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DASH-002",
+      "title": "Lib de métricas + API metrics/fluxo",
+      "description": "src/lib/sial/dashboard.ts (agregações) + GET /api/dashboard/metrics e /fluxo; só servidor.",
+      "acceptanceCriteria": [
+        "metrics retorna counts por status + vencendo + carga",
+        "fluxo retorna série por período de Evento",
+        "Não-servidor recebe 403"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DASH-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/dashboard.ts", "src/app/api/dashboard/metrics/route.ts", "src/app/api/dashboard/fluxo/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DASH-003",
+      "title": "Painel (UI) com cartões + drill-down",
+      "description": "Página backoffice com indicadores e clique levando à fila filtrada.",
+      "acceptanceCriteria": [
+        "Cartões mostram os indicadores",
+        "Clique abre /analise/fila com filtro",
+        "Carga por analista listada"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DASH-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(backoffice)/dashboard/page.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DASH-004",
+      "title": "Smoke — métricas batem com o banco",
+      "description": "scripts/smoke/dashboard-operacional.ts compara metrics com counts diretos.",
+      "acceptanceCriteria": [
+        "pendentes == SELECT count(*) status='enviado_analise'",
+        "Painel carrega sem erro"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Processo\" WHERE status='enviado_analise'", "expected": ">=0" }
+      ],
+      "dependsOn": ["SIAL-DASH-003"],
+      "estimateMinutes": 20,
+      "touches": ["scripts/smoke/dashboard-operacional.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

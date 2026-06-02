@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ModuleRow } from "./module-row";
 import { StoryRow } from "./story-row";
+import { TaskRow } from "./task-row";
 import type {
   HierarchyModuleNode,
   HierarchyTreeCallbacks,
@@ -53,10 +54,13 @@ export function HierarchyTree({
     () => new Map(),
   );
 
+  const childCount = (mod: HierarchyModuleNode) =>
+    mod.stories.length + (mod.looseTasks?.length ?? 0);
+
   const isExpanded = (mod: HierarchyModuleNode) => {
     const override = userToggled.get(mod.key);
     if (override !== undefined) return override;
-    return autoExpandWithStories && mod.stories.length > 0;
+    return autoExpandWithStories && childCount(mod) > 0;
   };
 
   const toggle = (mod: HierarchyModuleNode) => {
@@ -115,6 +119,16 @@ export function HierarchyTree({
                 onOpenTask={onOpenTask}
                 onOpenAction={onOpenAction}
               />
+            ))}
+            {mod.looseTasks?.map((t) => (
+              <li key={t.id} className="px-3 py-2">
+                <TaskRow
+                  task={t}
+                  decorations={taskDecorations?.(t.id)}
+                  onOpenTask={onOpenTask}
+                  onOpenAction={onOpenAction}
+                />
+              </li>
             ))}
           </ModuleRow>
         </li>

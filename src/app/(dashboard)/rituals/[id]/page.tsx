@@ -35,6 +35,7 @@ export default function RitualDetailPage({
   const [planning, setPlanning] = useState<PlanningDetail | null>(null);
   const [loadError, setLoadError] = useState<"notfound" | "forbidden" | null>(null);
   const [concluding, setConcluding] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
@@ -161,10 +162,36 @@ export default function RitualDetailPage({
       title: "Concluir planning?",
       description:
         pending > 0
-          ? `${pending} proposta(s) pendente(s) serão aplicadas. Esta ação é irreversível — pra ajustar depois, abra uma nova planning na mesma sprint.`
-          : "Esta ação é irreversível. Pra ajustar depois, abra uma nova planning na mesma sprint.",
+          ? `${pending} proposta(s) pendente(s) serão aplicadas e a planning será publicada. Você pode reabrir depois pra refinar.`
+          : "A planning será publicada. Você pode reabrir depois pra refinar.",
       confirmLabel: "Concluir",
       onConfirm: doConclude,
+    });
+  };
+
+  // ─── Reabrir planning concluída ───────────────────────────────────────
+
+  const doReopen = async () => {
+    setReopening(true);
+    try {
+      await fetchOrThrow(`/api/planning/${id}/reopen`, { method: "POST" });
+      await loadPlanning();
+      toast.success("Planning reaberta. Refine e conclua de novo quando terminar.");
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao reabrir planning" });
+    } finally {
+      setReopening(false);
+    }
+  };
+
+  const handleReopen = () => {
+    if (!planning) return;
+    setConfirmState({
+      title: "Reabrir planning?",
+      description:
+        "A planning volta pra edição. As tasks já criadas são preservadas — ao concluir de novo, só as propostas novas são aplicadas.",
+      confirmLabel: "Reabrir",
+      onConfirm: doReopen,
     });
   };
 
@@ -240,6 +267,9 @@ export default function RitualDetailPage({
 
   // ─── Chat panel ───────────────────────────────────────────────────────
 
+  // Planning concluída/arquivada é read-only: pra editar, o PM reabre primeiro.
+  const isClosed = planning.phase === "closed" || planning.phase === "archived";
+
   const chatPanel = (
     <ConversationPanel
       agent="vitoria"
@@ -254,6 +284,8 @@ export default function RitualDetailPage({
       onOpenChange={setMobileOpen}
       planMode={planMode}
       onPlanModeChange={setPlanMode}
+      composerSubmitDisabled={isClosed}
+      placeholder={isClosed ? "Planning concluída — reabra pra editar" : undefined}
       className="h-full"
     />
   );
@@ -270,6 +302,8 @@ export default function RitualDetailPage({
         treeStats={ribbonStats}
         concluding={concluding}
         onConclude={handleConclude}
+        reopening={reopening}
+        onReopen={handleReopen}
         onOpenContext={() => setContextSheetOpen(true)}
         onEdit={() => setEditSheetOpen(true)}
         threadId={threadId}

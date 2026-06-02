@@ -8,23 +8,12 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { fmtDateNumeric } from "@/lib/date-utils";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
-import { File, Loader2, Mic, Paperclip, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ConversationPanel } from "@/components/ui/conversation";
 import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
-import {
-  TranscriptModal,
-  type ImportedTranscript,
-} from "@/components/agent/context-import";
 import { DesignSessionContextSheet } from "@/components/design-session/design-session-context-sheet";
-import {
-  useSessionFiles,
-  type SessionFileRow,
-} from "@/hooks/design-session/use-session-files";
 import { PrdBriefingRibbon } from "@/components/sessions/prd-session/prd-briefing-ribbon";
 import { PrdCard } from "@/components/sessions/prd-session/prd-card";
 import { PrdDetailSheet } from "@/components/prd/prd-detail-sheet";
@@ -32,12 +21,6 @@ import type { ProductRequirementRow } from "@/lib/dal/product-requirements";
 
 const WELCOME_TEXT =
   "Olá! Sou o Vitor. Vamos refinar esses PRDs juntos antes de mandar pra Forja — me peça pra detalhar AC, descobrir gaps, dividir ou consolidar PRDs.";
-
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function computeStats(prds: ProductRequirementRow[]) {
   let ready = 0;
@@ -68,27 +51,24 @@ type Props = {
 export function PrdBriefingStep({ sessionId, projectId }: Props) {
   const [approvingAll, setApprovingAll] = useState(false);
 
-  const {
-    uploading,
-    uploadFiles: uploadFilesHook,
-    deleteFile,
-    getExtractedText,
-  } = useSessionFiles(sessionId);
-
   const [prds, setPrds] = useState<ProductRequirementRow[]>([]);
   const [prdsLoading, setPrdsLoading] = useState(true);
   const [selectedPrdId, setSelectedPrdId] = useState<string | null>(null);
-  const [pendingFiles, setPendingFiles] = useState<SessionFileRow[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
   const [inputText, setInputText] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [roamModalOpen, setRoamModalOpen] = useState(false);
-  const [transcripts, setTranscripts] = useState<ImportedTranscript[]>([]);
   const [insumosOpen, setInsumosOpen] = useState(false);
   const [insumosCount, setInsumosCount] = useState(0);
-  const [insumosRefresh, setInsumosRefresh] = useState(0);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Kickoff (QAL-006): 1ª análise automática do Vitor ao abrir uma session
+  // criada via launcher (firstAnalysisStatus=pending + thread vazia).
+  const [firstAnalysisStatus, setFirstAnalysisStatus] = useState<string | null>(
+    null,
+  );
+  const [launcherBrief, setLauncherBrief] = useState<string | null>(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [threadHasMessages, setThreadHasMessages] = useState(false);
+  const kickoffFiredRef = useRef(false);
+
   const threadIdRef = useRef<string | null>(threadId);
 
   useEffect(() => {
@@ -138,7 +118,11 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
     fetch(`/api/design-sessions/${sessionId}/chat?channel=web&limit=100`)
       .then((r) => (r.ok ? r.json() : null))
       .then((result) => {
-        if (cancelled || !result) return;
+        if (cancelled) return;
+        if (!result) {
+          setHistoryLoaded(true);
+          return;
+        }
         if (result.threadId) setThreadId(result.threadId);
         if (result.messages?.length) {
           const restored = result.messages
@@ -153,15 +137,68 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
               parts: [{ type: "text" as const, text: m.content }],
             }));
           setMessages([initialMsg, ...restored]);
+          setThreadHasMessages(true);
         }
+        setHistoryLoaded(true);
       })
       .catch((err) => {
         console.error("[PrdBriefingStep] Failed to load chat history:", err);
+        if (!cancelled) setHistoryLoaded(true);
       });
     return () => {
       cancelled = true;
     };
   }, [sessionId, setMessages, initialMsg]);
+
+  // Kickoff (QAL-006): lê o status da 1ª análise + o brief do launcher.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/design-sessions/${sessionId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (cancelled || !s) return;
+        setFirstAnalysisStatus(
+          (s as { firstAnalysisStatus?: string | null }).firstAnalysisStatus ??
+            null,
+        );
+        setLauncherBrief(
+          (s as { launcherBrief?: string | null }).launcherBrief ?? null,
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  // Kickoff (QAL-006): quando a session foi criada via launcher e ainda não
+  // teve a 1ª análise (status=pending) e a thread está vazia, dispara UMA vez
+  // a análise automática do Vitor. O guard via ref + flip otimista + a checagem
+  // de thread-vazia impedem duplicar; o server marca `done` no fim do turno.
+  useEffect(() => {
+    if (kickoffFiredRef.current) return;
+    if (!historyLoaded || threadHasMessages) return;
+    if (firstAnalysisStatus !== "pending") return;
+    if (status !== "ready") return;
+
+    // ref guard impede re-disparo nesta instância; server marca `done` pra
+    // reaberturas. Sem setState aqui (evita cascading render).
+    kickoffFiredRef.current = true;
+
+    const brief = launcherBrief?.trim();
+    const text = brief
+      ? brief
+      : "Analise os insumos que anexei e proponha os PRDs (incluindo o PRD-000 Setup & Stack).";
+
+    sendMessage({ text }, { body: { kickoff: true } });
+  }, [
+    historyLoaded,
+    threadHasMessages,
+    firstAnalysisStatus,
+    status,
+    launcherBrief,
+    sendMessage,
+  ]);
 
   // Load PRDs
   const loadPrds = useCallback(async () => {
@@ -189,207 +226,12 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
     }
   }, [status, loadPrds]);
 
-  // Load transcripts
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/design-sessions/${sessionId}/transcripts`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        if (cancelled || !json) return;
-        setTranscripts((json.imported as ImportedTranscript[]) ?? []);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId]);
-
-  const loadTranscripts = useCallback(async () => {
-    try {
-      const r = await fetch(`/api/design-sessions/${sessionId}/transcripts`);
-      if (!r.ok) return;
-      const json = await r.json();
-      setTranscripts((json.imported as ImportedTranscript[]) ?? []);
-    } catch {
-      /* silencioso */
-    }
-  }, [sessionId]);
-
-  const handleUnlinkTranscript = useCallback(
-    async (transcriptId: string) => {
-      const prev = transcripts;
-      setTranscripts((cur) => cur.filter((t) => t.id !== transcriptId));
-      const res = await fetch(
-        `/api/design-sessions/${sessionId}/transcripts/${transcriptId}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) setTranscripts(prev);
-      else setInsumosRefresh((k) => k + 1);
-    },
-    [sessionId, transcripts],
-  );
-
-  const uploadFiles = useCallback(
-    async (fileList: FileList) => {
-      const uploaded = await uploadFilesHook(fileList);
-      if (uploaded.length > 0) {
-        setPendingFiles((cur) => [...cur, ...uploaded]);
-      }
-    },
-    [uploadFilesHook],
-  );
-
-  const removePendingFile = (id: string) => {
-    setPendingFiles((cur) => cur.filter((f) => f.id !== id));
-    void deleteFile(id);
-  };
-
-  const handleSend = useCallback(async () => {
-    if ((!inputText.trim() && !pendingFiles.length) || uploading || isStreaming)
-      return;
-    let fullMessage = inputText.trim();
-    if (pendingFiles.length > 0) {
-      const texts = await Promise.all(
-        pendingFiles.map(async (f) => {
-          const text = await getExtractedText(f.id);
-          const header = `\n---\nArquivo: ${f.name} (${formatSize(f.size)})`;
-          if (text && text.trim()) return `${header}\n${text}`;
-          return `${header}\n[Conteúdo não extraído]`;
-        }),
-      );
-      const fileTexts = texts.join("");
-      if (fileTexts) {
-        fullMessage = fullMessage
-          ? `${fullMessage}\n${fileTexts}`
-          : `Documentos anexados:${fileTexts}`;
-      }
-    }
-    if (!fullMessage) return;
+  const handleSend = useCallback(() => {
+    const text = inputText.trim();
+    if (!text || isStreaming) return;
     setInputText("");
-    setPendingFiles([]);
-    sendMessage({ text: fullMessage });
-  }, [
-    inputText,
-    pendingFiles,
-    uploading,
-    isStreaming,
-    sendMessage,
-    getExtractedText,
-  ]);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      if (e.dataTransfer.files.length) {
-        uploadFiles(e.dataTransfer.files);
-      }
-    },
-    [uploadFiles],
-  );
-
-  const composerLeftActions = (
-    <>
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.xlsx,.xls"
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files) uploadFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={uploading || isStreaming}
-        aria-label="Anexar arquivo"
-      >
-        <Paperclip className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        onClick={() => setRoamModalOpen(true)}
-        disabled={isStreaming}
-        title="Importar reunião"
-        aria-label="Importar reunião"
-      >
-        <Mic className="h-4 w-4" />
-      </Button>
-    </>
-  );
-
-  const composerAboveSlot = (
-    <>
-      {transcripts.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-b border-border/50 px-4 py-2">
-          {transcripts.map((t) => (
-            <div
-              key={t.id}
-              className="flex items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1 text-xs"
-              title={t.summary ?? t.meetingTitle ?? undefined}
-            >
-              <Mic className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="max-w-[180px] truncate font-medium">
-                {t.meetingTitle}
-              </span>
-              <span className="text-muted-foreground">
-                · {fmtDateNumeric(t.meetingStart)}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleUnlinkTranscript(t.id)}
-                aria-label="Remover transcrição"
-              >
-                <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {uploading && (
-        <div className="flex items-center gap-2 px-4 py-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-xs">Processando arquivos...</span>
-        </div>
-      )}
-
-      {pendingFiles.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-t border-border/50 px-4 py-2">
-          {pendingFiles.map((f) => (
-            <div
-              key={f.id}
-              className="flex items-center gap-2 rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs"
-            >
-              <File className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="max-w-[150px] truncate font-medium">
-                {f.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => removePendingFile(f.id)}
-                aria-label="Remover anexo"
-              >
-                <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-
-  const submitDisabled =
-    (!inputText.trim() && !pendingFiles.length) || uploading;
+    sendMessage({ text });
+  }, [inputText, isStreaming, sendMessage]);
 
   const stats = computeStats(prds);
 
@@ -430,7 +272,7 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
   }, [prds, loadPrds]);
 
   return (
-    <div className="w-full -m-6 h-full flex flex-col min-h-0">
+    <div className="-m-6 h-full flex flex-col min-h-0">
       <PrdBriefingRibbon
         stats={stats}
         insumosCount={insumosCount}
@@ -466,33 +308,7 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
         </div>
 
         {/* Chat Vitor (direita) */}
-        <div
-          className="min-h-0 surface relative flex flex-col overflow-hidden"
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-              setIsDragging(false);
-            }
-          }}
-          onDrop={handleDrop}
-        >
-          {isDragging && (
-            <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/5 backdrop-blur-sm">
-              <div className="text-center">
-                <Paperclip className="mx-auto mb-2 h-8 w-8 text-primary" />
-                <p className="text-sm font-medium text-primary">
-                  Solte os arquivos aqui
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  PDF, DOCX, TXT, MD, HTML, CSV, XLSX
-                </p>
-              </div>
-            </div>
-          )}
-
+        <div className="min-h-0 surface relative flex flex-col overflow-hidden">
           <ConversationPanel
             agent="vitor"
             variant="desktop"
@@ -505,22 +321,10 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
             planMode={planMode}
             onPlanModeChange={setPlanMode}
             placeholder="Peça pra Vitor refinar, dividir, consolidar PRDs ou tirar dúvidas…"
-            composerLeftActions={composerLeftActions}
-            composerAboveSlot={composerAboveSlot}
-            composerSubmitDisabled={submitDisabled}
+            composerSubmitDisabled={!inputText.trim()}
           />
         </div>
       </div>
-
-      <TranscriptModal
-        apiUrl={`/api/design-sessions/${sessionId}/transcripts`}
-        open={roamModalOpen}
-        onOpenChange={setRoamModalOpen}
-        onImported={(t) => {
-          setTranscripts((cur) => [t, ...cur]);
-          setInsumosRefresh((k) => k + 1);
-        }}
-      />
 
       <DesignSessionContextSheet
         sessionId={sessionId}
@@ -528,8 +332,6 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
         open={insumosOpen}
         onOpenChange={setInsumosOpen}
         ritualLabel="PRD"
-        refreshKey={insumosRefresh}
-        onChanged={loadTranscripts}
         onCountChange={setInsumosCount}
       />
 

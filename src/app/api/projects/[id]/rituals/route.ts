@@ -8,6 +8,7 @@
  * Cada item tem `kind` discriminador + `href` pra navegação.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
 import { requireProjectViewApi } from "@/lib/dal";
 import { listPlanningsForProject } from "@/lib/dal/planning";
 import {
@@ -56,6 +57,7 @@ type RitualItem =
       title: string;
       status: string;
       scheduledFor: string | null;
+      sprintCount: number;
       sortKey: string;
       href: string;
       badges: { linkedCount: number; noteCount: number };
@@ -108,19 +110,36 @@ export async function GET(
 
   // Release Planning é singleton por projeto: surface só o mais recente
   // (listForProject vem desc por createdAt).
-  const releasePlanning = planningSessions[0];
+  const releasePlanning = planningSessions.find((s) => s.status !== "aborted");
   if (releasePlanning) {
+    // Resolve nome do facilitador + contagem de insumos linkados (EntityLink).
+    const [facilitator, linkedCountRes] = await Promise.all([
+      releasePlanning.facilitatorId
+        ? db()
+            .from("Member")
+            .select("name")
+            .eq("id", releasePlanning.facilitatorId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      db()
+        .from("EntityLink")
+        .select("id", { count: "exact", head: true })
+        .eq("planningSessionId", releasePlanning.id)
+        .not("contextSourceId", "is", null),
+    ]);
+    const scheduledFor = releasePlanning.scheduledFor ?? releasePlanning.createdAt;
     items.push({
       kind: "release_planning",
       id: releasePlanning.id,
       title: `${releasePlanning.sprintCount ?? 6} sprints`,
       status: releasePlanning.status,
-      scheduledFor: releasePlanning.createdAt,
-      sortKey: releasePlanning.createdAt ?? "0",
+      scheduledFor,
+      sprintCount: releasePlanning.sprintCount ?? 6,
+      sortKey: scheduledFor ?? "0",
       href: `/projects/${projectId}/planning`,
-      badges: { linkedCount: 0, noteCount: 0 },
+      badges: { linkedCount: linkedCountRes.count ?? 0, noteCount: 0 },
       facilitatorId: releasePlanning.facilitatorId,
-      facilitatorName: null,
+      facilitatorName: (facilitator.data as { name: string } | null)?.name ?? null,
     });
   }
 

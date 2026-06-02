@@ -1,0 +1,98 @@
+{
+  "feature": "sial-exigencia",
+  "title": "SIAL Exigência — loop de devolução e correção (erros estruturados)",
+  "prd_path": "docs/prd/backlog/prd-sial-exigencia.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-EXIG-001",
+      "title": "Migration — tabela Exigencia (+ UNIQUE parcial + RLS)",
+      "description": "Cria Exigencia conforme §7 com descricaoErros jsonb, UNIQUE parcial de uma aberta por processo e policies.",
+      "acceptanceCriteria": [
+        "Exigencia.status CHECK ('aberta','sanada')",
+        "Índice UNIQUE parcial Exigencia_uma_aberta existe",
+        "Policies exigencia_select e exigencia_abrir existem"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_indexes WHERE indexname='Exigencia_uma_aberta'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-EXIG-002",
+      "title": "DAL exigencia — abrir, getAberta, sanar",
+      "description": "src/lib/sial/dal/exigencia.ts. abrir cria + transiciona em_analise→em_exigencia; sanar marca sanada + transiciona em_exigencia→enviado_analise.",
+      "acceptanceCriteria": [
+        "abrir falha se já há exigência aberta",
+        "sanar exige que campos apontados tenham mudado",
+        "ambos passam por sial_transicao"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-EXIG-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/dal/exigencia.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-EXIG-003",
+      "title": "API abrir exigência (resolvedor)",
+      "description": "POST /api/processos/:id/exigencia com erros estruturados; valida perfil resolvedor.",
+      "acceptanceCriteria": [
+        "Cria Exigencia e transiciona para em_exigencia",
+        "Não-resolvedor recebe 403",
+        "Segunda exigência aberta retorna 409"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-EXIG-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/processos/[id]/exigencia/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-EXIG-004",
+      "title": "API sanar exigência (requerente)",
+      "description": "POST /api/exigencias/:id/sanar; só o dono do processo; transiciona para enviado_analise.",
+      "acceptanceCriteria": [
+        "Dono sana e processo volta a enviado_analise",
+        "Sem alteração nos campos apontados retorna 422",
+        "Não-dono recebe 403"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-EXIG-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/exigencias/[id]/sanar/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-EXIG-005",
+      "title": "Tela de exigência (requerente) + types + smoke",
+      "description": "Tela listando erros estruturados com atalho para corrigir; regenera types; smoke do loop completo.",
+      "acceptanceCriteria": [
+        "Tela mostra cada erro com campo/problema/orientação",
+        "Botão Corrigir abre o formulário com dados preservados",
+        "Smoke: abrir → corrigir → sanar volta a enviado_analise"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Resolvedor abre exigência; requerente corrige e reenvia", "expected": "processo volta a enviado_analise, dados preservados" }
+      ],
+      "dependsOn": ["SIAL-EXIG-003", "SIAL-EXIG-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(portal)/processos/[id]/exigencia/page.tsx", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

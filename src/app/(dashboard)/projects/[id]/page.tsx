@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/confirm-dialog";
 import { PageTitle } from "@/components/app-shell";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
-import { ProjectEditSheet } from "@/components/project-edit-sheet";
+import { ProjectEditSheet } from "@/components/projects/project-edit-sheet";
 import { ProjectCeremoniesTab } from "@/components/project-ceremonies-tab";
 import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { ProjectWiki } from "@/components/project-wiki";
@@ -79,9 +79,9 @@ import { ForgeTab } from "./_tabs/forge-tab";
 const TABS: { key: TabKey; label: string; icon: typeof BookOpen; minAccessLevel?: "manager" | "builder" }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
-  { key: "sessions", label: "Sessions", icon: Lightbulb },
   { key: "ceremonies", label: "Rituais", icon: CalendarClock },
   { key: "wiki", label: "Wiki", icon: FileText },
+  { key: "sessions", label: "Sessions", icon: Lightbulb },
   { key: "forge", label: "Forge", icon: Flame, minAccessLevel: "manager" },
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -607,6 +607,7 @@ export default function ProjectDetailPage({
           openCloneDialog={taskActions.openCloneDialog}
           handleCopyTaskRef={taskActions.handleCopyTaskRef}
           handleDeleteTask={taskActions.handleDeleteTask}
+          handleHardDeleteTask={taskActions.handleHardDeleteTask}
           handleBulkUpdate={taskActions.handleBulkUpdate}
           handleBulkDelete={taskActions.handleBulkDelete}
           handleBulkDuplicate={taskActions.handleBulkDuplicate}
@@ -920,6 +921,9 @@ export default function ProjectDetailPage({
                 startDate: project.startDate,
                 endDate: project.endDate,
                 status: project.status,
+                category: project.category,
+                phase: project.phase,
+                engagementType: project.engagementType,
                 clientId: project.clientId,
                 pmId: project.pmId,
                 githubRepoOwner: project.githubRepoOwner,

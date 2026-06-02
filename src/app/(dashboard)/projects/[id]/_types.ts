@@ -13,6 +13,9 @@ export type ProjectMeta = {
   id: string;
   name: string;
   status: string;
+  category: string;
+  phase: string;
+  engagementType: string;
   client: { name: string } | null;
   clientId: string;
   pmId: string | null;

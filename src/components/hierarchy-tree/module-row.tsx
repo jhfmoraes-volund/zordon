@@ -15,6 +15,9 @@ type Props = {
 export function ModuleRow({ mod, expanded, onToggle, children }: Props) {
   const isOrphan = mod.key === "_orphan_";
   const isProposed = mod.key.startsWith("proposed:");
+  const isLooseTasks = mod.key === "_loose_tasks_";
+  const looseCount = mod.looseTasks?.length ?? 0;
+  const hasChildren = mod.stories.length > 0 || looseCount > 0;
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -44,14 +47,20 @@ export function ModuleRow({ mod, expanded, onToggle, children }: Props) {
               proposto
             </Badge>
           )}
+          {isLooseTasks && (
+            <Badge variant="outline" className="text-[10px] py-0 h-5">
+              sem story
+            </Badge>
+          )}
           <span className="text-xs text-muted-foreground shrink-0 ml-auto">
-            {mod.stories.length}{" "}
-            {mod.stories.length === 1 ? "story" : "stories"}
+            {isLooseTasks
+              ? `${looseCount} ${looseCount === 1 ? "task" : "tasks"}`
+              : `${mod.stories.length} ${mod.stories.length === 1 ? "story" : "stories"}`}
           </span>
         </button>
       </div>
 
-      {expanded && mod.stories.length > 0 && (
+      {expanded && hasChildren && (
         <ul className="border-t divide-y">{children}</ul>
       )}
     </div>

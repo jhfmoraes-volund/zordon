@@ -43,6 +43,12 @@ export type HierarchyModuleNode = {
   approved: boolean;
   approvedAt: string | null;
   stories: HierarchyStoryNode[];
+  /**
+   * Tasks no escopo que NÃO têm UserStory (ex: bugs/itens operacionais criados
+   * direto na sprint, sem hierarquia). Renderizadas direto sob o módulo, sem
+   * wrapper de story. Só populado no grupo sintético "(sem story)".
+   */
+  looseTasks?: HierarchyTaskNode[];
 };
 
 export type HierarchyStats = {

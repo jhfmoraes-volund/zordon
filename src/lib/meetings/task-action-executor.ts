@@ -151,6 +151,26 @@ async function recordProposalOutcome(supabase: Supabase, action: ActionRow): Pro
   }
 }
 
+/**
+ * Normaliza acceptanceCriteria do payload pra `string[]` de textos limpos.
+ * Aceita string (shape da Vitoria), `{text}` (legado/UI) ou `{criterion}`/
+ * `{description}`. Descarta vazios. Espelha coerceAcList da sheet de proposta.
+ */
+function coerceAcTexts(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((a) => {
+      if (typeof a === "string") return a;
+      if (a && typeof a === "object") {
+        const o = a as Record<string, unknown>;
+        return (o.text ?? o.criterion ?? o.description ?? "") as string;
+      }
+      return "";
+    })
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter((s) => s.length > 0);
+}
+
 // ─── Per-type apply ──────────────────────────────────────
 
 async function applyCreate(supabase: Supabase, action: ActionRow) {
@@ -224,17 +244,16 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
     if (aErr) throw new Error(`Assignments failed: ${aErr.message}`);
   }
 
-  // Acceptance criteria
-  const acs = Array.isArray(p.acceptanceCriteria)
-    ? (p.acceptanceCriteria as Array<{ text: string }>)
-    : [];
-  const validAcs = acs.filter((a) => a && typeof a.text === "string" && a.text.trim());
-  if (validAcs.length > 0) {
+  // Acceptance criteria. Vitoria grava AC como array de STRINGS; legado/UI usa
+  // {text}. coerceAcTexts normaliza ambos — sem isso, AC de proposta da IA
+  // sumiam silenciosamente ao concluir a planning (capture infra-bug e853c860).
+  const acTexts = coerceAcTexts(p.acceptanceCriteria);
+  if (acTexts.length > 0) {
     const { error: acErr } = await supabase.from("AcceptanceCriterion").insert(
-      validAcs.map((ac, i) => ({
+      acTexts.map((text, i) => ({
         id: crypto.randomUUID(),
         taskId,
-        text: ac.text.trim(),
+        text,
         order: i,
       })),
     );

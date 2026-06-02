@@ -260,6 +260,45 @@ export async function ensurePMReviewThread(
 }
 
 /**
+ * Ensures a thread exists for a Release Planning (PlanningSession).
+ * channel = 'release_planning', agentName = sessionId — mesma estratégia do
+ * ensurePlanningThread.
+ */
+export async function ensureReleasePlanningThread(
+  sessionId: string,
+  createdBy?: string,
+): Promise<string> {
+  const { data: existing } = await db()
+    .from("ChatThread")
+    .select("id")
+    .eq("agentName", sessionId)
+    .eq("channel", "release_planning")
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  const { data: created, error } = await db()
+    .from("ChatThread")
+    .insert({
+      sessionId: null,
+      agentName: sessionId,
+      channel: "release_planning",
+      createdBy: createdBy || null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[ensureReleasePlanningThread] insert failed:", error.message);
+    throw new Error(`Failed to create release_planning thread: ${error.message}`);
+  }
+
+  return created!.id;
+}
+
+/**
  * Ensures a thread exists for a standalone agent (no DesignSession),
  * scoped to a specific member so each user keeps a private history.
  * Uses agentName + channel + createdBy as the unique key.

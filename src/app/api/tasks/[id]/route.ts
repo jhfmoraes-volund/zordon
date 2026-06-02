@@ -155,7 +155,7 @@ async function fanoutTaskNotifications(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -173,8 +173,34 @@ export async function DELETE(
   const denied = await requireProjectMemberApi(current.projectId);
   if (denied) return denied;
 
-  // Soft delete — flag `dismissedAt`. The task drops out of the Inception
-  // briefing tree but its history is preserved.
+  // `?hard=true` → exclusão permanente (remove a linha). Sem o flag, é
+  // arquivamento (soft delete via `dismissedAt`): a task some das listas mas
+  // o histórico fica preservado.
+  const hard = req.nextUrl.searchParams.get("hard") === "true";
+
+  if (hard) {
+    // TaskDependency.dependsOn é RESTRICT — limpa as arestas que apontam pra
+    // esta task antes do delete, senão o FK bloqueia. Os demais filhos
+    // (AC, comments, iterations, assignments, tags, activity, anchors e as
+    // deps cujo taskId = id) caem por CASCADE.
+    const { error: depErr } = await supabase
+      .from("TaskDependency")
+      .delete()
+      .eq("dependsOn", id);
+    if (depErr)
+      return NextResponse.json({ error: depErr.message }, { status: 500 });
+
+    const { error: delErr } = await supabase
+      .from("Task")
+      .delete()
+      .eq("id", id);
+    if (delErr)
+      return NextResponse.json({ error: delErr.message }, { status: 500 });
+    return NextResponse.json({ ok: true, id, hard: true });
+  }
+
+  // Soft delete (arquivar) — flag `dismissedAt`. A task sai do briefing/listas
+  // mas o histórico fica preservado.
   const { error } = await supabase
     .from("Task")
     .update({

@@ -12,7 +12,7 @@ export function useProjectMeta(projectId: string) {
     const { data } = await supabase
       .from("Project")
       .select(
-        "id, name, status, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role, fpCapacity)",
+        "id, name, status, category, phase, engagementType, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role, fpCapacity)",
       )
       .eq("id", projectId)
       .single();
@@ -21,6 +21,9 @@ export function useProjectMeta(projectId: string) {
       id: data.id,
       name: data.name,
       status: data.status,
+      category: (data.category as string | null) ?? "billable",
+      phase: (data.phase as string | null) ?? "ops",
+      engagementType: (data.engagementType as string | null) ?? "fixed_scope",
       client: (data.client as { name: string } | null) ?? null,
       clientId: data.clientId,
       pmId: data.pmId ?? null,

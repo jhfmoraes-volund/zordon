@@ -83,5 +83,20 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  // "1 planning viva por sprint": planning concluída/arquivada é read-only.
+  // Pra editar, o PM precisa reabrir explicitamente (POST .../reopen). Evita
+  // que a Vitoria crie propostas órfãs num plano já publicado.
+  const planning = await getPlanningById(id);
+  if (!planning) {
+    return NextResponse.json({ error: "Planning não encontrada" }, { status: 404 });
+  }
+  if (planning.phase === "closed" || planning.phase === "archived") {
+    return NextResponse.json(
+      { error: "Reabra a planning pra editar.", phase: planning.phase },
+      { status: 409 },
+    );
+  }
+
   return planningChatConnector.handle(req, id);
 }

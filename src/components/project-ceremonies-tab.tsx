@@ -19,10 +19,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChipTone } from "@/lib/status-chips";
 import { fmtDate as fmtShortDate } from "@/lib/date-utils";
-import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import { fetchOrThrow, showErrorToast, HttpError } from "@/lib/optimistic/toast";
 import { toast } from "sonner";
 import { PlanningSheet } from "@/components/planning/planning-sheet";
 import { PMReviewSheet } from "@/components/pm-review/pm-review-sheet";
+import { ReleasePlanningSheet } from "@/components/planning-session/release-planning-sheet";
 import {
   RitualPickerModal,
   type RitualType,
@@ -108,6 +109,7 @@ type RitualReleasePlanning = {
   title: string;
   status: ReleaseStatus;
   scheduledFor: string | null;
+  sprintCount: number;
   sortKey: string;
   href: string;
   badges: { linkedCount: number; noteCount: number };
@@ -198,12 +200,16 @@ export function ProjectCeremoniesTab({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [planningSheetOpen, setPlanningSheetOpen] = useState(false);
   const [pmReviewSheetOpen, setPMReviewSheetOpen] = useState(false);
+  const [releaseSheetOpen, setReleaseSheetOpen] = useState(false);
+  const [creatingRelease, setCreatingRelease] = useState(false);
   const [editingPlanning, setEditingPlanning] = useState<RitualPlanning | null>(
     null,
   );
   const [editingPMReview, setEditingPMReview] = useState<RitualPMReview | null>(
     null,
   );
+  const [editingRelease, setEditingRelease] =
+    useState<RitualReleasePlanning | null>(null);
 
   const handleEdit = useCallback(
     (item: RitualItem) => {
@@ -214,20 +220,24 @@ export function ProjectCeremoniesTab({
         setEditingPMReview(item);
         setPMReviewSheetOpen(true);
       } else {
-        // Release Planning não tem sheet de edição — abre o command center.
-        router.push(item.href);
+        setEditingRelease(item);
+        setReleaseSheetOpen(true);
       }
     },
-    [router],
+    [],
   );
 
   const handlePickRitual = useCallback(
     (type: RitualType) => {
       if (type === "pm_review") setPMReviewSheetOpen(true);
       else if (type === "sprint_planning") setPlanningSheetOpen(true);
-      else router.push(`/projects/${projectId}/planning`);
+      else {
+        // Release Planning: criação explícita via sheet (não auto-create).
+        setEditingRelease(null);
+        setReleaseSheetOpen(true);
+      }
     },
-    [router, projectId],
+    [],
   );
 
   const load = useCallback(async () => {
@@ -307,9 +317,56 @@ export function ProjectCeremoniesTab({
       toast.success("Planning criada.");
       router.push(`/rituals/${created.id}`);
     } catch (err) {
+      // "1 planning viva por sprint": já existe uma ativa pra essa sprint →
+      // abre a existente em vez de mostrar erro.
+      if (err instanceof HttpError && err.status === 409 && err.body) {
+        try {
+          const { existingPlanningId } = JSON.parse(err.body) as {
+            existingPlanningId?: string;
+          };
+          if (existingPlanningId) {
+            setPlanningSheetOpen(false);
+            toast.info("Já existe uma planning pra essa sprint — abrindo…");
+            router.push(`/rituals/${existingPlanningId}`);
+            return;
+          }
+        } catch {
+          // body não-JSON → cai no erro genérico abaixo
+        }
+      }
       showErrorToast(err, { label: "Falha ao criar Planning" });
     } finally {
       setCreatingPlanning(false);
+    }
+  }
+
+  async function handleCreateRelease(input: {
+    facilitatorId: string | null;
+    scheduledFor: string | null;
+    sprintCount: number;
+  }) {
+    if (creatingRelease) return;
+    setCreatingRelease(true);
+    try {
+      const res = await fetchOrThrow("/api/planning-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          title: "Release Planning",
+          sprintCount: input.sprintCount,
+          facilitatorId: input.facilitatorId,
+          scheduledFor: input.scheduledFor,
+        }),
+      });
+      await res.json();
+      setReleaseSheetOpen(false);
+      toast.success("Release Planning criado.");
+      router.push(`/projects/${projectId}/planning`);
+    } catch (err) {
+      showErrorToast(err, { label: "Falha ao criar Release Planning" });
+    } finally {
+      setCreatingRelease(false);
     }
   }
 
@@ -405,7 +462,7 @@ export function ProjectCeremoniesTab({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
           <RitualColumn
             title="Publicado"
             tone="emerald"
@@ -483,6 +540,36 @@ export function ProjectCeremoniesTab({
           load();
         }}
         saving={creatingPMReview}
+      />
+
+      <ReleasePlanningSheet
+        open={releaseSheetOpen}
+        onOpenChange={(open) => {
+          setReleaseSheetOpen(open);
+          if (!open) setEditingRelease(null);
+        }}
+        projectId={projectId}
+        planning={
+          editingRelease
+            ? {
+                id: editingRelease.id,
+                facilitatorId: editingRelease.facilitatorId,
+                scheduledFor: editingRelease.scheduledFor,
+                sprintCount: editingRelease.sprintCount,
+                status: editingRelease.status,
+              }
+            : null
+        }
+        onCreate={handleCreateRelease}
+        onUpdated={() => {
+          setEditingRelease(null);
+          load();
+        }}
+        onDeleted={() => {
+          setEditingRelease(null);
+          load();
+        }}
+        saving={creatingRelease}
       />
     </div>
   );

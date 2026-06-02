@@ -1,0 +1,95 @@
+{
+  "feature": "sial-notificacoes",
+  "title": "SIAL Notificações — multicanal (portal real, email/govbr mock) + central",
+  "prd_path": "docs/prd/backlog/prd-sial-notificacoes.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-NOT-001",
+      "title": "Migration — tabela Notificacao (+ RLS)",
+      "description": "Cria Notificacao conforme §7 com CHECK de canal e policy do dono.",
+      "acceptanceCriteria": [
+        "canal CHECK ('portal','email','govbr')",
+        "Policy notificacao_self existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Notificacao'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-NOT-002",
+      "title": "NotificacaoGateway (email/govbr) — interface + stub",
+      "description": "src/lib/sial/gateways/notificacao-gateway.ts (registra envio sem mandar). Real em Track B.",
+      "acceptanceCriteria": [
+        "enviar(canal, destino, conteudo) registra e retorna ok",
+        "Disponível via getGateways()"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/sial/gateways/notificacao-gateway.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-NOT-003",
+      "title": "NotificacaoService + templates (impl)",
+      "description": "src/lib/sial/services/notificacao-impl.ts resolve template+canal; portal=INSERT, email/govbr=gateway.",
+      "acceptanceCriteria": [
+        "notificar(tipo, processo, destinatario) cria Notificacao(portal)",
+        "Canais email/govbr passam pelo gateway",
+        "Templates por tipo (exigencia/deferimento/tramitacao)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-NOT-001", "SIAL-NOT-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/services/notificacao-impl.ts", "src/lib/sial/services/notificacao.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-NOT-004",
+      "title": "Central de notificações (API + UI)",
+      "description": "GET /api/notificacoes, POST /:id/lida e a central no portal (badge + lista).",
+      "acceptanceCriteria": [
+        "Lista as do usuário, não lidas primeiro",
+        "Marcar como lida funciona",
+        "Item leva à tela de ação"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-NOT-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/notificacoes/route.ts", "src/app/api/notificacoes/[id]/lida/route.ts", "src/components/sial/central-notificacoes.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-NOT-005",
+      "title": "Smoke — notificação no deferimento",
+      "description": "scripts/smoke/notificacoes.ts defere um processo e confere a notificação na central do requerente.",
+      "acceptanceCriteria": [
+        "Deferimento gera Notificacao(portal) ao requerente",
+        "Central retorna a notificação não lida"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Notificacao\" WHERE tipo='deferimento'", "expected": ">=1" }
+      ],
+      "dependsOn": ["SIAL-NOT-004"],
+      "estimateMinutes": 20,
+      "touches": ["scripts/smoke/notificacoes.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

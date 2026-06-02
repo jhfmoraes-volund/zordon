@@ -1,0 +1,97 @@
+{
+  "feature": "sial-parametrizacao",
+  "title": "SIAL Parametrização — editor de método/schema de formulário (form builder)",
+  "prd_path": "docs/prd/backlog/prd-sial-parametrizacao.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-PARAM-001",
+      "title": "Migration — MetodoVersao (+ RLS)",
+      "description": "Cria MetodoVersao conforme §7 com UNIQUE (metodoId, versao) e policies.",
+      "acceptanceCriteria": [
+        "UNIQUE (metodoId, versao)",
+        "Policies metodo_versao_admin e _read existem"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='MetodoVersao'", "expected": "2" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PARAM-002",
+      "title": "Validação de schemaFormulario",
+      "description": "src/lib/sial/schema-validacao.ts (keys únicas, tipos válidos, select com options, obrigatório bool).",
+      "acceptanceCriteria": [
+        "Rejeita key duplicada e tipo inválido",
+        "Select sem options é erro",
+        "Retorna lista de erros legível"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/schema-validacao.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PARAM-003",
+      "title": "API métodos CRUD + schema + publicar",
+      "description": "GET/POST métodos, PUT schema (valida→MetodoVersao), POST publicar (vigente).",
+      "acceptanceCriteria": [
+        "PUT schema inválido retorna 422",
+        "publicar troca a versão vigente e atualiza Metodo.schemaFormulario",
+        "Só admin"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-PARAM-001", "SIAL-PARAM-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/admin/metodos/route.ts", "src/app/api/admin/metodos/[id]/schema/route.ts", "src/app/api/admin/metodos/[id]/publicar/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PARAM-004",
+      "title": "Editor de método + preview (UI)",
+      "description": "Tela admin para editar campos e pré-visualizar com DynamicForm.",
+      "acceptanceCriteria": [
+        "Adicionar/editar/remover campo",
+        "Preview renderiza o schema em edição",
+        "Publicar reflete no requerimento"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-PARAM-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(backoffice)/admin/metodos/[id]/page.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PARAM-005",
+      "title": "Smoke — parametrização + types",
+      "description": "scripts/smoke/parametrizacao.ts edita um método (válido/inválido), publica e confere vigente; types.",
+      "acceptanceCriteria": [
+        "Schema inválido é rejeitado",
+        "Publicar gera MetodoVersao vigente",
+        "DynamicForm passa a renderizar o novo campo"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"MetodoVersao\" WHERE vigente", "expected": ">=1" }
+      ],
+      "dependsOn": ["SIAL-PARAM-004"],
+      "estimateMinutes": 25,
+      "touches": ["scripts/smoke/parametrizacao.ts", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

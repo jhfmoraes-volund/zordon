@@ -247,32 +247,52 @@ export const vitorAgent: AgentDefinition = {
     const prdTools: ToolSet = {
       propose_prd: tool({
         description:
-          "Propoe um PRD (Product Requirement Document) dentro do projeto da sessao. Use 1 PRD por functionality do brainstorm. Requer problem (>=50 chars), goal (>=20 chars), e >=3 acceptance criteria.",
-        inputSchema: ProposePrdInput.omit({
-          projectId: true,
-          designSessionId: true,
+          "Propoe um OU MAIS PRDs num unico call via `prds: [...]`. Passe TODOS os PRDs do scaffold de uma vez (NAO faca um call por PRD — isso para no meio). Cada PRD requer problem (>=50 chars), goal (>=20 chars) e >=3 acceptance criteria. Retorna { created: [{id, reference, title, status}] } pra voce ligar dependencias depois.",
+        inputSchema: z.object({
+          prds: z
+            .array(
+              ProposePrdInput.omit({
+                projectId: true,
+                designSessionId: true,
+              }),
+            )
+            .min(1),
         }),
-        execute: async (args) => {
-          const row = await createPrd({
-            projectId,
-            designSessionId: sessionId,
-            moduleId: args.moduleId ?? null,
-            title: args.title,
-            oneLiner: args.oneLiner,
-            personaIds: args.personaIds,
-            problem: args.problem,
-            goal: args.goal,
-            userJourney: args.userJourney,
-            acceptanceCriteria: args.acceptanceCriteria,
-            successMetrics: args.successMetrics,
-            outOfScope: args.outOfScope,
-            technicalNotes: args.technicalNotes,
-            risksAndAssumptions: args.risksAndAssumptions,
-            sourceCardIds: args.sourceCardIds,
-            actorAgent: "vitor",
-            actorMemberId: memberId ?? null,
-          });
-          return { id: row.id, reference: row.reference, status: row.status };
+        execute: async ({ prds }) => {
+          const created: Array<{
+            id: string;
+            reference: string;
+            title: string;
+            status: string;
+          }> = [];
+          for (const args of prds) {
+            const row = await createPrd({
+              projectId,
+              designSessionId: sessionId,
+              moduleId: args.moduleId ?? null,
+              title: args.title,
+              oneLiner: args.oneLiner,
+              personaIds: args.personaIds,
+              problem: args.problem,
+              goal: args.goal,
+              userJourney: args.userJourney,
+              acceptanceCriteria: args.acceptanceCriteria,
+              successMetrics: args.successMetrics,
+              outOfScope: args.outOfScope,
+              technicalNotes: args.technicalNotes,
+              risksAndAssumptions: args.risksAndAssumptions,
+              sourceCardIds: args.sourceCardIds,
+              actorAgent: "vitor",
+              actorMemberId: memberId ?? null,
+            });
+            created.push({
+              id: row.id,
+              reference: row.reference,
+              title: row.title,
+              status: row.status,
+            });
+          }
+          return { created };
         },
       }),
 

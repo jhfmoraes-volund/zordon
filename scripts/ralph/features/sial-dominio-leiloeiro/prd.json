@@ -1,0 +1,93 @@
+{
+  "feature": "sial-dominio-leiloeiro",
+  "title": "SIAL Domínio Leiloeiro — caução e termo de compromisso",
+  "prd_path": "docs/prd/backlog/prd-sial-dominio-leiloeiro.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-LEI-001",
+      "title": "Migration — tabela Caucao (+ RLS)",
+      "description": "Cria Caucao conforme §7 (1) com CHECK de status e policy de SELECT.",
+      "acceptanceCriteria": [
+        "Caucao.status CHECK ('pendente','registrada')",
+        "FK processoId ON DELETE CASCADE",
+        "Policy caucao_select existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Caucao'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-LEI-002",
+      "title": "Seed — Metodo leiloeiro",
+      "description": "Insere o método leiloeiro com schemaFormulario de §7 (2).",
+      "acceptanceCriteria": [
+        "Existe Metodo com dominio='leiloeiro' ativo"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Metodo\" WHERE dominio='leiloeiro' AND ativo", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-LEI-003",
+      "title": "DAL + API caução (registrar/consultar)",
+      "description": "src/lib/sial/dominio/leiloeiro.ts + POST/GET /api/processos/:id/caucao.",
+      "acceptanceCriteria": [
+        "POST registra caução com valor e comprovanteRef",
+        "Registrar exige valor > 0"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-LEI-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/sial/dominio/leiloeiro.ts", "src/app/api/processos/[id]/caucao/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-LEI-004",
+      "title": "Geração do termo de compromisso (referência de documento)",
+      "description": "POST /api/processos/:id/termo-compromisso cria a referência do documento (pendente de assinatura). PDF fica no PRD documentos.",
+      "acceptanceCriteria": [
+        "Cria referência de documento 'termo_compromisso' pendente",
+        "Não duplica termo se já existir pendente"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-LEI-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/processos/[id]/termo-compromisso/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-LEI-005",
+      "title": "Gate no submit + types + smoke",
+      "description": "submit do leiloeiro exige caução registrada e termo gerado; regenera types; smoke ponta-a-ponta.",
+      "acceptanceCriteria": [
+        "submit sem caução registrada retorna 422",
+        "Smoke: cadastro+caução+termo → aguardando_pagamento"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Abrir requerimento de leiloeiro, registrar caução, gerar termo, enviar", "expected": "processo em aguardando_pagamento com caução registrada" }
+      ],
+      "dependsOn": ["SIAL-LEI-003", "SIAL-LEI-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/dal/requerimento.ts", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

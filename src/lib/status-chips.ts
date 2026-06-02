@@ -69,6 +69,24 @@ export const PROJECT_STATUS = defineRegistry({
   archived:  { label: "Arquivado", tone: "muted" },
 });
 
+export const PROJECT_CATEGORY = defineRegistry({
+  billable:     { label: "Billable",     tone: "green" },
+  non_billable: { label: "Não-billable", tone: "muted" },
+  internal:     { label: "Interno",      tone: "blue"  },
+});
+
+export const PROJECT_PHASE = defineRegistry({
+  commercial: { label: "Comercial", tone: "purple" },
+  immersion:  { label: "Imersão",   tone: "cyan"   },
+  ops:        { label: "Ops",       tone: "blue"   },
+  post_ops:   { label: "Pós-Ops",   tone: "teal"   },
+});
+
+export const PROJECT_ENGAGEMENT = defineRegistry({
+  fixed_scope: { label: "Com fim",  tone: "slate" },
+  continuous:  { label: "Contínuo", tone: "brand" },
+});
+
 // ─── Task ────────────────────────────────────────────────
 
 export const TASK_STATUS = defineRegistry({

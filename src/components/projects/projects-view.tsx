@@ -9,20 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Field, FormBody } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogFooter,
-  ResponsiveDialogBody,
-} from "@/components/ui/responsive-dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,13 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Pencil, Trash2, Users, ChevronDown, ChevronRight, MoreVertical, ListChecks } from "lucide-react";
-import { hasMinAccessLevel, isPmEligible, roleLabel } from "@/lib/roles";
+import { hasMinAccessLevel, roleLabel } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
-import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
-import { showErrorToast } from "@/lib/optimistic/toast";
-import { generateUniqueReferenceKey } from "@/lib/project-reference-key";
+import {
+  ProjectEditSheet,
+  type ProjectEditInitial,
+} from "@/components/projects/project-edit-sheet";
 import { fmtDate } from "@/lib/date-utils";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
@@ -55,6 +43,9 @@ export type Project = {
   startDate: string | null;
   endDate: string | null;
   status: string;
+  category: string;
+  phase: string;
+  engagementType: string;
   clientId: string;
   githubRepoOwner: string | null;
   githubRepoName: string | null;
@@ -156,10 +147,8 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
   const projects = projectsCollection.items;
   const setProjects = projectsCollection.setCommitted;
   const projectMutate = projectsCollection.mutate;
-  const [clients, setClients] = useState<Client[]>(initial.clients);
-  const [members, setMembers] = useState<Member[]>(initial.members);
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Project | null>(null);
+  const [editProject, setEditProject] = useState<ProjectEditInitial | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [scope, setScope] = useState<"mine" | "all">("mine");
@@ -174,30 +163,21 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
       ? projects.filter(isMine)
       : projects;
   const mineCount = meId ? projects.filter(isMine).length : 0;
-  const [form, setForm] = useState({
-    name: "", repoUrl: "", startDate: "", endDate: "",    status: "active", clientId: "", pmId: "",
-    githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
-    memberIds: [] as string[],
-    ongoing: false,
-  });
 
   const reload = async () => {
     const supabase = createClient();
 
-    const [projectsRes, clientsRes, membersRes] = await Promise.all([
-      supabase
-        .from("Project")
-        .select("*, client:Client(id, name), projectMembers:ProjectMember(id, member:Member(id, name, role, position)), pm:Member!pmId(id, name)")
-        .order("createdAt", { ascending: false }),
-      supabase.from("Client").select("id, name").order("name"),
-      supabase.from("Member").select("id, name, role, position").eq("isGuest", false).order("name"),
-    ]);
+    const projectsRes = await supabase
+      .from("Project")
+      .select("*, client:Client(id, name), projectMembers:ProjectMember(id, member:Member(id, name, role, position)), pm:Member!pmId(id, name)")
+      .order("createdAt", { ascending: false });
 
     if (projectsRes.data) {
       const { data: taskCounts } = await supabase
         .from("Task")
         .select("projectId")
-        .neq("status", "draft");
+        .neq("status", "draft")
+        .is("dismissedAt", null);
 
       const countMap = new Map<string, number>();
       if (taskCounts) {
@@ -216,92 +196,32 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
         }))
       );
     }
-    if (clientsRes.data) setClients(clientsRes.data);
-    if (membersRes.data) setMembers(membersRes.data);
   };
 
   const openNew = () => {
-    setEditing(null);
-    setForm({
-      name: "", repoUrl: "", startDate: "", endDate: "",      status: "active", clientId: "", pmId: "",
-      githubRepoOwner: "", githubRepoName: "", githubDefaultBranch: "main",
-      memberIds: [],
-      ongoing: false,
-    });
+    setEditProject(null);
     setOpen(true);
   };
 
   const openEdit = (p: Project) => {
-    setEditing(p);
-    setForm({
+    setEditProject({
+      id: p.id,
       name: p.name,
-      repoUrl: p.repoUrl || "",
-      startDate: p.startDate ? p.startDate.slice(0, 10) : "",
-      endDate: p.endDate ? p.endDate.slice(0, 10) : "",
-
+      repoUrl: p.repoUrl,
+      startDate: p.startDate,
+      endDate: p.endDate,
       status: p.status,
+      category: p.category,
+      phase: p.phase,
+      engagementType: p.engagementType,
       clientId: p.clientId,
-      pmId: p.pmId || "",
-      githubRepoOwner: p.githubRepoOwner || "",
-      githubRepoName: p.githubRepoName || "",
-      githubDefaultBranch: p.githubDefaultBranch || "main",
+      pmId: p.pmId,
+      githubRepoOwner: p.githubRepoOwner,
+      githubRepoName: p.githubRepoName,
+      githubDefaultBranch: p.githubDefaultBranch,
       memberIds: p.projectMembers.map((pm) => pm.member.id),
-      ongoing: !p.startDate && !p.endDate,
     });
     setOpen(true);
-  };
-
-  const save = async () => {
-    const supabase = createClient();
-    const projectData = {
-      name: form.name,
-      repoUrl: form.repoUrl || null,
-      startDate: form.ongoing || !form.startDate ? null : new Date(form.startDate).toISOString(),
-      endDate: form.ongoing || !form.endDate ? null : new Date(form.endDate).toISOString(),
-      status: form.status,
-      clientId: form.clientId,
-      pmId: form.pmId || null,
-      githubRepoOwner: form.githubRepoOwner || null,
-      githubRepoName: form.githubRepoName || null,
-      githubDefaultBranch: form.githubDefaultBranch || "main",
-    };
-
-    let projectId: string;
-
-    if (editing) {
-      await supabase.from("Project").update(projectData).eq("id", editing.id);
-      projectId = editing.id;
-    } else {
-      const referenceKey = await generateUniqueReferenceKey(supabase, form.name);
-      const { data, error } = await supabase
-        .from("Project")
-        .insert({
-          id: crypto.randomUUID(),
-          updatedAt: new Date().toISOString(),
-          referenceKey,
-          ...projectData,
-        })
-        .select("id")
-        .single();
-      if (error || !data) {
-        showErrorToast(new Error(error?.message ?? "Falha ao criar projeto"), {
-          label: "Projeto",
-        });
-        return;
-      }
-      projectId = data.id;
-    }
-
-    // Sync project members
-    await supabase.from("ProjectMember").delete().eq("projectId", projectId);
-    if (form.memberIds.length > 0) {
-      await supabase.from("ProjectMember").insert(
-        form.memberIds.map((memberId) => ({ id: crypto.randomUUID(), projectId, memberId }))
-      );
-    }
-
-    setOpen(false);
-    reload();
   };
 
   const remove = async (id: string) => {
@@ -310,10 +230,10 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
 
     const supabase = createClient();
     const [tasksRes, storiesRes, sprintsRes, projTasksRes] = await Promise.all([
-      supabase.from("Task").select("id", { count: "exact", head: true }).eq("projectId", id),
+      supabase.from("Task").select("id", { count: "exact", head: true }).eq("projectId", id).is("dismissedAt", null),
       supabase.from("UserStory").select("id", { count: "exact", head: true }).eq("projectId", id),
       supabase.from("Sprint").select("id", { count: "exact", head: true }).eq("projectId", id),
-      supabase.from("Task").select("id").eq("projectId", id),
+      supabase.from("Task").select("id").eq("projectId", id).is("dismissedAt", null),
     ]);
     const counts = {
       tasks: tasksRes.count ?? 0,
@@ -377,15 +297,6 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
 
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
-  };
-
-  const toggleMember = (memberId: string) => {
-    setForm((f) => ({
-      ...f,
-      memberIds: f.memberIds.includes(memberId)
-        ? f.memberIds.filter((id) => id !== memberId)
-        : [...f.memberIds, memberId],
-    }));
   };
 
   return (
@@ -550,239 +461,12 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
         </Table>
       </div>
 
-      <ResponsiveDialog open={open} onOpenChange={setOpen}>
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>{editing ? "Editar Projeto" : "Novo Projeto"}</ResponsiveDialogTitle>
-          </ResponsiveDialogHeader>
-          <ResponsiveDialogBody className="py-4">
-            <FormBody>
-              <Field name="project-client" required>
-                <Field.Label>Cliente</Field.Label>
-                <Field.Control>
-                  <Select
-                    value={form.clientId}
-                    onValueChange={(v) => v && setForm({ ...form, clientId: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione">
-                        {(value: string | null) =>
-                          clients.find((c) => c.id === value)?.name ??
-                          "Selecione"
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field.Control>
-              </Field>
-
-              <Field name="project-pm">
-                <Field.Label>PM Responsável</Field.Label>
-                <Field.Control>
-                  <Select
-                    value={form.pmId}
-                    onValueChange={(v) => v && setForm({ ...form, pmId: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione (opcional)">
-                        {(value: string | null) =>
-                          members.find((m) => m.id === value)?.name ??
-                          "Selecione (opcional)"
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {members
-                        .filter((m) => isPmEligible(m.position))
-                        .map((m) => (
-                          <SelectItem key={m.id} value={m.id}>
-                            {m.name}
-                          </SelectItem>
-                        ))}
-                      {members.filter((m) => isPmEligible(m.position))
-                        .length === 0 && (
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                          Nenhum membro elegível a PM cadastrado
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </Field.Control>
-              </Field>
-
-              <Field name="project-members">
-                <Field.Label>Membros Alocados</Field.Label>
-                <Field.Hint>
-                  Clique para alocar/desalocar membros do projeto
-                </Field.Hint>
-                <div className="flex min-h-[40px] flex-wrap gap-1.5 rounded-md border p-3">
-                  {members
-                    .filter((m) => !isPmEligible(m.position))
-                    .map((m) => {
-                      const isSelected = form.memberIds.includes(m.id);
-                      return (
-                        <Badge
-                          key={m.id}
-                          variant={isSelected ? "default" : "outline"}
-                          className={`cursor-pointer text-xs transition-colors ${
-                            isSelected ? "" : "opacity-50 hover:opacity-80"
-                          }`}
-                          onClick={() => toggleMember(m.id)}
-                        >
-                          {m.name}
-                          <span className="ml-1 text-[10px]">
-                            {roleLabel(m.position)}
-                          </span>
-                        </Badge>
-                      );
-                    })}
-                  {members.filter((m) => !isPmEligible(m.position)).length ===
-                    0 && (
-                    <span className="text-xs text-muted-foreground">
-                      Nenhum membro cadastrado
-                    </span>
-                  )}
-                </div>
-              </Field>
-
-              <Field name="project-name" required>
-                <Field.Label>Nome</Field.Label>
-                <Field.Control>
-                  <Input
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  />
-                </Field.Control>
-              </Field>
-
-              <Field name="project-repo">
-                <Field.Label>Repo URL</Field.Label>
-                <Field.Control>
-                  <Input
-                    value={form.repoUrl}
-                    onChange={(e) =>
-                      setForm({ ...form, repoUrl: e.target.value })
-                    }
-                    placeholder="https://github.com/..."
-                  />
-                </Field.Control>
-              </Field>
-
-              <Field.Row cols={3}>
-                <Field name="project-gh-owner">
-                  <Field.Label>GitHub Owner</Field.Label>
-                  <Field.Control>
-                    <Input
-                      value={form.githubRepoOwner}
-                      onChange={(e) =>
-                        setForm({ ...form, githubRepoOwner: e.target.value })
-                      }
-                      placeholder="org-name"
-                    />
-                  </Field.Control>
-                </Field>
-                <Field name="project-gh-repo">
-                  <Field.Label>GitHub Repo</Field.Label>
-                  <Field.Control>
-                    <Input
-                      value={form.githubRepoName}
-                      onChange={(e) =>
-                        setForm({ ...form, githubRepoName: e.target.value })
-                      }
-                      placeholder="repo-name"
-                    />
-                  </Field.Control>
-                </Field>
-                <Field name="project-gh-branch">
-                  <Field.Label>Default Branch</Field.Label>
-                  <Field.Control>
-                    <Input
-                      value={form.githubDefaultBranch}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          githubDefaultBranch: e.target.value,
-                        })
-                      }
-                      placeholder="main"
-                    />
-                  </Field.Control>
-                </Field>
-              </Field.Row>
-
-              <div className="flex flex-col gap-(--field-gap)">
-                <label className="flex cursor-pointer items-center gap-2 text-sm select-none">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input"
-                    checked={form.ongoing}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        ongoing: e.target.checked,
-                        startDate: e.target.checked ? "" : form.startDate,
-                        endDate: e.target.checked ? "" : form.endDate,
-                      })
-                    }
-                  />
-                  Projeto em andamento (sem prazo definido)
-                </label>
-                {!form.ongoing && (
-                  <Field.Row cols={2}>
-                    <Field name="project-start">
-                      <Field.Label>Data Início</Field.Label>
-                      <Field.Control>
-                        <Input
-                          type="date"
-                          value={form.startDate}
-                          onChange={(e) =>
-                            setForm({ ...form, startDate: e.target.value })
-                          }
-                        />
-                      </Field.Control>
-                    </Field>
-                    <Field name="project-end">
-                      <Field.Label>Data Fim</Field.Label>
-                      <Field.Control>
-                        <Input
-                          type="date"
-                          value={form.endDate}
-                          onChange={(e) =>
-                            setForm({ ...form, endDate: e.target.value })
-                          }
-                        />
-                      </Field.Control>
-                    </Field>
-                  </Field.Row>
-                )}
-              </div>
-
-              <Field name="project-status">
-                <Field.Label>Status</Field.Label>
-                <Field.Control>
-                  <StatusChipSelect
-                    variant="input"
-                    value={form.status}
-                    options={PROJECT_STATUS}
-                    onValueChange={(v) => setForm({ ...form, status: v })}
-                  />
-                </Field.Control>
-              </Field>
-            </FormBody>
-          </ResponsiveDialogBody>
-          <ResponsiveDialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={!form.name || !form.clientId}>Salvar</Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      </ResponsiveDialog>
+      <ProjectEditSheet
+        open={open}
+        onOpenChange={setOpen}
+        project={editProject}
+        onSaved={reload}
+      />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       </div>

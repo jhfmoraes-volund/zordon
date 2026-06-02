@@ -41,7 +41,7 @@ export function StepSubHeader({
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-3 border-b bg-background px-3 py-3 sm:px-4",
+        "flex items-start justify-between gap-3 border-b bg-background px-3 py-3 sm:px-6",
         className,
       )}
     >

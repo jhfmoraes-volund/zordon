@@ -49,12 +49,14 @@ export const webConnector = {
       threadId: requestedThreadId,
       channel: requestedChannel,
       planMode,
+      kickoff,
     } = body as {
       messages: Array<{ role: string; content?: string; parts?: Array<{ type: string; text?: string }> }>;
       currentStepKey: string;
       threadId?: string;
       channel?: "web" | "briefing";
       planMode?: boolean;
+      kickoff?: boolean;
     };
 
     // Extract the last user message text from the messages array
@@ -130,8 +132,20 @@ export const webConnector = {
     });
 
     // Transport: UI message stream for DefaultChatTransport (AI SDK v6)
+    const persist = persistResponseMessage(threadId);
     const response = result.streamText.toUIMessageStreamResponse({
-      onFinish: persistResponseMessage(threadId),
+      onFinish: async (event: Parameters<typeof persist>[0]) => {
+        await persist(event);
+        // Kickoff (QAL-006): a 1ª análise do launcher rodou — marca done pra
+        // não re-disparar ao reabrir. Guard `=pending` torna o flip idempotente.
+        if (kickoff) {
+          await db()
+            .from("DesignSession")
+            .update({ firstAnalysisStatus: "done" })
+            .eq("id", sessionId)
+            .eq("firstAnalysisStatus", "pending");
+        }
+      },
     });
 
     // Attach thread ID header so the client knows which thread was used

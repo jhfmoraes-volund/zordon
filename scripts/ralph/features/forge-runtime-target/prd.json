@@ -74,7 +74,7 @@
       "title": "exec-story.ts spawna claude com cwd=workspacePath",
       "description": "Antes de spawn, chama ensureWorkspace(runId, project). Passa workspacePath pro spawn como cwd. Emite event workspace_ready. Fallback: se projectId ausente OU stub, mantém cwd=Zordon (dogfood mode).",
       "acceptanceCriteria": [
-        "scripts/forge/exec-story.ts importa ensureWorkspace",
+        "scripts/daemon/exec-forge-story.ts importa ensureWorkspace",
         "Se projectId real, chama ensureWorkspace antes do spawn claude",
         "spawn passa cwd: workspacePath",
         "Emit event workspace_ready com path, branch, repoUrl",
@@ -92,7 +92,7 @@
       ],
       "estimateMinutes": 25,
       "touches": [
-        "scripts/forge/exec-story.ts"
+        "scripts/daemon/exec-forge-story.ts"
       ],
       "agentProfile": "wiring",
       "passes": true

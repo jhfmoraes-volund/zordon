@@ -1,0 +1,78 @@
+{
+  "feature": "sial-termo-autenticidade",
+  "title": "SIAL Termo de Autenticidade — geração do artefato + QR",
+  "prd_path": "docs/prd/backlog/prd-sial-termo-autenticidade.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-TERMO-001",
+      "title": "Gerador de QR (URL pública de validação)",
+      "description": "src/lib/sial/qr.ts que gera um QR (dataURL/SVG) para /validar/<codigo>.",
+      "acceptanceCriteria": [
+        "Gera QR a partir de uma URL",
+        "URL aponta para /validar/<codigo>"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/sial/qr.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-TERMO-002",
+      "title": "Template do termo + TermoService.gerar",
+      "description": "src/lib/sial/services/termo-impl.ts implementa TermoService usando documento-gen + StorageGateway; idempotente.",
+      "acceptanceCriteria": [
+        "Gera Documento(tipo=termo_autenticidade) com dados+QR",
+        "Preenche Autenticacao.documentoId",
+        "Chamar 2x não duplica o termo"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-TERMO-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/services/termo-impl.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-TERMO-003",
+      "title": "API gerar/obter termo + ligar ao deferir",
+      "description": "POST/GET /api/processos/:id/termo; registra a impl como TermoService usado por deferir.",
+      "acceptanceCriteria": [
+        "POST gera o termo se faltar (idempotente)",
+        "GET retorna signed URL",
+        "Deferir passa a gerar o termo automaticamente"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-TERMO-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/processos/[id]/termo/route.ts", "src/lib/sial/services/termo.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-TERMO-004",
+      "title": "Smoke — termo no deferimento",
+      "description": "scripts/smoke/termo-autenticidade.ts defere e confere o termo gerado e vinculado.",
+      "acceptanceCriteria": [
+        "Após deferir, Autenticacao.documentoId preenchido",
+        "Documento do tipo termo_autenticidade existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Autenticacao\" WHERE \"documentoId\" IS NOT NULL", "expected": ">=1" }
+      ],
+      "dependsOn": ["SIAL-TERMO-003"],
+      "estimateMinutes": 20,
+      "touches": ["scripts/smoke/termo-autenticidade.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

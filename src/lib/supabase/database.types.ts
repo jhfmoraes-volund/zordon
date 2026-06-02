@@ -518,6 +518,56 @@ export type Database = {
           },
         ]
       }
+      AgentMode: {
+        Row: {
+          agentSlug: string
+          mode: string
+          updatedAt: string
+          userId: string
+        }
+        Insert: {
+          agentSlug: string
+          mode?: string
+          updatedAt?: string
+          userId: string
+        }
+        Update: {
+          agentSlug?: string
+          mode?: string
+          updatedAt?: string
+          userId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "AgentMode_userId_fkey"
+            columns: ["userId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentMode_userId_fkey"
+            columns: ["userId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentMode_userId_fkey"
+            columns: ["userId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "AgentMode_userId_fkey"
+            columns: ["userId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       AgentProposalOutcome: {
         Row: {
           agentName: string
@@ -939,6 +989,124 @@ export type Database = {
             columns: ["sessionId"]
             isOneToOne: false
             referencedRelation: "DesignSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ChatTurn: {
+        Row: {
+          agentSlug: string
+          claimedBy: string | null
+          costUsd: number | null
+          createdAt: string
+          endedAt: string | null
+          errorReason: string | null
+          id: string
+          mode: string
+          responseMessageId: string | null
+          startedAt: string | null
+          status: string
+          systemPrompt: string
+          threadId: string
+          tokensIn: number | null
+          tokensOut: number | null
+          userMessageId: string
+        }
+        Insert: {
+          agentSlug: string
+          claimedBy?: string | null
+          costUsd?: number | null
+          createdAt?: string
+          endedAt?: string | null
+          errorReason?: string | null
+          id?: string
+          mode: string
+          responseMessageId?: string | null
+          startedAt?: string | null
+          status?: string
+          systemPrompt: string
+          threadId: string
+          tokensIn?: number | null
+          tokensOut?: number | null
+          userMessageId: string
+        }
+        Update: {
+          agentSlug?: string
+          claimedBy?: string | null
+          costUsd?: number | null
+          createdAt?: string
+          endedAt?: string | null
+          errorReason?: string | null
+          id?: string
+          mode?: string
+          responseMessageId?: string | null
+          startedAt?: string | null
+          status?: string
+          systemPrompt?: string
+          threadId?: string
+          tokensIn?: number | null
+          tokensOut?: number | null
+          userMessageId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ChatTurn_claimedBy_fkey"
+            columns: ["claimedBy"]
+            isOneToOne: false
+            referencedRelation: "ForgeDaemon"
+            referencedColumns: ["daemonId"]
+          },
+          {
+            foreignKeyName: "ChatTurn_responseMessageId_fkey"
+            columns: ["responseMessageId"]
+            isOneToOne: false
+            referencedRelation: "ChatMessage"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ChatTurn_threadId_fkey"
+            columns: ["threadId"]
+            isOneToOne: false
+            referencedRelation: "ChatThread"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ChatTurn_userMessageId_fkey"
+            columns: ["userMessageId"]
+            isOneToOne: false
+            referencedRelation: "ChatMessage"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ChatTurnEvent: {
+        Row: {
+          kind: string
+          payload: Json | null
+          seq: number
+          ts: string
+          turnId: string
+        }
+        Insert: {
+          kind: string
+          payload?: Json | null
+          seq: number
+          ts?: string
+          turnId: string
+        }
+        Update: {
+          kind?: string
+          payload?: Json | null
+          seq?: number
+          ts?: string
+          turnId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ChatTurnEvent_turnId_fkey"
+            columns: ["turnId"]
+            isOneToOne: false
+            referencedRelation: "ChatTurn"
             referencedColumns: ["id"]
           },
         ]
@@ -1448,8 +1616,10 @@ export type Database = {
           currentStep: number
           description: string | null
           facilitatorId: string | null
+          firstAnalysisStatus: string
           id: string
           isMain: boolean
+          launcherBrief: string | null
           memoryAbstract: string | null
           memoryMd: string | null
           memoryUpdatedAt: string | null
@@ -1477,8 +1647,10 @@ export type Database = {
           currentStep?: number
           description?: string | null
           facilitatorId?: string | null
+          firstAnalysisStatus?: string
           id?: string
           isMain?: boolean
+          launcherBrief?: string | null
           memoryAbstract?: string | null
           memoryMd?: string | null
           memoryUpdatedAt?: string | null
@@ -1506,8 +1678,10 @@ export type Database = {
           currentStep?: number
           description?: string | null
           facilitatorId?: string | null
+          firstAnalysisStatus?: string
           id?: string
           isMain?: boolean
+          launcherBrief?: string | null
           memoryAbstract?: string | null
           memoryMd?: string | null
           memoryUpdatedAt?: string | null
@@ -2797,6 +2971,7 @@ export type Database = {
           createdAt: string
           heartbeatAt: string | null
           id: string
+          kind: string
           maxStories: number | null
           meta: Json
           ownerId: string
@@ -2813,6 +2988,7 @@ export type Database = {
           createdAt?: string
           heartbeatAt?: string | null
           id?: string
+          kind?: string
           maxStories?: number | null
           meta?: Json
           ownerId: string
@@ -2829,6 +3005,7 @@ export type Database = {
           createdAt?: string
           heartbeatAt?: string | null
           id?: string
+          kind?: string
           maxStories?: number | null
           meta?: Json
           ownerId?: string
@@ -4918,6 +5095,7 @@ export type Database = {
           orchestrateJobId: string | null
           prdIndexSha: string | null
           projectId: string
+          scheduledFor: string | null
           sprintCount: number
           status: string
           title: string
@@ -4938,6 +5116,7 @@ export type Database = {
           orchestrateJobId?: string | null
           prdIndexSha?: string | null
           projectId: string
+          scheduledFor?: string | null
           sprintCount?: number
           status?: string
           title: string
@@ -4958,6 +5137,7 @@ export type Database = {
           orchestrateJobId?: string | null
           prdIndexSha?: string | null
           projectId?: string
+          scheduledFor?: string | null
           sprintCount?: number
           status?: string
           title?: string
@@ -5039,7 +5219,8 @@ export type Database = {
           order: number
           ownerOverride: string | null
           planningSessionId: string
-          prdSlug: string
+          prdSlug: string | null
+          productRequirementId: string | null
           sprintCount: number
           sprintStart: number
         }
@@ -5051,7 +5232,8 @@ export type Database = {
           order: number
           ownerOverride?: string | null
           planningSessionId: string
-          prdSlug: string
+          prdSlug?: string | null
+          productRequirementId?: string | null
           sprintCount?: number
           sprintStart: number
         }
@@ -5063,7 +5245,8 @@ export type Database = {
           order?: number
           ownerOverride?: string | null
           planningSessionId?: string
-          prdSlug?: string
+          prdSlug?: string | null
+          productRequirementId?: string | null
           sprintCount?: number
           sprintStart?: number
         }
@@ -5080,6 +5263,13 @@ export type Database = {
             columns: ["planningSessionId"]
             isOneToOne: false
             referencedRelation: "PlanningSession"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSessionPRD_productRequirementId_fkey"
+            columns: ["productRequirementId"]
+            isOneToOne: false
+            referencedRelation: "ProductRequirement"
             referencedColumns: ["id"]
           },
         ]
@@ -5359,7 +5549,9 @@ export type Database = {
           reference: string
           risksAndAssumptions: Json
           sourceCardIds: string[]
+          specMarkdown: string | null
           status: string
+          stories: Json
           successMetrics: Json
           technicalNotes: string
           title: string
@@ -5390,7 +5582,9 @@ export type Database = {
           reference: string
           risksAndAssumptions?: Json
           sourceCardIds?: string[]
+          specMarkdown?: string | null
           status?: string
+          stories?: Json
           successMetrics?: Json
           technicalNotes?: string
           title: string
@@ -5421,7 +5615,9 @@ export type Database = {
           reference?: string
           risksAndAssumptions?: Json
           sourceCardIds?: string[]
+          specMarkdown?: string | null
           status?: string
+          stories?: Json
           successMetrics?: Json
           technicalNotes?: string
           title?: string
@@ -5564,10 +5760,12 @@ export type Database = {
       Project: {
         Row: {
           alphaHierarchyEnabled: boolean
+          category: string
           clientId: string
           createdAt: string
           definitionOfDone: Json
           endDate: string | null
+          engagementType: string
           forgeSourceSessionId: string | null
           githubDefaultBranch: string
           githubPat: string | null
@@ -5578,6 +5776,7 @@ export type Database = {
           memoryUpdatedAt: string | null
           memoryVersion: number
           name: string
+          phase: string
           planningActive: boolean
           planningCadence: string | null
           pmId: string | null
@@ -5591,10 +5790,12 @@ export type Database = {
         }
         Insert: {
           alphaHierarchyEnabled?: boolean
+          category?: string
           clientId: string
           createdAt?: string
           definitionOfDone?: Json
           endDate?: string | null
+          engagementType?: string
           forgeSourceSessionId?: string | null
           githubDefaultBranch?: string
           githubPat?: string | null
@@ -5605,6 +5806,7 @@ export type Database = {
           memoryUpdatedAt?: string | null
           memoryVersion?: number
           name: string
+          phase?: string
           planningActive?: boolean
           planningCadence?: string | null
           pmId?: string | null
@@ -5618,10 +5820,12 @@ export type Database = {
         }
         Update: {
           alphaHierarchyEnabled?: boolean
+          category?: string
           clientId?: string
           createdAt?: string
           definitionOfDone?: Json
           endDate?: string | null
+          engagementType?: string
           forgeSourceSessionId?: string | null
           githubDefaultBranch?: string
           githubPat?: string | null
@@ -5632,6 +5836,7 @@ export type Database = {
           memoryUpdatedAt?: string | null
           memoryVersion?: number
           name?: string
+          phase?: string
           planningActive?: boolean
           planningCadence?: string | null
           pmId?: string | null
@@ -7845,6 +8050,7 @@ export type Database = {
         | "github_repo"
         | "github_pr"
         | "github_issue"
+        | "document"
       OpportunityStatus:
         | "discovery"
         | "evaluating"
@@ -7987,6 +8193,7 @@ export const Constants = {
         "github_repo",
         "github_pr",
         "github_issue",
+        "document",
       ],
       OpportunityStatus: [
         "discovery",

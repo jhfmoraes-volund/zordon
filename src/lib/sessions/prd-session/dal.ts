@@ -1,150 +1,168 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { createPrd } from "@/lib/dal/product-requirements";
-import { parsePrdMarkdown, type ParsedPrd } from "./parser";
 import type { Database } from "@/lib/supabase/database.types";
 import crypto from "crypto";
 
 type Tables = Database["public"]["Tables"];
 type DesignSessionInsert = Tables["DesignSession"]["Insert"];
-type DesignSessionRow = Tables["DesignSession"]["Row"];
 
-export type PrdSessionFile = {
-  filename: string;
-  content: string;
-};
-
-export type CreatePrdSessionResult = {
-  sessionId: string;
-  prds: Array<{
-    id: string;
-    reference: string;
-    title: string;
-    warnings: string[];
-  }>;
-};
+// ─── Quick-Ask Launcher (QAL-003) ────────────────────────────────────────────
+//
+// Ciclo de vida draft-no-open (D13):
+//   open   → createPrdDraftSession      (status=draft, firstAnalysisStatus=pending)
+//   OK     → finalizePrdLauncherSession (valida brief OU insumo; status=in_progress)
+//   cancel → deletePrdDraftSession      (só se ainda draft)
+//
+// Sem PrdQuickAskJob, sem Haiku single-shot — a 1ª análise vive no chat.
 
 /**
- * Cria uma PRD Session do tipo 'upload', parseia os markdowns, e cria
- * ProductRequirement rows (status=draft). Idempotente via description hash.
+ * Cria a DesignSession draft ao abrir o launcher. Insumos linkam ao vivo
+ * nessa session (infra context-import já usa sessionId). Brief e finalização
+ * vêm depois, no finalize.
  */
-export async function createPrdSessionUpload(args: {
+export async function createPrdDraftSession(args: {
   projectId: string;
-  files: PrdSessionFile[];
   actorMemberId: string;
-}): Promise<CreatePrdSessionResult> {
-  const { projectId, files, actorMemberId } = args;
+}): Promise<{ sessionId: string }> {
+  const { projectId, actorMemberId } = args;
   const supabase = db();
 
-  // Calcula hash SHA256 do payload pra idempotência
-  const payload = JSON.stringify({ projectId, files });
-  const payloadHash = crypto.createHash("sha256").update(payload).digest("hex");
-
-  // Verifica se já existe session com esse hash (stored in description)
-  const { data: existing } = await supabase
-    .from("DesignSession")
-    .select("id")
-    .eq("projectId", projectId)
-    .eq("type", "prd_session")
-    .eq("subKind", "upload")
-    .eq("description", payloadHash)
-    .maybeSingle();
-
-  if (existing) {
-    // Retorna session existente (idempotente)
-    const { data: prds } = await supabase
-      .from("ProductRequirement")
-      .select("id, reference, title, technicalNotes")
-      .eq("projectId", projectId)
-      .eq("designSessionId", existing.id)
-      .order("createdAt", { ascending: true });
-
-    return {
-      sessionId: existing.id,
-      prds:
-        prds?.map((p) => {
-          // Parse warnings from technicalNotes if present
-          let warnings: string[] = [];
-          try {
-            const notes = p.technicalNotes;
-            if (notes && notes.startsWith("WARNINGS:")) {
-              warnings = JSON.parse(notes.slice(9));
-            }
-          } catch {
-            // Ignore parse errors
-          }
-          return {
-            id: p.id,
-            reference: p.reference,
-            title: p.title,
-            warnings,
-          };
-        }) ?? [],
-    };
-  }
-
-  // Cria nova session
   const sessionId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
-  const sessionInsert: DesignSessionInsert = {
+  const insert: DesignSessionInsert = {
     id: sessionId,
     projectId,
     type: "prd_session",
-    subKind: "upload",
-    title: `PRD Upload — ${files.length} arquivo${files.length > 1 ? "s" : ""}`,
-    status: "completed",
+    subKind: "quick_ask",
+    title: "PRD Quick-Ask — rascunho",
+    status: "draft",
+    firstAnalysisStatus: "pending",
     currentStep: 0,
-    totalSteps: 0,
+    totalSteps: 1,
     createdBy: actorMemberId,
     createdAt: nowIso,
     updatedAt: nowIso,
-    completedAt: nowIso,
-    description: payloadHash, // Store hash for idempotency
   };
 
-  const { error: sessionErr } = await supabase
+  const { error } = await supabase.from("DesignSession").insert(insert);
+  if (error) throw error;
+
+  return { sessionId };
+}
+
+/** Conta insumos (ContextSource) linkados a uma session via EntityLink. */
+async function countSessionInsumos(sessionId: string): Promise<number> {
+  const supabase = db();
+  const { count, error } = await supabase
+    .from("EntityLink")
+    .select("id", { count: "exact", head: true })
+    .eq("designSessionId", sessionId)
+    .not("contextSourceId", "is", null);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export type FinalizePrdLauncherResult =
+  | { ok: true; sessionId: string }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Finaliza o launcher (OK). Valida brief≥10 OU ≥1 insumo linkado; seta
+ * launcherBrief + status=in_progress. Idempotente via guard `status=draft`.
+ */
+export async function finalizePrdLauncherSession(args: {
+  sessionId: string;
+  brief?: string | null;
+}): Promise<FinalizePrdLauncherResult> {
+  const { sessionId } = args;
+  const brief = (args.brief ?? "").trim();
+  const supabase = db();
+
+  const { data: session, error: fetchErr } = await supabase
     .from("DesignSession")
-    .insert(sessionInsert);
-  if (sessionErr) throw sessionErr;
-
-  // Parseia e cria PRDs
-  const createdPrds: Array<{
-    id: string;
-    reference: string;
-    title: string;
-    warnings: string[];
-  }> = [];
-
-  for (const file of files) {
-    const parsed = parsePrdMarkdown(file.content);
-
-    const prd = await createPrd({
-      projectId,
-      designSessionId: sessionId,
-      title: parsed.title,
-      problem: parsed.problem ?? "",
-      goal: parsed.oneLiner ?? "",
-      acceptanceCriteria: parsed.acceptanceCriteria as unknown as Database["public"]["Tables"]["ProductRequirement"]["Insert"]["acceptanceCriteria"],
-      status: "draft",
-      technicalNotes:
-        parsed.warnings.length > 0
-          ? `WARNINGS:${JSON.stringify(parsed.warnings)}`
-          : "",
-      actorAgent: "system",
-      actorMemberId,
-    });
-
-    createdPrds.push({
-      id: prd.id,
-      reference: prd.reference,
-      title: prd.title,
-      warnings: parsed.warnings,
-    });
+    .select("id, status, type, subKind")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (fetchErr) throw fetchErr;
+  if (!session) return { ok: false, status: 404, error: "Session não encontrada" };
+  if (session.type !== "prd_session" || session.subKind !== "quick_ask") {
+    return { ok: false, status: 400, error: "Session não é um launcher de Quick-Ask" };
+  }
+  if (session.status !== "draft") {
+    return { ok: false, status: 409, error: "Session já finalizada" };
   }
 
-  return {
-    sessionId,
-    prds: createdPrds,
-  };
+  const hasBrief = brief.length >= 10;
+  const insumoCount = hasBrief ? 0 : await countSessionInsumos(sessionId);
+  if (!hasBrief && insumoCount === 0) {
+    return {
+      ok: false,
+      status: 422,
+      error: "Informe um brief (≥10 caracteres) ou anexe ao menos 1 insumo.",
+    };
+  }
+
+  const title = hasBrief
+    ? `PRD Quick-Ask — ${brief.slice(0, 50)}${brief.length > 50 ? "..." : ""}`
+    : "PRD Quick-Ask — a partir de insumos";
+
+  const { error: updErr } = await supabase
+    .from("DesignSession")
+    .update({
+      launcherBrief: hasBrief ? brief : null,
+      status: "in_progress",
+      title,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq("id", sessionId)
+    .eq("status", "draft"); // guard contra race
+  if (updErr) throw updErr;
+
+  return { ok: true, sessionId };
+}
+
+/**
+ * Deleta a session draft no cancel/fechar. Só apaga se ainda `status=draft`
+ * (no-op se já finalizada). Remove os EntityLinks de insumo antes, pra não
+ * esbarrar em FK; ContextSource (reutilizável no projeto) é preservado.
+ */
+export async function deletePrdDraftSession(args: {
+  sessionId: string;
+}): Promise<{ deleted: boolean }> {
+  const { sessionId } = args;
+  const supabase = db();
+
+  // Confirma que é uma draft de quick-ask antes de mexer.
+  const { data: session, error: fetchErr } = await supabase
+    .from("DesignSession")
+    .select("id, status, type, subKind")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (fetchErr) throw fetchErr;
+  if (
+    !session ||
+    session.type !== "prd_session" ||
+    session.subKind !== "quick_ask" ||
+    session.status !== "draft"
+  ) {
+    return { deleted: false };
+  }
+
+  // Solta os links de insumo (preserva ContextSource), depois a session.
+  const { error: linkErr } = await supabase
+    .from("EntityLink")
+    .delete()
+    .eq("designSessionId", sessionId);
+  if (linkErr) throw linkErr;
+
+  const { data, error } = await supabase
+    .from("DesignSession")
+    .delete()
+    .eq("id", sessionId)
+    .eq("status", "draft")
+    .select("id");
+  if (error) throw error;
+
+  return { deleted: (data?.length ?? 0) > 0 };
 }

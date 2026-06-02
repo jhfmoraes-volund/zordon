@@ -159,7 +159,7 @@
       "estimateMinutes": 45,
       "touches": [
         "scripts/forge/cli.ts",
-        "scripts/forge/daemon.ts"
+        "scripts/daemon/daemon.ts"
       ],
       "agentProfile": "wiring",
       "passes": true
@@ -192,7 +192,7 @@
       "estimateMinutes": 30,
       "touches": [
         "scripts/forge/cli.ts",
-        "scripts/forge/daemon.ts"
+        "scripts/daemon/daemon.ts"
       ],
       "agentProfile": "wiring",
       "passes": true

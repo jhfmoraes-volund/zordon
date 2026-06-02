@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
+  File,
   FileSpreadsheet,
   FileText,
   GitBranch,
+  Loader2,
   Unlink,
 } from "lucide-react";
 import {
@@ -18,7 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type PillKind = "transcript" | "spreadsheet" | "github";
+type PillKind = "transcript" | "spreadsheet" | "github" | "document";
+
+/** Formatos aceitos no upload de documentos — espelha o backend de extração. */
+const FILE_ACCEPT = ".pdf,.docx,.txt,.md,.html,.htm,.csv,.xlsx,.xls";
 
 interface ContextItem {
   id: string;
@@ -103,6 +108,7 @@ interface ContextSheetCapabilities {
   transcript?: boolean;
   spreadsheet?: boolean;
   github?: boolean;
+  file?: boolean;
 }
 
 interface ContextSheetHandlers {
@@ -110,6 +116,7 @@ interface ContextSheetHandlers {
   onImportTranscript?: () => void;
   onImportSpreadsheet?: () => void;
   onImportGitHub?: () => void;
+  onUploadFiles?: (files: FileList) => void;
 }
 
 interface ContextSheetProps {
@@ -120,6 +127,8 @@ interface ContextSheetProps {
   capabilities: ContextSheetCapabilities;
   handlers: ContextSheetHandlers;
   customGitHubPanel?: React.ReactNode;
+  /** Mostra spinner no painel de documentos enquanto o upload roda. */
+  uploadingFile?: boolean;
 }
 
 export default function ContextSheet({
@@ -130,8 +139,10 @@ export default function ContextSheet({
   capabilities,
   handlers,
   customGitHubPanel,
+  uploadingFile,
 }: ContextSheetProps) {
   const [activePill, setActivePill] = useState<PillKind | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Abre modal de importação fechando o sheet primeiro — sem isso, o backdrop
   // do sheet captura os cliques do modal e parece que "nada acontece".
@@ -155,6 +166,9 @@ export default function ContextSheet({
     (item) => item.kind === "spreadsheet",
   ).length;
   const githubCount = linkedItems.filter((item) => item.kind === "github").length;
+  const documentCount = linkedItems.filter(
+    (item) => item.kind === "document",
+  ).length;
 
   const togglePill = (kind: PillKind) =>
     setActivePill((cur) => (cur === kind ? null : kind));
@@ -165,6 +179,9 @@ export default function ContextSheet({
     }
     if (kind === "github") {
       return <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+    }
+    if (kind === "document") {
+      return <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
     }
     return <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
   }
@@ -201,6 +218,16 @@ export default function ContextSheet({
                   onClick={() => togglePill("spreadsheet")}
                 />
               )}
+              {capabilities.file && (
+                <ContextPill
+                  icon={<File className="h-3.5 w-3.5" />}
+                  label="Documento"
+                  count={documentCount}
+                  active={activePill === "document"}
+                  onClick={() => togglePill("document")}
+                />
+              )}
+              {/* GitHub sempre por último — chip à direita. */}
               {capabilities.github && (
                 <ContextPill
                   icon={<GitBranch className="h-3.5 w-3.5" />}
@@ -222,7 +249,7 @@ export default function ContextSheet({
 
             {activePill === "spreadsheet" && capabilities.spreadsheet && (
               <InlinePanel
-                description="Importar dados de planilha (CSV ou Google Sheets)."
+                description="Importar dados de planilha (CSV)."
                 cta="Importar planilha"
                 onClick={() => openImport("spreadsheet")}
               />
@@ -240,6 +267,41 @@ export default function ContextSheet({
                     bare
                   />
                 )}
+              </div>
+            )}
+
+            {activePill === "document" && capabilities.file && (
+              <div className="rounded-md border bg-muted/20 px-3 py-3 space-y-1.5">
+                <div className="flex items-center gap-3">
+                  <p className="flex-1 text-sm text-muted-foreground">
+                    Anexar documentos (PDF, DOCX, TXT, MD, HTML, CSV, XLSX) como
+                    contexto.
+                  </p>
+                  <Button
+                    size="sm"
+                    disabled={uploadingFile}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {uploadingFile ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Anexar arquivo"
+                    )}
+                  </Button>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={FILE_ACCEPT}
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) {
+                      handlers.onUploadFiles?.(e.target.files);
+                    }
+                    e.target.value = "";
+                  }}
+                />
               </div>
             )}
           </section>

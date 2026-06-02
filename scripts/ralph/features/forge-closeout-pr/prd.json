@@ -82,12 +82,12 @@
         "Tipecheck passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts", "expected": "" },
-        { "kind": "lint", "command_or_query": "grep -c 'closeoutRun' scripts/forge/exec-prd.ts", "expected": "1" }
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit scripts/daemon/exec-forge-run.ts", "expected": "" },
+        { "kind": "lint", "command_or_query": "grep -c 'closeoutRun' scripts/daemon/exec-forge-run.ts", "expected": "1" }
       ],
       "dependsOn": ["FCO-002"],
       "estimateMinutes": 15,
-      "touches": ["scripts/forge/exec-prd.ts"],
+      "touches": ["scripts/daemon/exec-forge-run.ts"],
       "agentProfile": "code",
       "passes": false
     },

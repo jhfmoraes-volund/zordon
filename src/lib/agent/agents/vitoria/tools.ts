@@ -131,10 +131,12 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
             .record(z.string(), z.unknown())
             .describe(
               "Dados da ação. SHAPE POR TYPE:\n" +
-                "• create: { title, description, functionPoints (1-13), acceptanceCriteria (array ≥3), type?, scope?, priority? }\n" +
-                "• update: campos a alterar (qualquer subset dos de create)\n" +
+                "• create: { title, description, functionPoints (1-13), acceptanceCriteria (array de strings ≥3), type?, scope?, priority?, assigneeIds?, userStoryId? }\n" +
+                "• update: campos a alterar (qualquer subset dos de create; assigneeIds substitui o set inteiro)\n" +
                 "• move: { } (vazio — use targetSprintId top-level)\n" +
                 "• delete: { } (vazio)\n" +
+                "assigneeIds: array de Member.id — resolva via list_project_members ANTES (1 responsável por task é o ideal). " +
+                "userStoryId: id de uma UserStory pra pendurar a task — crie a story antes via propose_story se ainda não existe. " +
                 "description deve usar template SDD: H2 ## Problema, H2 ## Solução, H2 ## Invariantes (cite path do código quando relevante).",
             ),
           aiReasoning: z
@@ -223,6 +225,62 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
 
         if (error) throw new Error(`Falha ao criar proposta: ${error.message}`);
         return { ok: true, actionId: data.id, type: data.type };
+      },
+    }),
+
+    propose_story: tool({
+      description:
+        "Cria uma User Story pra AGRUPAR tasks da planning. A story é o container; as tasks vão penduradas via `userStoryId` no propose_task_action (use o storyId retornado aqui). " +
+        "A story é criada NA HORA (aparece na árvore já agrupando os ghosts das tasks) — mas as TASKS continuam propostas até o PM concluir a planning. " +
+        "Use proposedModuleName pra agrupar a story sob um módulo nomeado (ex: 'Cobrança', 'Notas Fiscais'); sem isso ela cai em '(sem módulo)'. " +
+        "NÃO crie stories pra itens operacionais soltos (bugs/ajustes avulsos) — esses ficam como tasks sem story. Story é pra agrupar trabalho que compartilha um objetivo de usuário.",
+      inputSchema: z.object({
+        title: z.string().min(3).describe("Título curto da story (ex: 'Conciliação de cobrança')"),
+        want: z
+          .string()
+          .min(10)
+          .describe("O 'quero' da story — 'Como <persona>, quero <want>'. Foco na capacidade do usuário."),
+        soThat: z
+          .string()
+          .optional()
+          .describe("O 'para que' — valor/porquê. 'para que <soThat>'."),
+        proposedModuleName: z
+          .string()
+          .optional()
+          .describe("Nome do módulo pra agrupar a story na árvore. Reuse o mesmo nome entre stories do mesmo tema."),
+      }),
+      execute: async ({ title, want, soThat, proposedModuleName }) => {
+        const supabase = db();
+        const { data: reference, error: rpcErr } = await supabase.rpc(
+          "next_user_story_reference",
+          { p_project_id: projectId },
+        );
+        if (rpcErr || !reference) {
+          return { ok: false, error: `Falha ao gerar reference: ${rpcErr?.message ?? "sem valor"}` };
+        }
+        const { data, error } = await supabase
+          .from("UserStory")
+          .insert({
+            projectId,
+            reference: reference as string,
+            title,
+            want,
+            soThat: soThat ?? null,
+            proposedModuleName: proposedModuleName ?? null,
+            refinementStatus: "draft",
+            createdByAgent: true,
+            updatedAt: new Date().toISOString(),
+          })
+          .select("id, reference, title")
+          .single();
+        if (error) return { ok: false, error: error.message };
+        return {
+          ok: true,
+          storyId: data.id,
+          reference: data.reference,
+          title: data.title,
+          hint: "Use storyId em payload.userStoryId dos propose_task_action pra pendurar as tasks.",
+        };
       },
     }),
 
@@ -412,6 +470,38 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           limit: lim,
           offset: off,
         };
+      },
+    }),
+
+    list_project_members: tool({
+      description:
+        "Lista os membros do squad do projeto (id, nome, capacidade FP, dedicação). " +
+        "Use SEMPRE antes de propor assigneeIds num create/update — nunca invente Member.id. " +
+        "Se o projeto não tem squad, retorna lista vazia (avise o PM que precisa cadastrar squad).",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const supabase = db();
+        const { data: ps } = await supabase
+          .from("ProjectSquad")
+          .select("squadId")
+          .eq("projectId", projectId);
+        const squadIds = (ps ?? []).map((r) => r.squadId);
+        if (squadIds.length === 0) return { ok: true, members: [] };
+
+        const { data: smRows, error } = await supabase
+          .from("SquadMember")
+          .select("member:Member(id, name, fpCapacity, dedicationPercent)")
+          .in("squadId", squadIds);
+        if (error) return { ok: false, error: error.message };
+
+        // Dedup por id (membro pode estar em >1 squad do projeto).
+        const byId = new Map<string, { id: string; name: string; fpCapacity: number; dedicationPercent: number }>();
+        for (const row of (smRows ?? []) as Array<{
+          member: { id: string; name: string; fpCapacity: number; dedicationPercent: number } | null;
+        }>) {
+          if (row.member) byId.set(row.member.id, row.member);
+        }
+        return { ok: true, members: Array.from(byId.values()) };
       },
     }),
 

@@ -1,0 +1,97 @@
+{
+  "feature": "sial-validacao-publica",
+  "title": "SIAL Validação Pública — consulta de autenticidade sem login",
+  "prd_path": "docs/prd/backlog/prd-sial-validacao-publica.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-PUB-001",
+      "title": "Migration — view sial_validacao_publica (+ GRANT anon)",
+      "description": "Cria a view mínima de §7 e concede SELECT ao role anônimo.",
+      "acceptanceCriteria": [
+        "View sial_validacao_publica existe",
+        "View não inclui colunas de CPF/CNPJ/dados pessoais",
+        "anon tem SELECT na view"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.views WHERE table_name='sial_validacao_publica'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PUB-002",
+      "title": "Rate limiting util",
+      "description": "src/lib/sial/rate-limit.ts (por IP/janela) reutilizável no endpoint público.",
+      "acceptanceCriteria": [
+        "Bloqueia após N hits na janela",
+        "Reseta após a janela"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/sial/rate-limit.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PUB-003",
+      "title": "API pública GET /api/publico/validar/:codigo",
+      "description": "Endpoint sem auth lendo a view, com rate limiting; não vaza existência de processo.",
+      "acceptanceCriteria": [
+        "Código válido retorna {valido:true, tipo, protocolo, autenticadoEm}",
+        "Código inexistente retorna {valido:false}",
+        "Excesso de requisições retorna 429"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-PUB-001", "SIAL-PUB-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/publico/validar/[codigo]/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PUB-004",
+      "title": "Página pública de validação + leitura de QR",
+      "description": "Página em (publico) com campo de código e resultado; aceita ?codigo= do QR.",
+      "acceptanceCriteria": [
+        "Sem login, mostra válido/não encontrado",
+        "QR /validar?codigo= preenche e consulta automaticamente",
+        "Link 'Ver termo' abre o documento"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-PUB-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(publico)/validar/page.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-PUB-005",
+      "title": "Smoke — validação pública (válido/inválido/sem-dados-sensíveis)",
+      "description": "scripts/smoke/validacao-publica.ts consulta código válido e inválido e checa ausência de dados sensíveis.",
+      "acceptanceCriteria": [
+        "Código publicado retorna valido:true",
+        "Código aleatório retorna valido:false",
+        "Resposta não contém CPF/CNPJ"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='sial_validacao_publica' AND column_name IN ('documento','cpf','cnpj')", "expected": "0" }
+      ],
+      "dependsOn": ["SIAL-PUB-004"],
+      "estimateMinutes": 20,
+      "touches": ["scripts/smoke/validacao-publica.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

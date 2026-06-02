@@ -33,6 +33,7 @@ type Props = {
   onCloneTask?: (taskRef: string) => void;
   onCopyTaskRef?: (taskRef: string) => void;
   onDeleteTask?: (taskRef: string) => void;
+  onHardDeleteTask?: (taskRef: string) => void;
 
   // ─── Bulk callbacks (forwarded to TasksList) ──────────────────────────────
   onBulkUpdate?: (
@@ -73,6 +74,7 @@ export function SprintDetail({
   onCloneTask,
   onCopyTaskRef,
   onDeleteTask,
+  onHardDeleteTask,
   onBulkUpdate,
   onBulkDelete,
   onBulkDuplicate,
@@ -104,6 +106,7 @@ export function SprintDetail({
         onClone={onCloneTask}
         onCopyRef={onCopyTaskRef}
         onDelete={onDeleteTask}
+        onHardDelete={onHardDeleteTask}
         onBulkUpdate={onBulkUpdate}
         onBulkDelete={onBulkDelete}
         onBulkDuplicate={onBulkDuplicate}

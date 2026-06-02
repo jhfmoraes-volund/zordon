@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
       assignments:TaskAssignment(*, member:Member(id, name))
     `)
     .neq("status", "draft")
+    .is("dismissedAt", null)
     .order("priority", { ascending: false })
     .order("createdAt", { ascending: false });
 
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   // Add _count.iterations via separate query
   const taskIds = (tasks ?? []).map((t) => t.id);
-  let iterationCounts: Record<string, number> = {};
+  const iterationCounts: Record<string, number> = {};
   if (taskIds.length > 0) {
     const { data: counts } = await supabase
       .from("TaskIteration")

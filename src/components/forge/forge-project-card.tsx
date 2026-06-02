@@ -413,7 +413,29 @@ function SessionLoader({
           onValueChange={(v) => setSelectedId(v)}
         >
           <SelectTrigger className="h-9 flex-1 min-w-[260px]">
-            <SelectValue placeholder="Selecione uma session…" />
+            <SelectValue placeholder="Selecione uma session…">
+              {(v: string | null) => {
+                const s = v ? sessions.find((x) => x.id === v) : null;
+                if (!s) {
+                  return (
+                    <span className="text-muted-foreground">
+                      Selecione uma session…
+                    </span>
+                  );
+                }
+                return (
+                  <span className="flex items-center gap-2">
+                    {s.isMain && (
+                      <Star className="size-3 text-amber-500 fill-amber-500" />
+                    )}
+                    <span className="truncate">{s.title}</span>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {s.prdReady}/{s.prdTotal}
+                    </span>
+                  </span>
+                );
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {sessions.map((s) => (

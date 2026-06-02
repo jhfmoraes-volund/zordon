@@ -64,7 +64,8 @@ export async function GET(
       supabase
         .from("Task")
         .select("status, functionPoints")
-        .in("projectId", projectIds),
+        .in("projectId", projectIds)
+        .is("dismissedAt", null),
       supabase
         .from("Sprint")
         .select("id, status")

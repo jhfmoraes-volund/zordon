@@ -1,0 +1,234 @@
+{
+  "feature": "sial-identity-access",
+  "title": "SIAL Identidade e Acesso (IAM) — gov.br + SSO interno + RBAC + RLS",
+  "prd_path": "docs/prd/backlog/prd-sial-identity-access.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-IAM-001",
+      "title": "Migration — tabela Usuario (externo/interno + nivelGovbr)",
+      "description": "Cria Usuario conforme §7 (1) com CHECK de tipo e nivelGovbr, índice por tipo, RLS on.",
+      "acceptanceCriteria": [
+        "Usuario existe com tipo CHECK ('externo','interno')",
+        "Colunas govBrId, ssoId, nivelGovbr presentes",
+        "RLS habilitado"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT relrowsecurity FROM pg_class WHERE relname='Usuario'", "expected": "t" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-002",
+      "title": "Migration — Perfil (+ seed dos 3 perfis)",
+      "description": "Cria Perfil e insere administrador/resolvedor/setor conforme §7 (2).",
+      "acceptanceCriteria": [
+        "Perfil existe com nome UNIQUE",
+        "3 perfis seedados"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Perfil\"", "expected": "3" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-003",
+      "title": "Migration — UsuarioPerfil (N:N)",
+      "description": "Cria tabela de junção conforme §7 (3) com PK composta e RLS on.",
+      "acceptanceCriteria": [
+        "UsuarioPerfil tem PK (usuarioId, perfilId)",
+        "FKs ON DELETE CASCADE para Usuario e Perfil"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.table_constraints WHERE table_name='UsuarioPerfil' AND constraint_type='FOREIGN KEY'", "expected": "2" }
+      ],
+      "dependsOn": ["SIAL-IAM-001", "SIAL-IAM-002"],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-004",
+      "title": "Migration — FKs no núcleo (Processo.requerenteId, Evento.usuarioId)",
+      "description": "ALTER adicionando as FKs que o core deixou como uuid solto (§7 (4)).",
+      "acceptanceCriteria": [
+        "Processo_requerente_fk existe",
+        "Evento_usuario_fk existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.table_constraints WHERE constraint_name IN ('Processo_requerente_fk','Evento_usuario_fk')", "expected": "2" }
+      ],
+      "dependsOn": ["SIAL-IAM-001"],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-005",
+      "title": "Migration — RLS helpers (is_servidor, has_perfil, current_usuario)",
+      "description": "Cria as funções SQL de §7 (5).",
+      "acceptanceCriteria": [
+        "sial_current_usuario(), sial_is_servidor(), sial_has_perfil(text) existem",
+        "sial_has_perfil retorna boolean"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_proc WHERE proname IN ('sial_current_usuario','sial_is_servidor','sial_has_perfil')", "expected": "3" }
+      ],
+      "dependsOn": ["SIAL-IAM-003"],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-006",
+      "title": "Migration — RLS policies (Processo, Evento, Metodo, Usuario)",
+      "description": "Cria as policies de §7 (6) usando os helpers.",
+      "acceptanceCriteria": [
+        "Policies de SELECT em Processo para requerente e servidor existem",
+        "Metodo tem policy de escrita só para administrador"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename IN ('Processo','Evento','Metodo','Usuario')", "expected": "7" }
+      ],
+      "dependsOn": ["SIAL-IAM-005", "SIAL-IAM-004"],
+      "estimateMinutes": 30,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-007",
+      "title": "Auth gov.br — provider OIDC + callback (Usuario externo)",
+      "description": "Configura provider OIDC gov.br no Supabase Auth e o callback que faz upsert de Usuario(tipo=externo, govBrId, nivelGovbr) e cria sessão.",
+      "acceptanceCriteria": [
+        "GET /api/auth/govbr/callback troca code por token e upserta Usuario",
+        "nivelGovbr é persistido a partir do claim do gov.br",
+        "Cadastro novo redireciona para onboarding; existente para o Portal"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-IAM-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/auth/govbr/callback/route.ts", "src/lib/sial/auth/govbr.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-008",
+      "title": "Auth interno — callback SSO (Usuario interno + perfis)",
+      "description": "Callback SAML/OIDC corporativo que upserta Usuario(tipo=interno, ssoId), resolve UsuarioPerfil e entrega o backoffice. Atrás de feature flag.",
+      "acceptanceCriteria": [
+        "GET /api/auth/interno/callback upserta Usuario interno",
+        "Perfis resolvidos a partir do diretório (ou seed admin de fallback)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-IAM-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/auth/interno/callback/route.ts", "src/lib/sial/auth/interno.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-009",
+      "title": "GET /api/me — sessão atual + perfis",
+      "description": "Endpoint que retorna o Usuario logado, tipo, perfis e nivelGovbr. Base dos guards da app.",
+      "acceptanceCriteria": [
+        "GET /api/me retorna {usuario, perfis[], tipo, nivelGovbr}",
+        "Sem sessão retorna 401"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-IAM-007"],
+      "estimateMinutes": 20,
+      "touches": ["src/app/api/me/route.ts", "src/lib/sial/auth/session.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-010",
+      "title": "Onboarding externo — API + wizard (CNPJ stub)",
+      "description": "POST /api/onboarding coleta papel/CNPJ/contato, valida CNPJ via stub e completa Usuario. Wizard React de 2 passos.",
+      "acceptanceCriteria": [
+        "POST /api/onboarding completa documento/papel do Usuario",
+        "Wizard renderiza 2 passos e bloqueia avanço sem papel",
+        "Validação de CNPJ é um stub isolado (interface trocável)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-IAM-009"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/onboarding/route.ts", "src/components/sial/onboarding-wizard.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-011",
+      "title": "Gestão de usuários e perfis (admin) — API + UI",
+      "description": "GET /api/admin/usuarios, POST /api/admin/usuarios/:id/perfis (add/remove), GET /api/admin/perfis. UI em ResponsiveSheet. Restrito a administrador (RLS + guard).",
+      "acceptanceCriteria": [
+        "Lista de usuários internos com perfis",
+        "Add/remove de perfil persiste e reflete no RLS",
+        "Não-admin recebe 403"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-IAM-006", "SIAL-IAM-009"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/admin/usuarios/route.ts", "src/components/sial/admin/usuarios-sheet.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-012",
+      "title": "Regenerar database.types.ts (Usuario/Perfil/UsuarioPerfil + FKs)",
+      "description": "Atualiza os types do Supabase.",
+      "acceptanceCriteria": [
+        "Types incluem Usuario, Perfil, UsuarioPerfil",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-IAM-004"],
+      "estimateMinutes": 15,
+      "touches": ["src/lib/supabase/database.types.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-IAM-013",
+      "title": "Smoke — isolamento RLS entre dois requerentes",
+      "description": "Cria usuário A e B (externos), cada um com um Processo. Confirma que A não vê o de B, e que resolvedor vê ambos.",
+      "acceptanceCriteria": [
+        "Como A: GET processos retorna só o de A",
+        "Como B: não retorna o de A",
+        "Como resolvedor: retorna A e B"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Logar como A, B e resolvedor; comparar listas de processos", "expected": "isolamento correto entre requerentes; servidor vê todos" }
+      ],
+      "dependsOn": ["SIAL-IAM-011", "SIAL-IAM-010"],
+      "estimateMinutes": 25,
+      "touches": ["(end-to-end)"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

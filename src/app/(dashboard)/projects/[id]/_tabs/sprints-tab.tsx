@@ -103,6 +103,7 @@ export type SprintsTabProps = {
   openCloneDialog: (taskRef: string) => Promise<void> | void;
   handleCopyTaskRef: (taskRef: string) => Promise<void> | void;
   handleDeleteTask: (taskRef: string) => Promise<void> | void;
+  handleHardDeleteTask: (taskRef: string) => Promise<void> | void;
   handleBulkUpdate: (taskRefs: string[], input: BulkUpdateInput) => Promise<void> | void;
   handleBulkDelete: (taskRefs: string[]) => Promise<void> | void;
   handleBulkDuplicate: (taskRefs: string[]) => Promise<void> | void;
@@ -146,6 +147,7 @@ export function SprintsTab({
   openCloneDialog,
   handleCopyTaskRef,
   handleDeleteTask,
+  handleHardDeleteTask,
   handleBulkUpdate,
   handleBulkDelete,
   handleBulkDuplicate,
@@ -385,6 +387,7 @@ export function SprintsTab({
                 onClone={openCloneDialog}
                 onCopyRef={handleCopyTaskRef}
                 onDelete={handleDeleteTask}
+                onHardDelete={handleHardDeleteTask}
                 onBulkUpdate={handleBulkUpdate}
                 onBulkDelete={handleBulkDelete}
                 onBulkDuplicate={handleBulkDuplicate}
@@ -408,6 +411,7 @@ export function SprintsTab({
               onCloneTask={openCloneDialog}
               onCopyTaskRef={handleCopyTaskRef}
               onDeleteTask={handleDeleteTask}
+              onHardDeleteTask={handleHardDeleteTask}
               onBulkUpdate={handleBulkUpdate}
               onBulkDelete={handleBulkDelete}
               onBulkDuplicate={handleBulkDuplicate}

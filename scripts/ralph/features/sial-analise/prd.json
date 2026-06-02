@@ -1,0 +1,112 @@
+{
+  "feature": "sial-analise",
+  "title": "SIAL Análise — fila + tela com sincronização externa + parecer",
+  "prd_path": "docs/prd/backlog/prd-sial-analise.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-ANA-001",
+      "title": "Migration — tabela Analise (+ RLS)",
+      "description": "Cria Analise conforme §7 (1) com CHECK de decisao e policy de servidor.",
+      "acceptanceCriteria": [
+        "decisao CHECK (exigencia/deferir/tramitar/arquivar/proresp)",
+        "Policy analise_servidor existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Analise'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ANA-002",
+      "title": "Migration — FK Exigencia.analiseId → Analise",
+      "description": "Fecha a FK adiada do PRD exigência (§7 (2)).",
+      "acceptanceCriteria": [
+        "Constraint Exigencia_analise_fk existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.table_constraints WHERE constraint_name='Exigencia_analise_fk'", "expected": "1" }
+      ],
+      "dependsOn": ["SIAL-ANA-001"],
+      "estimateMinutes": 10,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ANA-003",
+      "title": "SincronizacaoGateway — interface + stub",
+      "description": "src/lib/sial/sincronizacao-gateway.ts com sync(processo) → fontes [{nome, sincronizadoEm, ok}] (stub).",
+      "acceptanceCriteria": [
+        "Retorna status por fonte (SEFAZ/Receita/mainframe)",
+        "Fonte fora retorna ok=false sem lançar"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/sial/sincronizacao-gateway.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ANA-004",
+      "title": "API fila de análise (filtros + RLS)",
+      "description": "GET /api/analise/fila com filtros método/prazo/status; só servidor (RLS).",
+      "acceptanceCriteria": [
+        "Retorna processos enviado_analise",
+        "Filtro por método funciona",
+        "Não-servidor recebe 403"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-ANA-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/analise/fila/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ANA-005",
+      "title": "API iniciar análise (claim) + parecer + sincronizar",
+      "description": "POST iniciar (enviado_analise→em_analise + Analise), POST parecer, POST sincronizar.",
+      "acceptanceCriteria": [
+        "iniciar faz claim e cria Analise com analistaId",
+        "iniciar em processo já em_analise por outro retorna 409",
+        "sincronizar retorna status por fonte"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-ANA-001", "SIAL-ANA-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/processos/[id]/analise/iniciar/route.ts", "src/app/api/processos/[id]/analise/parecer/route.ts", "src/app/api/processos/[id]/analise/sincronizar/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ANA-006",
+      "title": "Tela de fila + tela de análise + types + smoke",
+      "description": "Fila com filtros e tela de detalhe (dados+sync+documentos+parecer+botões de decisão). Regenera types; smoke.",
+      "acceptanceCriteria": [
+        "Fila abre o protocolo na tela de análise",
+        "Sincronização mostra status por fonte",
+        "Smoke: iniciar análise move para em_analise e grava parecer"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Resolvedor abre a fila, entra num protocolo, sincroniza, grava parecer", "expected": "processo em em_analise, Analise criada" }
+      ],
+      "dependsOn": ["SIAL-ANA-004", "SIAL-ANA-005"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(backoffice)/analise/page.tsx", "src/app/(backoffice)/analise/[id]/page.tsx", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

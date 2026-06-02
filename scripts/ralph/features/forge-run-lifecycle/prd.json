@@ -50,12 +50,12 @@
       "verifiable": [
         {
           "kind": "typecheck",
-          "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts",
+          "command_or_query": "npx tsc --noEmit scripts/daemon/exec-forge-run.ts",
           "expected": ""
         },
         {
           "kind": "lint",
-          "command_or_query": "grep -cE 'markRunRunning|updateRunProgress' scripts/forge/exec-prd.ts",
+          "command_or_query": "grep -cE 'markRunRunning|updateRunProgress' scripts/daemon/exec-forge-run.ts",
           "expected": "2"
         }
       ],
@@ -64,7 +64,7 @@
       ],
       "estimateMinutes": 15,
       "touches": [
-        "scripts/forge/exec-prd.ts"
+        "scripts/daemon/exec-forge-run.ts"
       ],
       "agentProfile": "code",
       "passes": true
@@ -83,12 +83,12 @@
       "verifiable": [
         {
           "kind": "typecheck",
-          "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts",
+          "command_or_query": "npx tsc --noEmit scripts/daemon/exec-forge-run.ts",
           "expected": ""
         },
         {
           "kind": "lint",
-          "command_or_query": "grep -cE 'markRunDone|markRunError' scripts/forge/exec-prd.ts",
+          "command_or_query": "grep -cE 'markRunDone|markRunError' scripts/daemon/exec-forge-run.ts",
           "expected": "6"
         }
       ],
@@ -97,7 +97,7 @@
       ],
       "estimateMinutes": 20,
       "touches": [
-        "scripts/forge/exec-prd.ts"
+        "scripts/daemon/exec-forge-run.ts"
       ],
       "agentProfile": "code",
       "passes": true

@@ -5,25 +5,26 @@ import { toast } from "sonner";
 import ContextSheet from "@/components/agent/context-import/context-sheet";
 import {
   TranscriptModal,
-  SpreadsheetModal,
   GitHubSourceModal,
 } from "@/components/agent/context-import";
 import {
   ConfirmDialog,
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
+import { createDocumentSource } from "@/lib/context-sources/upload-document";
+import { showErrorToast } from "@/lib/optimistic/toast";
 
 /**
  * Painel único de Insumos para Design Sessions (Inception + PRD).
  *
- * Dono do sheet completo: transcript + planilha + github, todos sobre o mesmo
+ * Dono do sheet completo: transcript + documento + github, todos sobre o mesmo
  * modelo `ContextSource` + `EntityLink.contextSourceId`. Cada superfície DS só
- * renderiza este componente e abre/fecha via `open`/`onOpenChange` — capabilities
- * e fluxo de import/unlink ficam aqui, padronizados.
+ * renderiza este componente e abre/fecha via `open`/`onOpenChange`.
  *
  * Fluxo de import:
  *   • transcript → POST /transcripts (cria ContextSource kind='transcript' + linka)
- *   • planilha/github → POST /api/context-sources (cria) → POST /context/link (linka)
+ *   • documento → POST /api/context-sources (kind='document') → POST /context/link
+ *   • github → POST /api/context-sources → POST /context/link
  * Unlink (qualquer kind) → DELETE /context/[linkId] (linkId = EntityLink.id).
  */
 
@@ -41,7 +42,10 @@ type ContextLinkRow = {
   } | null;
 };
 
-function kindToPill(kind: string): "transcript" | "spreadsheet" | "github" {
+function kindToPill(
+  kind: string,
+): "transcript" | "spreadsheet" | "github" | "document" {
+  if (kind === "document") return "document";
   if (kind.startsWith("spreadsheet")) return "spreadsheet";
   if (kind.startsWith("github")) return "github";
   return "transcript";
@@ -73,17 +77,17 @@ export function DesignSessionContextSheet({
 }: Props) {
   const [links, setLinks] = useState<ContextLinkRow[]>([]);
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
-  const [spreadsheetModalOpen, setSpreadsheetModalOpen] = useState(false);
   const [githubModalOpen, setGithubModalOpen] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
-  const applyRows = useCallback(
-    (rows: ContextLinkRow[]) => {
-      setLinks(rows);
-      onCountChange?.(rows.length);
-    },
-    [onCountChange],
-  );
+  const applyRows = useCallback((rows: ContextLinkRow[]) => {
+    setLinks(rows);
+  }, []);
+
+  useEffect(() => {
+    onCountChange?.(links.length);
+  }, [links.length, onCountChange]);
 
   const refetch = useCallback(async () => {
     try {
@@ -123,7 +127,7 @@ export function DesignSessionContextSheet({
     [links],
   );
 
-  // Linka um ContextSource recém-criado (planilha/github) a esta sessão.
+  // Linka um ContextSource recém-criado (documento/github) a esta sessão.
   const linkSource = useCallback(
     async (contextSourceId: string) => {
       const r = await fetch(`/api/design-sessions/${sessionId}/context/link`, {
@@ -166,6 +170,23 @@ export function DesignSessionContextSheet({
     [sessionId, refetch, onChanged],
   );
 
+  const handleUploadFiles = useCallback(
+    async (fileList: FileList) => {
+      setUploadingFile(true);
+      try {
+        for (const file of Array.from(fileList)) {
+          const sourceId = await createDocumentSource(projectId, file);
+          await linkSource(sourceId);
+        }
+      } catch (e) {
+        showErrorToast(e, { label: "Falha ao enviar documento" });
+      } finally {
+        setUploadingFile(false);
+      }
+    },
+    [projectId, linkSource],
+  );
+
   return (
     <>
       <ContextSheet
@@ -173,12 +194,17 @@ export function DesignSessionContextSheet({
         onOpenChange={onOpenChange}
         ritualLabel={ritualLabel}
         linkedItems={linkedItems}
-        capabilities={{ transcript: true, spreadsheet: true, github: true }}
+        capabilities={{
+          transcript: true,
+          file: true,
+          github: true,
+        }}
+        uploadingFile={uploadingFile}
         handlers={{
           onUnlink: handleUnlink,
           onImportTranscript: () => setTranscriptModalOpen(true),
-          onImportSpreadsheet: () => setSpreadsheetModalOpen(true),
           onImportGitHub: () => setGithubModalOpen(true),
+          onUploadFiles: handleUploadFiles,
         }}
       />
 
@@ -189,16 +215,6 @@ export function DesignSessionContextSheet({
         onImported={() => {
           void refetch();
           onChanged?.();
-        }}
-      />
-
-      <SpreadsheetModal
-        apiUrl="/api/context-sources"
-        projectId={projectId}
-        open={spreadsheetModalOpen}
-        onOpenChange={setSpreadsheetModalOpen}
-        onImported={(id) => {
-          void linkSource(id);
         }}
       />
 

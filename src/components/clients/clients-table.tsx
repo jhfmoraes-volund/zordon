@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/app-shell";
 import {
   Table,
   TableBody,
@@ -121,7 +122,8 @@ export function ClientsTable({ initial }: Props) {
   };
 
   return (
-    <div className="space-y-6">
+    <PageContainer>
+      <div className="space-y-6">
       <PageHeader title="Clientes" onAdd={openNew} addLabel="Novo Cliente" />
 
       <div className="surface">
@@ -233,6 +235,7 @@ export function ClientsTable({ initial }: Props) {
         </ResponsiveDialogContent>
       </ResponsiveDialog>
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
-    </div>
+      </div>
+    </PageContainer>
   );
 }

@@ -1,0 +1,113 @@
+{
+  "feature": "sial-assinatura",
+  "title": "SIAL Assinatura — gov.br/certificado A1-A3, coautoria e fila",
+  "prd_path": "docs/prd/backlog/prd-sial-assinatura.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-ASS-001",
+      "title": "Migration — DocumentoAssinante (+ RLS, UNIQUE)",
+      "description": "Cria DocumentoAssinante conforme §7 (1) com UNIQUE (documentoId, usuarioId) e policy.",
+      "acceptanceCriteria": [
+        "UNIQUE (documentoId, usuarioId)",
+        "status CHECK ('pendente','assinado')",
+        "Policy doc_assinante_self existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='DocumentoAssinante'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ASS-002",
+      "title": "Migration — Assinatura (+ RLS)",
+      "description": "Cria Assinatura conforme §7 (2) com CHECK de tipo e policy.",
+      "acceptanceCriteria": [
+        "tipo CHECK ('govbr','certificado_a1','certificado_a3')",
+        "hash NOT NULL"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='Assinatura' AND column_name='hash'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ASS-003",
+      "title": "AssinaturaGateway — gov.br + certificado (stub)",
+      "description": "src/lib/sial/assinatura-gateway.ts com assinar(caminho, documento, usuario) → {hash}. Stub valida nivelGovbr.",
+      "acceptanceCriteria": [
+        "Caminho govbr rejeita nivelGovbr insuficiente",
+        "Caminho certificado_a1/a3 retorna hash determinístico (stub)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/sial/assinatura-gateway.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ASS-004",
+      "title": "API vincular assinante + assinar (regra de conclusão)",
+      "description": "POST assinantes, POST assinar (cria Assinatura, marca pendência; quando todas assinadas, documento pronto).",
+      "acceptanceCriteria": [
+        "Vincular cria pendência",
+        "Assinar com nivel insuficiente retorna 412",
+        "Última assinatura marca o documento como totalmente assinado"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-ASS-001", "SIAL-ASS-002", "SIAL-ASS-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/documentos/[id]/assinantes/route.ts", "src/app/api/documentos/[id]/assinar/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ASS-005",
+      "title": "Fila de pendências + assinatura em lote (API + UI)",
+      "description": "GET /api/assinaturas/pendentes, POST /api/assinaturas/lote, e a tela de fila.",
+      "acceptanceCriteria": [
+        "Fila lista só pendências do usuário logado",
+        "Lote assina múltiplos com o mesmo caminho",
+        "RLS impede ver pendência de outro usuário"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-ASS-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/assinaturas/pendentes/route.ts", "src/app/api/assinaturas/lote/route.ts", "src/components/sial/fila-assinaturas.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-ASS-006",
+      "title": "Regenerar types + smoke (coautoria)",
+      "description": "Types; smoke com documento de 2 assinantes — só conclui quando ambos assinam.",
+      "acceptanceCriteria": [
+        "Documento com 2 assinantes não conclui com 1 assinatura",
+        "Após a 2ª assinatura, documento fica totalmente assinado"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Vincular 2 assinantes; assinar com cada um; observar conclusão", "expected": "conclui só após ambos" }
+      ],
+      "dependsOn": ["SIAL-ASS-005"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/supabase/database.types.ts", "(end-to-end)"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

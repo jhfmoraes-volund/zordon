@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getActorMemberId } from "@/lib/dal";
+import { extractTextFromBuffer } from "@/lib/design-session/file-extraction";
 import { z } from "zod";
 
 // Schema Zod para CSV upload
@@ -14,6 +15,16 @@ const CSVCreateSchema = z.object({
   title: z.string().min(1),
   projectId: z.string().uuid(),
   file: z.string().describe("Base64-encoded CSV file content"),
+});
+
+// Schema Zod para upload de documento genérico (PDF/DOCX/CSV/XLSX/TXT/...).
+const DocumentCreateSchema = z.object({
+  kind: z.literal("document"),
+  title: z.string().min(1),
+  projectId: z.string().uuid(),
+  file: z.string().describe("Base64-encoded file content"),
+  filename: z.string().min(1),
+  mimeType: z.string().default(""),
 });
 
 // Schema Zod para GSheets
@@ -34,6 +45,7 @@ const GitHubCreateSchema = z.object({
 
 const CreateContextSourceSchema = z.discriminatedUnion("kind", [
   CSVCreateSchema,
+  DocumentCreateSchema,
   GSheetsCreateSchema,
   GitHubCreateSchema,
 ]);
@@ -91,6 +103,58 @@ export async function POST(req: NextRequest) {
 
       if (uploadError) {
         // Rollback: delete the ContextSource record
+        await supabase.from("ContextSource").delete().eq("id", source.id);
+        throw new Error(`Failed to upload file: ${uploadError.message}`);
+      }
+
+      return NextResponse.json({ id: source.id, kind: source.kind, title: source.title });
+    }
+
+    // Handle generic document upload (PDF/DOCX/CSV/XLSX/TXT/...).
+    // Extracts text on upload and caches it in fullText so agents read it via
+    // read_context_source. Raw file is kept in storage for eventual download.
+    if (data.kind === "document") {
+      const fileBuffer = Buffer.from(data.file, "base64");
+      const extraction = await extractTextFromBuffer(
+        fileBuffer,
+        data.filename,
+        data.mimeType,
+      );
+      const summary =
+        extraction.status === "success"
+          ? null
+          : extraction.status === "unsupported"
+            ? "Formato não suportado — conteúdo não extraído."
+            : "Falha ao extrair o conteúdo do arquivo.";
+
+      const { data: source, error: sourceError } = await supabase
+        .from("ContextSource")
+        .insert({
+          kind: data.kind,
+          title: data.title,
+          projectId: data.projectId,
+          createdBy: memberId,
+          fullText: extraction.text || null,
+          source: data.mimeType || null,
+          summary,
+          capturedAt: new Date().toISOString(),
+          payload: {},
+        })
+        .select()
+        .single();
+
+      if (sourceError || !source) {
+        throw new Error(sourceError?.message || "Failed to create ContextSource");
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from("context-source-files")
+        .upload(source.id, fileBuffer, {
+          contentType: data.mimeType || "application/octet-stream",
+          upsert: false,
+        });
+
+      if (uploadError) {
         await supabase.from("ContextSource").delete().eq("id", source.id);
         throw new Error(`Failed to upload file: ${uploadError.message}`);
       }

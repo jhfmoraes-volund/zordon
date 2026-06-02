@@ -1,0 +1,94 @@
+{
+  "feature": "sial-denuncia-analise",
+  "title": "SIAL Denúncia Análise — despacho e decisão (tramitar/arquivar/PRORESP)",
+  "prd_path": "docs/prd/backlog/prd-sial-denuncia-analise.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-DENA-001",
+      "title": "Migration — tabela Despacho (+ RLS)",
+      "description": "Cria Despacho conforme §7 com policy de servidor.",
+      "acceptanceCriteria": [
+        "Despacho.processoId FK CASCADE; analiseId FK",
+        "Policy despacho_servidor existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Despacho'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DENA-002",
+      "title": "API fila de denúncias + analisar",
+      "description": "GET /api/denuncias/fila e POST analisar (pendente→em_analise + Analise).",
+      "acceptanceCriteria": [
+        "Fila lista denúncias pendentes (servidor)",
+        "analisar cria Analise e transiciona"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DENA-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/denuncias/fila/route.ts", "src/app/api/processos/[id]/denuncia/analisar/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DENA-003",
+      "title": "API despacho",
+      "description": "POST despacho cria Despacho e transiciona em_analise→despachada.",
+      "acceptanceCriteria": [
+        "Despacho criado com conteudo",
+        "Processo vira despachada"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DENA-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/processos/[id]/denuncia/despacho/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DENA-004",
+      "title": "API decidir (arquivar/tramitar/PRORESP) — reuso",
+      "description": "POST decidir roteia para cascata de deferir (arquivar), tramitação (tramitar) ou tramitar p/ PRORESP.",
+      "acceptanceCriteria": [
+        "arquivar leva a status arquivado (cascata reusada)",
+        "tramitar/proresp criam Tramite e transicionam",
+        "decisão inválida retorna 422"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DENA-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/processos/[id]/denuncia/decidir/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DENA-005",
+      "title": "Tela de análise de denúncia + types + smoke",
+      "description": "Tela com alvo/provas/despacho/decisão; types; smoke do fluxo até cada desfecho.",
+      "acceptanceCriteria": [
+        "Tela permite despachar e decidir",
+        "Smoke: pendente→...→arquivado e tramitado funcionam"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Despacho\"", "expected": ">=1" }
+      ],
+      "dependsOn": ["SIAL-DENA-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/(backoffice)/denuncias/[id]/page.tsx", "scripts/smoke/denuncia-analise.ts", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

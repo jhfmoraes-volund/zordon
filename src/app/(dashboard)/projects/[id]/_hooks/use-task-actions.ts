@@ -557,30 +557,47 @@ export function useTaskActions(args: {
     );
   }
 
+  // Arquivar = soft delete (server seta `dismissedAt`). A task some das listas
+  // mas o histórico fica preservado.
   async function handleDeleteTask(taskRef: string) {
     const taskId = findTaskIdByRef(taskRef);
     if (!taskId) return;
     setConfirmState({
-      title: `Deletar task ${taskRef}?`,
-      confirmLabel: "Deletar",
-      destructive: true,
-      onConfirm: () => deleteTask(taskRef, taskId),
+      title: `Arquivar task ${taskRef}?`,
+      description:
+        "A task sai das listas, mas o histórico fica preservado. Você pode excluir de vez depois.",
+      confirmLabel: "Arquivar",
+      onConfirm: () => removeTask(taskRef, taskId, false),
     });
   }
 
-  async function deleteTask(taskRef: string, taskId: string) {
+  // Excluir = hard delete (server remove a linha + cascata). Permanente.
+  async function handleHardDeleteTask(taskRef: string) {
+    const taskId = findTaskIdByRef(taskRef);
+    if (!taskId) return;
+    setConfirmState({
+      title: `Excluir task ${taskRef} permanentemente?`,
+      description:
+        "Isso apaga a task e tudo ligado a ela (critérios, comentários, iterações). Não dá pra desfazer.",
+      confirmLabel: "Excluir",
+      destructive: true,
+      onConfirm: () => removeTask(taskRef, taskId, true),
+    });
+  }
+
+  async function removeTask(taskRef: string, taskId: string, hard: boolean) {
     if (selectedTaskRef === taskRef) setSelectedTaskRef(null);
     await taskMutate(
       { type: "delete", id: taskId },
       async (signal) => {
-        const res = await fetchOrThrow(`/api/tasks/${taskId}`, {
-          method: "DELETE",
-          signal,
-        });
+        const res = await fetchOrThrow(
+          `/api/tasks/${taskId}${hard ? "?hard=true" : ""}`,
+          { method: "DELETE", signal },
+        );
         return (await res.json()) as { ok: true; id: string };
       },
       {
-        errorLabel: "Falha ao deletar task",
+        errorLabel: hard ? "Falha ao excluir task" : "Falha ao arquivar task",
         reconcile: (prev) => prev.filter((t) => t.id !== taskId),
       },
     );
@@ -793,7 +810,8 @@ export function useTaskActions(args: {
     handleConfirmDuplicate,
     handleConfirmClone,
     handleDeleteTask,
-    deleteTask,
+    handleHardDeleteTask,
+    removeTask,
     handleBulkUpdate,
     handleBulkDelete,
     handleBulkDuplicate,

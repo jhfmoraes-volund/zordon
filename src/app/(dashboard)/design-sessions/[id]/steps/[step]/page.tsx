@@ -126,7 +126,7 @@ export default function StepPage({
         backHref={`/projects/${session.projectId}?tab=sessions`}
         memoriaHref={`/design-sessions/${id}/memoria`}
       >
-        <StepContent stepKey={currentStepDef.key} sessionId={id} projectId={session.projectId} />
+        <StepContent stepKey={currentStepDef.key} sessionId={id} projectId={session.projectId} sessionType={session.type} />
       </WizardLayout>
     </DesignSessionProvider>
     </div>
@@ -139,10 +139,12 @@ function StepContent({
   stepKey,
   sessionId,
   projectId,
+  sessionType,
 }: {
   stepKey: string;
   sessionId: string;
   projectId: string;
+  sessionType: string;
 }) {
   switch (stepKey) {
     case "pre_work":
@@ -164,6 +166,12 @@ function StepContent({
     case "hypotheses":
       return <HypothesesStep sessionId={sessionId} />;
     case "briefing":
+      // Vitor (inception/super) agora termina sempre no PRD Tree, não na
+      // árvore Module→Story→Task (deprecated p/ Vitor). BriefingStep (árvore
+      // de Story) segue p/ CI e demais usos.
+      if (sessionType === "inception" || sessionType === "super") {
+        return <PrdBriefingStep sessionId={sessionId} projectId={projectId} />;
+      }
       return <BriefingStep sessionId={sessionId} />;
     case "prd_briefing":
       return <PrdBriefingStep sessionId={sessionId} projectId={projectId} />;
@@ -893,7 +901,7 @@ function BriefingStep({ sessionId }: { sessionId: string }) {
     // borda inferior do header. h-full + flex-col faz o conteúdo abaixo do
     // ribbon ocupar exatamente a altura restante (até o bottom do viewport),
     // e cada coluna do grid rola independente — chat não acompanha a árvore.
-    <div className="w-full -m-6 h-full flex flex-col min-h-0">
+    <div className="-m-6 h-full flex flex-col min-h-0">
       <BriefingRibbon
         sessionId={sessionId}
         briefingData={allData}

@@ -528,8 +528,13 @@ export async function setForgeSourceSession(args: {
 type ManifestStory = {
   id: string;
   title: string;
-  ac: string[];
+  description?: string;
+  acceptanceCriteria: string[];
+  verifiable: Array<{ kind: string; command_or_query: string; expected: string }>;
   dependsOn: string[];
+  agentProfile?: string;
+  estimateMinutes?: number;
+  touches?: string[];
 };
 
 type ManifestPrd = {
@@ -550,27 +555,111 @@ export type ForgeRunManifest = {
   prds: ManifestPrd[];
 };
 
+/** Ordena os PRDs topologicamente por ProductRequirement.dependencies (prdId),
+ *  pra que a ordem do snapshot respeite deps cross-PRD. Deps fora do conjunto
+ *  elegível são ignoradas. Ciclo/sobra → mantém ordem de entrada (estável). */
+function topoSortByDependencies(
+  prds: ProductRequirementRow[],
+): ProductRequirementRow[] {
+  const byId = new Map(prds.map((p) => [p.id, p]));
+  const indeg = new Map(prds.map((p) => [p.id, 0]));
+  const adj = new Map<string, string[]>(prds.map((p) => [p.id, []]));
+  for (const p of prds) {
+    const deps = Array.isArray(p.dependencies)
+      ? (p.dependencies as Array<Record<string, unknown>>)
+      : [];
+    for (const d of deps) {
+      const pid =
+        d && typeof d === "object" && typeof d.prdId === "string"
+          ? d.prdId
+          : null;
+      if (pid && byId.has(pid)) {
+        adj.get(pid)!.push(p.id);
+        indeg.set(p.id, (indeg.get(p.id) ?? 0) + 1);
+      }
+    }
+  }
+  const queue = prds.filter((p) => (indeg.get(p.id) ?? 0) === 0).map((p) => p.id);
+  const out: ProductRequirementRow[] = [];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(byId.get(id)!);
+    for (const n of adj.get(id) ?? []) {
+      indeg.set(n, (indeg.get(n) ?? 1) - 1);
+      if ((indeg.get(n) ?? 0) === 0) queue.push(n);
+    }
+  }
+  if (out.length < prds.length) {
+    for (const p of prds) if (!seen.has(p.id)) out.push(p);
+  }
+  return out;
+}
+
+/** Mapeia uma story rica (jsonb de ProductRequirement.stories) pro shape do
+ *  manifest consumido por exec-forge-run/exec-forge-story. */
+function toManifestStory(s: Record<string, unknown>): ManifestStory {
+  return {
+    id: String(s.id ?? ""),
+    title: String(s.title ?? s.id ?? ""),
+    description: typeof s.description === "string" ? s.description : undefined,
+    acceptanceCriteria: Array.isArray(s.acceptanceCriteria)
+      ? (s.acceptanceCriteria as unknown[]).map(String)
+      : [],
+    verifiable: Array.isArray(s.verifiable)
+      ? (s.verifiable as ManifestStory["verifiable"])
+      : [],
+    dependsOn: Array.isArray(s.dependsOn)
+      ? (s.dependsOn as unknown[]).map(String)
+      : [],
+    agentProfile: typeof s.agentProfile === "string" ? s.agentProfile : undefined,
+    estimateMinutes:
+      typeof s.estimateMinutes === "number" ? s.estimateMinutes : undefined,
+    touches: Array.isArray(s.touches)
+      ? (s.touches as unknown[]).map(String)
+      : undefined,
+  };
+}
+
 /**
  * Snapshot dos PRDs aprovados de uma session pro formato consumido pelo worker.
  *
- * Cada PRD vira 1 "story implícita" no manifest (id = PRD reference). O worker
- * recebe acceptanceCriteria como AC; deps entre PRDs ficam vazias por default
- * (ordenação fica a cargo do orchestrator no worker).
+ * Se o PRD tem `stories` rico (com verifiable), emite **1 manifest story por
+ * item** (granular, self-verifying). Se `stories` está vazio, faz fallback ao
+ * comportamento legado: 1 story por PRD com AC = acceptanceCriteria (sem
+ * verifiable). PRDs são ordenados topologicamente por dependencies.
  */
-function snapshotManifest(
+export function snapshotManifest(
   sessionId: string,
   prds: ProductRequirementRow[],
 ): ForgeRunManifest {
   const snapshotAt = new Date().toISOString();
+  const ordered = topoSortByDependencies(prds);
   return {
     version: 1,
     snapshotAt,
     sourceSessionId: sessionId,
-    prds: prds.map((p) => {
+    prds: ordered.map((p) => {
       const acRaw = Array.isArray(p.acceptanceCriteria)
         ? (p.acceptanceCriteria as Array<Record<string, unknown>>)
         : [];
-      const acFlat = acRaw.map(stringifyAc);
+      const richStories = Array.isArray(p.stories)
+        ? (p.stories as Array<Record<string, unknown>>)
+        : [];
+      const stories: ManifestStory[] =
+        richStories.length > 0
+          ? richStories.map(toManifestStory)
+          : [
+              {
+                id: p.reference,
+                title: p.title,
+                acceptanceCriteria: acRaw.map(stringifyAc),
+                verifiable: [],
+                dependsOn: [],
+              },
+            ];
       return {
         id: p.id,
         reference: p.reference,
@@ -579,14 +668,7 @@ function snapshotManifest(
         goal: p.goal ?? "",
         oneLiner: p.oneLiner ?? "",
         acceptanceCriteria: acRaw,
-        stories: [
-          {
-            id: p.reference,
-            title: p.title,
-            ac: acFlat,
-            dependsOn: [],
-          },
-        ],
+        stories,
       };
     }),
   };
@@ -664,6 +746,24 @@ export async function createForgeRunFromSession(args: {
         "Todos os PRDs aprovados desta session já foram concluídos — nada novo pra rodar.",
       );
     }
+  }
+
+  // FRS-004: stories ricas exigem ≥1 verifiable cada — sem check automatizável
+  // o agente não tem "done" objetivo. PRDs sem `stories` (fallback legado) passam.
+  const offenders: string[] = [];
+  for (const p of eligible) {
+    const stories = Array.isArray(p.stories)
+      ? (p.stories as Array<Record<string, unknown>>)
+      : [];
+    for (const s of stories) {
+      const v = Array.isArray(s.verifiable) ? s.verifiable : [];
+      if (v.length === 0) offenders.push(`${p.reference}/${String(s.id ?? "?")}`);
+    }
+  }
+  if (offenders.length > 0) {
+    const head = offenders.slice(0, 10).join(", ");
+    const more = offenders.length > 10 ? ` (+${offenders.length - 10})` : "";
+    throw new Error(`story_without_verifiable: ${head}${more}`);
   }
 
   const manifest = snapshotManifest(project.forgeSourceSessionId, eligible);

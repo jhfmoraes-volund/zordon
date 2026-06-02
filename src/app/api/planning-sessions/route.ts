@@ -12,6 +12,7 @@ const createSchema = z.object({
   title: z.string().min(3).max(160),
   sprintCount: z.number().int().min(1).max(12).default(6),
   facilitatorId: z.string().uuid().nullable().optional(),
+  scheduledFor: z.string().datetime().nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {

@@ -27,7 +27,7 @@ Código existente no qual esse spec se apoia:
 
 | Anchor | Função | Como autorun usa |
 |---|---|---|
-| [scripts/forge/exec-story.ts](../../scripts/forge/exec-story.ts) | Spawn de 1 worker `claude -p` com contexto de 1 story | Autorun chama múltiplas vezes em loop |
+| [scripts/daemon/exec-forge-story.ts](../../scripts/daemon/exec-forge-story.ts) | Spawn de 1 worker `claude -p` com contexto de 1 story | Autorun chama múltiplas vezes em loop |
 | [src/lib/forge/prd-fs.ts](../../src/lib/forge/prd-fs.ts) | `readPrd`, `listRuns`, agregação | Fonte da lista de stories + estado |
 | [src/app/api/forge/runs/from-story/route.ts](../../src/app/api/forge/runs/from-story/route.ts) | Dispatch detached único | Modelo do dispatch — autorun usa o mesmo `child_process.spawn` |
 | [src/app/api/forge/runs/[id]/stream/route.ts](../../src/app/api/forge/runs/[id]/stream/route.ts) | SSE de events.jsonl | Reusa — autorun adiciona stream agregado por PRD |
@@ -155,7 +155,7 @@ Código existente no qual esse spec se apoia:
 ## Implementação proposta — 4 sub-spikes incrementais
 
 **3a (~45min) — Sequencial mínimo, sem gates:**
-- `scripts/forge/exec-prd.ts` — orchestrator loop em Node
+- `scripts/daemon/exec-forge-run.ts` — orchestrator loop em Node
 - `src/app/api/forge/runs/from-prd/route.ts` — POST dispatch
 - Loop simples: pick → spawn exec-story → wait done → next
 - Sem memory.jsonl, sem verifiable enforcement, sem gates

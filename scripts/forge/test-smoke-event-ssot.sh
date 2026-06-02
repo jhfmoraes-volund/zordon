@@ -182,7 +182,7 @@ if [[ -f .env ]]; then
   export SUPABASE_SERVICE_ROLE_KEY=$(grep '^SUPABASE_SERVICE_ROLE_KEY=' .env | cut -d= -f2- | tr -d '"')
 fi
 
-npx tsx scripts/forge/exec-story.ts "${TEST_RUN_ID}" smoke-test "${TEST_STORY_ID}" > /tmp/smoke-test-output.log 2>&1 &
+npx tsx scripts/daemon/exec-forge-story.ts "${TEST_RUN_ID}" smoke-test "${TEST_STORY_ID}" > /tmp/smoke-test-output.log 2>&1 &
 EXEC_PID=$!
 
 # Wait up to 15s for completion

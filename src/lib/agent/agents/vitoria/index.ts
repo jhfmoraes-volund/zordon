@@ -7,6 +7,11 @@ import {
   buildPMReviewPrompt,
   buildPMReviewTools,
 } from "./pm-review";
+import {
+  loadReleasePlanningContext,
+  buildReleasePlanningPrompt,
+  buildReleasePlanningTools,
+} from "./release-planning";
 import { getConnectionStatus, getUserTools } from "@/lib/composio/client";
 
 /**
@@ -38,6 +43,10 @@ export const vitoriaAgent: AgentDefinition = {
     if (surface === "pm_review") {
       const pmReviewId = req.params.pmReviewId as string;
       return loadPMReviewContext(pmReviewId, req.memberId ?? null);
+    }
+    if (surface === "release_planning") {
+      const sessionId = req.params.sessionId as string;
+      return loadReleasePlanningContext(sessionId, req.memberId ?? null);
     }
 
     const planningId = req.params.planningId as string;
@@ -196,8 +205,12 @@ export const vitoriaAgent: AgentDefinition = {
   },
 
   buildPrompt(ctx) {
-    if ((ctx.agentContext as { surface?: string }).surface === "pm_review") {
+    const surface = (ctx.agentContext as { surface?: string }).surface;
+    if (surface === "pm_review") {
       return buildPMReviewPrompt(ctx);
+    }
+    if (surface === "release_planning") {
+      return buildReleasePlanningPrompt(ctx);
     }
     return buildVitoriaPrompt(ctx);
   },
@@ -212,6 +225,11 @@ export const vitoriaAgent: AgentDefinition = {
       // PM Review NÃO usa Composio/GitHub tools (manifest do projeto está no
       // prompt; indicadores via get_project_indicators). Mantém prompt enxuto.
       return buildPMReviewTools(pmReviewId, projectId);
+    }
+
+    if (surface === "release_planning") {
+      const sessionId = agentContext.sessionId as string;
+      return buildReleasePlanningTools(sessionId);
     }
 
     const planningId = agentContext.planningId as string;

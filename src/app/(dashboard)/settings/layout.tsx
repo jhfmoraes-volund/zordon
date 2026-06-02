@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings, User, Palette, Plug } from "lucide-react";
+import { Settings, User, Palette, Plug, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const sections = [
   { href: "/settings/account", label: "Conta", icon: User },
   { href: "/settings/appearance", label: "Aparência", icon: Palette },
+  { href: "/settings/agents", label: "Agentes", icon: Bot },
   { href: "/settings/integrations", label: "Integrações", icon: Plug },
 ];
 

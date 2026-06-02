@@ -84,7 +84,8 @@ export async function POST(
        tags:TaskTagAssignment(tag:TaskTag(id, name, tone))`,
     )
     .eq("projectId", projectId)
-    .neq("status", "draft");
+    .neq("status", "draft")
+    .is("dismissedAt", null);
 
   if (tasksRes.error) {
     return NextResponse.json({ error: tasksRes.error.message }, { status: 500 });

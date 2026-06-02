@@ -1,0 +1,81 @@
+{
+  "feature": "sial-mock-data",
+  "title": "SIAL Mock Data — seed idempotente da demo (fecha o Track A)",
+  "prd_path": "docs/prd/backlog/prd-sial-mock-data.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-MOCK-001",
+      "title": "Seed — usuários, perfis, áreas, métodos, cadastros",
+      "description": "scripts/seed/mock-data.ts (parte 1): 5 usuários + perfis, áreas (PRORESP+setores), métodos garantidos, cadastros. Idempotente.",
+      "acceptanceCriteria": [
+        "5 usuários com perfis das personas",
+        "Área PRORESP existe",
+        ">=4 cadastros leiloeiro/tradutor",
+        "Reexecutar não duplica"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Usuario\"", "expected": ">=5" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": ["scripts/seed/mock-data.ts"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-MOCK-002",
+      "title": "Seed — processos em todos os status (+ artefatos)",
+      "description": "~20 processos de requerimento cobrindo todos os status, com Protocolo, Documento, Assinatura, Analise.",
+      "acceptanceCriteria": [
+        ">=8 status distintos representados",
+        "Processos têm protocolo e ao menos 1 documento",
+        "Idempotente"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(DISTINCT status) FROM \"Processo\"", "expected": ">=8" }
+      ],
+      "dependsOn": ["SIAL-MOCK-001"],
+      "estimateMinutes": 30,
+      "touches": ["scripts/seed/mock-data.ts"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-MOCK-003",
+      "title": "Seed — denúncias, trâmites, autenticações publicadas, notificações",
+      "description": "Denúncias em vários estados, trâmites ida/volta, >=3 Autenticacao publicadas com código, notificações na central.",
+      "acceptanceCriteria": [
+        ">=3 autenticações publicadas com codigoValidacao",
+        ">=2 denúncias em estados diferentes",
+        "Trâmites e notificações presentes"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"Autenticacao\" WHERE \"publicadoEm\" IS NOT NULL", "expected": ">=3" }
+      ],
+      "dependsOn": ["SIAL-MOCK-002"],
+      "estimateMinutes": 30,
+      "touches": ["scripts/seed/mock-data.ts"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-MOCK-004",
+      "title": "npm run seed (guarda de ambiente) + smoke",
+      "description": "Comando npm run seed que roda o mock-data só fora de produção; scripts/smoke/mock-data.ts confere as contagens mínimas.",
+      "acceptanceCriteria": [
+        "npm run seed popula tudo de uma vez",
+        "Recusa rodar em produção",
+        "Smoke valida cobertura de status + autenticações publicadas + diretório"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT (SELECT count(DISTINCT status) FROM \"Processo\")>=8 AND (SELECT count(*) FROM \"Autenticacao\" WHERE \"publicadoEm\" IS NOT NULL)>=3", "expected": "t" }
+      ],
+      "dependsOn": ["SIAL-MOCK-003"],
+      "estimateMinutes": 25,
+      "touches": ["package.json", "scripts/smoke/mock-data.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

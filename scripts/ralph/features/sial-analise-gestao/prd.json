@@ -1,0 +1,131 @@
+{
+  "feature": "sial-analise-gestao",
+  "title": "SIAL Gestão da Análise — redistribuição, anotações internas, SLA/prazos",
+  "prd_path": "docs/prd/backlog/prd-sial-analise-gestao.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-AGES-001",
+      "title": "Migration — Processo.responsavelId",
+      "description": "ALTER add responsavelId + índice (§7 (1)).",
+      "acceptanceCriteria": [
+        "Coluna responsavelId (FK Usuario) existe",
+        "Índice Processo_responsavel_idx existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='Processo' AND column_name='responsavelId'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-AGES-002",
+      "title": "Migration — NotaInterna (+ RLS só servidor)",
+      "description": "Cria NotaInterna conforme §7 (2); policy só servidor.",
+      "acceptanceCriteria": [
+        "Tabela NotaInterna existe com mencionados uuid[]",
+        "Policy nota_interna_servidor existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='NotaInterna'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-AGES-003",
+      "title": "Migration — PrazoConfig (+ RLS)",
+      "description": "Cria PrazoConfig conforme §7 (3) com UNIQUE (metodoDominio, etapa).",
+      "acceptanceCriteria": [
+        "UNIQUE (metodoDominio, etapa)",
+        "Policies prazo_admin e prazo_read existem"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='PrazoConfig'", "expected": "2" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-AGES-004",
+      "title": "Atribuição/redistribuição (API + carga)",
+      "description": "POST /api/processos/:id/atribuir + GET /api/analise/carga.",
+      "acceptanceCriteria": [
+        "Atribuir seta responsavelId e grava Evento",
+        "Carga retorna contagem por analista",
+        "Só servidor/admin"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-AGES-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/processos/[id]/atribuir/route.ts", "src/app/api/analise/carga/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-AGES-005",
+      "title": "Notas internas (API + UI)",
+      "description": "GET/POST /api/processos/:id/notas + componente; nunca exposto ao requerente.",
+      "acceptanceCriteria": [
+        "Servidor cria/lê notas",
+        "Endpoint do portal NUNCA retorna notas",
+        "Menção registra usuários"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-AGES-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/processos/[id]/notas/route.ts", "src/components/sial/notas-internas.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "SIAL-AGES-006",
+      "title": "SLA — config + cálculo de vencimento + alerta (no-op)",
+      "description": "GET/POST /api/admin/prazos, GET /api/analise/vencendo, alerta via NotificacaoService.",
+      "acceptanceCriteria": [
+        "Admin configura prazo por método/etapa",
+        "vencendo lista itens próximos/estourados",
+        "Alerta chama NotificacaoService (no-op ok)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-AGES-003"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/admin/prazos/route.ts", "src/app/api/analise/vencendo/route.ts", "src/lib/sial/sla.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-AGES-007",
+      "title": "Smoke — gestão da análise + types",
+      "description": "scripts/smoke/analise-gestao.ts atribui, anota e calcula prazo; types.",
+      "acceptanceCriteria": [
+        "Atribuição persiste",
+        "Nota interna criada e invisível ao requerente",
+        "Item vencido aparece em /vencendo"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"NotaInterna\"", "expected": ">=1" }
+      ],
+      "dependsOn": ["SIAL-AGES-004", "SIAL-AGES-005", "SIAL-AGES-006"],
+      "estimateMinutes": 25,
+      "touches": ["scripts/smoke/analise-gestao.ts", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

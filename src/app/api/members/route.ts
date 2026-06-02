@@ -22,7 +22,8 @@ export async function GET() {
     supabase
       .from("Task")
       .select("id, functionPoints, status, sprintId, assignments:TaskAssignment(memberId)")
-      .in("status", [...OPEN_STATUSES]),
+      .in("status", [...OPEN_STATUSES])
+      .is("dismissedAt", null),
   ]);
 
   if (membersRes.error) {

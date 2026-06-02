@@ -70,11 +70,12 @@ type TasksListProps = {
   sprints?: SprintLite[];
   onChangeSprint?: (taskRef: string, sprintId: string | null) => void;
 
-  // ─── Row menu callbacks (3-dot menu). When all 4 are passed, column shows. ─
+  // ─── Row menu callbacks (3-dot menu). When all 5 are passed, column shows. ─
   onDuplicate?: (taskRef: string) => void;
   onClone?: (taskRef: string) => void;
   onCopyRef?: (taskRef: string) => void;
   onDelete?: (taskRef: string) => void;
+  onHardDelete?: (taskRef: string) => void;
 
   // ─── Bulk callbacks. When provided, checkbox column appears. ──────────────
   onBulkUpdate?: (
@@ -136,6 +137,7 @@ export function TasksList({
   onClone,
   onCopyRef,
   onDelete,
+  onHardDelete,
   onBulkUpdate,
   onBulkDelete,
   onBulkDuplicate,
@@ -293,7 +295,13 @@ export function TasksList({
   };
 
   const showSprint = !!(sprints && onChangeSprint);
-  const showMenu = !!(onDuplicate && onClone && onCopyRef && onDelete);
+  const showMenu = !!(
+    onDuplicate &&
+    onClone &&
+    onCopyRef &&
+    onDelete &&
+    onHardDelete
+  );
 
   const editing: RowEditingProps = {
     members,
@@ -308,6 +316,7 @@ export function TasksList({
     onClone,
     onCopyRef,
     onDelete,
+    onHardDelete,
     bulkEnabled,
     selected,
     onToggleSelect: toggleOne,
@@ -766,6 +775,7 @@ type RowEditingProps = {
   onClone?: (taskRef: string) => void;
   onCopyRef?: (taskRef: string) => void;
   onDelete?: (taskRef: string) => void;
+  onHardDelete?: (taskRef: string) => void;
   bulkEnabled: boolean;
   selected: Set<string>;
   onToggleSelect: (taskRef: string) => void;
@@ -1191,6 +1201,7 @@ function TasksTable({
                     onClone={editing.onClone!}
                     onCopyRef={editing.onCopyRef!}
                     onDelete={editing.onDelete!}
+                    onHardDelete={editing.onHardDelete!}
                   />
                 </span>
               ) : null}

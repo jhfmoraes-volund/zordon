@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Check, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Pencil, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { fmtDate } from "@/lib/date-utils";
@@ -23,6 +23,8 @@ type Props = {
   } | null;
   concluding: boolean;
   onConclude: () => void;
+  reopening: boolean;
+  onReopen: () => void;
   onOpenContext: () => void;
   onEdit: () => void;
   /** Thread atual do chat — usado pra exibir custo da sessão (manager+). */
@@ -33,8 +35,8 @@ type Props = {
  * Cabeçalho da Planning no modelo staging-commit.
  *
  * UI mostra só 2 estados ao PM: "Em planejamento" e "Concluída". Em
- * planejamento, único botão de governance é "Concluir planning" — append-only,
- * irreversível.
+ * planejamento, o botão de governance é "Concluir planning". Concluída, vira
+ * "Reabrir" — "1 planning viva por sprint": o plano é refinável, não descartável.
  */
 export function PlanningRibbon({
   planning,
@@ -42,6 +44,8 @@ export function PlanningRibbon({
   treeStats,
   concluding,
   onConclude,
+  reopening,
+  onReopen,
   onOpenContext,
   onEdit,
   threadId,
@@ -94,7 +98,16 @@ export function PlanningRibbon({
           className="h-8"
         />
 
-        {!isClosed && (
+        {isClosed ? (
+          <Button size="sm" variant="outline" disabled={reopening} onClick={onReopen}>
+            {reopening ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Reabrir
+          </Button>
+        ) : (
           <Button size="sm" disabled={concluding} onClick={onConclude}>
             {concluding ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

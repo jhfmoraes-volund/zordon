@@ -54,6 +54,7 @@ export async function GET(
       "*, assignments:TaskAssignment(*, member:Member(id, name)), acceptanceCriteria:AcceptanceCriterion!AcceptanceCriterion_taskId_fkey(*)",
     )
     .eq("userStoryId", story.id)
+    .is("dismissedAt", null)
     .order("createdAt");
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

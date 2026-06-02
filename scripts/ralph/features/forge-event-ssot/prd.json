@@ -100,7 +100,7 @@
       "title": "Integrar createEmitter em exec-prd.ts",
       "description": "Substituir função emit() inline por import + createEmitter. close() no autorun_done e no catch principal.",
       "acceptanceCriteria": [
-        "scripts/forge/exec-prd.ts importa createEmitter",
+        "scripts/daemon/exec-forge-run.ts importa createEmitter",
         "Variável seq local removida",
         "Função emit() inline removida; chamadas usam emitter.emit(...)",
         "main().catch(...) chama await emitter.close() antes de process.exit",
@@ -109,17 +109,17 @@
       "verifiable": [
         {
           "kind": "typecheck",
-          "command_or_query": "npx tsc --noEmit scripts/forge/exec-prd.ts",
+          "command_or_query": "npx tsc --noEmit scripts/daemon/exec-forge-run.ts",
           "expected": ""
         },
         {
           "kind": "lint",
-          "command_or_query": "grep -c 'createEmitter' scripts/forge/exec-prd.ts",
+          "command_or_query": "grep -c 'createEmitter' scripts/daemon/exec-forge-run.ts",
           "expected": "1"
         },
         {
           "kind": "lint",
-          "command_or_query": "grep -c 'function emit(' scripts/forge/exec-prd.ts",
+          "command_or_query": "grep -c 'function emit(' scripts/daemon/exec-forge-run.ts",
           "expected": "0"
         }
       ],
@@ -128,7 +128,7 @@
       ],
       "estimateMinutes": 20,
       "touches": [
-        "scripts/forge/exec-prd.ts"
+        "scripts/daemon/exec-forge-run.ts"
       ],
       "agentProfile": "code",
       "passes": true
@@ -138,7 +138,7 @@
       "title": "Integrar createEmitter em exec-story.ts",
       "description": "Mesma operação em exec-story.",
       "acceptanceCriteria": [
-        "scripts/forge/exec-story.ts importa createEmitter",
+        "scripts/daemon/exec-forge-story.ts importa createEmitter",
         "Função emit() inline removida",
         "close() chamado no fim e no error handler",
         "Tipecheck passa"
@@ -146,12 +146,12 @@
       "verifiable": [
         {
           "kind": "typecheck",
-          "command_or_query": "npx tsc --noEmit scripts/forge/exec-story.ts",
+          "command_or_query": "npx tsc --noEmit scripts/daemon/exec-forge-story.ts",
           "expected": ""
         },
         {
           "kind": "lint",
-          "command_or_query": "grep -c 'createEmitter' scripts/forge/exec-story.ts",
+          "command_or_query": "grep -c 'createEmitter' scripts/daemon/exec-forge-story.ts",
           "expected": "1"
         }
       ],
@@ -160,7 +160,7 @@
       ],
       "estimateMinutes": 20,
       "touches": [
-        "scripts/forge/exec-story.ts"
+        "scripts/daemon/exec-forge-story.ts"
       ],
       "agentProfile": "code",
       "passes": true

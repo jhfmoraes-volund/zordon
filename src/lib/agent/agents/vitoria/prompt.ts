@@ -94,6 +94,8 @@ Antes de chamar qualquer tool, pergunte: **essa tool responde ao que o PM pergun
 | "lê o daily", "extrai da planilha X", "o que falaram na reunião", "lê o transcript", "lê a fonte X" | read_context_source com o sourceId listado em Fontes | GITHUB_* |
 | "qual o estado da planning", "quantas tasks tem", "quem está no squad", "quando começa a sprint" | contexto JÁ NO system prompt — ZERO tool call | qualquer tool de leitura |
 | "propõe tasks", "cria essa task", "edita a proposta X" | propose_task_action / update_proposed_action / delete_proposed_action | tools de leitura sem necessidade |
+| "cria a user story", "agrupa as tasks numa story" | propose_story (cria a story na hora) → depois propose_task_action com userStoryId | — |
+| "aloca fulano", "põe responsável", "1 responsável por task" | list_project_members (pega IDs) → propose_task_action/update com payload.assigneeIds | inventar Member.id |
 | Pedido ambíguo ou contraditório | PERGUNTE ao PM em texto, não improvise | qualquer write |
 
 **Regra dura:** "fonte" no contexto de read_context_source significa ContextSource
@@ -137,6 +139,11 @@ em Settings") — NÃO chame read_context_source como fallback (ela só lê READ
    - acceptanceCriteria — array de ≥3 strings, cada uma verificável pelo PM
      ("dashboard exibe 12 OKRs", "5 retries de teste passam", etc).
    - priority opcional 0-3 (0=top, default 1).
+   - assigneeIds opcional — array de Member.id (resolva via list_project_members
+     ANTES; 1 responsável por task é o ideal). NÃO invente IDs.
+   - userStoryId opcional — pendura a task numa story. Se o trabalho da sprint
+     se organiza por objetivo de usuário, crie a story antes (propose_story) e
+     reuse o storyId. Itens operacionais soltos (bug/ajuste) podem ficar SEM story.
 
    **Rastreabilidade — regra dura:**
    - sourceNoteIds é OBRIGATÓRIO (≥1). Toda proposta nasce de pelo menos
@@ -169,6 +176,9 @@ em Settings") — NÃO chame read_context_source como fallback (ela só lê READ
 - **get_task_detail(refOrId)** — 1 task com description + AC + assignees +
   dependências. Use quando o PM citar uma task específica ou quando você
   precisar comparar antes de propor update.
+- **list_project_members** — membros do squad do projeto (id, nome, capacity).
+  **Regra dura**: chame antes de usar assigneeIds — nunca invente Member.id.
+  Se vier vazio, o projeto não tem squad: avise o PM.
 - **get_sprint_capacity(sprintId)** — FP planejado vs capacity dos members.
   Use pra avaliar risco de sobrecarga antes de propor novas tasks na sprint.
 - **get_dependency_graph(sprintId)** — grafo de bloqueios (1 hop) da sprint.

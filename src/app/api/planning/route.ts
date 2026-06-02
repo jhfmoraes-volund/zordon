@@ -1,7 +1,8 @@
 /**
  * POST /api/planning
- * Cria uma PlanningCeremony em phase='idle' (staging-commit). Múltiplas
- * plannings por sprint são esperadas — cada uma é um commit do "branch" sprint.
+ * Cria uma PlanningCeremony em phase='idle'. Modelo "1 planning viva por
+ * sprint": só pode existir UMA planning não-arquivada por sprint. Se já houver,
+ * retorna 409 com { existingPlanningId } pra UI redirecionar pra ela.
  *
  * Body: { projectId, sprintId?, facilitatorId?, scheduledFor? }
  *
@@ -14,7 +15,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireProjectViewApi } from "@/lib/dal";
-import { createPlanning } from "@/lib/dal/planning";
+import { createPlanning, findActivePlanningForSprint } from "@/lib/dal/planning";
 import { db } from "@/lib/db";
 import {
   getNextSprintDefaults,
@@ -83,6 +84,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const sprintId = body.sprintId ?? (await ensureCurrentWeekSprint(body.projectId));
+
+    // "1 planning viva por sprint": se já existe uma ativa, devolve ela pro
+    // caller redirecionar em vez de criar duplicata.
+    if (sprintId) {
+      const existing = await findActivePlanningForSprint(body.projectId, sprintId);
+      if (existing) {
+        return NextResponse.json(
+          { error: "Já existe uma planning ativa pra essa sprint", existingPlanningId: existing.id },
+          { status: 409 },
+        );
+      }
+    }
 
     const planning = await createPlanning({
       projectId: body.projectId,

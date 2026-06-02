@@ -1,0 +1,111 @@
+{
+  "feature": "sial-documentos",
+  "title": "SIAL Documentos — Storage (Supabase) + geração + E2DOC",
+  "prd_path": "docs/prd/backlog/prd-sial-documentos.md",
+  "runtime": "sial-web-app",
+  "userStories": [
+    {
+      "id": "SIAL-DOC-001",
+      "title": "Migration — tabela Documento (+ RLS)",
+      "description": "Cria Documento conforme §7 com CHECK origem/status e policy de SELECT.",
+      "acceptanceCriteria": [
+        "Documento.origem CHECK ('gerado','upload')",
+        "Colunas storageRef e e2docId presentes",
+        "Policy documento_select existe"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename='Documento'", "expected": "1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/"],
+      "agentProfile": "sql",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DOC-002",
+      "title": "StorageGateway — Supabase Storage",
+      "description": "src/lib/sial/storage-gateway.ts com put/getSignedUrl sobre o Supabase Storage (bucket privado).",
+      "acceptanceCriteria": [
+        "put salva o binário e retorna storageRef",
+        "getSignedUrl retorna URL temporária"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/sial/storage-gateway.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DOC-003",
+      "title": "E2docGateway — interface + stub",
+      "description": "src/lib/sial/e2doc-gateway.ts com upload(storageRef) (stub). Real em PRD resiliência.",
+      "acceptanceCriteria": [
+        "Interface E2docGateway + stub",
+        "upload retorna e2docId determinístico"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/sial/e2doc-gateway.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DOC-004",
+      "title": "API upload + listar + get (signed URL)",
+      "description": "POST upload (multipart), GET lista, GET documento com signed URL.",
+      "acceptanceCriteria": [
+        "Upload cria Documento(origem=upload) com storageRef",
+        "GET documento retorna signed URL"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DOC-001", "SIAL-DOC-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/processos/[id]/documentos/upload/route.ts", "src/app/api/processos/[id]/documentos/route.ts", "src/app/api/documentos/[id]/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DOC-005",
+      "title": "Geração por template + combinação de PDFs",
+      "description": "src/lib/sial/documento-gen.ts (template+dados → PDF) + POST gerar e POST combinar.",
+      "acceptanceCriteria": [
+        "gerar produz PDF a partir de template+dados e cria Documento(origem=gerado)",
+        "combinar mescla N PDFs num novo Documento"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["SIAL-DOC-002"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/sial/documento-gen.ts", "src/app/api/processos/[id]/documentos/gerar/route.ts", "src/app/api/documentos/combinar/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "SIAL-DOC-006",
+      "title": "Painel de documentos + types + smoke",
+      "description": "Componente de lista/abrir/anexar/combinar; regenera types; smoke de upload+geração.",
+      "acceptanceCriteria": [
+        "Painel lista e abre documentos via signed URL",
+        "Smoke: upload de 1 arquivo + geração de 1 documento aparecem na lista"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Anexar um PDF e gerar o requerimento; abrir ambos", "expected": "ambos aparecem e abrem; binário no Storage, metadados no banco" }
+      ],
+      "dependsOn": ["SIAL-DOC-004", "SIAL-DOC-005"],
+      "estimateMinutes": 25,
+      "touches": ["src/components/sial/documentos-panel.tsx", "src/lib/supabase/database.types.ts"],
+      "agentProfile": "ui",
+      "passes": false
+    }
+  ]
+}

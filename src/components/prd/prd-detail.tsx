@@ -19,6 +19,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, FormBody } from "@/components/ui/field";
+import { Markdown } from "@/components/ui/markdown";
 import {
   Select,
   SelectContent,
@@ -49,6 +50,16 @@ type JourneyStep = { actor: string; action: string; expectation: string };
 type AcceptanceCriterion = { given: string; when: string; then: string };
 type Metric = { metric: string; baseline?: string; target: string };
 type Dependency = { prdId: string; kind: "blocks" | "enables" | "shares-data" };
+type StoryLite = {
+  id: string;
+  title: string;
+  description?: string;
+  acceptanceCriteria?: string[];
+  verifiable?: { kind: string; command_or_query: string; expected: string }[];
+  dependsOn?: string[];
+  agentProfile?: string;
+  estimateMinutes?: number;
+};
 type RiskOrAssumption = {
   kind: "risk" | "assumption";
   text: string;
@@ -198,6 +209,8 @@ export function PrdDetail(props: Props) {
   const metrics = asArray<Metric>(prd.successMetrics);
   const dependencies = asArray<Dependency>(prd.dependencies);
   const risks = asArray<RiskOrAssumption>(prd.risksAndAssumptions);
+  const stories = asArray<StoryLite>(prd.stories);
+  const specMarkdown = (prd.specMarkdown ?? "").trim();
 
   return (
     <div className="flex flex-col gap-6 py-6">
@@ -251,234 +264,64 @@ export function PrdDetail(props: Props) {
         ) : null}
       </Card>
 
-      {/* 2. Briefing */}
-      <SectionCard
-        title="Briefing"
-        editable={editable}
-        onEdit={() => setActiveSection("briefing")}
-      >
-        <Row label="One-liner">
-          <p className="text-sm">{prd.oneLiner || "—"}</p>
-        </Row>
-        <Row label="Módulo">
+      {/* 1.5 Stories de execução (o que o Forge roda; read-only) */}
+      <SectionCard title={`Stories de execução (${stories.length})`} editable={false}>
+        {stories.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {prd.moduleId
-              ? moduleNameById.get(prd.moduleId) ?? prd.moduleId
-              : "—"}
+            Nenhuma story — rode o importer (scripts/forge/import-prd-stories.ts).
           </p>
-        </Row>
-        <Row label="Personas">
-          {prd.personaIds.length === 0 ? (
-            <p className="text-sm text-muted-foreground">—</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {prd.personaIds.map((id) => (
-                <Badge key={id} variant="secondary">
-                  {personaNameById.get(id) ?? id.slice(0, 8)}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </Row>
-      </SectionCard>
-
-      {/* 3. Problema & Goal */}
-      <SectionCard
-        title="Problema & Goal"
-        editable={editable}
-        onEdit={() => setActiveSection("problem-goal")}
-      >
-        <Row label="Problema">
-          <p className="whitespace-pre-wrap text-sm">{prd.problem || "—"}</p>
-        </Row>
-        <Row label="Goal">
-          <p className="whitespace-pre-wrap text-sm">{prd.goal || "—"}</p>
-        </Row>
-      </SectionCard>
-
-      {/* 4. Jornada do usuário */}
-      <SectionCard
-        title="Jornada do usuário"
-        editable={editable}
-        onEdit={() => setActiveSection("journey")}
-      >
-        {journey.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum passo.</p>
-        ) : (
-          <ol className="list-decimal space-y-2 pl-5 text-sm">
-            {journey.map((step, i) => (
-              <li key={i}>
-                <span className="font-semibold">{step.actor}</span> {step.action}
-                <span className="text-muted-foreground"> → {step.expectation}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </SectionCard>
-
-      {/* 5. Acceptance Criteria */}
-      <SectionCard
-        title="Acceptance Criteria"
-        editable={editable}
-        onEdit={() => setActiveSection("ac")}
-      >
-        {ac.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum critério.</p>
         ) : (
           <ul className="space-y-2 text-sm">
-            {ac.map((c, i) => (
-              <li key={i} className="rounded-md border bg-muted/40 p-2">
-                <span className="font-mono text-xs text-muted-foreground">
-                  AC-{i + 1}
-                </span>{" "}
-                <strong>Given</strong> {c.given} <strong>When</strong> {c.when}{" "}
-                <strong>Then</strong> {c.then}
+            {stories.map((s) => (
+              <li key={s.id} className="rounded-md border bg-muted/40 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs text-muted-foreground">{s.id}</span>
+                  <div className="flex items-center gap-1.5">
+                    {s.agentProfile ? (
+                      <Badge variant="secondary">{s.agentProfile}</Badge>
+                    ) : null}
+                    {typeof s.estimateMinutes === "number" ? (
+                      <span className="text-xs text-muted-foreground">
+                        {s.estimateMinutes}min
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <p className="font-medium">{s.title}</p>
+                <div className="mt-1 flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                  <span>{s.acceptanceCriteria?.length ?? 0} AC</span>
+                  <span>· {s.verifiable?.length ?? 0} verifiable</span>
+                  {s.dependsOn && s.dependsOn.length > 0 ? (
+                    <span>· deps: {s.dependsOn.join(", ")}</span>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
         )}
       </SectionCard>
 
-      {/* 6. Métricas */}
-      <SectionCard
-        title="Métricas de sucesso"
-        editable={editable}
-        onEdit={() => setActiveSection("metrics")}
-      >
-        {metrics.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma métrica.</p>
-        ) : (
-          <ul className="space-y-1.5 text-sm">
-            {metrics.map((m, i) => (
-              <li key={i}>
-                <span className="font-medium">{m.metric}</span>
-                <span className="text-muted-foreground">
-                  : baseline {m.baseline ?? "n/a"} → target {m.target}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      {/* 7. Out of scope */}
-      <SectionCard
-        title="Out of scope"
-        editable={editable}
-        onEdit={() => setActiveSection("outOfScope")}
-      >
-        {prd.outOfScope.length === 0 ? (
-          <p className="text-sm text-muted-foreground">—</p>
-        ) : (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {prd.outOfScope.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      {/* 8. Dependências */}
-      <SectionCard
-        title="Dependências"
-        editable={editable}
-        onEdit={() => setActiveSection("dependencies")}
-      >
-        {dependencies.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma.</p>
-        ) : (
-          <ul className="space-y-1.5 text-sm">
-            {dependencies.map((d, i) => (
-              <li key={i}>
-                <Badge variant="outline" className="mr-2">
-                  {d.kind}
-                </Badge>
-                {props.onBack ? (
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {d.prdId.slice(0, 8)}…
-                  </span>
-                ) : (
-                  <Link
-                    href={`/projects/${project.id}/prds/${d.prdId}`}
-                    className="font-mono text-xs hover:underline"
-                  >
-                    {d.prdId.slice(0, 8)}…
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      {/* 9. Notas técnicas */}
-      <SectionCard
-        title="Notas técnicas"
-        editable={editable}
-        onEdit={() => setActiveSection("technicalNotes")}
-      >
-        <p className="whitespace-pre-wrap text-sm">
-          {prd.technicalNotes || "—"}
-        </p>
-      </SectionCard>
-
-      {/* 10. Riscos & Assumptions */}
-      <SectionCard
-        title="Riscos & Assumptions"
-        editable={editable}
-        onEdit={() => setActiveSection("risks")}
-      >
-        {risks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum.</p>
-        ) : (
-          <ul className="space-y-1.5 text-sm">
-            {risks.map((r, i) => (
-              <li key={i}>
-                <Badge variant={r.kind === "risk" ? "destructive" : "secondary"} className="mr-2">
-                  {r.kind}
-                </Badge>
-                {r.text}
-                {r.mitigation ? (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    — mitigação: {r.mitigation}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      {/* 11. Source cards (read-only) */}
-      <SectionCard title="Source cards" editable={false}>
-        {prd.sourceCardIds.length === 0 ? (
-          <p className="text-sm text-muted-foreground">—</p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {prd.sourceCardIds.map((id) => (
-              <Badge key={id} variant="outline" className="font-mono text-xs">
-                {id}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* 12. Markdown export */}
+      {/* 12. Especificação completa (§1–§16) + markdown gerado */}
       <Card>
         <CardHeader>
-          <CardTitle>Markdown export</CardTitle>
+          <CardTitle>Especificação completa</CardTitle>
           <CardDescription>
-            Gerado automaticamente pelo trigger SQL. Read-only.
+            §1–§16 da fonte (specMarkdown). Read-only.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
+          {specMarkdown ? (
+            <Markdown maxChars={1500}>{specMarkdown}</Markdown>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              — (rode o importer p/ trazer o §1–§16 do arquivo)
+            </p>
+          )}
           <details>
-            <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
-              Ver markdown ({prd.markdown.length} chars)
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+              Markdown gerado pelo trigger ({prd.markdown.length} chars)
             </summary>
-            <pre className="mt-3 max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs">
+            <pre className="mt-2 max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
               {prd.markdown}
             </pre>
           </details>

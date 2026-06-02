@@ -22,13 +22,14 @@ export async function GET() {
 
   // Add _count.tasks per project
   const projectIds = (projects ?? []).map((p) => p.id);
-  let taskCounts: Record<string, number> = {};
+  const taskCounts: Record<string, number> = {};
   if (projectIds.length > 0) {
     const { data: tasks } = await supabase
       .from("Task")
       .select("projectId")
       .in("projectId", projectIds)
-      .neq("status", "draft");
+      .neq("status", "draft")
+      .is("dismissedAt", null);
     if (tasks) {
       for (const t of tasks) {
         taskCounts[t.projectId] = (taskCounts[t.projectId] ?? 0) + 1;

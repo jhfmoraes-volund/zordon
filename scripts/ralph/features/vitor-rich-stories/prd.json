@@ -1,0 +1,116 @@
+{
+  "feature": "vitor-rich-stories",
+  "title": "Vitor gera §16 rico (stories + verifiable)",
+  "prd_path": "docs/prd/backlog/prd-vitor-rich-stories.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "VRS-001",
+      "title": "ProposePrdInput += stories (ForgeStorySchema)",
+      "description": "Adiciona stories: z.array(ForgeStorySchema).min(1) ao ProposePrdInput, importando o schema único. Atualiza tipos.",
+      "acceptanceCriteria": [
+        "ProposePrdInput tem campo stories tipado por ForgeStorySchema",
+        "stories exige min(1); cada story exige verifiable.min(1) (herdado)",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/agent/agents/vitor/prd-schemas.ts"],
+      "agentProfile": "wiring",
+      "passes": false
+    },
+    {
+      "id": "VRS-002",
+      "title": "propose_prd grava stories no insert",
+      "description": "A tool inclui stories no input e no insert do ProductRequirement; retorna storiesCount.",
+      "acceptanceCriteria": [
+        "propose_prd aceita stories no payload",
+        "insert persiste stories",
+        "retorno inclui storiesCount"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["VRS-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/agents/vitor/index.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VRS-003",
+      "title": "Prompt do Vitor — bloco §16",
+      "description": "Instrução pro Vitor gerar stories implementáveis (≤30min, ≥1 verifiable automatizável, dependsOn DAG, agentProfile), com exemplos no padrão SIAL.",
+      "acceptanceCriteria": [
+        "Prompt descreve o §16 e os tipos de verifiable (typecheck/sql/http/lint)",
+        "Prompt instrui evitar manual_browser como único check",
+        "Prompt instrui granularidade ≤30min e dependsOn"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Inspecionar o prompt renderizado do Vitor inclui o bloco §16", "expected": "bloco §16 presente" }
+      ],
+      "dependsOn": ["VRS-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/agents/vitor/prompt.ts"],
+      "agentProfile": "doc",
+      "passes": false
+    },
+    {
+      "id": "VRS-004",
+      "title": "Validação/erro claro por story inválida",
+      "description": "Story sem verifiable ou >30min → erro legível com id da story; PRD não é inserido.",
+      "acceptanceCriteria": [
+        "Story sem verifiable → erro com id da story",
+        "Story >30min → erro com id da story",
+        "PRD não é inserido em caso de erro"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["VRS-002"],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/agent/agents/vitor/index.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "VRS-005",
+      "title": "Side sheet — fallback specMarkdown ?? markdown",
+      "description": "prd-detail.tsx renderiza specMarkdown se houver, senão o markdown gerado.",
+      "acceptanceCriteria": [
+        "Com specMarkdown → renderiza specMarkdown",
+        "Sem specMarkdown → renderiza prd.markdown",
+        "tsc passa"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["src/components/prd/prd-detail.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "VRS-006",
+      "title": "Eval/smoke — Vitor gera PRD com stories verificáveis",
+      "description": "Caso que roda o Vitor sobre um brief mínimo e valida ≥1 story, todas com ≥1 verifiable e ≤30min.",
+      "acceptanceCriteria": [
+        "Vitor propõe PRD com stories não-vazio",
+        "Toda story tem ≥1 verifiable e estimateMinutes ≤30",
+        "Roda via CLI/eval sem browser"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["VRS-002", "VRS-003", "VRS-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/eval/vitor/cases/", "scripts/forge/"],
+      "agentProfile": "test",
+      "passes": false
+    }
+  ]
+}

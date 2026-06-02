@@ -1,0 +1,188 @@
+{
+  "feature": "forge-prd-rich-stories",
+  "title": "Forge consome §16 rico (stories + verifiable) do DB",
+  "prd_path": "docs/prd/backlog/prd-forge-prd-rich-stories.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "FRS-001",
+      "title": "Migration — ProductRequirement.stories jsonb",
+      "description": "ALTER ADD COLUMN stories jsonb NOT NULL DEFAULT '[]'. Atualiza database.types.ts.",
+      "acceptanceCriteria": [
+        "Coluna stories existe em ProductRequirement com default '[]'",
+        "database.types.ts reflete a coluna"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT data_type FROM information_schema.columns WHERE table_name='ProductRequirement' AND column_name='stories'",
+          "expected": "jsonb"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": [
+        "supabase/migrations/",
+        "src/lib/supabase/database.types.ts"
+      ],
+      "agentProfile": "db",
+      "passes": true
+    },
+    {
+      "id": "FRS-002",
+      "title": "Schema único de story (Zod) reusado por planner/manifest/importer",
+      "description": "Centraliza ForgeStorySchema (id, title, description?, acceptanceCriteria string[], verifiable.min(1), dependsOn, agentProfile, estimateMinutes, touches, passes?). planner reusa.",
+      "acceptanceCriteria": [
+        "src/lib/forge/spec/story-schema.ts exporta ForgeStorySchema",
+        "verifiable exige min(1)",
+        "planner.ts importa o schema único (sem duplicar)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/forge/spec/story-schema.ts",
+        "src/lib/forge/planner.ts"
+      ],
+      "agentProfile": "wiring",
+      "passes": true
+    },
+    {
+      "id": "FRS-003",
+      "title": "ManifestStory rico + snapshotManifest por-story (com fallback)",
+      "description": "ManifestStory += verifiable/agentProfile/estimateMinutes/touches. snapshotManifest emite 1 story por item de PR.stories; fallback 1-story se vazio.",
+      "acceptanceCriteria": [
+        "PRD com stories[] gera N manifest stories com verifiable",
+        "PRD com stories=[] gera 1 manifest story (comportamento atual)",
+        "Cada manifest story carrega ac (text) + verifiable"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [
+        "FRS-001",
+        "FRS-002"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/dal/forge-project.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
+    },
+    {
+      "id": "FRS-004",
+      "title": "Validação bloqueante de verifiable no run-creation",
+      "description": "createForgeRunFromSession rejeita PRD elegível cujo stories[] tenha story sem ≥1 verifiable (error 'story_without_verifiable').",
+      "acceptanceCriteria": [
+        "Run com story sem verifiable falha com erro claro",
+        "Run com todas stories verifiáveis prossegue"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [
+        "FRS-003"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/dal/forge-project.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
+    },
+    {
+      "id": "FRS-005",
+      "title": "Propagar verifiable manifest → prd.json local → worker",
+      "description": "exec-forge-run.ts Story type += verifiable; ao escrever prd.json local, inclui verifiable/agentProfile. Worker já renderiza.",
+      "acceptanceCriteria": [
+        "prd.json local escrito pelo daemon inclui verifiable por story",
+        "Prompt do worker lista os checks (já suportado)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [
+        "FRS-003"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "scripts/daemon/exec-forge-run.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
+    },
+    {
+      "id": "FRS-006",
+      "title": "Importer de backfill prd.json → ProductRequirement.stories",
+      "description": "scripts/forge/import-prd-stories.ts lê scripts/ralph/features/<slug>/prd.json e grava userStories em ProductRequirement.stories casando por reference. Valida via ForgeStorySchema.",
+      "acceptanceCriteria": [
+        "Rodar o importer popula stories dos PRDs por reference",
+        "Stories inválidas (sem verifiable) são reportadas, não gravadas",
+        "Idempotente"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": [
+        "FRS-002",
+        "FRS-001"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "scripts/forge/import-prd-stories.ts"
+      ],
+      "agentProfile": "api",
+      "passes": true
+    },
+    {
+      "id": "FRS-007",
+      "title": "Smoke — PR rico vira run multi-story com verifiable",
+      "description": "Backfill de 1 PRD (ex.: sial-core-process) → cria run → manifest tem N stories, cada uma com verifiable.",
+      "acceptanceCriteria": [
+        "Manifest do run tem >1 story para o PRD",
+        "Toda story do manifest tem verifiable não-vazio"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT bool_and(jsonb_array_length(s->'verifiable')>0) FROM \"ForgeRun\", jsonb_array_elements(manifest->'prds'->0->'stories') s ORDER BY \"createdAt\" DESC LIMIT 1",
+          "expected": "t"
+        }
+      ],
+      "dependsOn": [
+        "FRS-004",
+        "FRS-005",
+        "FRS-006"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "scripts/forge/test-smoke-rich-stories.sh"
+      ],
+      "agentProfile": "test",
+      "passes": true
+    }
+  ]
+}
