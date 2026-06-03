@@ -286,7 +286,7 @@ async function runDaemon() {
   mkdirSync(DAEMON_CONFIG_DIR, { recursive: true });
   writeFileSync(DAEMON_PID_PATH, String(process.pid));
 
-  // Resolve + valida FORGE_HOME (default: ~/volund-forge, visível no Finder).
+  // Resolve + valida FORGE_HOME (default: ~/zordon-forge, visível no Finder).
   // Fail-fast aqui pra evitar runs sem destino de workspace/eventos.
   let forgeHome: string;
   try {

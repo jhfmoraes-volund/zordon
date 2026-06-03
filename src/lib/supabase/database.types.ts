@@ -902,36 +902,48 @@ export type Database = {
           agentId: string | null
           agentName: string | null
           agentVersionId: string | null
+          ccSessionId: string | null
           channel: string
           createdAt: string
           createdBy: string | null
           id: string
+          lastCompactAt: string | null
+          lastSummary: string | null
           sessionId: string | null
           title: string | null
+          turnsSinceCompact: number
           updatedAt: string
         }
         Insert: {
           agentId?: string | null
           agentName?: string | null
           agentVersionId?: string | null
+          ccSessionId?: string | null
           channel?: string
           createdAt?: string
           createdBy?: string | null
           id?: string
+          lastCompactAt?: string | null
+          lastSummary?: string | null
           sessionId?: string | null
           title?: string | null
+          turnsSinceCompact?: number
           updatedAt?: string
         }
         Update: {
           agentId?: string | null
           agentName?: string | null
           agentVersionId?: string | null
+          ccSessionId?: string | null
           channel?: string
           createdAt?: string
           createdBy?: string | null
           id?: string
+          lastCompactAt?: string | null
+          lastSummary?: string | null
           sessionId?: string | null
           title?: string | null
+          turnsSinceCompact?: number
           updatedAt?: string
         }
         Relationships: [

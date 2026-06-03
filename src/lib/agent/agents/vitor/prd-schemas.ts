@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ForgeStorySchema } from "@/lib/forge/spec/story-schema";
 
 export const PrdAcceptanceCriterion = z.object({
   given: z.string().min(1),
@@ -45,6 +46,9 @@ export const ProposePrdInput = z.object({
   technicalNotes: z.string().default(""),
   risksAndAssumptions: z.array(PrdRiskOrAssumption).default([]),
   sourceCardIds: z.array(z.string()).default([]),
+  // §16 — stories implementáveis (o que o Forge executa). Cada uma com ≥1
+  // verifiable automatizável, ≤30min, dependsOn (DAG) e agentProfile.
+  stories: z.array(ForgeStorySchema).min(1, "PRD precisa de ≥1 story implementável (§16)"),
 });
 
 export const UpdatePrdInput = ProposePrdInput.partial().extend({

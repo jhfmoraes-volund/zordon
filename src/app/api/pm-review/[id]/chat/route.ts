@@ -3,11 +3,22 @@
  *
  *   POST /api/pm-review/[id]/chat — stream da resposta.
  *   GET  /api/pm-review/[id]/chat?limit=30&before=<iso> — histórico do thread.
+ *
+ * Branch por AgentMode('vitoria'):
+ *   - openrouter (default): pmReviewChatConnector (streamText AI SDK)
+ *   - claude-daemon: streamViaClaudeDaemon (helper compartilhado — SSE proxy
+ *     que enfileira ChatTurn pro daemon local). Mesma Response shape pra
+ *     useChat ler transparente.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireProjectViewApi } from "@/lib/dal";
+import { requireProjectViewApi, getCurrentMember } from "@/lib/dal";
 import { pmReviewChatConnector } from "@/lib/agent/connectors/pm-review-chat";
+import { ensurePMReviewThread } from "@/lib/agent/context";
+import {
+  streamViaClaudeDaemon,
+  isDaemonOnline,
+} from "@/lib/agent/sse-chat-proxy";
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 200;
@@ -80,6 +91,95 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
-  return pmReviewChatConnector.handle(req, id);
+  const { id: pmReviewId } = await params;
+
+  const member = await getCurrentMember();
+  if (!member) return new NextResponse("Unauthorized", { status: 401 });
+
+  const supabase = db();
+  const { data: pm } = await supabase
+    .from("PMReview")
+    .select("projectId")
+    .eq("id", pmReviewId)
+    .maybeSingle();
+  if (!pm) {
+    return NextResponse.json(
+      { error: "PM Review não encontrado" },
+      { status: 404 },
+    );
+  }
+  const denied = await requireProjectViewApi(pm.projectId);
+  if (denied) return denied;
+
+  // Lookup AgentMode('vitoria')
+  const { data: modeRow } = await supabase
+    .from("AgentMode")
+    .select("mode")
+    .eq("userId", member.id)
+    .eq("agentSlug", "vitoria")
+    .maybeSingle();
+
+  if (modeRow?.mode === "claude-daemon") {
+    if (!(await isDaemonOnline())) {
+      const res = await pmReviewChatConnector.handle(req, pmReviewId);
+      res.headers.set("X-Mode-Fallback", "true");
+      res.headers.set("X-Mode-Fallback-Reason", "daemon_offline");
+      return res;
+    }
+    return handleClaudeDaemonChat(req, pmReviewId, member.id);
+  }
+
+  return pmReviewChatConnector.handle(req, pmReviewId);
+}
+
+async function handleClaudeDaemonChat(
+  req: NextRequest,
+  pmReviewId: string,
+  memberId: string,
+): Promise<Response> {
+  const body = await req.json();
+  const { messages } = body as {
+    messages?: Array<{
+      role: string;
+      content?: string;
+      parts?: Array<{ type: string; text?: string }>;
+    }>;
+  };
+
+  const lastUserMsg = [...(messages || [])]
+    .reverse()
+    .find((m) => m.role === "user");
+  const message =
+    lastUserMsg?.content ??
+    lastUserMsg?.parts
+      ?.filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("\n") ??
+    "";
+
+  if (!message?.trim()) {
+    return new NextResponse("Missing message", { status: 400 });
+  }
+
+  const threadId = await ensurePMReviewThread(pmReviewId, memberId);
+
+  const supabase = db();
+  const { data: userMessage, error: msgErr } = await supabase
+    .from("ChatMessage")
+    .insert({ threadId, role: "user", content: message })
+    .select("id")
+    .single();
+  if (msgErr || !userMessage) {
+    return NextResponse.json(
+      { error: msgErr?.message ?? "Failed to persist user message" },
+      { status: 500 },
+    );
+  }
+
+  return streamViaClaudeDaemon({
+    threadId,
+    userMessageId: userMessage.id,
+    agentSlug: "vitoria",
+    ownerId: memberId,
+  });
 }

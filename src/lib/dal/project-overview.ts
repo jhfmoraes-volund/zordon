@@ -34,6 +34,8 @@ export type ProjectOverview = {
   /** Estimativa de fim — só para `fixed_scope`; `null` em contínuos. */
   endDate: string | null;
   status: string;
+  /** Criação do projeto — alimenta o big-number "novos no mês". */
+  createdAt: string;
   /** Convenção de nome — escondido por default na UI. */
   isEval: boolean;
   clientName: string | null;
@@ -108,6 +110,7 @@ type ProjectRow = {
   engagementType: string | null;
   endDate: string | null;
   status: string;
+  createdAt: string;
   client: { name: string | null } | null;
   pm: { name: string | null } | null;
   projectMembers:
@@ -136,7 +139,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
   const { data: projectRows, error: projErr } = await supabase
     .from("Project")
     .select(
-      "id, name, category, phase, engagementType, endDate, status, client:Client(name), pm:Member!pmId(name), projectMembers:ProjectMember(member:Member(id, name, position))",
+      "id, name, category, phase, engagementType, endDate, status, createdAt, client:Client(name), pm:Member!pmId(name), projectMembers:ProjectMember(member:Member(id, name, position))",
     )
     .in("status", ["active", "paused"])
     .order("name");
@@ -298,6 +301,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
       engagementType: (p.engagementType ?? "fixed_scope") as ProjectEngagement,
       endDate: p.endDate ?? null,
       status: p.status,
+      createdAt: p.createdAt,
       isEval: typeof p.name === "string" && p.name.includes("__eval__"),
       clientName: p.client?.name ?? null,
       pmName: p.pm?.name ?? null,

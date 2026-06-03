@@ -552,6 +552,7 @@ Posso persistir os 5 PRDs?
    - **(6) technicalNotes cita decisões ativas por ID** (ex: "D-03 define RBAC simples. D-07 exige cache Redis.") — vincule decisão arquitetural ao PRD.
    - **(7) successMetrics com target** — ex: \`[{ metric: "Taxa conversao signup", target: "≥40%", baseline: "28% atual" }]\`.
    - **(8) risksAndAssumptions ≥1 cada** — risks com mitigação; assumptions explícitas.
+   - **(9) stories §16 ≥1** — cada story com ≥1 verifiable AUTOMATIZAVEL (typecheck/sql/http/lint — nunca manual_browser sozinho), estimateMinutes ≤30, dependsOn (DAG), agentProfile. Sem stories validas o PRD NAO roda na Forja (ver Regua de Stories).
 
 **Regua de AC (Acceptance Criteria):**
 
@@ -562,6 +563,24 @@ AC viram array jsonb \`acceptanceCriteria\` do PRD (≥3 criterios). Formato obr
 - **then**: resultado observavel e verificavel (ex: "Sistema remove MFA, exibe toast de confirmacao, e proximo login exige apenas email+senha")
 
 Notas tecnicas (arquitetura, constraints, APIs) vao no campo \`technicalNotes\` separado, **nao misture com AC**. AC sao criterios de produto verificaveis pelo PM/usuario final sem ler codigo.
+
+**Regua de Stories (§16 — o que a Forja executa):**
+
+O campo stories e o array que o Forge roda story-a-story. Cada PRD precisa de >=1. Diferente do AC (produto, pro PM), a story e IMPLEMENTAVEL e tem CHECK automatizavel — e ela que torna o PRD executavel em 1-shot.
+
+Cada story = { id, title, description?, acceptanceCriteria[], verifiable[], dependsOn[], agentProfile, estimateMinutes, touches[] }:
+- id: <REF>-NNN sequencial dentro do PRD (ex: "AUTH-001", "AUTH-002").
+- acceptanceCriteria: array de STRINGS objetivas e verificaveis ("Tabela X existe com coluna Y", "Endpoint Z retorna 202"). NAO use {given,when,then} aqui — esse e o AC de produto, num campo separado.
+- verifiable: >=1 check AUTOMATIZAVEL no formato { kind, command_or_query, expected }. kind in typecheck | lint | sql | http | manual_browser. REGRA DURA: toda story precisa de >=1 check typecheck/sql/http/lint — NUNCA manual_browser como UNICO check (sem check automatico o agente nao tem "done" objetivo e o PRD nao roda em loop).
+- estimateMinutes: <=30 (se passar de 30, quebre em mais stories — nao cabe em 1 context window).
+- dependsOn: ids de stories anteriores DESTE PRD (DAG, sem ciclo). Vazio se for story-raiz.
+- agentProfile: db | api | ui | wiring | test | doc (o perfil de quem implementa).
+- touches: arquivos previstos (orientativo).
+
+Exemplo de story valida:
+{ id: "AUTH-001", title: "Migration — tabela User (+RLS)", acceptanceCriteria: ["Tabela User existe com email unique", "RLS habilitado"], verifiable: [{ kind: "sql", command_or_query: "SELECT relrowsecurity FROM pg_class WHERE relname='User'", expected: "t" }], dependsOn: [], agentProfile: "db", estimateMinutes: 15, touches: ["supabase/migrations/"] }
+
+Pense em cada PRD como o §16 do SIAL: 4-15 stories pequenas, encadeadas por dependsOn, cada uma provavel por um comando. Sem isso o PRD cai no fallback fraco da Forja (1 story sem check).
 
 7. **Apresente o resumo enxuto no chat** (regra "Chat enxuto, banco rico" acima) e pergunte: **"Posso persistir os N PRDs?"**
 
@@ -579,6 +598,8 @@ Notas tecnicas (arquitetura, constraints, APIs) vao no campo \`technicalNotes\` 
    - \`outOfScope\` — clarifica fronteira (o que NÃO entra).
    - \`technicalNotes\` — cita decisões ativas (D-NN), constraints técnicos, dependências.
    - \`risksAndAssumptions\` — objeto \`{ risks: [...], assumptions: [...] }\`.
+
+   - stories — array §16 de stories implementaveis (ver "Regua de Stories" acima). OBRIGATORIO: >=1 story, cada com >=1 verifiable automatizavel.
 
 9. **Resumo final no chat:** **NAO REPITA conteudo dos PRDs.** Apenas: "Criei N PRDs em <modulo>. Abre a arvore pra revisar. Quando aprovar, sigo pra PRD_REVIEW ou outro modulo."
 

@@ -50,10 +50,12 @@ const server = new McpServer({
 });
 
 // FAKE_CTX só pra extrair schemas estáticos das factories. Schemas não
-// dependem de sessionId/projectId — eles vêm do .inputSchema do tool().
+// dependem de sessionId/projectId/pmReviewId — eles vêm do .inputSchema do
+// tool(). Todos campos preenchidos pra passar os runtime guards das factories.
 const FAKE_CTX: ToolContext = {
   sessionId: "mcp-init",
   projectId: "mcp-init",
+  pmReviewId: "mcp-init",
   memberId: null,
 };
 

@@ -1,11 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import {
-  listPrds,
-  filterPrdsByProject,
-  type PrdSummary,
-} from "@/lib/forge/prd-fs";
 import { getPrdsForSession } from "@/lib/dal/product-requirements";
 import { createJob } from "@/lib/forge/dal/job";
 import type { PrdRunState } from "@/lib/forge/run-state";
@@ -233,8 +228,6 @@ export async function derivePrdRunInfo(
 }
 
 export type ProjectForgeSummary = {
-  /** PRDs do filesystem (modo legado/Ralph). Vazio quando forgeSourceSessionId está setado. */
-  prds: PrdSummary[];
   /** PRDs do banco (snapshot live da source session). Vazio quando forgeSourceSessionId é null. */
   dbPrds: ForgePrdItem[];
   /** ID da DesignSession carregada como source da Forja deste projeto, ou null. */
@@ -275,11 +268,14 @@ export async function getLoadableSessions(
 ): Promise<LoadableSession[]> {
   const supabase = db();
 
+  // Toda DesignSession do projeto — não só `prd_session`. PRDs podem nascer
+  // direto de uma Inception (type=super/inception), então qualquer session que
+  // segure ≥1 PRD é "loadable". `prd_session` aparece sempre (mesmo vazia) pra
+  // não quebrar o fluxo de carregar uma session recém-criada.
   const { data: sessions, error } = await supabase
     .from("DesignSession")
-    .select("id, title, subKind, status, isMain, createdAt")
+    .select("id, title, subKind, type, status, isMain, createdAt")
     .eq("projectId", projectId)
-    .eq("type", "prd_session")
     .order("createdAt", { ascending: false });
   if (error) throw error;
 
@@ -303,19 +299,22 @@ export async function getLoadableSessions(
     if (p.status === "approved" || p.status === "ready") t.ready += 1;
   }
 
-  const items: LoadableSession[] = (sessions ?? []).map((s) => {
-    const t = totals.get(s.id) ?? { total: 0, ready: 0 };
-    return {
-      id: s.id,
-      title: s.title,
-      subKind: s.subKind,
-      status: s.status,
-      isMain: s.isMain,
-      prdTotal: t.total,
-      prdReady: t.ready,
-      createdAt: s.createdAt,
-    };
-  });
+  const items: LoadableSession[] = (sessions ?? [])
+    // Mantém: prd_session (sempre) + qualquer session com PRDs (ex: Inception).
+    .filter((s) => s.type === "prd_session" || (totals.get(s.id)?.total ?? 0) > 0)
+    .map((s) => {
+      const t = totals.get(s.id) ?? { total: 0, ready: 0 };
+      return {
+        id: s.id,
+        title: s.title,
+        subKind: s.subKind,
+        status: s.status,
+        isMain: s.isMain,
+        prdTotal: t.total,
+        prdReady: t.ready,
+        createdAt: s.createdAt,
+      };
+    });
 
   // Main primeiro
   items.sort((a, b) => {
@@ -328,8 +327,9 @@ export async function getLoadableSessions(
 }
 
 /**
- * Resume da tab Forge. Quando `forgeSourceSessionId` está setado, lista PRDs
- * do banco; senão cai no modo legado filesystem (Ralph).
+ * Resume da tab Forge. A Forja é DB-only: PRDs vêm exclusivamente da source
+ * session carregada (`forgeSourceSessionId`). Sem session carregada, dbPrds é
+ * vazio e a UI pede pra carregar uma session — não há mais fallback filesystem.
  */
 export async function getProjectForgeSummary(
   projectId: string,
@@ -344,7 +344,6 @@ export async function getProjectForgeSummary(
   if (projectError) throw projectError;
   if (!project) throw new Error(`Project ${projectId} not found`);
 
-  let prds: PrdSummary[] = [];
   let dbPrds: ForgePrdItem[] = [];
 
   if (project.forgeSourceSessionId) {
@@ -357,10 +356,6 @@ export async function getProjectForgeSummary(
     dbPrds = rows.map((r) =>
       prdRowToItem(r, runInfo.get(r.reference)?.runState ?? "idle"),
     );
-  } else {
-    // Fallback: PRDs do FS (Ralph) por slug-match com o nome do projeto.
-    const allPrds = await listPrds();
-    prds = filterPrdsByProject(allPrds, project);
   }
 
   const { data: runs, error: runsError } = await supabase
@@ -451,7 +446,6 @@ export async function getProjectForgeSummary(
   const runCount7d = (recentRuns ?? []).length;
 
   return {
-    prds,
     dbPrds,
     forgeSourceSessionId: project.forgeSourceSessionId ?? null,
     runs: runsList,

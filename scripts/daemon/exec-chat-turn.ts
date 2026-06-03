@@ -26,11 +26,15 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { db } from "../../src/lib/db";
 import {
   appendChatTurnEvent,
+  applyChatThreadCompact,
   completeChatTurn,
   failChatTurn,
+  getChatThreadSessionState,
   markChatTurnRunning,
+  saveChatThreadSession,
   setChatTurnSystemPrompt,
 } from "../../src/lib/dal/chat-turn";
+import { buildChatPrompt, type ChatContext } from "./chat-prompts";
 
 const ZORDON_URL = process.env.ZORDON_URL ?? "http://localhost:3333";
 
@@ -107,7 +111,7 @@ async function main() {
   // 1. Carrega ChatTurn + history do thread
   const { data: turn, error: turnErr } = await supabase
     .from("ChatTurn")
-    .select("id, threadId, agentSlug, status, systemPrompt")
+    .select("id, threadId, agentSlug, status, systemPrompt, userMessageId")
     .eq("id", chatTurnId!)
     .maybeSingle();
 
@@ -124,7 +128,7 @@ async function main() {
   // 2. Carrega mensagens do thread em ordem cronológica
   const { data: history } = await supabase
     .from("ChatMessage")
-    .select("role, content, createdAt")
+    .select("id, role, content, createdAt")
     .eq("threadId", turn.threadId)
     .order("createdAt", { ascending: true })
     .limit(40);
@@ -156,17 +160,19 @@ async function main() {
     console.error("[exec-chat-turn] broadcast setup failed:", err);
   }
 
-  // 4. Hidrata systemPrompt via prepare-turn endpoint (assembleia contexto da
-  // DS atual — current step, decisões, open questions, transcripts, etc.)
-  const prepareUrl = `${ZORDON_URL}/api/agents/${turn.agentSlug}/prepare-turn`;
+  // 4. Lê estado de session do thread — define se vamos `resume` ou fresh.
+  const sessionState = await getChatThreadSessionState(turn.threadId);
+  const hasResumableSession = !!sessionState?.ccSessionId;
+
+  // 5. Hidrata prompt LEVE via prepare-context (~1-2KB JSON de fatos vivos)
+  //    + buildChatPrompt (~500-800 tokens identidade+estado+tools+estilo).
+  //    Substitui o prepare-turn antigo (~20KB de instruções OpenRouter) —
+  //    aquele continua existindo intocado pro path /chat openrouter.
+  //    Em resume, este systemPrompt SÓ é usado na 1ª turn (depois Claude
+  //    tem memória nativa via sessionId).
+  const prepareUrl = `${ZORDON_URL}/api/agents/${turn.agentSlug}/prepare-context`;
   let systemPrompt = DEFAULT_SYSTEM_PROMPT;
-  let preparedHistory: Array<{ role: "user" | "assistant"; content: string }> =
-    (history ?? [])
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
+  let workspacePath: string | null = null;
   try {
     const res = await fetch(prepareUrl, {
       method: "POST",
@@ -174,25 +180,23 @@ async function main() {
       body: JSON.stringify({ chatTurnId }),
     });
     if (res.ok) {
-      const data = (await res.json()) as {
-        systemPrompt?: string;
-        history?: Array<{ role: "user" | "assistant"; content: string }>;
-      };
-      if (data.systemPrompt && data.systemPrompt.length > 0) {
-        systemPrompt = data.systemPrompt;
-        await setChatTurnSystemPrompt(chatTurnId!, systemPrompt);
-      }
-      if (Array.isArray(data.history) && data.history.length > 0) {
-        preparedHistory = data.history;
-      }
+      const ctx = (await res.json()) as ChatContext;
+      systemPrompt = buildChatPrompt(ctx);
+      // Read-grounded: se projeto tem workspace clonado no FORGE_HOME, daemon
+      // usa essa pasta como cwd → Vitor pode Read/Grep/Glob no código real.
+      const projectWithWs = (ctx as { project?: { workspacePath?: string | null } }).project;
+      workspacePath = projectWithWs?.workspacePath ?? null;
+      await setChatTurnSystemPrompt(chatTurnId!, systemPrompt);
       await safeEmit("prepare_turn_ok", {
         systemPromptLen: systemPrompt.length,
-        historyLen: preparedHistory.length,
+        resume: hasResumableSession,
+        mode: "light-prompt",
+        workspacePath,
       });
     } else {
       await safeEmit("prepare_turn_fallback", {
         status: res.status,
-        reason: "prepare-turn endpoint returned non-OK; using DEFAULT prompt",
+        reason: "prepare-context returned non-OK; using DEFAULT prompt",
       });
     }
   } catch (err) {
@@ -201,12 +205,36 @@ async function main() {
     });
   }
 
-  const historyText = preparedHistory
-    .slice(-10)
-    .map((m) => `[${m.role}] ${m.content}`)
-    .join("\n\n");
+  // 6. Monta prompt:
+  //    - Resume (Claude tem memória nativa via sessionId): só msg nova
+  //    - Fresh (1ª turn ou pós-compact): system leve + summary (se houver)
+  //      + bootstrap mínimo de history (apenas pra threads pré-migração,
+  //      sem session ainda) + msg
+  let prompt: string;
+  if (hasResumableSession) {
+    prompt = lastUser!.content;
+  } else {
+    const summaryBlock =
+      sessionState?.lastSummary && sessionState.lastSummary.length > 0
+        ? `\n\n---\n**Resumo da conversa anterior:** ${sessionState.lastSummary}`
+        : "";
 
-  const prompt = `${systemPrompt}\n\n---\nHistórico:\n${historyText}\n\n---\nResponda agora a última mensagem do user de forma natural, em Português. Use as MCP tools (zordon namespace) quando precisar ler/escrever entidades da DS.`;
+    // Bootstrap mínimo: pra threads pré-migração (já com msgs mas sem
+    // session), injeta últimas 10 msgs como contexto inicial. Depois do
+    // 1º turn isso vira automático via resume.
+    const priorMessages = (history ?? []).filter(
+      (m) => m.id !== turn.userMessageId,
+    );
+    const historyBlock =
+      !sessionState?.lastSummary && priorMessages.length > 0
+        ? `\n\n---\n**Conversa recente (contexto inicial):**\n${priorMessages
+            .slice(-10)
+            .map((m) => `_${m.role}:_ ${m.content}`)
+            .join("\n\n")}`
+        : "";
+
+    prompt = `${systemPrompt}${summaryBlock}${historyBlock}\n\n---\n**Mensagem do João:** ${lastUser!.content}`;
+  }
 
   // 5. Roda Claude via SDK programático (não spawn da CLI).
   //    SDK usa MESMA binary, MESMA auth (~/.claude/), MESMA subscription.
@@ -224,6 +252,7 @@ async function main() {
   let tokensOut: number | null = null;
   let costUsd: number | null = null;
   let resultSubtype: string | null = null;
+  let capturedSessionId: string | null = null;
 
   try {
     const response = query({
@@ -231,6 +260,69 @@ async function main() {
       options: {
         includePartialMessages: true,
         maxTurns,
+        // Resume nativo: Claude lembra de turns anteriores. Sem isso, daemon
+        // seria stateless e cairia em loops "ler + propor + esperar ok" pq
+        // o "ok" do user some na janela de history.
+        ...(sessionState?.ccSessionId
+          ? { resume: sessionState.ccSessionId }
+          : {}),
+        // Read-grounded: se projeto tem workspace clonado, cwd vira a pasta
+        // do projeto na Forja — Vitor pode usar Read/Grep/Glob no código real.
+        // Sem workspace, cai no cwd padrão (irrelevante porque sem tools
+        // de filesystem na whitelist).
+        ...(workspacePath ? { cwd: workspacePath } : {}),
+        // Whitelist explícita: Vitor é discovery, NÃO codifica.
+        // - mcp__zordon__* : domínio (entidades DS, decisões, PRDs, anexos)
+        // - Read/Grep/Glob : leitura do código pra ancorar discovery na
+        //   realidade da implementação atual (NÃO Write/Edit/Bash).
+        allowedTools: [
+          "Read",
+          "Grep",
+          "Glob",
+          "mcp__zordon__read_product_vision",
+          "mcp__zordon__read_scope",
+          "mcp__zordon__read_persona",
+          "mcp__zordon__read_brainstorm",
+          "mcp__zordon__read_priority",
+          "mcp__zordon__read_risk",
+          "mcp__zordon__read_gap",
+          "mcp__zordon__read_tech_specs",
+          "mcp__zordon__read_hypothesis",
+          "mcp__zordon__write_product_vision",
+          "mcp__zordon__write_scope_item",
+          "mcp__zordon__write_persona",
+          "mcp__zordon__write_brainstorm",
+          "mcp__zordon__write_priority",
+          "mcp__zordon__write_risk",
+          "mcp__zordon__write_gap",
+          "mcp__zordon__write_tech_specs",
+          "mcp__zordon__write_hypothesis",
+          "mcp__zordon__read_business_context",
+          "mcp__zordon__read_session_memory",
+          "mcp__zordon__update_session_memory",
+          "mcp__zordon__read_project_memory",
+          "mcp__zordon__update_project_memory",
+          "mcp__zordon__record_decision",
+          "mcp__zordon__revise_decision",
+          "mcp__zordon__list_decisions",
+          "mcp__zordon__add_open_question",
+          "mcp__zordon__resolve_open_question",
+          "mcp__zordon__list_open_questions",
+          "mcp__zordon__read_context_source",
+          "mcp__zordon__propose_prd",
+          "mcp__zordon__read_prd",
+          "mcp__zordon__update_prd",
+          "mcp__zordon__approve_prd",
+          "mcp__zordon__link_prd_dependency",
+          "mcp__zordon__list_prds",
+          "mcp__zordon__read_transcript_content",
+          "mcp__zordon__add_pm_review_note",
+          "mcp__zordon__update_pm_review_report",
+          "mcp__zordon__get_project_indicators",
+        ],
+        // Daemon roda local trusted, sem humano no loop. Tool router valida
+        // ctx (member/session/project) no servidor — sem prompt de permissão.
+        permissionMode: "bypassPermissions",
         mcpServers: {
           zordon: {
             type: "stdio",
@@ -240,6 +332,10 @@ async function main() {
               AGENT_SLUG: turn.agentSlug,
               CHAT_TURN_ID: chatTurnId!,
             },
+            // Pre-carrega TODAS as tools no prompt turn-1 (sem ToolSearch
+            // deferral). Sem isso, Claude verbaliza "carregando tools" e
+            // gasta 1 turn extra descobrindo o catalogo.
+            alwaysLoad: true,
           },
         },
         stderr: (data: string) => {
@@ -251,6 +347,13 @@ async function main() {
     });
 
     for await (const msg of response) {
+      // Captura session_id (vem em toda msg do SDK). 1ª turn usa este pra
+      // salvar no thread; resume reusa o mesmo id (não muda).
+      const maybeSession = (msg as { session_id?: string }).session_id;
+      if (maybeSession && !capturedSessionId) {
+        capturedSessionId = maybeSession;
+      }
+
       // 5a. stream_event (partial) — onde mora o streaming token-a-token
       if (msg.type === "stream_event") {
         const ev = msg.event;
@@ -268,11 +371,21 @@ async function main() {
           ev.type === "content_block_start" &&
           ev.content_block.type === "tool_use"
         ) {
+          const tu = ev.content_block as {
+            id: string;
+            name: string;
+            input: unknown;
+          };
           void safeEmit("tool_use", {
-            tool: ev.content_block.name,
-            input: ev.content_block.input,
+            id: tu.id,
+            tool: tu.name,
+            input: tu.input,
           });
-          void broadcast("tool_use", { tool: ev.content_block.name });
+          void broadcast("tool_use", {
+            id: tu.id,
+            tool: tu.name,
+            input: tu.input,
+          });
         }
         continue;
       }
@@ -286,14 +399,26 @@ async function main() {
         }>;
         for (const block of blocks) {
           if (block.type === "tool_result") {
+            const tr = block as {
+              type: "tool_result";
+              tool_use_id?: string;
+              content?: unknown;
+              is_error?: boolean;
+            };
+            const preview =
+              typeof tr.content === "string"
+                ? tr.content.slice(0, 1000)
+                : JSON.stringify(tr.content ?? null).slice(0, 1000);
             void safeEmit("tool_result", {
-              isError: !!block.is_error,
-              preview:
-                typeof block.content === "string"
-                  ? block.content.slice(0, 300)
-                  : "<structured>",
+              id: tr.tool_use_id,
+              isError: !!tr.is_error,
+              preview,
             });
-            void broadcast("tool_result", { isError: !!block.is_error });
+            void broadcast("tool_result", {
+              id: tr.tool_use_id,
+              isError: !!tr.is_error,
+              preview,
+            });
           }
         }
         continue;
@@ -337,6 +462,36 @@ async function main() {
         tokensOut: tokensOut ?? undefined,
         costUsd: costUsd ?? undefined,
       });
+
+      // Pilar 1: persiste session id capturado (1ª turn salva fresh;
+      // resume re-salva o mesmo id, idempotente). Incrementa turnsSinceCompact.
+      if (capturedSessionId) {
+        await saveChatThreadSession({
+          threadId: turn.threadId,
+          ccSessionId: capturedSessionId,
+          incrementTurns: true,
+        });
+        await safeEmit("session_saved", {
+          ccSessionId: capturedSessionId,
+          isResume: hasResumableSession,
+        });
+      }
+
+      // Pilar 2: auto-compact silencioso. Threshold conservador (50 turns)
+      // pra não disparar em conversas curtas. Compact roda DEPOIS de
+      // completar este turn — UI já recebeu resposta; usuário não espera.
+      const nextTurnCount = (sessionState?.turnsSinceCompact ?? 0) + 1;
+      const COMPACT_THRESHOLD = Number(process.env.CHAT_COMPACT_THRESHOLD ?? "50");
+      if (capturedSessionId && nextTurnCount >= COMPACT_THRESHOLD) {
+        // Fire-and-forget: erro no compact não bloqueia turn já completo.
+        runCompact({
+          threadId: turn.threadId,
+          ccSessionId: capturedSessionId,
+        }).catch((e) =>
+          console.warn(`[exec-chat-turn] compact failed:`, e),
+        );
+      }
+
       await safeEmit("done", { ok: true, responseText: assistantText });
       await broadcast("done", {
         ok: true,
@@ -385,6 +540,74 @@ async function main() {
     console.error("query() failed:", err);
     process.exit(1);
   }
+}
+
+/**
+ * Auto-compact (Pilar 2 — summary-only strategy).
+ *
+ * Roda DEPOIS de completar o turn principal — UI não bloqueia. Pede ao SDK
+ * (resume na mesma session) um resumo curto da conversa, salva em
+ * ChatThread.lastSummary, e zera ccSessionId — próxima turn começa fresh
+ * com o summary como bootstrap (em vez do history inteiro).
+ *
+ * Falha silenciosa: se a query travar/falhar, thread continua com a session
+ * antiga e tenta de novo no próximo turn que bater threshold.
+ */
+async function runCompact(args: {
+  threadId: string;
+  ccSessionId: string;
+}): Promise<void> {
+  const COMPACT_PROMPT = `Resuma nossa conversa até aqui em no máximo 2000 tokens, em português.
+
+Inclua:
+- Contexto da Design Session (projeto, objetivo, escopo discutido).
+- Decisões fixadas (com IDs se houver).
+- PRDs criados/atualizados (ids + status atual).
+- Pendências e próximos passos.
+- Preferências do usuário relevantes (tom, abordagem).
+
+Omita:
+- Saudações, agradecimentos, narrativa de processo.
+- Tool calls intermediárias (preserve só o resultado final).
+
+Devolva APENAS o resumo, sem prefácio.`;
+
+  let summary = "";
+  try {
+    const response = query({
+      prompt: COMPACT_PROMPT,
+      options: {
+        resume: args.ccSessionId,
+        maxTurns: 2,
+        permissionMode: "bypassPermissions",
+      },
+    });
+    for await (const msg of response) {
+      if (msg.type === "assistant") {
+        const blocks = (msg.message.content ?? []) as Array<{
+          type?: string;
+          text?: string;
+        }>;
+        for (const b of blocks) {
+          if (b.type === "text" && b.text) summary += b.text;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[runCompact] query failed:`, err);
+    return;
+  }
+
+  if (summary.trim().length < 50) {
+    console.warn(`[runCompact] summary too short, skipping save`);
+    return;
+  }
+
+  await applyChatThreadCompact({
+    threadId: args.threadId,
+    summary: summary.trim(),
+  });
+  console.log(`[runCompact] thread=${args.threadId} summary=${summary.length}c`);
 }
 
 const DEFAULT_SYSTEM_PROMPT = `Você é o Vitor, agente de Discovery do Volund.

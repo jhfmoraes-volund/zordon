@@ -247,7 +247,7 @@ export const vitorAgent: AgentDefinition = {
     const prdTools: ToolSet = {
       propose_prd: tool({
         description:
-          "Propoe um OU MAIS PRDs num unico call via `prds: [...]`. Passe TODOS os PRDs do scaffold de uma vez (NAO faca um call por PRD — isso para no meio). Cada PRD requer problem (>=50 chars), goal (>=20 chars) e >=3 acceptance criteria. Retorna { created: [{id, reference, title, status}] } pra voce ligar dependencias depois.",
+          "Propoe um OU MAIS PRDs num unico call via `prds: [...]`. Passe TODOS os PRDs do scaffold de uma vez (NAO faca um call por PRD — isso para no meio). Cada PRD requer problem (>=50 chars), goal (>=20 chars), >=3 acceptance criteria E `stories` (§16): >=1 story implementavel, cada uma com >=1 `verifiable` automatizavel (typecheck/sql/http/lint — NAO use manual_browser como unico check), estimateMinutes <=30, `dependsOn` (DAG) e `agentProfile` (db/api/ui/wiring/test/doc). Sem stories validas o PRD nao roda na Forja. Retorna { created: [{id, reference, title, status, storiesCount}] }.",
         inputSchema: z.object({
           prds: z
             .array(
@@ -264,6 +264,7 @@ export const vitorAgent: AgentDefinition = {
             reference: string;
             title: string;
             status: string;
+            storiesCount: number;
           }> = [];
           for (const args of prds) {
             const row = await createPrd({
@@ -282,6 +283,8 @@ export const vitorAgent: AgentDefinition = {
               technicalNotes: args.technicalNotes,
               risksAndAssumptions: args.risksAndAssumptions,
               sourceCardIds: args.sourceCardIds,
+              // §16 — stories implementáveis (Forge executa por-story c/ verifiable).
+              stories: args.stories as never,
               actorAgent: "vitor",
               actorMemberId: memberId ?? null,
             });
@@ -290,6 +293,7 @@ export const vitorAgent: AgentDefinition = {
               reference: row.reference,
               title: row.title,
               status: row.status,
+              storiesCount: args.stories.length,
             });
           }
           return { created };

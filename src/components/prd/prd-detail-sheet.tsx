@@ -31,6 +31,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   /** Bubbled up whenever the PRD changes (edit/approve) so lists can re-sync. */
   onChanged?: (prd: ProductRequirementRow) => void;
+  /** Bubbled up after the PRD is deleted so lists can drop it. */
+  onDeleted?: (prdId: string) => void;
 };
 
 /**
@@ -39,7 +41,12 @@ type Props = {
  * personas, activity) is fetched client-side from /api/prds/[id]/detail when the
  * sheet opens. Sheet nesting (edit sub-sheets) is handled by SheetDepthContext.
  */
-export function PrdDetailSheet({ prdId, onOpenChange, onChanged }: Props) {
+export function PrdDetailSheet({
+  prdId,
+  onOpenChange,
+  onChanged,
+  onDeleted,
+}: Props) {
   const open = prdId !== null;
   const [bundle, setBundle] = useState<DetailBundle | null>(null);
   const [loading, setLoading] = useState(false);
@@ -91,6 +98,7 @@ export function PrdDetailSheet({ prdId, onOpenChange, onChanged }: Props) {
               canEdit={bundle.canEdit}
               onBack={() => onOpenChange(false)}
               onChanged={onChanged}
+              onDeleted={onDeleted}
             />
           </div>
         )}

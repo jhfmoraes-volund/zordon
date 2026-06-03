@@ -42,8 +42,8 @@ const AGENTS: AgentDef[] = [
   {
     slug: "vitoria",
     name: "Vitoria",
-    description: "PM Review & Planning",
-    mcpReady: false,
+    description: "PM Review (notas, report, indicadores)",
+    mcpReady: true,
   },
   {
     slug: "alpha",

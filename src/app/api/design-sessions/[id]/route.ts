@@ -57,23 +57,23 @@ export async function DELETE(
   const denied = await requireSessionEditApi(id);
   if (denied) return denied;
 
-  // PRDs são artefatos da sessão e são a única casa de spec deles (além de poderem
-  // ter ForgeRun referenciando). Deletar a sessão os orfanaria. Sessão com PRD só
-  // pode ser arquivada (PUT { archivedAt }), nunca deletada.
-  const { count: prdCount, error: countErr } = await db()
-    .from("ProductRequirement")
+  // Deletar a session cascateia os PRDs vinculados (FK designSessionId ON DELETE
+  // CASCADE). O único bloqueio é o vínculo com a FORGE: se algum projeto usa esta
+  // session como fonte de PRDs (Project.forgeSourceSessionId), descarregue na tab
+  // Forge antes de deletar — senão a Forja perderia a fonte silenciosamente.
+  const { count: forgeRefCount, error: forgeErr } = await db()
+    .from("Project")
     .select("id", { count: "exact", head: true })
-    .eq("designSessionId", id)
-    .is("dismissedAt", null);
-  if (countErr)
-    return NextResponse.json({ error: countErr.message }, { status: 500 });
-  if ((prdCount ?? 0) > 0) {
+    .eq("forgeSourceSessionId", id);
+  if (forgeErr)
+    return NextResponse.json({ error: forgeErr.message }, { status: 500 });
+  if ((forgeRefCount ?? 0) > 0) {
     return NextResponse.json(
       {
         error:
-          "Esta sessão tem PRDs vinculados e não pode ser deletada. Arquive-a em vez disso.",
-        code: "session_has_prds",
-        prdCount,
+          "Esta sessão está carregada na Forja de um projeto e não pode ser deletada. Descarregue-a na tab Forge antes.",
+        code: "session_is_forge_source",
+        projectCount: forgeRefCount,
       },
       { status: 409 },
     );

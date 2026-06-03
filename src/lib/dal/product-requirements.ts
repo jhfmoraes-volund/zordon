@@ -1,4 +1,6 @@
-import "server-only";
+// Sem "server-only": importado tanto pela rota Next.js (server component)
+// quanto pelo MCP server CLI (scripts/daemon/mcp-server.ts via tools/prd.ts).
+// server-only protege bundler Next vs Client Component — em CLI quebra.
 import { db } from "@/lib/db";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
@@ -108,7 +110,10 @@ export async function getPrdsByIds(
 
 /**
  * Reference no formato `<projectKey>-PRD-NNN` com NNN zero-padded a 3.
- * Conta PRDs do projeto (inclusive dismissed) + 1 — assume não-recicláveis.
+ *
+ * Deriva NNN de `max(sufixo existente) + 1`, não de `count + 1` — assim hard
+ * delete de um PRD do meio não causa colisão na reference UNIQUE (deletar o
+ * PRD-002 de 3 não faz o próximo nascer como PRD-003, que já existe).
  */
 export async function nextPrdReference(projectId: string): Promise<string> {
   const supabase = db();
@@ -125,13 +130,19 @@ export async function nextPrdReference(projectId: string): Promise<string> {
     );
   }
 
-  const { count, error: cErr } = await supabase
+  const { data: existing, error: rErr } = await supabase
     .from("ProductRequirement")
-    .select("id", { count: "exact", head: true })
+    .select("reference")
     .eq("projectId", projectId);
-  if (cErr) throw cErr;
+  if (rErr) throw rErr;
 
-  const next = (count ?? 0) + 1;
+  let maxNum = 0;
+  for (const row of existing ?? []) {
+    const m = /-PRD-(\d+)$/.exec(row.reference ?? "");
+    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+  }
+
+  const next = maxNum + 1;
   return `${project.referenceKey}-PRD-${String(next).padStart(3, "0")}`;
 }
 
@@ -267,6 +278,63 @@ export async function approvePrd(
   });
 
   return data;
+}
+
+/**
+ * Despromove um PRD aprovado de volta pra `draft` (limpa approvedAt/approvedBy),
+ * tornando-o editável de novo. Caminho explícito porque o PATCH trata `approved`
+ * como imutável de propósito — só a despromoção destrava a edição.
+ */
+export async function demotePrd(
+  id: string,
+  ctx: { actorMemberId?: string | null },
+): Promise<ProductRequirementRow> {
+  const current = await getPrdById(id);
+  if (!current) throw new Error(`PRD ${id} not found`);
+  if (current.status !== "approved") {
+    throw new Error(
+      `PRD ${id} não está aprovado (status=${current.status}) — nada a despromover`,
+    );
+  }
+
+  const { data, error } = await db()
+    .from("ProductRequirement")
+    .update({
+      status: "draft",
+      approvedAt: null,
+      approvedBy: null,
+      updatedAt: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+
+  await recordPrdActivity({
+    productRequirementId: id,
+    kind: "updated",
+    diff: {
+      before: { status: current.status, approvedAt: current.approvedAt },
+      after: { status: data.status, approvedAt: data.approvedAt },
+    },
+    actorMemberId: ctx.actorMemberId,
+  });
+
+  return data;
+}
+
+/**
+ * Hard delete de um PRD. Cascateia ProductRequirementActivity e PlanningSessionPRD;
+ * Task.productRequirementId vira NULL (task sobrevive). Irreversível — a UI
+ * confirma antes. nextPrdReference é max-based, então o buraco na numeração não
+ * causa colisão na próxima criação.
+ */
+export async function deletePrd(id: string): Promise<void> {
+  const { error } = await db()
+    .from("ProductRequirement")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
 }
 
 /**

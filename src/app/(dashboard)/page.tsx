@@ -29,7 +29,7 @@ export default async function OverviewPage({
 }) {
   await requireMinLevel(MANAGER, { redirectTo: "/projects" });
   const sp = await searchParams;
-  const tab: OverviewTab = sp?.tab === "projetos" ? "projetos" : "ops";
+  const tab: OverviewTab = sp?.tab === "ops" ? "ops" : "projetos";
 
   const now = new Date();
   const weekStart = startOfWeek(now);

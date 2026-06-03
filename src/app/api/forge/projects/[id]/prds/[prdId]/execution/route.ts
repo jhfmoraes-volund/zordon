@@ -67,11 +67,30 @@ export async function GET(
     return NextResponse.json({ error: runsErr.message }, { status: 500 });
   }
 
-  type ManifestPrd = { reference?: string };
+  type ManifestStory = { id?: string };
+  type ManifestPrd = { reference?: string; stories?: ManifestStory[] };
   const coveringRuns = (runs ?? []).filter((r) => {
     const m = r.manifest as { prds?: ManifestPrd[] } | null;
     return (m?.prds ?? []).some((p) => p.reference === prd.reference);
   });
+
+  // Cada run tem seu próprio snapshot de stories no manifest. Um PRD vira N
+  // stories com ids próprios (ex: SIAL-DENA-001..005), distintos do
+  // PRD.reference (SIAL-PRD-019). Os ForgeEvent carregam payload.storyId =
+  // story.id, então pra filtrar os eventos deste PRD precisamos do conjunto de
+  // story ids por run — não dá pra comparar com prd.reference direto.
+  const storyIdsByRun = new Map<string, Set<string>>();
+  for (const r of coveringRuns) {
+    const m = r.manifest as { prds?: ManifestPrd[] } | null;
+    const entry = (m?.prds ?? []).find((p) => p.reference === prd.reference);
+    const ids = new Set<string>();
+    for (const s of entry?.stories ?? []) {
+      if (typeof s.id === "string") ids.add(s.id);
+    }
+    // Legado: snapshots antigos usavam story.id === PRD.reference.
+    ids.add(prd.reference);
+    storyIdsByRun.set(r.id, ids);
+  }
 
   // Histórico: ids + status + timestamps. Pra startedAt/finishedAt cruzamos
   // com ForgeEvent (story_picked / story_done|story_failed).
@@ -103,11 +122,12 @@ export async function GET(
         row.taskId ??
         null;
 
-      // Pra eventos com storyId definido, só inclui se for desse PRD.
-      // Eventos sem storyId (started, claude_system…) entram em todos os PRDs
-      // do run — mas pra esta visão por PRD, ignoramos esses orchestrator-level
-      // events e mostramos só os do PRD em questão.
-      if (storyId !== prd.reference) continue;
+      // Só inclui eventos cujo storyId pertence a uma das stories deste PRD
+      // (conjunto derivado do manifest do run). Eventos orchestrator-level sem
+      // storyId (autorun_started, manifest_bootstrapped…) ficam de fora desta
+      // visão por PRD.
+      const prdStoryIds = storyIdsByRun.get(row.runId);
+      if (!storyId || !prdStoryIds?.has(storyId)) continue;
 
       const list = eventsByRun.get(row.runId) ?? [];
       list.push({

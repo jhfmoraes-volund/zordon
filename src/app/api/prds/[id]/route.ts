@@ -8,6 +8,7 @@ import {
 } from "@/lib/dal";
 import { BUILDER } from "@/lib/roles";
 import {
+  deletePrd,
   getPrdById,
   updatePrd,
   type ProductRequirementUpdate,
@@ -106,6 +107,32 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ data: updated });
   } catch (error) {
     console.error("PATCH /api/prds/[id] failed:", error);
+    return NextResponse.json(
+      { error: String((error as Error)?.message ?? error) },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+  const denied = await requireMinLevelApi(BUILDER);
+  if (denied) return denied;
+
+  const { id } = await ctx.params;
+  const current = await getPrdById(id);
+  if (!current) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+
+  if (!(await canEditTasks(current.projectId))) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  try {
+    await deletePrd(id);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("DELETE /api/prds/[id] failed:", error);
     return NextResponse.json(
       { error: String((error as Error)?.message ?? error) },
       { status: 500 },

@@ -3,8 +3,8 @@ import Link from "next/link";
 export type OverviewTab = "ops" | "projetos";
 
 const TABS: Array<{ key: OverviewTab; label: string }> = [
-  { key: "ops", label: "Operação" },
   { key: "projetos", label: "Projetos" },
+  { key: "ops", label: "Operação" },
 ];
 
 export function OverviewTabs({ current }: { current: OverviewTab }) {
@@ -13,7 +13,7 @@ export function OverviewTabs({ current }: { current: OverviewTab }) {
       <ul className="flex gap-1 overflow-x-auto scrollbar-none">
         {TABS.map((t) => {
           const active = current === t.key;
-          const href = t.key === "ops" ? "/" : `/?tab=${t.key}`;
+          const href = t.key === "projetos" ? "/" : `/?tab=${t.key}`;
           const base =
             "inline-block px-4 py-2 text-sm border-b-2 transition-colors whitespace-nowrap shrink-0";
           return (

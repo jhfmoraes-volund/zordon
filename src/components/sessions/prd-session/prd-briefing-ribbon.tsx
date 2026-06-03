@@ -7,7 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { CheckCheck, FileText } from "lucide-react";
+import { CheckCheck, FileText, Undo2 } from "lucide-react";
 import { InsumosButton } from "@/components/agent/context-import";
 
 /**
@@ -32,6 +32,8 @@ type Props = {
   onOpenInsumos: () => void;
   onApproveAll?: () => void;
   approving?: boolean;
+  onDemoteAll?: () => void;
+  demoting?: boolean;
 };
 
 export function PrdBriefingRibbon({
@@ -40,8 +42,11 @@ export function PrdBriefingRibbon({
   onOpenInsumos,
   onApproveAll,
   approving = false,
+  onDemoteAll,
+  demoting = false,
 }: Props) {
   const canApproveAll = stats.draft > 0 && !approving;
+  const canDemoteAll = stats.ready > 0 && !demoting;
 
   return (
     <TooltipProvider delay={150}>
@@ -82,6 +87,31 @@ export function PrdBriefingRibbon({
         />
 
         <div className="ml-auto flex items-center gap-2">
+          {onDemoteAll && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={onDemoteAll}
+                      disabled={!canDemoteAll}
+                      className="h-7 text-xs"
+                    >
+                      <Undo2 className="h-3 w-3 mr-1.5" />
+                      {demoting ? "Despromovendo…" : `Despromover todos${stats.ready > 0 ? ` (${stats.ready})` : ""}`}
+                    </Button>
+                  </span>
+                }
+              />
+              {stats.ready === 0 && (
+                <TooltipContent>
+                  Nenhum PRD aprovado pra despromover.
+                </TooltipContent>
+              )}
+            </Tooltip>
+          )}
           {onApproveAll && (
             <Tooltip>
               <TooltipTrigger

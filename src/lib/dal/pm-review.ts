@@ -10,7 +10,10 @@
  * Status é atualizado SÓ via `transitionPMReviewStatus`, que delega à state
  * lib `src/lib/pm-review/status.ts`. Esta camada não decide regras.
  */
-import "server-only";
+// Sem "server-only": esse DAL é importado transitivamente pelo MCP server
+// (scripts/daemon/mcp-server.ts via tools-registry → agents/vitoria/pm-review).
+// "server-only" é defensivo pra bundler do Next contra Client Components —
+// quebra em CLI tsx. A camada continua só-servidor por usar `db()` (service_role).
 import { db } from "@/lib/db";
 import type { Database } from "@/lib/supabase/database.types";
 import { transition, type PMReviewStatus } from "@/lib/pm-review/status";

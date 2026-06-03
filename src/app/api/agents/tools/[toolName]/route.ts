@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { TOOL_REGISTRY } from "@/lib/agent/tools-registry";
 
 export const dynamic = "force-dynamic";
+// build-bump: 2026-06-02 read_prd
+
 
 /**
  * POST /api/agents/tools/:toolName
@@ -53,7 +55,8 @@ export async function POST(
     );
   }
 
-  // Resolve sessionId + projectId a partir do chatTurnId
+  // Resolve contexto (sessionId, projectId, pmReviewId) a partir do chatTurnId.
+  // ChatThread pode ser de DS (sessionId populado) OU PM Review (agentName=pmReviewId, channel='pm_review').
   const supabase = db();
   const { data: turn } = await supabase
     .from("ChatTurn")
@@ -69,32 +72,64 @@ export async function POST(
 
   const { data: thread } = await supabase
     .from("ChatThread")
-    .select("sessionId")
+    .select("sessionId, channel, agentName, createdBy")
     .eq("id", turn.threadId)
     .maybeSingle();
-  if (!thread?.sessionId) {
+  if (!thread) {
     return NextResponse.json(
-      { ok: false, error: "thread_session_not_found" },
+      { ok: false, error: "thread_not_found" },
       { status: 404 },
     );
   }
 
-  const { data: session } = await supabase
-    .from("DesignSession")
-    .select("projectId")
-    .eq("id", thread.sessionId)
-    .maybeSingle();
-  if (!session?.projectId) {
+  let sessionId: string | null = null;
+  let projectId: string | null = null;
+  let pmReviewId: string | null = null;
+
+  if (thread.sessionId) {
+    // DS thread
+    sessionId = thread.sessionId;
+    const { data: session } = await supabase
+      .from("DesignSession")
+      .select("projectId")
+      .eq("id", thread.sessionId)
+      .maybeSingle();
+    projectId = session?.projectId ?? null;
+  } else if (thread.channel === "pm_review" && thread.agentName) {
+    // PM Review thread
+    pmReviewId = thread.agentName;
+    const { data: pm } = await supabase
+      .from("PMReview")
+      .select("projectId")
+      .eq("id", pmReviewId)
+      .maybeSingle();
+    projectId = pm?.projectId ?? null;
+  }
+
+  if (!projectId) {
     return NextResponse.json(
-      { ok: false, error: "project_not_found_for_session" },
+      { ok: false, error: "project_not_resolvable" },
       { status: 404 },
     );
+  }
+
+  // Resolve memberId via ChatThread.createdBy (auth user id) → Member.userId.
+  // PRD tools (propose_prd/update_prd) audit-trail; approve_prd requires.
+  let memberId: string | null = null;
+  if (thread.createdBy) {
+    const { data: member } = await supabase
+      .from("Member")
+      .select("id")
+      .eq("userId", thread.createdBy)
+      .maybeSingle();
+    memberId = member?.id ?? null;
   }
 
   const ctx = {
-    sessionId: thread.sessionId,
-    projectId: session.projectId,
-    memberId: null,
+    sessionId,
+    projectId,
+    pmReviewId,
+    memberId,
   };
 
   try {

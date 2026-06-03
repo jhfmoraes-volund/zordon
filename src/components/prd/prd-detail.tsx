@@ -88,6 +88,8 @@ type Props = {
   onBack?: () => void;
   /** Notify parent (e.g. in-session PRD list) after the PRD changes. */
   onChanged?: (prd: ProductRequirementRow) => void;
+  /** Notify parent after the PRD is hard-deleted, so the list can drop it. */
+  onDeleted?: (prdId: string) => void;
 };
 
 const STATUS_TONE: Record<PrdStatus, ChipTone> = {
@@ -145,6 +147,8 @@ export function PrdDetail(props: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [approving, startApprove] = useTransition();
+  const [demoting, startDemote] = useTransition();
+  const [deleting, startDelete] = useTransition();
 
   const status: PrdStatus = isPrdStatus(prd.status) ? prd.status : "draft";
   const editable = props.canEdit && (status === "draft" || status === "review");
@@ -204,6 +208,72 @@ export function PrdDetail(props: Props) {
     });
   }
 
+  function openDemote() {
+    if (!props.canEdit) return;
+    setConfirmState({
+      title: "Despromover PRD pra draft?",
+      description:
+        "O PRD volta pra draft e fica editável de novo. A aprovação (data/autor) é limpa.",
+      confirmLabel: "Despromover",
+      cancelLabel: "Cancelar",
+      destructive: false,
+      onConfirm: async () => {
+        startDemote(async () => {
+          try {
+            const res = await fetch(`/api/prds/${prd.id}/demote`, {
+              method: "POST",
+            });
+            if (!res.ok) {
+              const body = await res.json().catch(() => null);
+              const msg = body?.error ?? `${res.status} ${res.statusText}`;
+              toast.error(`Não foi possível despromover: ${msg}`);
+              return;
+            }
+            const json = (await res.json()) as { data: ProductRequirementRow };
+            setPrd(json.data);
+            props.onChanged?.(json.data);
+            toast.success("PRD despromovido pra draft.");
+            router.refresh();
+          } catch (error) {
+            showErrorToast(error, { label: "Despromover PRD" });
+          }
+        });
+      },
+    });
+  }
+
+  function openDelete() {
+    if (!props.canEdit) return;
+    setConfirmState({
+      title: "Deletar PRD?",
+      description: `${prd.reference} — ${prd.title} será apagado de vez (e seu histórico). Esta ação é irreversível.`,
+      confirmLabel: "Deletar",
+      cancelLabel: "Cancelar",
+      destructive: true,
+      onConfirm: async () => {
+        startDelete(async () => {
+          try {
+            const res = await fetch(`/api/prds/${prd.id}`, {
+              method: "DELETE",
+            });
+            if (!res.ok) {
+              const body = await res.json().catch(() => null);
+              const msg = body?.error ?? `${res.status} ${res.statusText}`;
+              toast.error(`Não foi possível deletar: ${msg}`);
+              return;
+            }
+            toast.success("PRD deletado.");
+            props.onDeleted?.(prd.id);
+            props.onBack?.();
+            router.refresh();
+          } catch (error) {
+            showErrorToast(error, { label: "Deletar PRD" });
+          }
+        });
+      },
+    });
+  }
+
   const journey = asArray<JourneyStep>(prd.userJourney);
   const ac = asArray<AcceptanceCriterion>(prd.acceptanceCriteria);
   const metrics = asArray<Metric>(prd.successMetrics);
@@ -252,6 +322,28 @@ export function PrdDetail(props: Props) {
                   disabled={approving}
                 >
                   {approving ? "Aprovando…" : "Aprovar"}
+                </Button>
+              ) : null}
+              {props.canEdit && status === "approved" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openDemote}
+                  disabled={demoting}
+                >
+                  {demoting ? "Despromovendo…" : "Despromover"}
+                </Button>
+              ) : null}
+              {props.canEdit ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={openDelete}
+                  disabled={deleting}
+                  className="text-destructive hover:text-destructive"
+                  aria-label="Deletar PRD"
+                >
+                  <Trash2 className="size-3.5" />
                 </Button>
               ) : null}
             </div>
@@ -312,10 +404,10 @@ export function PrdDetail(props: Props) {
         <CardContent className="flex flex-col gap-3">
           {specMarkdown ? (
             <Markdown maxChars={1500}>{specMarkdown}</Markdown>
+          ) : prd.markdown ? (
+            <Markdown maxChars={1500}>{prd.markdown}</Markdown>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              — (rode o importer p/ trazer o §1–§16 do arquivo)
-            </p>
+            <p className="text-sm text-muted-foreground">—</p>
           )}
           <details>
             <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">

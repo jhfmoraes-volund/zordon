@@ -1,4 +1,6 @@
-import "server-only";
+// Sem "server-only": é importado tanto pela rota Next.js do tool router
+// quanto pelo MCP server CLI (scripts/daemon/mcp-server.ts). server-only é
+// proteção do bundler do Next contra Client Components — em CLI quebra.
 import type { Tool } from "ai";
 import {
   createReadBrainstormTool,
@@ -35,16 +37,38 @@ import {
   createUpdateProjectMemoryTool,
   createUpdateSessionMemoryTool,
 } from "./tools/memory";
+import { buildPMReviewTools } from "./agents/vitoria/pm-review";
+import {
+  createProposePrdTool,
+  createReadPrdTool,
+  createUpdatePrdTool,
+  createApprovePrdTool,
+  createLinkPrdDependencyTool,
+  createListPrdsTool,
+} from "./tools/prd";
+import { createReadContextSourceTool } from "./tools/context-source";
 
 /**
- * Context passed pelo router pra cada factory. sessionId é obrigatório (todas
- * tools são session-scoped); projectId vem por lookup quando o tool precisa.
+ * Context passed pelo router pra cada factory. Campos opcionais — cada tool
+ * declara o que precisa via runtime check (Vitor: sessionId; Vitoria PM
+ * Review: pmReviewId).
  */
 export type ToolContext = {
-  sessionId: string;
+  sessionId: string | null;
   projectId: string;
   memberId?: string | null;
+  pmReviewId?: string | null;
 };
+
+function requireSessionId(ctx: ToolContext): string {
+  if (!ctx.sessionId) throw new Error("sessionId required for this tool");
+  return ctx.sessionId;
+}
+
+function requirePMReviewId(ctx: ToolContext): string {
+  if (!ctx.pmReviewId) throw new Error("pmReviewId required for this tool");
+  return ctx.pmReviewId;
+}
 
 type ToolFactory = (ctx: ToolContext) => Tool;
 
@@ -65,62 +89,110 @@ type ToolFactory = (ctx: ToolContext) => Tool;
  */
 export const TOOL_REGISTRY: Record<string, ToolFactory> = {
   // ── DS entities — READ ────────────────────────────────────────────────
-  read_product_vision: (ctx) => createReadProductVisionTool(ctx.sessionId),
-  read_scope: (ctx) => createReadScopeTool(ctx.sessionId),
-  read_persona: (ctx) => createReadPersonaTool(ctx.sessionId),
-  read_brainstorm: (ctx) => createReadBrainstormTool(ctx.sessionId),
-  read_priority: (ctx) => createReadPriorityTool(ctx.sessionId),
-  read_risk: (ctx) => createReadRiskTool(ctx.sessionId),
-  read_gap: (ctx) => createReadGapTool(ctx.sessionId),
-  read_tech_specs: (ctx) => createReadTechSpecsTool(ctx.sessionId),
-  read_hypothesis: (ctx) => createReadHypothesisTool(ctx.sessionId),
+  read_product_vision: (ctx) => createReadProductVisionTool(requireSessionId(ctx)),
+  read_scope: (ctx) => createReadScopeTool(requireSessionId(ctx)),
+  read_persona: (ctx) => createReadPersonaTool(requireSessionId(ctx)),
+  read_brainstorm: (ctx) => createReadBrainstormTool(requireSessionId(ctx)),
+  read_priority: (ctx) => createReadPriorityTool(requireSessionId(ctx)),
+  read_risk: (ctx) => createReadRiskTool(requireSessionId(ctx)),
+  read_gap: (ctx) => createReadGapTool(requireSessionId(ctx)),
+  read_tech_specs: (ctx) => createReadTechSpecsTool(requireSessionId(ctx)),
+  read_hypothesis: (ctx) => createReadHypothesisTool(requireSessionId(ctx)),
 
   // ── DS entities — WRITE ───────────────────────────────────────────────
-  write_product_vision: (ctx) => createWriteProductVisionTool(ctx.sessionId),
-  write_scope_item: (ctx) => createWriteScopeItemTool(ctx.sessionId),
-  write_persona: (ctx) => createWritePersonaTool(ctx.sessionId),
-  write_brainstorm: (ctx) => createWriteBrainstormTool(ctx.sessionId),
-  write_priority: (ctx) => createWritePriorityTool(ctx.sessionId),
-  write_risk: (ctx) => createWriteRiskTool(ctx.sessionId),
-  write_gap: (ctx) => createWriteGapTool(ctx.sessionId),
-  write_tech_specs: (ctx) => createWriteTechSpecsTool(ctx.sessionId),
-  write_hypothesis: (ctx) => createWriteHypothesisTool(ctx.sessionId),
+  write_product_vision: (ctx) => createWriteProductVisionTool(requireSessionId(ctx)),
+  write_scope_item: (ctx) => createWriteScopeItemTool(requireSessionId(ctx)),
+  write_persona: (ctx) => createWritePersonaTool(requireSessionId(ctx)),
+  write_brainstorm: (ctx) => createWriteBrainstormTool(requireSessionId(ctx)),
+  write_priority: (ctx) => createWritePriorityTool(requireSessionId(ctx)),
+  write_risk: (ctx) => createWriteRiskTool(requireSessionId(ctx)),
+  write_gap: (ctx) => createWriteGapTool(requireSessionId(ctx)),
+  write_tech_specs: (ctx) => createWriteTechSpecsTool(requireSessionId(ctx)),
+  write_hypothesis: (ctx) => createWriteHypothesisTool(requireSessionId(ctx)),
 
   // ── Memória + Contexto ────────────────────────────────────────────────
   read_business_context: (ctx) =>
-    createReadBusinessContextTool(ctx.sessionId, ctx.projectId),
+    createReadBusinessContextTool(requireSessionId(ctx), ctx.projectId),
   read_session_memory: (ctx) =>
-    createReadSessionMemoryTool(ctx.sessionId, ctx.projectId),
+    createReadSessionMemoryTool(requireSessionId(ctx), ctx.projectId),
   update_session_memory: (ctx) =>
-    createUpdateSessionMemoryTool(ctx.sessionId, ctx.projectId),
+    createUpdateSessionMemoryTool(requireSessionId(ctx), ctx.projectId),
   read_project_memory: (ctx) =>
-    createReadProjectMemoryTool(ctx.sessionId, ctx.projectId),
+    createReadProjectMemoryTool(requireSessionId(ctx), ctx.projectId),
   update_project_memory: (ctx) =>
-    createUpdateProjectMemoryTool(ctx.sessionId, ctx.projectId),
+    createUpdateProjectMemoryTool(requireSessionId(ctx), ctx.projectId),
 
   // ── Decisões ──────────────────────────────────────────────────────────
   record_decision: (ctx) =>
-    createRecordDecisionTool(ctx.sessionId, ctx.projectId),
+    createRecordDecisionTool(requireSessionId(ctx), ctx.projectId),
   revise_decision: (ctx) =>
-    createReviseDecisionTool(ctx.sessionId, ctx.projectId),
+    createReviseDecisionTool(requireSessionId(ctx), ctx.projectId),
   list_decisions: (ctx) =>
-    createListDecisionsTool(ctx.sessionId, ctx.projectId),
+    createListDecisionsTool(requireSessionId(ctx), ctx.projectId),
 
   // ── Open questions ────────────────────────────────────────────────────
   add_open_question: (ctx) =>
-    createAddOpenQuestionTool(ctx.sessionId, ctx.projectId),
+    createAddOpenQuestionTool(requireSessionId(ctx), ctx.projectId),
   resolve_open_question: (ctx) =>
-    createResolveOpenQuestionTool(ctx.sessionId, ctx.projectId),
+    createResolveOpenQuestionTool(requireSessionId(ctx), ctx.projectId),
   list_open_questions: (ctx) =>
-    createListOpenQuestionsTool(ctx.sessionId, ctx.projectId),
+    createListOpenQuestionsTool(requireSessionId(ctx), ctx.projectId),
+
+  // ── Anexos / ContextSource ────────────────────────────────────────────
+  read_context_source: () => createReadContextSourceTool(),
+
+  // ── PRDs (Vitor — sub-fase PRD_DRAFTING / PRD_REVIEW) ────────────────
+  propose_prd: (ctx) =>
+    createProposePrdTool(requireSessionId(ctx), ctx.projectId, ctx.memberId ?? null),
+  read_prd: () => createReadPrdTool(),
+  update_prd: (ctx) => createUpdatePrdTool(ctx.memberId ?? null),
+  approve_prd: (ctx) => createApprovePrdTool(ctx.memberId ?? null),
+  link_prd_dependency: (ctx) => createLinkPrdDependencyTool(ctx.memberId ?? null),
+  list_prds: (ctx) => createListPrdsTool(ctx.projectId),
+
+  // ── Vitoria PM Review tools ───────────────────────────────────────────
+  // buildPMReviewTools retorna bundle de 4 tools; cada entrada aqui resolve
+  // pra mesma instância da bundle (cheap re-build — só zod schemas).
+  read_transcript_content: (ctx) =>
+    buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
+      .read_transcript_content,
+  add_pm_review_note: (ctx) =>
+    buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
+      .add_pm_review_note,
+  update_pm_review_report: (ctx) =>
+    buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
+      .update_pm_review_report,
+  get_project_indicators: (ctx) =>
+    buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
+      .get_project_indicators,
 };
 
+const VITOR_TOOLS = new Set([
+  "read_product_vision", "read_scope", "read_persona", "read_brainstorm",
+  "read_priority", "read_risk", "read_gap", "read_tech_specs", "read_hypothesis",
+  "write_product_vision", "write_scope_item", "write_persona", "write_brainstorm",
+  "write_priority", "write_risk", "write_gap", "write_tech_specs", "write_hypothesis",
+  "read_business_context", "read_session_memory", "update_session_memory",
+  "read_project_memory", "update_project_memory",
+  "record_decision", "revise_decision", "list_decisions",
+  "add_open_question", "resolve_open_question", "list_open_questions",
+  "propose_prd", "read_prd", "update_prd", "approve_prd", "link_prd_dependency", "list_prds",
+  "read_context_source",
+]);
+
+const VITORIA_TOOLS = new Set([
+  "read_transcript_content",
+  "read_context_source",
+  "add_pm_review_note",
+  "update_pm_review_report",
+  "get_project_indicators",
+]);
+
 /**
- * Helper: descobre nome de tools por agente. Por enquanto Vitor usa todas.
- * Vitoria/Alpha terão subsets diferentes quando entrarem (Fase 3).
+ * Quais tools cada agente expõe via MCP. Filtra o registry global por slug.
  */
 export function getToolNamesForAgent(agentSlug: string): string[] {
-  if (agentSlug === "vitor") return Object.keys(TOOL_REGISTRY);
-  // Vitoria/Alpha pendentes (mcpAvailable=false na settings page)
+  if (agentSlug === "vitor") return [...VITOR_TOOLS];
+  if (agentSlug === "vitoria") return [...VITORIA_TOOLS];
   return [];
 }

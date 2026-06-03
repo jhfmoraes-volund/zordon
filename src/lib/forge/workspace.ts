@@ -280,6 +280,16 @@ function resetIncremental(
     execGit(workspacePath, `git remote add origin "${desiredUrl}"`);
   }
 
+  // Repo do cliente recém-criado, sem 1º commit: o remote não tem NENHUMA
+  // branch, então não há ref pra fetch — `git fetch origin <base>` falharia com
+  // "couldn't find remote ref <base>". Re-clona limpo (clone de repo vazio é
+  // no-op de conteúdo, mas deixa o workspace consistente) e deixa o agente
+  // criar o primeiro commit; o push posterior materializa a base branch.
+  if (!remoteHasBranches(workspacePath)) {
+    freshCloneInto(workspacePath, project, baseBranch);
+    return;
+  }
+
   // Refspec explícito: senão `git fetch origin <branch> --depth 1` só atualiza
   // FETCH_HEAD, NÃO cria/atualiza refs/remotes/origin/<branch>. Daí o checkout
   // -B abaixo falha com "origin/main is not a commit".
@@ -294,6 +304,25 @@ function resetIncremental(
 
   const excludes = PRESERVED_CACHE_PATTERNS.map((p) => `-e "${p}"`).join(" ");
   execGit(workspacePath, `git clean -fdx ${excludes}`);
+}
+
+/**
+ * true se o remote `origin` tem ao menos uma branch. Um repo recém-criado no
+ * GitHub (sem commits) responde sem nenhuma head — nesse caso não há ref pra
+ * fetch e o caller deve tratar como bootstrap (fresh clone), não reset.
+ * Em falha de rede/auth assume `true` e deixa o fetch reportar o erro real.
+ */
+function remoteHasBranches(workspacePath: string): boolean {
+  try {
+    const out = execSync("git ls-remote --heads origin", {
+      cwd: workspacePath,
+      stdio: "pipe",
+      encoding: "utf-8",
+    });
+    return out.trim().length > 0;
+  } catch {
+    return true;
+  }
 }
 
 function execGit(cwd: string, cmd: string): void {

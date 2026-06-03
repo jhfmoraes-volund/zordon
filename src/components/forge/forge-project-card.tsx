@@ -45,7 +45,6 @@ import type {
   ProjectForgeSummary,
 } from "@/lib/dal/forge-project";
 import type { ChipTone } from "@/lib/status-chips";
-import type { PrdState } from "@/lib/forge/prd-fs";
 import { forgeRunChip } from "@/lib/forge/run-state";
 import { PrdDetailSheet } from "@/components/prd/prd-detail-sheet";
 
@@ -82,26 +81,6 @@ function formatDate(iso: string): string {
   }
 }
 
-function prdStateTone(state: PrdState): ChipTone {
-  switch (state) {
-    case "backlog":
-      return "slate";
-    case "ready":
-      return "blue";
-    case "in-progress":
-      return "amber";
-    case "blocked":
-      return "red";
-    case "done":
-      return "green";
-    case "archive":
-      return "muted";
-    default:
-      return "muted";
-  }
-}
-
-
 function runStatusTone(status: string): ChipTone {
   switch (status) {
     case "done":
@@ -123,7 +102,6 @@ export function ForgeProjectCard({
   onChanged,
 }: ForgeProjectCardProps) {
   const {
-    prds,
     dbPrds,
     forgeSourceSessionId,
     runs,
@@ -134,19 +112,16 @@ export function ForgeProjectCard({
     runCount7d,
   } = summary;
 
-  // Modo DB-sourced: tem session carregada → mostra dbPrds.
-  // Modo legado FS: sem session → mostra prds do filesystem (Ralph).
-  const isDbMode = !!forgeSourceSessionId;
-  const hasData = isDbMode ? dbPrds.length > 0 : prds.length > 0 || runs.length > 0;
+  // Forja é DB-only: PRDs vêm da source session carregada. Sem session (ou
+  // session vazia) e sem runs → empty state pedindo pra carregar uma session.
+  const hasData = dbPrds.length > 0 || runs.length > 0;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Resumo do projeto</CardTitle>
         <CardDescription>
-          {isDbMode
-            ? "Session carregada, PRDs prontos pra forja e histórico de runs."
-            : "PRDs vinculados, runs recentes e custo dos últimos 7 dias."}
+          PRDs da session carregada, runs recentes e custo dos últimos 7 dias.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -157,16 +132,20 @@ export function ForgeProjectCard({
           onChanged={onChanged}
         />
 
-        {/* Empty state — só quando legacy FS mode + sem dados */}
-        {!isDbMode && !hasData ? (
+        {/* Empty state — sem PRDs de session nem runs */}
+        {!hasData ? (
           <div className="flex flex-col items-center gap-4 py-8 text-center">
             <Lightbulb className="size-12 text-muted-foreground/40" />
             <div>
               <p className="text-sm font-medium">
-                Nenhum PRD ou run neste projeto ainda
+                {forgeSourceSessionId
+                  ? "A session carregada não tem PRDs ainda"
+                  : "Nenhuma session carregada"}
               </p>
               <p className="text-xs text-muted-foreground">
-                Carregue uma PRD Session acima para começar.
+                {forgeSourceSessionId
+                  ? "Gere ou aprove PRDs na session pra forjar aqui."
+                  : "Carregue uma PRD Session acima para começar."}
               </p>
             </div>
           </div>
@@ -177,11 +156,9 @@ export function ForgeProjectCard({
               <div className="rounded-lg border p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <FileText className="size-4" />
-                  <span>PRDs {isDbMode ? "carregados" : "vinculados"}</span>
+                  <span>PRDs carregados</span>
                 </div>
-                <div className="mt-2 text-2xl font-bold">
-                  {isDbMode ? dbPrds.length : prds.length}
-                </div>
+                <div className="mt-2 text-2xl font-bold">{dbPrds.length}</div>
               </div>
 
               <div className="rounded-lg border p-4">
@@ -203,20 +180,16 @@ export function ForgeProjectCard({
               </div>
             </div>
 
-            {/* PRDs list */}
-            {isDbMode ? (
-              dbPrds.length > 0 && (
-                <DbPrdList
-                  project={project}
-                  prds={dbPrds}
-                  activeRun={activeRun}
-                  lastFinishedRun={lastFinishedRun}
-                  lastFinishedRunFailedPrdRefs={lastFinishedRunFailedPrdRefs}
-                  onChanged={onChanged}
-                />
-              )
-            ) : (
-              prds.length > 0 && <FsPrdList prds={prds} />
+            {/* PRDs list (DB-only, da source session) */}
+            {dbPrds.length > 0 && (
+              <DbPrdList
+                project={project}
+                prds={dbPrds}
+                activeRun={activeRun}
+                lastFinishedRun={lastFinishedRun}
+                lastFinishedRunFailedPrdRefs={lastFinishedRunFailedPrdRefs}
+                onChanged={onChanged}
+              />
             )}
 
             {/* Runs list — cada item linka pro Spike (stream ao vivo) */}
@@ -810,33 +783,3 @@ function SmartRunButton({
   );
 }
 
-function FsPrdList({ prds }: { prds: ProjectForgeSummary["prds"] }) {
-  return (
-    <div>
-      <h3 className="mb-3 text-sm font-semibold">
-        PRDs vinculados (legacy FS)
-      </h3>
-      <div className="space-y-2">
-        {prds.slice(0, 5).map((prd) => (
-          <div
-            key={prd.slug}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
-          >
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <FileText className="size-4 shrink-0 text-muted-foreground" />
-              <span className="truncate font-medium">{prd.title}</span>
-            </div>
-            <StatusChip tone={prdStateTone(prd.state)} size="sm">
-              {prd.state}
-            </StatusChip>
-          </div>
-        ))}
-        {prds.length > 5 ? (
-          <p className="text-xs text-muted-foreground">
-            +{prds.length - 5} PRDs — veja todos no Forge Spike
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}

@@ -231,6 +231,85 @@ export async function completeChatTurn(
   if (error) console.warn(`[chat-turn] complete(${turnId}) failed:`, error);
 }
 
+// ─── Session continuity (Pilar 1+2) ────────────────────────────────────────
+
+export type ChatThreadSessionState = {
+  threadId: string;
+  ccSessionId: string | null;
+  turnsSinceCompact: number;
+  lastSummary: string | null;
+  lastCompactAt: string | null;
+};
+
+/**
+ * Lê estado de session do thread pra decidir se o daemon usa `resume`
+ * (sessionId existe) ou inicia fresh (com lastSummary como bootstrap).
+ */
+export async function getChatThreadSessionState(
+  threadId: string,
+): Promise<ChatThreadSessionState | null> {
+  const { data, error } = await db()
+    .from("ChatThread")
+    .select("id, ccSessionId, turnsSinceCompact, lastSummary, lastCompactAt")
+    .eq("id", threadId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    threadId: data.id,
+    ccSessionId: data.ccSessionId,
+    turnsSinceCompact: data.turnsSinceCompact ?? 0,
+    lastSummary: data.lastSummary,
+    lastCompactAt: data.lastCompactAt,
+  };
+}
+
+/**
+ * Salva sessionId capturado da resposta da SDK na 1ª turn do thread.
+ * Incrementa turnsSinceCompact em qualquer turn (1ª inclusive).
+ */
+export async function saveChatThreadSession(args: {
+  threadId: string;
+  ccSessionId: string;
+  incrementTurns: boolean;
+}): Promise<void> {
+  const supabase = db();
+  // Lê valor atual pra incremento atômico (Supabase JS não tem rpc.add).
+  const { data: row } = await supabase
+    .from("ChatThread")
+    .select("turnsSinceCompact")
+    .eq("id", args.threadId)
+    .maybeSingle();
+  const next = (row?.turnsSinceCompact ?? 0) + (args.incrementTurns ? 1 : 0);
+  const { error } = await supabase
+    .from("ChatThread")
+    .update({
+      ccSessionId: args.ccSessionId,
+      turnsSinceCompact: next,
+    })
+    .eq("id", args.threadId);
+  if (error) console.warn(`[chat-thread] saveSession(${args.threadId}) failed:`, error);
+}
+
+/**
+ * Aplica compact: salva summary, zera sessionId (próxima turn fresh), zera contador.
+ */
+export async function applyChatThreadCompact(args: {
+  threadId: string;
+  summary: string;
+}): Promise<void> {
+  const { error } = await db()
+    .from("ChatThread")
+    .update({
+      ccSessionId: null,
+      lastSummary: args.summary,
+      lastCompactAt: new Date().toISOString(),
+      turnsSinceCompact: 0,
+    })
+    .eq("id", args.threadId);
+  if (error) console.warn(`[chat-thread] applyCompact(${args.threadId}) failed:`, error);
+}
+
 /**
  * Marca turn como error/aborted. Idempotente.
  */

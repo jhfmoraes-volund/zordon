@@ -50,6 +50,7 @@ type Props = {
  */
 export function PrdBriefingStep({ sessionId, projectId }: Props) {
   const [approvingAll, setApprovingAll] = useState(false);
+  const [demotingAll, setDemotingAll] = useState(false);
 
   const [prds, setPrds] = useState<ProductRequirementRow[]>([]);
   const [prdsLoading, setPrdsLoading] = useState(true);
@@ -271,6 +272,44 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
     }
   }, [prds, loadPrds]);
 
+  const handleDemoteAll = useCallback(async () => {
+    const approved = prds.filter(
+      (p) => p.status === "approved" || p.status === "ready",
+    );
+    if (approved.length === 0) return;
+    setDemotingAll(true);
+    try {
+      const results = await Promise.allSettled(
+        approved.map((p) =>
+          fetch(`/api/prds/${p.id}/demote`, { method: "POST" }).then(
+            async (r) => {
+              if (!r.ok) {
+                const json = await r.json().catch(() => ({}));
+                throw new Error(json.error ?? `HTTP ${r.status}`);
+              }
+              return r;
+            },
+          ),
+        ),
+      );
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - ok;
+      if (failed === 0) {
+        toast.success(
+          `${ok} PRD${ok > 1 ? "s" : ""} despromovido${ok > 1 ? "s" : ""} pra draft.`,
+        );
+      } else {
+        const firstErr = (results.find((r) => r.status === "rejected") as PromiseRejectedResult)?.reason;
+        toast.warning(
+          `${ok} despromovido${ok !== 1 ? "s" : ""}, ${failed} falhou${failed !== 1 ? "ram" : ""}: ${String(firstErr?.message ?? firstErr)}`,
+        );
+      }
+      await loadPrds();
+    } finally {
+      setDemotingAll(false);
+    }
+  }, [prds, loadPrds]);
+
   return (
     <div className="-m-6 h-full flex flex-col min-h-0">
       <PrdBriefingRibbon
@@ -279,6 +318,8 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
         onOpenInsumos={() => setInsumosOpen(true)}
         onApproveAll={handleApproveAll}
         approving={approvingAll}
+        onDemoteAll={handleDemoteAll}
+        demoting={demotingAll}
       />
 
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(420px,1fr)] gap-6 p-6">
@@ -342,6 +383,9 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
           setPrds((prev) =>
             prev.map((p) => (p.id === updated.id ? updated : p)),
           )
+        }
+        onDeleted={(deletedId) =>
+          setPrds((prev) => prev.filter((p) => p.id !== deletedId))
         }
       />
     </div>

@@ -3,7 +3,7 @@
  *
  * Decisões (`Dn` referenciados nos AGENTS.md e PRD da Forja):
  *
- *   D1  FORGE_HOME default ~/volund-forge (visível no Finder, sem ponto).
+ *   D1  FORGE_HOME default ~/zordon-forge (visível no Finder, sem ponto).
  *       Override via env FORGE_HOME ou CLI flag --home. Resolvido aqui em
  *       runtime; nada hard-codeado a cwd().
  *
@@ -41,11 +41,11 @@ export type ForgeProjectLike = {
   referenceKey: string | null;
 };
 
-/** Resolve FORGE_HOME. Default ~/volund-forge (visível no Finder). */
+/** Resolve FORGE_HOME. Default ~/zordon-forge (visível no Finder). */
 export function getForgeHome(): string {
   const fromEnv = process.env.FORGE_HOME?.trim();
   if (fromEnv) return resolve(fromEnv);
-  return resolve(homedir(), "volund-forge");
+  return resolve(homedir(), "zordon-forge");
 }
 
 /** Ensure FORGE_HOME directory tree exists + writable. Idempotente. */

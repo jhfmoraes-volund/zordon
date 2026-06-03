@@ -103,5 +103,101 @@ export function buildSetupStackPrd(
       "Este é o PRD-000: raiz do DAG, sem dependências de saída; todas as features dependem dele.",
     risksAndAssumptions: [],
     sourceCardIds: [],
+    // §16 — stories implementáveis do setup (raiz do DAG; tudo depende delas).
+    stories: [
+      {
+        id: "SETUP-001",
+        title: `Scaffold ${stack.framework} + Tailwind + env`,
+        description:
+          "Inicializa o projeto com TypeScript strict, Tailwind e .env.example com as chaves obrigatórias.",
+        acceptanceCriteria: [
+          "Projeto builda sem erro",
+          ".env.example lista as chaves obrigatórias da stack",
+        ],
+        verifiable: [
+          { kind: "lint", command_or_query: "npm run build", expected: "exit 0" },
+        ],
+        dependsOn: [],
+        agentProfile: "wiring",
+        estimateMinutes: 30,
+        touches: ["package.json", "tsconfig.json"],
+      },
+      {
+        id: "SETUP-002",
+        title: `Client ${stack.database} (server + browser) + sessão`,
+        description:
+          "Configura o client SSR (server + browser) e o helper de sessão que os guards usam.",
+        acceptanceCriteria: [
+          "Clients server e browser exportados",
+          "Helper de sessão resolve usuário/acesso",
+        ],
+        verifiable: [
+          { kind: "typecheck", command_or_query: "npx tsc --noEmit", expected: "exit 0" },
+        ],
+        dependsOn: ["SETUP-001"],
+        agentProfile: "wiring",
+        estimateMinutes: 25,
+        touches: ["src/lib/supabase/", "src/lib/auth/"],
+      },
+      {
+        id: "SETUP-003",
+        title: "Migration inicial + RLS por tabela",
+        description:
+          "Cria o schema base com RLS habilitado em cada tabela inicial e regenera os types.",
+        acceptanceCriteria: [
+          "Migration inicial aplica sem erro via psql",
+          "RLS habilitado nas tabelas iniciais",
+        ],
+        verifiable: [
+          {
+            kind: "sql",
+            command_or_query:
+              "SELECT bool_and(relrowsecurity) FROM pg_class WHERE relkind='r' AND relnamespace='public'::regnamespace",
+            expected: "t",
+          },
+        ],
+        dependsOn: ["SETUP-002"],
+        agentProfile: "db",
+        estimateMinutes: 30,
+        touches: ["supabase/migrations/", "src/lib/supabase/database.types.ts"],
+      },
+      {
+        id: "SETUP-004",
+        title: `Auth base — ${stack.auth} + access_level por rota`,
+        description:
+          "Liga a autenticação base e o middleware que resolve access_level por rota.",
+        acceptanceCriteria: [
+          "Usuário autentica e a sessão é estabelecida",
+          "Rotas protegidas respeitam access_level",
+        ],
+        verifiable: [
+          { kind: "typecheck", command_or_query: "npx tsc --noEmit", expected: "exit 0" },
+        ],
+        dependsOn: ["SETUP-002"],
+        agentProfile: "api",
+        estimateMinutes: 30,
+        touches: ["src/proxy.ts", "src/lib/auth/"],
+      },
+      {
+        id: "SETUP-005",
+        title: `CI verde via ${stack.ci}`,
+        description: "Pipeline que roda build + typecheck em cada PR e fica verde.",
+        acceptanceCriteria: [
+          "build + typecheck rodam no CI",
+          "Pipeline verde no PR base",
+        ],
+        verifiable: [
+          {
+            kind: "lint",
+            command_or_query: "npm run build && npx tsc --noEmit",
+            expected: "exit 0",
+          },
+        ],
+        dependsOn: ["SETUP-001"],
+        agentProfile: "test",
+        estimateMinutes: 25,
+        touches: ["cloudbuild.yaml", ".github/"],
+      },
+    ],
   };
 }

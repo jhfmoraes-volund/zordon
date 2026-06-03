@@ -14,13 +14,19 @@
         "tsc passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 20,
-      "touches": ["src/lib/agent/agents/vitor/prd-schemas.ts"],
+      "touches": [
+        "src/lib/agent/agents/vitor/prd-schemas.ts"
+      ],
       "agentProfile": "wiring",
-      "passes": false
+      "passes": true
     },
     {
       "id": "VRS-002",
@@ -32,13 +38,21 @@
         "retorno inclui storiesCount"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["VRS-001"],
+      "dependsOn": [
+        "VRS-001"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/lib/agent/agents/vitor/index.ts"],
+      "touches": [
+        "src/lib/agent/agents/vitor/index.ts"
+      ],
       "agentProfile": "api",
-      "passes": false
+      "passes": true
     },
     {
       "id": "VRS-003",
@@ -50,13 +64,21 @@
         "Prompt instrui granularidade ≤30min e dependsOn"
       ],
       "verifiable": [
-        { "kind": "manual_browser", "command_or_query": "Inspecionar o prompt renderizado do Vitor inclui o bloco §16", "expected": "bloco §16 presente" }
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Inspecionar o prompt renderizado do Vitor inclui o bloco §16",
+          "expected": "bloco §16 presente"
+        }
       ],
-      "dependsOn": ["VRS-001"],
+      "dependsOn": [
+        "VRS-001"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/lib/agent/agents/vitor/prompt.ts"],
+      "touches": [
+        "src/lib/agent/agents/vitor/prompt.ts"
+      ],
       "agentProfile": "doc",
-      "passes": false
+      "passes": true
     },
     {
       "id": "VRS-004",
@@ -68,13 +90,21 @@
         "PRD não é inserido em caso de erro"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["VRS-002"],
+      "dependsOn": [
+        "VRS-002"
+      ],
       "estimateMinutes": 20,
-      "touches": ["src/lib/agent/agents/vitor/index.ts"],
+      "touches": [
+        "src/lib/agent/agents/vitor/index.ts"
+      ],
       "agentProfile": "api",
-      "passes": false
+      "passes": true
     },
     {
       "id": "VRS-005",
@@ -86,13 +116,19 @@
         "tsc passa"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 15,
-      "touches": ["src/components/prd/prd-detail.tsx"],
+      "touches": [
+        "src/components/prd/prd-detail.tsx"
+      ],
       "agentProfile": "ui",
-      "passes": false
+      "passes": true
     },
     {
       "id": "VRS-006",
@@ -104,13 +140,24 @@
         "Roda via CLI/eval sem browser"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "exit 0" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
       ],
-      "dependsOn": ["VRS-002", "VRS-003", "VRS-004"],
+      "dependsOn": [
+        "VRS-002",
+        "VRS-003",
+        "VRS-004"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/eval/vitor/cases/", "scripts/forge/"],
+      "touches": [
+        "src/eval/vitor/cases/",
+        "scripts/forge/"
+      ],
       "agentProfile": "test",
-      "passes": false
+      "passes": true
     }
   ]
 }
