@@ -778,7 +778,7 @@ function SmartRunButton({
       ) : (
         <Flame className="size-3.5 mr-1.5" />
       )}
-      Disparar run
+      Disparar run · {pendingCount} na fila
     </Button>
   );
 }
