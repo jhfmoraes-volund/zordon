@@ -1,5 +1,5 @@
 // workspace tools — leitura SANDBOXED dentro do workspace do projeto na
-// Forja (~/zordon-forge/workspaces/<projectKey>/). Vitor pode usar pra
+// Forja (<FORGE_HOME>/workspaces/<projectKey>/). Vitor pode usar pra
 // ancorar discovery no código real do projeto. Toda chamada valida o
 // path contra o prefixo do workspace — paths fora retornam erro.
 //
@@ -42,7 +42,7 @@ function ensureInWorkspace(
 export function createReadWorkspaceFileTool(ctx: SourceContext): Tool {
   return tool({
     description:
-      "Le um arquivo do workspace do projeto clonado na Forja (~/zordon-forge/workspaces/<projectKey>/). Path pode ser RELATIVO (ex: 'src/app/page.tsx') ou ABSOLUTO (deve estar dentro do workspace). Retorna texto. Falha com 'path_outside_workspace' se voce tentar ler fora do projeto. Use pra ancorar discovery no codigo real.",
+      "Le um arquivo do workspace do projeto clonado na Forja (<FORGE_HOME>/workspaces/<projectKey>/). Path pode ser RELATIVO (ex: 'src/app/page.tsx') ou ABSOLUTO (deve estar dentro do workspace). Retorna texto. Falha com 'path_outside_workspace' se voce tentar ler fora do projeto. Use pra ancorar discovery no codigo real.",
     inputSchema: z.object({
       path: z.string().min(1),
       maxBytes: z.number().int().positive().max(500_000).optional(),

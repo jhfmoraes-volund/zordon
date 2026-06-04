@@ -1,0 +1,227 @@
+{
+  "feature": "projects-v2-schema",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/backlog/prd-projects-v2-schema.md",
+  "phase": 1,
+  "phaseGoal": "Schema foundation de Projects V2 — estende ProductRequirement (Spec/sprint/delivery status/deploy lanes/estimateFp/originType) + join table de assignees com RLS + database.types.ts em dia.",
+  "userStories": [
+    {
+      "id": "PV2S-001",
+      "title": "Migration — ProductRequirement.userStoryId (FK Spec pai)",
+      "description": "Adiciona userStoryId uuid FK->UserStory nullable ON DELETE SET NULL + índice prd_user_story_idx.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260604a_prd_user_story_id.sql existe",
+        "psql roda sem erro",
+        "Coluna userStoryId existe em ProductRequirement",
+        "Índice prd_user_story_idx existe"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604a_prd_user_story_id.sql",
+          "expected": "ALTER TABLE (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='ProductRequirement' AND column_name='userStoryId';",
+          "expected": "userStoryId"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/20260604a_prd_user_story_id.sql"]
+    },
+    {
+      "id": "PV2S-002",
+      "title": "Migration — ProductRequirement.sprintId (FK Sprint)",
+      "description": "Adiciona sprintId uuid FK->Sprint nullable ON DELETE SET NULL + índice prd_sprint_idx.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260604b_prd_sprint_id.sql existe",
+        "psql roda sem erro",
+        "Coluna sprintId existe em ProductRequirement",
+        "Índice prd_sprint_idx existe"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604b_prd_sprint_id.sql",
+          "expected": "ALTER TABLE (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT column_name FROM information_schema.columns WHERE table_name='ProductRequirement' AND column_name='sprintId';",
+          "expected": "sprintId"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/20260604b_prd_sprint_id.sql"]
+    },
+    {
+      "id": "PV2S-003",
+      "title": "Migration — ProductRequirement.deliveryStatus (board axis)",
+      "description": "Adiciona deliveryStatus text NOT NULL default 'backlog' + CHECK no conjunto do plano §4.2 (backlog,todo,in_progress,review,changes_requested,done,in_production) + índice prd_delivery_status_idx.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260604c_prd_delivery_status.sql existe",
+        "psql roda sem erro",
+        "CHECK prd_delivery_status_check existe com os 7 valores",
+        "Default é 'backlog'"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604c_prd_delivery_status.sql",
+          "expected": "ALTER TABLE (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT column_default FROM information_schema.columns WHERE table_name='ProductRequirement' AND column_name='deliveryStatus';",
+          "expected": "'backlog'::text"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/20260604c_prd_delivery_status.sql"]
+    },
+    {
+      "id": "PV2S-004",
+      "title": "Migration — ProductRequirement deploy timestamps",
+      "description": "Adiciona deployedToStagingAt e deployedToProductionAt timestamptz null (mirror de Sprint).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260604d_prd_deploy_timestamps.sql existe",
+        "psql roda sem erro",
+        "Ambas colunas existem e são nullable"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604d_prd_deploy_timestamps.sql",
+          "expected": "ALTER TABLE (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='ProductRequirement' AND column_name IN ('deployedToStagingAt','deployedToProductionAt');",
+          "expected": "2"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 12,
+      "touches": ["supabase/migrations/20260604d_prd_deploy_timestamps.sql"]
+    },
+    {
+      "id": "PV2S-005",
+      "title": "Migration — ProductRequirement.estimateFp (sprint capacity)",
+      "description": "Adiciona estimateFp numeric null pra somar capacidade de sprint no nível PRD.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260604e_prd_estimate_fp.sql existe",
+        "psql roda sem erro",
+        "Coluna estimateFp existe com data_type numeric"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604e_prd_estimate_fp.sql",
+          "expected": "ALTER TABLE (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT data_type FROM information_schema.columns WHERE table_name='ProductRequirement' AND column_name='estimateFp';",
+          "expected": "numeric"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 10,
+      "touches": ["supabase/migrations/20260604e_prd_estimate_fp.sql"]
+    },
+    {
+      "id": "PV2S-006",
+      "title": "Migration — ProductRequirement.originType (proveniência)",
+      "description": "Adiciona originType text null + CHECK in (discovery,ceremony,board,spec_decomposition). Lineage de cerimônia reusa EntityLink.planningCeremonyId existente (D8), sem FK nova.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260604f_prd_origin_type.sql existe",
+        "psql roda sem erro",
+        "CHECK prd_origin_type_check existe (aceita NULL + 4 valores)"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604f_prd_origin_type.sql",
+          "expected": "ALTER TABLE (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT conname FROM pg_constraint WHERE conname='prd_origin_type_check';",
+          "expected": "prd_origin_type_check"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/20260604f_prd_origin_type.sql"]
+    },
+    {
+      "id": "PV2S-007",
+      "title": "Migration — ProductRequirementAssignee (join table + RLS)",
+      "description": "Cria join table (productRequirementId, memberId, PK composta) com FKs CASCADE, índice por memberId, RLS pra_read/pra_write espelhando prd_read/prd_write da tabela-mãe (manager-only write).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260604g_product_requirement_assignee.sql existe",
+        "psql roda sem erro",
+        "Tabela ProductRequirementAssignee existe com RLS ligada",
+        "PK composta (productRequirementId, memberId) existe",
+        "Policies pra_read e pra_write existem"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604g_product_requirement_assignee.sql",
+          "expected": "CREATE TABLE / CREATE POLICY (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT relrowsecurity FROM pg_class WHERE relname='ProductRequirementAssignee';",
+          "expected": "t"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT policyname FROM pg_policies WHERE tablename='ProductRequirementAssignee' ORDER BY policyname;",
+          "expected": "pra_read\\npra_write"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/20260604g_product_requirement_assignee.sql"]
+    },
+    {
+      "id": "PV2S-008",
+      "title": "Atualizar database.types.ts + typecheck",
+      "description": "Reflete à mão (regra AGENTS.md) as 7 colunas novas em ProductRequirement (Row/Insert/Update) e adiciona o tipo ProductRequirementAssignee (Row/Insert/Update/Relationships). Valida com tsc.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "ProductRequirement Row inclui userStoryId, sprintId, deliveryStatus, deployedToStagingAt, deployedToProductionAt, estimateFp, originType",
+        "Tipo ProductRequirementAssignee existe em database.types.ts",
+        "npx tsc --noEmit passa sem erros"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "grep -c 'deliveryStatus' src/lib/supabase/database.types.ts",
+          "expected": ">= 3"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        }
+      ],
+      "dependsOn": ["PV2S-001", "PV2S-002", "PV2S-003", "PV2S-004", "PV2S-005", "PV2S-006", "PV2S-007"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/supabase/database.types.ts"]
+    }
+  ]
+}

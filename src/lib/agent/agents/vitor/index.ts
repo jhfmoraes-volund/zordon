@@ -156,12 +156,20 @@ export const vitorAgent: AgentDefinition = {
       listSessionTranscripts(db(), sessionId).then((items) => ({
         data: items.map((t) => ({
           id: t.transcriptRefId,
+          kind: t.kind,
           meetingTitle: t.meetingTitle ?? "Sem título",
           meetingStart: t.meetingStart ?? "",
           meetingEnd: t.meetingEnd ?? t.meetingStart ?? "",
           participants: t.participants,
           summary: t.summary,
           actionItems: t.actionItems,
+          // Documentos não têm resumo/participantes — sem um trecho inline o
+          // modelo trata o anexo como ruído e chega a negar que existe. Mostra
+          // os primeiros 800 chars do texto extraído pra ancorar.
+          excerpt:
+            t.kind === "document"
+              ? (t.fullText ?? "").slice(0, 800).trim()
+              : undefined,
         })),
       })),
       // Hierarchy context — only loaded on briefing to keep prompt token budget tight.
@@ -416,12 +424,15 @@ export interface SessionIndexEntry {
 
 export interface TranscriptContextItem {
   id: string;
+  kind: string;
   meetingTitle: string;
   meetingStart: string;
   meetingEnd: string;
   participants: { name: string; email?: string }[];
   summary: string | null;
   actionItems: { title: string; description: string }[];
+  /** Só para kind=document: primeiros ~800 chars do texto extraído. */
+  excerpt?: string;
 }
 
 export interface ExistingModule {

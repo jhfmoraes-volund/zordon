@@ -20,6 +20,7 @@ type SupabaseClientLike = Pick<SupabaseClient<Database>, "from">;
 export type SessionTranscript = {
   id: string;                       // PK do link (estável para a DS)
   transcriptRefId: string;          // PK da TranscriptRef
+  kind: string;                     // ContextSource.kind (transcript | document | spreadsheet_* | github_*)
   source: string;
   sourceId: string | null;
   meetingTitle: string | null;
@@ -40,7 +41,7 @@ const FULL_SELECT = `
   "linkedById",
   weight,
   transcript:ContextSource!EntityLink_contextSourceId_fkey(
-    id, source, "sourceId", title, "capturedAt", "endedAt",
+    id, kind, source, "sourceId", title, "capturedAt", "endedAt",
     participants, summary, "actionItems", "fullText"
   )
 ` as const;
@@ -52,6 +53,7 @@ type LinkRow = {
   weight: string | null;
   transcript: {
     id: string;
+    kind: string;
     source: string;
     sourceId: string | null;
     title: string | null;
@@ -97,6 +99,7 @@ function rowToTranscript(row: LinkRow): SessionTranscript | null {
   return {
     id: row.id,
     transcriptRefId: t.id,
+    kind: t.kind,
     source: t.source,
     sourceId: t.sourceId,
     meetingTitle: t.title,

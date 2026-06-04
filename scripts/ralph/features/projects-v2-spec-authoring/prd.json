@@ -1,0 +1,295 @@
+{
+  "feature": "projects-v2-spec-authoring",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/backlog/prd-projects-v2-spec-authoring.md",
+  "phase": 1,
+  "phaseGoal": "Spec notion no Vitor (D10/D14/D15): nova tool propose_spec (UserStory=Spec/pack), todo PRD nasce dentro de um Spec (propose_prd seta userStoryId), árvore de PRDs agrupada em cards de Spec colapsáveis, StorySheet relabelado como Spec side sheet, e validador SOFT de tamanho (advisory, não bloqueia). Consome ProductRequirement.userStoryId de projects-v2-schema.",
+  "userStories": [
+    {
+      "id": "PV2SP-001",
+      "title": "Schema Zod ProposeSpecInput + userStoryId em ProposePrdInput",
+      "description": "Adiciona ProposeSpecInput (title/want/soThat/personaId/moduleId) e acrescenta userStoryId opcional em ProposePrdInput, em prd-schemas.ts.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "prd-schemas.ts exporta ProposeSpecInput (zod object)",
+        "ProposePrdInput tem campo userStoryId opcional uuid",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'ProposeSpecInput' src/lib/agent/agents/vitor/prd-schemas.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'userStoryId' src/lib/agent/agents/vitor/prd-schemas.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'prd-schemas' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": [
+        "src/lib/agent/agents/vitor/prd-schemas.ts"
+      ]
+    },
+    {
+      "id": "PV2SP-002",
+      "title": "Validador SOFT evaluatePrdSizing (função pura + teste)",
+      "description": "Cria src/lib/agent/agents/vitor/prd-sizing.ts com evaluatePrdSizing(prd) -> { level:'ok'|'warn', reasons:string[] } (stories 1..8, soma estimateMinutes<=240, cada story 1..4 verifiable e <=30min). Nunca lança. Teste co-localizado cobre ok e warn.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "prd-sizing.ts exporta evaluatePrdSizing",
+        "Função retorna level 'warn' quando stories>8; 'ok' no caso base",
+        "Função não lança (advisory)",
+        "Teste unitário passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'export function evaluatePrdSizing' src/lib/agent/agents/vitor/prd-sizing.ts",
+          "expected": "1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'prd-sizing' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "npx vitest run src/lib/agent/agents/vitor/prd-sizing.test.ts 2>&1 | grep -E 'passed|PASS' | head -1 || echo check-manually",
+          "expected": "passed (ou PASS)"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitor/prd-sizing.ts",
+        "src/lib/agent/agents/vitor/prd-sizing.test.ts"
+      ]
+    },
+    {
+      "id": "PV2SP-003",
+      "title": "Tool propose_spec no Vitor",
+      "description": "Adiciona a tool propose_spec em vitor/index.ts (buildTools) que cria um UserStory (Spec) via DAL createUserStory na sessão atual e retorna { id, reference, title }.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildTools registra propose_spec",
+        "execute chama createUserStory com projectId/designSessionId da sessão",
+        "Retorna { id, reference, title }",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'propose_spec' src/lib/agent/agents/vitor/index.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'agents/vitor/index' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Numa sessão prd_session, pedir ao Vitor pra criar um Spec; confirmar que um UserStory aparece (reference -US-NNN) e o chat reporta o reference.",
+          "expected": "Spec criado, reference -US- visível"
+        }
+      ],
+      "dependsOn": [
+        "PV2SP-001"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitor/index.ts"
+      ]
+    },
+    {
+      "id": "PV2SP-004",
+      "title": "propose_prd seta userStoryId + auto-Spec + sizing no retorno",
+      "description": "Altera propose_prd em vitor/index.ts pra aceitar userStoryId; se ausente, cria um Spec via createUserStory e usa o id; passa userStoryId no createPrd; anexa evaluatePrdSizing(prd) no retorno por PRD.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "propose_prd aceita userStoryId e o injeta no createPrd",
+        "Quando userStoryId ausente, cria Spec automático antes de criar PRD",
+        "Retorno inclui userStoryId e sizing por PRD criado",
+        "Conteúdo do PRD (problem/goal/AC/stories) inalterado"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'userStoryId' src/lib/agent/agents/vitor/index.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'agents/vitor/index' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM \"ProductRequirement\" pr JOIN \"UserStory\" us ON us.id = pr.\"userStoryId\" WHERE pr.\"createdAt\" > now() - interval '1 day';",
+          "expected": ">=0 (query roda; coluna userStoryId existe e o JOIN é válido)"
+        }
+      ],
+      "dependsOn": [
+        "PV2SP-001",
+        "PV2SP-002",
+        "PV2SP-003"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitor/index.ts"
+      ]
+    },
+    {
+      "id": "PV2SP-005",
+      "title": "Regra Spec-first no prompt do Vitor",
+      "description": "Adiciona ao prompt.ts (bloco após 'Régua de Stories') a regra de decomposição Spec-first — decomponha a feature em PRDs PR-sized antes de criar; 1 PRD ≈ 1 PR (1–4 verifiable, ≤30 min); todo PRD vive num Spec (use propose_spec). Texto, não código.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "prompt.ts menciona propose_spec e a regra Spec-first / PR-sized",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'propose_spec' src/lib/agent/prompt.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -ciE 'Spec-first|PR-sized|1 PRD' src/lib/agent/prompt.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'agent/prompt' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [
+        "PV2SP-003"
+      ],
+      "estimateMinutes": 15,
+      "touches": [
+        "src/lib/agent/prompt.ts"
+      ]
+    },
+    {
+      "id": "PV2SP-006",
+      "title": "Consumir SpecPrdTree compartilhado em prd-briefing-step (renderBadge=sizing)",
+      "description": "Troca a lista plana de PrdCard em prd-briefing-step.tsx por <SpecPrdTree prds specs renderBadge={...}/> do componente compartilhado src/components/prd/spec-prd-tree.tsx (de projects-v2-area). Carrega os Specs (UserStory) da sessão; agrupamento, card colapsável e bucket 'Sem Spec' vêm do componente. renderBadge usa evaluatePrdSizing(prd) pro chip advisory. NÃO cria spec-card.tsx nem groupPrdsBySpec.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "prd-briefing-step.tsx importa SpecPrdTree de src/components/prd/spec-prd-tree.tsx",
+        "Passa prds + specs + renderBadge (sizing.level warn → chip âmbar via evaluatePrdSizing)",
+        "Nenhum arquivo spec-card.tsx ou helper groupPrdsBySpec é criado nesta feature"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'spec-prd-tree' src/components/sessions/prd-session/prd-briefing-step.tsx",
+          "expected": ">=1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "ls src/components/sessions/prd-session/spec-card.tsx 2>/dev/null | wc -l | tr -d ' '",
+          "expected": "0"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'prd-briefing-step' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir uma prd_session com PRDs em ≥2 Specs. Confirmar cards de Spec colapsáveis (do SpecPrdTree), bucket 'Sem Spec', e PRD com >8 stories com badge âmbar via renderBadge.",
+          "expected": "Specs colapsáveis + badge warn visível"
+        }
+      ],
+      "dependsOn": [
+        "PV2SP-004"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/components/sessions/prd-session/prd-briefing-step.tsx"
+      ]
+    },
+    {
+      "id": "PV2SP-007",
+      "title": "Relabel StorySheet como Spec side sheet (prop entityLabel)",
+      "description": "Adiciona prop opcional entityLabel ('Spec'|'Story', default 'Story') em story-sheet.tsx; usa nos títulos/labels visíveis. Sem fork — mesmo componente.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "story-sheet.tsx aceita prop entityLabel com default 'Story'",
+        "Título do sheet usa entityLabel",
+        "Nenhum arquivo novo duplicando StorySheet",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'entityLabel' src/components/story-hierarchy/story-sheet.tsx",
+          "expected": ">=2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "ls src/components/**/spec-sheet.tsx 2>/dev/null | wc -l | tr -d ' '",
+          "expected": "0"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'story-sheet' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/components/story-hierarchy/story-sheet.tsx"
+      ]
+    },
+    {
+      "id": "PV2SP-008",
+      "title": "Abrir Spec side sheet ao clicar no Spec na árvore",
+      "description": "Liga o clique no header/nome do Spec no SpecPrdTree (callback onOpenSpec passado pelo prd-briefing-step) pra abrir StorySheet com entityLabel='Spec', hidratando o UserStory do Spec. Reusa o componente.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Clicar no Spec abre StorySheet com entityLabel='Spec'",
+        "Sheet hidrata o UserStory correspondente",
+        "tsc + lint passam"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'entityLabel' src/components/sessions/prd-session/prd-briefing-step.tsx",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'prd-briefing-step|story-sheet' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Clicar no nome de um Spec na árvore. Confirmar side sheet rotulado 'Spec' com want/soThat do UserStory.",
+          "expected": "Spec side sheet abre com dados corretos"
+        }
+      ],
+      "dependsOn": [
+        "PV2SP-006",
+        "PV2SP-007"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/components/sessions/prd-session/prd-briefing-step.tsx"
+      ]
+    }
+  ]
+}

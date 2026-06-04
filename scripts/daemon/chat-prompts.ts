@@ -170,7 +170,7 @@ Use direto quando precisar — sem narrar "vou carregar tools" ou "vou consultar
 
 **Anexos:** read_context_source — lê transcripts, docs e planilhas anexados na DS.
 
-**Workspace (quando projeto tem clone na Forja):** read_workspace_file, glob_workspace, grep_workspace — sandboxed dentro de \`~/zordon-forge/workspaces/<projectKey>/\`.
+**Workspace (quando projeto tem clone na Forja):** read_workspace_file, glob_workspace, grep_workspace — sandboxed dentro de \`<FORGE_HOME>/workspaces/<projectKey>/\`.
 
 **⚠️ FONTES DE INFORMAÇÃO PERMITIDAS — SOMENTE estas duas:**
 1. **Anexos do contexto** (ContextSource via read_context_source) — transcripts, docs subidos

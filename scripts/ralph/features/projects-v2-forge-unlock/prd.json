@@ -1,0 +1,328 @@
+{
+  "feature": "projects-v2-forge-unlock",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/backlog/prd-projects-v2-forge-unlock.md",
+  "phase": 1,
+  "phaseGoal": "Forge unlock (run project-scoped sem forgeSourceSessionId via createForgeRunFromProject) + delivery-status machinery: trigger auto in_progress->review on run done, colunas kanban Review/Production, production toggle manual de PM, e botao Enviar pra Forge ligado.",
+  "userStories": [
+    {
+      "id": "PV2F-001",
+      "title": "Migration — auto-transição deliveryStatus on run done",
+      "description": "Cria trigger function update_prd_delivery_on_done() + trigger trg_forge_run_delivery_review (AFTER UPDATE OF status ON ForgeRun) que promove ProductRequirement.deliveryStatus in_progress->review pros PRDs cobertos pelo manifest quando o run termina em done. Convive com trg_forge_run_last_run. Migration atômica via psql.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "supabase/migrations/20260604a_prd_delivery_on_run_done.sql existe com a DDL do §7",
+        "Função update_prd_delivery_on_done registrada em pg_proc",
+        "Trigger trg_forge_run_delivery_review registrado em ForgeRun (AFTER UPDATE OF status)",
+        "Atualizar ForgeRun pra status=done flipa deliveryStatus de PRDs in_progress cobertos pelo manifest pra review",
+        "Não pisa em deliveryStatus já em done/changes_requested/in_production"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604a_prd_delivery_on_run_done.sql",
+          "expected": "CREATE FUNCTION / CREATE TRIGGER (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT tgname FROM pg_trigger WHERE tgrelid='\"ForgeRun\"'::regclass AND tgname='trg_forge_run_delivery_review';",
+          "expected": "trg_forge_run_delivery_review"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT proname FROM pg_proc WHERE proname='update_prd_delivery_on_done';",
+          "expected": "update_prd_delivery_on_done"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "supabase/migrations/20260604a_prd_delivery_on_run_done.sql"
+      ]
+    },
+    {
+      "id": "PV2F-002",
+      "title": "SQL smoke — run done flipa deliveryStatus pra review",
+      "description": "Check transacional (ROLLBACK) que cria um ForgeRun cobrindo 1 PRD em deliveryStatus in_progress, atualiza o run pra done, e verifica que o PRD virou review. Não persiste. Roda após PV2F-001 aplicado.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Query transacional sobe ForgeRun done e lê deliveryStatus=review do PRD coberto",
+        "PRD com deliveryStatus=done NÃO é alterado pelo mesmo run",
+        "Transação faz ROLLBACK (sem efeito colateral)"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -v ON_ERROR_STOP=1 <<'SQL'\nBEGIN;\nWITH pr AS (\n  UPDATE \"ProductRequirement\" SET \"deliveryStatus\"='in_progress'\n  WHERE id=(SELECT id FROM \"ProductRequirement\" LIMIT 1)\n  RETURNING id, reference, \"projectId\"\n), run AS (\n  INSERT INTO \"ForgeRun\"(id,\"projectId\",\"ownerId\",title,status,trigger,manifest)\n  SELECT gen_random_uuid(), pr.\"projectId\", (SELECT id FROM \"Member\" LIMIT 1), 't','queued','ad_hoc',\n    jsonb_build_object('prds', jsonb_build_array(jsonb_build_object('reference', pr.reference)))\n  FROM pr RETURNING id\n)\nUPDATE \"ForgeRun\" SET status='done' WHERE id=(SELECT id FROM run);\nSELECT \"deliveryStatus\" FROM \"ProductRequirement\" WHERE \"deliveryStatus\"='review' LIMIT 1;\nROLLBACK;\nSQL",
+          "expected": "review"
+        }
+      ],
+      "dependsOn": [
+        "PV2F-001"
+      ],
+      "estimateMinutes": 20,
+      "touches": []
+    },
+    {
+      "id": "PV2F-003",
+      "title": "DAL — createForgeRunFromProject",
+      "description": "Adiciona createForgeRunFromProject({projectId, ownerId, prdRefs}) em forge-project.ts. Usa getPrdsForProject(projectId,{status:['approved','ready']}), filtra por prdRefs (não-vazio), aplica o gate story_without_verifiable, snapshotManifest(\"\", eligible), insere ForgeRun(status=queued, designSessionId=null, trigger=ad_hoc, manifest, repoUrl) e cria ForgeJob queued. Retorna {runId, jobId, prdCount}.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "forge-project.ts exporta createForgeRunFromProject",
+        "Não referencia project.forgeSourceSessionId no novo caminho",
+        "Usa getPrdsForProject + snapshotManifest existentes",
+        "Lança erro claro se prdRefs vazio ou nenhum PRD aprovado casa",
+        "Aplica o gate story_without_verifiable idêntico ao path session"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'forge-project' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'export async function createForgeRunFromProject' src/lib/dal/forge-project.ts",
+          "expected": "1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'getPrdsForProject' src/lib/dal/forge-project.ts",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/dal/forge-project.ts"
+      ]
+    },
+    {
+      "id": "PV2F-004",
+      "title": "API — POST runs aceita prdRefs (project-run)",
+      "description": "Estende src/app/api/forge/projects/[id]/runs/route.ts: se body.prdRefs é array não-vazio, chama createForgeRunFromProject e retorna 202 { runId, jobId, prdCount } — sem olhar forgeSourceSessionId (D7). Caso contrário mantém o path createForgeRunFromSession (retryFailed/prdRefsFilter). Guard manager inalterado.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "route.ts importa e chama createForgeRunFromProject quando body.prdRefs é não-vazio",
+        "Branch project-run NÃO depende de forgeSourceSessionId",
+        "Retorna 202 com { runId } quando prdRefs passado",
+        "Mantém back-compat com retryFailed e session-run",
+        "Guard hasMinAccessLevel(manager) preservado"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'forge/projects/\\[id\\]/runs' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'createForgeRunFromProject' 'src/app/api/forge/projects/[id]/runs/route.ts'",
+          "expected": ">=1"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/api/forge/projects/<pid>/runs -H 'Content-Type: application/json' -d '{\"prdRefs\":[\"<REF>\"]}' (autenticado como manager, projeto sem session, >=1 PRD aprovado)",
+          "expected": "202"
+        }
+      ],
+      "dependsOn": [
+        "PV2F-003"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/api/forge/projects/[id]/runs/route.ts"
+      ]
+    },
+    {
+      "id": "PV2F-005",
+      "title": "API — POST production toggle",
+      "description": "Cria src/app/api/forge/projects/[id]/prds/[prdId]/production/route.ts. POST {deployed:boolean} seta ProductRequirement.deployedToProductionAt = (deployed ? now() : null) WHERE id=prdId AND projectId=id. Guard manager. 404 se PRD não pertence ao projeto. Retorna 200 {id, deployedToProductionAt}.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "route.ts existe com handler POST",
+        "UPDATE filtra por id AND projectId (404 se não casar)",
+        "deployed=true seta now(); deployed=false seta null",
+        "Guard hasMinAccessLevel(manager)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'prds/\\[prdId\\]/production' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'export (async )?function POST' 'src/app/api/forge/projects/[id]/prds/[prdId]/production/route.ts'",
+          "expected": "1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'deployedToProductionAt' 'src/app/api/forge/projects/[id]/prds/[prdId]/production/route.ts'",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/api/forge/projects/[id]/prds/[prdId]/production/route.ts"
+      ]
+    },
+    {
+      "id": "PV2F-006",
+      "title": "API — prds payload expõe deliveryStatus + deployedToProductionAt",
+      "description": "Estende src/app/api/forge/projects/[id]/prds/route.ts: cada PrdLine inclui deliveryStatus e deployedToProductionAt lidos do ProductRequirement row, pro kanban classificar Review/Production.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Tipo PrdLine ganha deliveryStatus: string e deployedToProductionAt: string|null",
+        "Cada item do payload popula esses campos do row",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'forge/projects/\\[id\\]/prds' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'deliveryStatus|deployedToProductionAt' 'src/app/api/forge/projects/[id]/prds/route.ts'",
+          "expected": ">=2"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/app/api/forge/projects/[id]/prds/route.ts"
+      ]
+    },
+    {
+      "id": "PV2F-007",
+      "title": "classify-prd.ts (lib) + página nova projects-v2/[id]/forge/kanban",
+      "description": "Extrai a lógica de coluna pra src/lib/forge/classify-prd.ts (ColumnKey com 'review'/'production', COLUMNS, PrdItem com deliveryStatus+deployedToProductionAt, classifyPrd com a precedência do §9). Cria a página nova admin-gated src/app/(dashboard)/projects-v2/[id]/forge/kanban/page.tsx que importa COLUMNS+classifyPrd e renderiza as lanes. NÃO toca o kanban legado.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/lib/forge/classify-prd.ts exporta COLUMNS, classifyPrd, ColumnKey, PrdItem",
+        "ColumnKey inclui 'review' e 'production'; classifyPrd retorna 'production' quando deployedToProductionAt não-null (precede tudo) e 'review' quando deliveryStatus==='review'",
+        "src/app/(dashboard)/projects-v2/[id]/forge/kanban/page.tsx existe, admin-gated (redirect /projects se não-admin), importando de classify-prd.ts",
+        "O arquivo legado projects/[id]/forge/kanban/page.tsx NÃO é modificado"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'classify-prd|projects-v2/\\[id\\]/forge/kanban' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE \"'review'|'production'\" src/lib/forge/classify-prd.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'classify-prd' 'src/app/(dashboard)/projects-v2/[id]/forge/kanban/page.tsx'",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [
+        "PV2F-006"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/forge/classify-prd.ts",
+        "src/app/(dashboard)/projects-v2/[id]/forge/kanban/page.tsx"
+      ]
+    },
+    {
+      "id": "PV2F-008",
+      "title": "Kanban v2 — botão \"marcar prod\" no card de Review",
+      "description": "No card do kanban v2, quando columnKey==='review', renderiza botão 'marcar prod ★' que faz POST /api/forge/projects/[id]/prds/[prdId]/production { deployed:true } e refaz o load. Card de Production mostra ★ + data.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Card em Review tem botão que chama o endpoint production com deployed:true",
+        "Card em Production renderiza indicador com a data",
+        "tsc + lint passam"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'projects-v2/\\[id\\]/forge/kanban' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'production' 'src/app/(dashboard)/projects-v2/[id]/forge/kanban/page.tsx'",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [
+        "PV2F-007"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/projects-v2/[id]/forge/kanban/page.tsx"
+      ]
+    },
+    {
+      "id": "PV2F-009",
+      "title": "Wire Enviar pra Forge no board → POST runs",
+      "description": "Liga o botão host stub Enviar pra Forge (do projects-v2-area) ao endpoint: coleta prdRefs (references) dos PRDs selecionados / da sprint e faz POST /api/forge/projects/[id]/runs {prdRefs}. Sucesso -> toast com runId + refetch. Erro -> showErrorToast.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Handler do botão monta prdRefs e faz POST .../runs",
+        "Sucesso mostra feedback (toast) com runId; erro via showErrorToast",
+        "Multi-select envia N refs num único run (batch)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'projects-v2' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Como admin, em projects-v2 board de um projeto sem session carregada e com >=2 PRDs aprovados: selecionar 2 PRDs, clicar Enviar pra Forge. Validar: toast com runId, run aparece queued, PRDs entram em in_progress.",
+          "expected": "Run criado (202) + PRDs selecionados no run"
+        }
+      ],
+      "dependsOn": [
+        "PV2F-004"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/projects-v2/board-forge-button.tsx"
+      ]
+    },
+    {
+      "id": "PV2F-010",
+      "title": "Smoke browser — kanban Review/Production visíveis e funcionais",
+      "description": "Validação visual ponta-a-ponta: colunas Review e Production renderizam, um run terminado move o PRD pra Review, e o toggle manual move pra Production.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Colunas Review e Production aparecem no kanban",
+        "PRD com deliveryStatus=review cai na coluna Review",
+        "Clicar marcar prod move o PRD pra Production e persiste após reload"
+      ],
+      "verifiable": [
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir /projects-v2/<id>/forge/kanban como admin. Confirmar colunas Review + Production. Num PRD de Review, clicar marcar prod ★ e recarregar.",
+          "expected": "PRD aparece em Production com ★ + data após reload"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'Review|Production' src/lib/forge/classify-prd.ts",
+          "expected": ">=2"
+        }
+      ],
+      "dependsOn": [
+        "PV2F-008"
+      ],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/app/(dashboard)/projects-v2/[id]/forge/kanban/page.tsx"
+      ]
+    }
+  ]
+}

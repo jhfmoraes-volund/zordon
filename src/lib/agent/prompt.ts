@@ -241,6 +241,26 @@ function buildTranscriptsBlock(transcripts: TranscriptContextItem[]): string {
   // CTXSRC-013: lista context sources linkados SEM fullText; instrui uso de read_context_source.
   const blocks = transcripts
     .map((t) => {
+      // Documento/anexo: nao tem reuniao, participantes nem action items. Render
+      // dedicado com um trecho inline do texto extraido — sem isso o modelo trata
+      // o anexo como "reuniao vazia" e chega a negar que tem acesso a ele.
+      if (t.kind === "document") {
+        const excerpt = t.excerpt?.trim();
+        const quoted = excerpt
+          ? excerpt
+              .split("\n")
+              .map((l) => `> ${l}`)
+              .join("\n") + (excerpt.length >= 800 ? "\n> […]" : "")
+          : null;
+        return `### 📎 ${t.meetingTitle} (documento anexado)
+**contextSourceId**: \`${t.id}\`
+${
+  quoted
+    ? `Trecho inicial do conteudo:\n${quoted}\n\nConteudo completo via \`read_context_source({ sourceId: "${t.id}" })\`.`
+    : "(conteudo ainda nao extraido — tente read_context_source mesmo assim)"
+}`;
+      }
+
       const start = new Date(t.meetingStart);
       const date = `${String(start.getDate()).padStart(2, "0")}/${String(start.getMonth() + 1).padStart(2, "0")} ${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
       const people = t.participants.map((p) => p.name).join(", ") || "(sem participantes)";
@@ -261,12 +281,14 @@ ${actions}`;
   return `
 ## Fontes de contexto linkadas
 
-Voce tem ${transcripts.length} fonte(s) de contexto linkada(s) a esta Design Session (transcripts, planilhas, repositorios GitHub).
+Voce tem ${transcripts.length} fonte(s) de contexto linkada(s) a esta Design Session (transcripts, documentos anexados, planilhas, repositorios GitHub).
 **Para ler o conteudo completo de qualquer fonte**, use a tool:
 
   read_context_source({ sourceId: "<id>" })
 
-Ela retorna o fullText extraido + metadados + kind (transcript | meeting | spreadsheet_csv | spreadsheet_gsheets | github_repo | github_pr | github_issue). Use quando o usuario perguntar sobre o que foi discutido/documentado, ou quando precisar de detalhe alem do resumo.
+Ela retorna o fullText extraido + metadados + kind (transcript | meeting | document | spreadsheet_csv | spreadsheet_gsheets | github_repo | github_pr | github_issue). Use quando o usuario perguntar sobre o que foi discutido/documentado/anexado, ou quando precisar de detalhe alem do resumo.
+
+REGRA: toda fonte listada abaixo (inclusive documentos anexados) JA esta linkada a esta sessao e e legivel pelo \`contextSourceId\` mostrado. NUNCA diga que nao tem o anexo, que ele "nao sincronizou" ou que precisa do id — o id esta aqui. Se o usuario pedir pra ler um anexo, chame read_context_source com o contextSourceId correspondente.
 
 ${blocks}
 `;

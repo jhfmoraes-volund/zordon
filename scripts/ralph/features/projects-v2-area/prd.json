@@ -1,0 +1,406 @@
+{
+  "feature": "projects-v2-area",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/backlog/prd-projects-v2-area.md",
+  "phase": 1,
+  "phaseGoal": "Área Projects V2 admin-only (read-only): clone da rota + board Spec→PRD + side sheet de PRD mesclado (specMarkdown/stories + delivery status/assignees/sprint) com Copiar funcional e Enviar pra Forge como STUB desabilitado. Consome colunas de projects-v2-schema.",
+  "userStories": [
+    {
+      "id": "PV2A-001",
+      "title": "Rota lista projects-v2 admin-gated",
+      "description": "Cria src/app/(dashboard)/projects-v2/page.tsx (Server Component) que chama getEffectiveAccessLevel() e redirect('/projects') se não-admin; senão lista os Project (reusa a query da lista atual) linkando cada card pra /projects-v2/[id].",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/app/(dashboard)/projects-v2/page.tsx existe e é async Server Component",
+        "Chama getEffectiveAccessLevel + hasMinAccessLevel(level,'admin'); redirect('/projects') quando false",
+        "Renderiza lista de Project com links href=/projects-v2/<id>"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "npx eslint 'src/app/(dashboard)/projects-v2/page.tsx'",
+          "expected": "no errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Logar como NÃO-admin (builder) e abrir /projects-v2 → deve redirecionar pra /projects. Logar como admin → lista de projetos com links pra /projects-v2/<id>.",
+          "expected": "Non-admin redirecionado; admin vê a lista"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/app/(dashboard)/projects-v2/page.tsx"
+      ]
+    },
+    {
+      "id": "PV2A-002",
+      "title": "Rota detalhe projects-v2/[id] admin-gated + shell client",
+      "description": "Cria src/app/(dashboard)/projects-v2/[id]/page.tsx (Server Component) com mesmo gate admin; busca Project (id, name) e monta o client ProjectsV2Board com projectId/projectName. Cria o stub do client em src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx ('use client') que por enquanto só renderiza o título.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "[id]/page.tsx existe, async, com gate admin + redirect('/projects')",
+        "projects-v2-board.tsx existe com 'use client' e recebe { projectId, projectName }",
+        "page.tsx renderiza <ProjectsV2Board .../>"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "npx eslint 'src/app/(dashboard)/projects-v2/[id]/page.tsx' 'src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx'",
+          "expected": "no errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Como builder, abrir /projects-v2/<id> → redireciona pra /projects. Como admin → vê o título do projeto.",
+          "expected": "Gate redireciona non-admin; admin vê o shell"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-001"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/projects-v2/[id]/page.tsx",
+        "src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx"
+      ]
+    },
+    {
+      "id": "PV2A-003",
+      "title": "Registry DELIVERY_STATUS em status-chips",
+      "description": "Adiciona o registry DELIVERY_STATUS em src/lib/status-chips.ts via defineRegistry, com o conjunto exato do schema (backlog,todo,in_progress,review,changes_requested,done,in_production) e tones coerentes. Comentário referencia a migration 20260604c do projects-v2-schema.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/lib/status-chips.ts exporta DELIVERY_STATUS via defineRegistry",
+        "As 7 keys exatas existem: backlog,todo,in_progress,review,changes_requested,done,in_production",
+        "tsc passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'backlog|todo|in_progress|review|changes_requested|done|in_production' src/lib/status-chips.ts",
+          "expected": ">=7"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 10,
+      "touches": [
+        "src/lib/status-chips.ts"
+      ]
+    },
+    {
+      "id": "PV2A-004",
+      "title": "Hook use-prds-by-spec (carrega PRDs + Specs, agrupa)",
+      "description": "Cria src/app/(dashboard)/projects-v2/[id]/_hooks/use-prds-by-spec.ts que carrega ProductRequirement do projeto (supabase client, eq projectId, is dismissedAt null) + UserStory (Specs) do projeto, e expõe { prds, specs, prdMutate, reload }. O agrupamento por Spec vive no SpecPrdTree (PV2A-006), não no hook. Usa useOptimisticCollection pros PRDs.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo existe e exporta usePrdsBySpec(projectId)",
+        "Expõe prds + specs (UserStory do projeto) + prdMutate + reload",
+        "Usa useOptimisticCollection (não setState após fetch dos PRDs)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'useOptimisticCollection' 'src/app/(dashboard)/projects-v2/[id]/_hooks/use-prds-by-spec.ts'",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-002"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/(dashboard)/projects-v2/[id]/_hooks/use-prds-by-spec.ts"
+      ]
+    },
+    {
+      "id": "PV2A-005",
+      "title": "PrdRow (linha de PRD reutilizável, em src/components/prd/)",
+      "description": "Cria src/components/prd/prd-row.tsx — linha de PRD reutilizável (derivada de story-row) mostrando reference, title e StatusChip vindo de statusRegistry passado por prop. Slots opcionais renderBadge(prd)/renderRowActions(prd); onOpenPrd(prdId) ao clicar. Primitivo compartilhado, NÃO em projects-v2/.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo src/components/prd/prd-row.tsx existe; recebe { prd, statusRegistry, onOpenPrd?, renderBadge?, renderRowActions? }",
+        "Renderiza reference + title + StatusChip(statusRegistry)",
+        "onClick dispara onOpenPrd(prd.id); renderBadge/renderRowActions renderizam quando passados"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'renderBadge|renderRowActions|statusRegistry' src/components/prd/prd-row.tsx",
+          "expected": ">=2"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-003"
+      ],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/components/prd/prd-row.tsx"
+      ]
+    },
+    {
+      "id": "PV2A-006",
+      "title": "SpecPrdTree compartilhado (grouping + Spec card colapsável)",
+      "description": "Cria src/components/prd/spec-prd-tree.tsx — árvore COMPARTILHADA pelos três surfaces V2. Recebe { prds, specs, statusRegistry, onOpenPrd?, renderBadge?, renderRowActions? }, agrupa PRDs por userStoryId INTERNAMENTE, renderiza SpecCard colapsável (chevron, default aberto, contagem) por Spec + bucket 'Sem Spec' por último, com PrdRow em cada linha. O que varia entra por renderBadge/renderRowActions/statusRegistry.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/components/prd/spec-prd-tree.tsx existe exportando SpecPrdTree",
+        "Agrupa PRDs por userStoryId internamente; expõe renderBadge/renderRowActions/statusRegistry/onOpenPrd",
+        "SpecCard colapsável (chevron, default expandido) com contagem; bucket 'Sem Spec' por último"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'collapsed|Sem Spec|userStoryId' src/components/prd/spec-prd-tree.tsx",
+          "expected": ">=2"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Não aplicável isolado — validado em PV2A-007. Confirmar que compila e exporta SpecPrdTree.",
+          "expected": "Componente exporta SpecPrdTree"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-005"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/prd/spec-prd-tree.tsx"
+      ]
+    },
+    {
+      "id": "PV2A-007",
+      "title": "Montar SpecPrdTree no ProjectsV2Board",
+      "description": "Edita projects-v2-board.tsx pra usar usePrdsBySpec(projectId), montar <SpecPrdTree prds specs statusRegistry={DELIVERY_STATUS} onOpenPrd/> (de src/components/prd/) e guardar selectedPrdId em useState. Header 'Projects V2 · <name> · admin pilot'.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "projects-v2-board.tsx chama usePrdsBySpec e renderiza SpecPrdTree (de src/components/prd/)",
+        "Passa statusRegistry=DELIVERY_STATUS + onOpenPrd; selectedPrdId em useState",
+        "Header mostra o nome do projeto + rótulo de piloto admin"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'SpecPrdTree|usePrdsBySpec' 'src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx'",
+          "expected": ">=2"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Como admin, abrir /projects-v2/<id> de um projeto com PRDs → board mostra ≥1 SpecCard colapsável com PrdCards dentro; toggle do chevron colapsa/expande.",
+          "expected": "Board renderiza a árvore Spec→PRD; collapse funciona"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-004",
+        "PV2A-006"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx"
+      ]
+    },
+    {
+      "id": "PV2A-008",
+      "title": "PrdSheet shell (ResponsiveSheet + header)",
+      "description": "Cria src/components/projects-v2/prd-sheet.tsx usando ResponsiveSheet size=lg. Header com reference + title + StatusChipSelect(DELIVERY_STATUS) (onChange chama prop onChangeDeliveryStatus) + nome do Spec pai + Sprint select. Recebe { prd, spec, sprints, members, onClose, onChange* } props. Sem body de markdown ainda.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "prd-sheet.tsx existe usando ResponsiveSheet (não Sheet/Dialog nus)",
+        "Header mostra reference + StatusChipSelect com options=DELIVERY_STATUS",
+        "Abre quando prd != null, fecha via onClose"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'ResponsiveSheet|StatusChipSelect|DELIVERY_STATUS' src/components/projects-v2/prd-sheet.tsx",
+          "expected": ">=3"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-003"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/components/projects-v2/prd-sheet.tsx"
+      ]
+    },
+    {
+      "id": "PV2A-009",
+      "title": "PrdSheet body — specMarkdown + stories + Copiar",
+      "description": "Adiciona ao prd-sheet.tsx o body que renderiza Markdown(prd.specMarkdown) (empty-state se vazio), lista prd.stories[] (id + title + flag verifiable), textarea de notes, e a action row com botão Copiar (navigator.clipboard.writeText(specMarkdown) + toast Sonner de sucesso, disabled se specMarkdown vazio).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Body renderiza Markdown(specMarkdown) com empty-state quando vazio",
+        "Lista prd.stories[] com id/title",
+        "Botão Copiar escreve specMarkdown no clipboard + toast; disabled se vazio"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'clipboard|Markdown|specMarkdown' src/components/projects-v2/prd-sheet.tsx",
+          "expected": ">=2"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir um PRD com specMarkdown no sheet, clicar Copiar, colar num editor → reproduz o specMarkdown; toast de sucesso aparece.",
+          "expected": "Clipboard contém o specMarkdown; toast visível"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-008"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/components/projects-v2/prd-sheet.tsx"
+      ]
+    },
+    {
+      "id": "PV2A-010",
+      "title": "PrdSheet action row — Enviar pra Forge (stub) + montagem no board",
+      "description": "Adiciona ao prd-sheet.tsx o botão 'Enviar pra Forge' disabled com title='Disponível em breve (projects-v2-forge-unlock)'. Monta <PrdSheet/> em projects-v2-board.tsx, resolvendo o prd selecionado por selectedPrdId, passando sprints/members carregados pelo hook.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Botão Enviar pra Forge presente e disabled (não dispara request)",
+        "projects-v2-board.tsx monta <PrdSheet prd={selected} onClose=.../>",
+        "Clicar num PrdCard abre o sheet do PRD correto"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'PrdSheet|disabled' 'src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx' src/components/projects-v2/prd-sheet.tsx",
+          "expected": ">=2"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "No board, clicar num PrdCard → sheet abre com o PRD certo. Botão 'Enviar pra Forge' está cinza/disabled; clicar não faz nada (Network vazio).",
+          "expected": "Sheet abre; Forge button disabled e inerte"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-007",
+        "PV2A-009"
+      ],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/components/projects-v2/prd-sheet.tsx",
+        "src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx"
+      ]
+    },
+    {
+      "id": "PV2A-011",
+      "title": "PATCH /api/projects-v2/prds/[prdId] (delivery/assignees/sprint/notes)",
+      "description": "Cria src/app/api/projects-v2/prds/[prdId]/route.ts. PATCH admin-gated (getEffectiveAccessLevel → 403 se não-admin), valida Zod { deliveryStatus?, sprintId?, assignees?: string[], notes? } (deliveryStatus restrito ao enum DELIVERY_STATUS), chama updatePrd e sincroniza ProductRequirementAssignee (delete+insert do set). Retorna { prd } 200.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "route.ts existe com export PATCH",
+        "Gate admin retorna 403 pra não-admin",
+        "Zod valida deliveryStatus contra o enum; rejeita valor fora do set com 400",
+        "Chama updatePrd + sync de ProductRequirementAssignee"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'updatePrd|z\\.(object|enum|string)' 'src/app/api/projects-v2/prds/[prdId]/route.ts'",
+          "expected": ">=2"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-003"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/api/projects-v2/prds/[prdId]/route.ts"
+      ]
+    },
+    {
+      "id": "PV2A-012",
+      "title": "Wire-up escrita — delivery status optimistic + smoke",
+      "description": "Conecta o StatusChipSelect/assignees/sprint/notes do PrdSheet à mutação optimistic do hook (prdMutate → PATCH /api/projects-v2/prds/[prdId]) em projects-v2-board.tsx. Erros via showErrorToast. Smoke browser end-to-end.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Mudar deliveryStatus no sheet dispara prdMutate(patch, persist) → PATCH",
+        "Reverte + toast em erro (showErrorToast); não usa setState após fetch",
+        "Mudança persiste após reload"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'prdMutate|showErrorToast' 'src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx'",
+          "expected": ">=1"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Como admin: abrir um PRD, trocar Delivery de Backlog→Review, fechar sheet, dar reload → status persistiu (Review). Trocar de novo e ver o chip atualizar otimisticamente.",
+          "expected": "deliveryStatus persiste; update otimista visível"
+        }
+      ],
+      "dependsOn": [
+        "PV2A-010",
+        "PV2A-011"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/(dashboard)/projects-v2/[id]/projects-v2-board.tsx"
+      ]
+    }
+  ]
+}

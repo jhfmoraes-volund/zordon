@@ -16,7 +16,7 @@ import * as documentAdapter from "@/lib/context-sources/adapters/document";
 export function createReadContextSourceTool() {
   return tool({
     description:
-      "Lê o conteúdo de uma fonte de contexto linkada (transcript, meeting, planilha, GitHub). Use para extrair insights detalhados antes de criar notas ou propostas.",
+      "Lê o conteúdo de uma fonte de contexto linkada (transcript, meeting, documento/anexo, planilha, GitHub). Use para extrair insights detalhados antes de criar notas ou propostas — inclusive para ler documentos anexados (PDF/DOCX/HTML/TXT/MD/CSV) pelo seu contextSourceId.",
     inputSchema: z.object({
       sourceId: z.string().uuid().describe("ID do ContextSource"),
     }),

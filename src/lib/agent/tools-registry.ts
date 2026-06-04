@@ -63,7 +63,7 @@ export type ToolContext = {
   projectId: string;
   memberId?: string | null;
   pmReviewId?: string | null;
-  /** Path absoluto do workspace clonado na Forja (~/zordon-forge/workspaces/<key>/).
+  /** Path absoluto do workspace clonado na Forja (<FORGE_HOME>/workspaces/<key>/).
    *  Null se projeto ainda não tem 1º Forge run. Workspace tools (read/glob/grep)
    *  validam todo path contra este prefix. */
   workspacePath?: string | null;

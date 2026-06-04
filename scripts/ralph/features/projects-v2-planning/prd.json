@@ -1,0 +1,326 @@
+{
+  "feature": "projects-v2-planning",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/backlog/prd-projects-v2-planning.md",
+  "phase": 1,
+  "phaseGoal": "Sprint Planning re-pointed from Tasks to PRDs: Vitoria allocates/deallocates approved PRDs to THIS ceremony's sprint (writes ProductRequirement.sprintId + deliveryStatus='todo'), with a sprint_prd_capacity view summing estimateFp and a Spec->PRD allocation tree. Release Planning untouched.",
+  "userStories": [
+    {
+      "id": "PV2P-001",
+      "title": "Migration — view sprint_prd_capacity",
+      "description": "Cria a view SQL sprint_prd_capacity (§7) somando ProductRequirement.estimateFp por sprintId, com FILTER espelhando os status de sprint_member_capacity. Roda via psql \"$DIRECT_URL\".",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo supabase/migrations/20260604a_sprint_prd_capacity.sql existe com o DDL do §7",
+        "psql roda sem erro",
+        "View sprint_prd_capacity tem colunas: sprintId, prd_count, fp_allocated, fp_done, fp_open",
+        "GRANT SELECT TO service_role, authenticated aplicado"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql \"$DIRECT_URL\" -f supabase/migrations/20260604a_sprint_prd_capacity.sql",
+          "expected": "CREATE VIEW / GRANT (no error)"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_name='sprint_prd_capacity';",
+          "expected": "sprintId,prd_count,fp_allocated,fp_done,fp_open"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "supabase/migrations/20260604a_sprint_prd_capacity.sql"
+      ]
+    },
+    {
+      "id": "PV2P-002",
+      "title": "Regenerar database.types.ts com sprint_prd_capacity",
+      "description": "Atualiza src/lib/supabase/database.types.ts pra expor a view sprint_prd_capacity em Views, sem quebrar tsc.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "database.types.ts contém 'sprint_prd_capacity' como key em Views",
+        "tsc não acusa erro relacionado a sprint_prd_capacity"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'sprint_prd_capacity' src/lib/supabase/database.types.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit 2>&1 | grep -E 'sprint_prd_capacity' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-001"
+      ],
+      "estimateMinutes": 10,
+      "touches": [
+        "src/lib/supabase/database.types.ts"
+      ]
+    },
+    {
+      "id": "PV2P-003",
+      "title": "DAL — getAllocatablePrds + getSprintPrdCapacity (reads)",
+      "description": "Cria src/lib/dal/planning-prd-allocation.ts com os reads: getAllocatablePrds(projectId) (PRDs approved, não dismissed, do projeto) e getSprintPrdCapacity(sprintId) (SELECT da view sprint_prd_capacity, null se sem PRDs).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo src/lib/dal/planning-prd-allocation.ts existe",
+        "Exporta getAllocatablePrds(projectId) e getSprintPrdCapacity(sprintId)",
+        "getAllocatablePrds filtra status='approved' e dismissedAt IS NULL",
+        "getSprintPrdCapacity lê a view sprint_prd_capacity e mapeia pra camelCase"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit 2>&1 | grep -E 'src/lib/dal/planning-prd-allocation' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'export (async )?function (getAllocatablePrds|getSprintPrdCapacity)' src/lib/dal/planning-prd-allocation.ts",
+          "expected": "2"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-002"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/dal/planning-prd-allocation.ts"
+      ]
+    },
+    {
+      "id": "PV2P-004",
+      "title": "DAL — allocatePrdToSprint + deallocatePrd (writes)",
+      "description": "Adiciona em planning-prd-allocation.ts os writes: allocatePrdToSprint(prdId, sprintId, projectId) (UPDATE sprintId + deliveryStatus='todo'; valida projeto + status='approved'; idempotente/move) e deallocatePrd(prdId, projectId) (sprintId=NULL + deliveryStatus='backlog'). Usa updatePrd do DAL pra registrar activity.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Exporta allocatePrdToSprint(prdId, sprintId, projectId) e deallocatePrd(prdId, projectId)",
+        "allocatePrdToSprint rejeita PRD com status != 'approved' (erro legível)",
+        "allocatePrdToSprint rejeita PRD de outro projeto",
+        "deallocatePrd zera sprintId e seta deliveryStatus='backlog'"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit 2>&1 | grep -E 'src/lib/dal/planning-prd-allocation' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'export (async )?function (allocatePrdToSprint|deallocatePrd)' src/lib/dal/planning-prd-allocation.ts",
+          "expected": "2"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-003"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/dal/planning-prd-allocation.ts"
+      ]
+    },
+    {
+      "id": "PV2P-005",
+      "title": "Vitoria tools — list_project_prds + get_sprint_prd_capacity (reads)",
+      "description": "Em src/lib/agent/agents/vitoria/tools.ts (buildVitoriaTools, surface planning), adiciona list_project_prds (chama getAllocatablePrds, flag allocatedHere) e get_sprint_prd_capacity (resolve PlanningCeremony.sprintId, chama getSprintPrdCapacity).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildVitoriaTools exporta as tools list_project_prds e get_sprint_prd_capacity",
+        "get_sprint_prd_capacity resolve a sprint via PlanningCeremony.sprintId (não recebe sprintId)",
+        "list_project_prds retorna PRDs approved com flag allocatedHere"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit 2>&1 | grep -E 'src/lib/agent/agents/vitoria/tools' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE '(list_project_prds|get_sprint_prd_capacity):' src/lib/agent/agents/vitoria/tools.ts",
+          "expected": "2"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-004"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts"
+      ]
+    },
+    {
+      "id": "PV2P-006",
+      "title": "Vitoria tools — allocate_prd_to_sprint + deallocate_prd_from_sprint (writes)",
+      "description": "Adiciona em buildVitoriaTools as tools de commit: allocate_prd_to_sprint (resolve PlanningCeremony.sprintId, chama allocatePrdToSprint; erro se cerimônia sem sprint) e deallocate_prd_from_sprint (chama deallocatePrd). Mirror single-sprint de link_prd_to_sprint.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildVitoriaTools exporta allocate_prd_to_sprint e deallocate_prd_from_sprint",
+        "allocate_prd_to_sprint NÃO aceita sprintId no inputSchema (resolve da cerimônia)",
+        "allocate_prd_to_sprint retorna erro legível se PlanningCeremony.sprintId for null",
+        "Retorno inclui { ok, productRequirementId, sprintId, deliveryStatus }"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit 2>&1 | grep -E 'src/lib/agent/agents/vitoria/tools' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE '(allocate_prd_to_sprint|deallocate_prd_from_sprint):' src/lib/agent/agents/vitoria/tools.ts",
+          "expected": "2"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-005"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts"
+      ]
+    },
+    {
+      "id": "PV2P-007",
+      "title": "API — POST /api/planning/[id]/allocate-prd",
+      "description": "Cria src/app/api/planning/[id]/allocate-prd/route.ts. Body Zod { productRequirementId: uuid, action: 'allocate'|'deallocate' }. [id]=PlanningCeremony.id. Resolve sprintId da cerimônia; chama allocatePrdToSprint/deallocatePrd. 409 se cerimônia sem sprint.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo route.ts existe e exporta POST",
+        "Valida body via Zod (rejeita action inválida com 400)",
+        "Retorna 409 quando a cerimônia não tem sprintId",
+        "Retorna 200 { prd } em sucesso"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit 2>&1 | grep -E 'src/app/api/planning/\\[id\\]/allocate-prd' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'export (async )?function POST' 'src/app/api/planning/[id]/allocate-prd/route.ts'",
+          "expected": "1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE '(z\\.object|z\\.enum|zod)' 'src/app/api/planning/[id]/allocate-prd/route.ts'",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-004"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/app/api/planning/[id]/allocate-prd/route.ts"
+      ]
+    },
+    {
+      "id": "PV2P-008",
+      "title": "UI — montar SpecPrdTree compartilhado na superfície de planning",
+      "description": "Monta o <SpecPrdTree> compartilhado (src/components/prd/spec-prd-tree.tsx, de projects-v2-area) na superfície de Sprint Planning, passando PRDs alocáveis + Specs, statusRegistry=DELIVERY_STATUS, e renderRowActions(prd) com botões alocar(⊕)/desalocar(⊖) + estimateFp na linha. NÃO cria componente de árvore novo.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "A superfície de planning importa SpecPrdTree de src/components/prd/spec-prd-tree.tsx",
+        "Passa renderRowActions com alocar/desalocar + estimateFp na linha; statusRegistry=DELIVERY_STATUS",
+        "Nenhum arquivo planning-prd-tree.tsx é criado"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit 2>&1 | grep -E 'src/components/planning' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -rc 'spec-prd-tree' src/components/planning/",
+          "expected": ">=1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "ls src/components/planning/planning-prd-tree.tsx 2>/dev/null | wc -l | tr -d ' '",
+          "expected": "0"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-002"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/planning/planning-sheet.tsx"
+      ]
+    },
+    {
+      "id": "PV2P-009",
+      "title": "UI — capacidade PRD na superfície de planning + wire allocate",
+      "description": "Renderiza a barra de capacidade por PRD (sprint_prd_capacity via getSprintPrdCapacity) acima do SpecPrdTree e fia os botões alocar/desalocar (renderRowActions) pra POST /api/planning/[id]/allocate-prd, re-somando capacidade após a mutação. Smoke browser.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "A superfície de planning renderiza SpecPrdTree + barra de capacidade (fpAllocated / capacity)",
+        "Clicar alocar num PRD backlog chama POST allocate-prd e o card vira 'todo'",
+        "A barra de capacidade re-soma o estimateFp do PRD após alocar"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit 2>&1 | grep -E 'src/components/planning' || echo no-errors",
+          "expected": "no-errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -rc 'spec-prd-tree' src/components/planning/",
+          "expected": ">=1"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir Sprint Planning de uma sprint com PRDs approved. Alocar um PRD backlog: validar que vira 'todo', sprintId gravado, e a barra de capacidade soma o estimateFp.",
+          "expected": "PRD vira todo + capacidade re-soma o FP do PRD"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-007",
+        "PV2P-008"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/planning/planning-sheet.tsx"
+      ]
+    },
+    {
+      "id": "PV2P-010",
+      "title": "Verify SQL — alocação grava sprintId + capacidade reflete",
+      "description": "Story de verificação end-to-end por SQL: após alocar um PRD via API/tool, o ProductRequirement tem sprintId set, deliveryStatus='todo', e sprint_prd_capacity retorna a linha com fp_allocated correto.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Após allocate, SELECT confirma sprintId NOT NULL e deliveryStatus='todo'",
+        "sprint_prd_capacity retorna fp_allocated = Σ estimateFp dos PRDs daquela sprint",
+        "Após deallocate, sprintId volta a NULL e deliveryStatus='backlog'"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) >= 0 FROM sprint_prd_capacity;",
+          "expected": "t"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT (SELECT COALESCE(SUM(\"estimateFp\"),0) FROM \"ProductRequirement\" WHERE \"sprintId\" IS NOT NULL AND \"dismissedAt\" IS NULL AND \"deliveryStatus\"<>'backlog' GROUP BY \"sprintId\" LIMIT 1) = (SELECT fp_allocated FROM sprint_prd_capacity LIMIT 1) OR NOT EXISTS (SELECT 1 FROM sprint_prd_capacity);",
+          "expected": "t"
+        }
+      ],
+      "dependsOn": [
+        "PV2P-006",
+        "PV2P-007"
+      ],
+      "estimateMinutes": 15,
+      "touches": []
+    }
+  ]
+}

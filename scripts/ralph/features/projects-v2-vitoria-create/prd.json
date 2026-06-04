@@ -1,0 +1,256 @@
+{
+  "feature": "projects-v2-vitoria-create",
+  "branchName": "joao-dev",
+  "prdPath": "docs/prd/backlog/prd-projects-v2-vitoria-create.md",
+  "phase": 1,
+  "phaseGoal": "Vitoria cria PRDs in-ceremony convocando o Vitor em background (D13, plano §7.3/§7.4): ensure_sprint_prd_session (subKind='vitoria_ask' por cerimônia via EntityLink.planningCeremonyId, sem migration), summon background do Vitor sem troca de tela do PM, anúncio transparente, alocação on-approve na sprint, e roteamento dos hosts +New PRD / Decompose pra autoria do Vitor.",
+  "userStories": [
+    {
+      "id": "PV2V-001",
+      "title": "Estende createPrdDraftSession com ceremonyId + subKind",
+      "description": "Adiciona params opcionais ceremonyId? e subKind? ('quick_ask'|'vitoria_ask', default 'quick_ask') a createPrdDraftSession. subKind='vitoria_ask' seta subKind+title; ceremonyId presente cria EntityLink(planningCeremonyId, designSessionId). Sem schema novo.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "createPrdDraftSession aceita { projectId, actorMemberId, ceremonyId?, subKind? }",
+        "Com subKind='vitoria_ask', a DesignSession inserida tem subKind='vitoria_ask'",
+        "Com ceremonyId presente, uma row EntityLink com planningCeremonyId e designSessionId é criada",
+        "Chamada legada (sem ceremonyId/subKind) continua criando subKind='quick_ask' (retrocompatível)"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "npx eslint src/lib/sessions/prd-session/dal.ts",
+          "expected": "no errors"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/sessions/prd-session/dal.ts"
+      ]
+    },
+    {
+      "id": "PV2V-002",
+      "title": "ensureCeremonyPrdSession (provision-or-reuse idempotente)",
+      "description": "Helper no dal.ts: lookup EntityLink WHERE planningCeremonyId=ceremonyId JOIN DesignSession ON subKind='vitoria_ask'. Achou → { sessionId, reused:true }; senão createPrdDraftSession({ ceremonyId, subKind:'vitoria_ask' }) → reused:false. Garante no máx 1 session vitoria_ask por cerimônia (D11).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "ensureCeremonyPrdSession({ projectId, actorMemberId, ceremonyId }) existe e exporta tipo de retorno",
+        "2ª chamada com mesmo ceremonyId retorna reused:true e o MESMO sessionId",
+        "Query de idempotência (§13) retorna 0 linhas após 2 chamadas"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT el.\"planningCeremonyId\", count(*) FROM \"EntityLink\" el JOIN \"DesignSession\" ds ON el.\"designSessionId\"=ds.id WHERE ds.\"subKind\"='vitoria_ask' GROUP BY 1 HAVING count(*) > 1;",
+          "expected": "0 rows"
+        }
+      ],
+      "dependsOn": [
+        "PV2V-001"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/sessions/prd-session/dal.ts"
+      ]
+    },
+    {
+      "id": "PV2V-003",
+      "title": "Tool ensure_sprint_prd_session na Vitoria",
+      "description": "Adiciona tool ensure_sprint_prd_session em buildVitoriaTools. inputSchema { ceremonyId:uuid }. execute chama ensureCeremonyPrdSession e retorna { sessionId, reused, subKind:'vitoria_ask' }. Description deixa claro que NÃO autora PRD e deve ser chamada antes do summon.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildVitoriaTools expõe ensure_sprint_prd_session",
+        "inputSchema valida ceremonyId como uuid",
+        "execute retorna { sessionId, reused, subKind }"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "npx eslint src/lib/agent/agents/vitoria/tools.ts",
+          "expected": "no errors"
+        }
+      ],
+      "dependsOn": [
+        "PV2V-002"
+      ],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts"
+      ]
+    },
+    {
+      "id": "PV2V-004",
+      "title": "Helper summonVitorHeadless (runAgent + drain) disparado por after()",
+      "description": "Cria src/lib/sessions/prd-session/summon.ts com summonVitorHeadless({ sessionId, brief, actorMemberId }): runAgent(vitorAgent, params{sessionId,currentStepKey:'briefing'}, userMessage:brief) e DRENA o stream (toUIMessageStreamResponse + reader loop até done, padrão runAlphaIngestHeadless) — sem drain o loop do Vitor não roda. A tool de summon da Vitoria dispara via after(() => summonVitorHeadless(...)) depois do anúncio (D6), fire-and-forget. SEM endpoint HTTP, sem job table.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "src/lib/sessions/prd-session/summon.ts exporta summonVitorHeadless",
+        "Usa runAgent (engine.ts) com vitorAgent e DRENA o stream (toUIMessageStreamResponse + reader loop até done)",
+        "O disparo usa after() de next/server dentro da tool da Vitoria (fire-and-forget), não um endpoint",
+        "Após o summon, um ProductRequirement.designSessionId = sessionId é criado pelo Vitor"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'summonVitorHeadless|toUIMessageStreamResponse|getReader' src/lib/sessions/prd-session/summon.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'after' src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [
+        "PV2V-003"
+      ],
+      "estimateMinutes": 45,
+      "touches": [
+        "src/lib/sessions/prd-session/summon.ts",
+        "src/lib/agent/agents/vitoria/tools.ts"
+      ]
+    },
+    {
+      "id": "PV2V-005",
+      "title": "Anúncio estruturado do summon + reforço no prompt da Vitoria",
+      "description": "Antes do summon, Vitoria emite status message estruturada (kind='vitoria_summon') 'Estou convocando o Vitor em background — ele vai criar o PRD; aparece na árvore de PRDs desta sprint.' Reforça no prompt: SEMPRE anunciar antes de convocar; NUNCA autorar PRD (transparência D6).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Tipo SummonAnnouncement (kind:'vitoria_summon') definido e emitido antes do summon",
+        "Prompt da Vitoria contém regra explícita de anúncio + proibição de autoria",
+        "Mensagem de anúncio cita 'background' e 'árvore de PRDs desta sprint'"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Na Sprint Planning, pedir um PRD à Vitoria; confirmar que ela ANUNCIA o summon (texto sobre background + árvore) ANTES do Vitor agir",
+          "expected": "Anúncio visível antes do summon"
+        }
+      ],
+      "dependsOn": [
+        "PV2V-004"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts",
+        "src/lib/agent/agents/vitoria/prompt.ts"
+      ]
+    },
+    {
+      "id": "PV2V-006",
+      "title": "Alocação on-approve (allocatePrdToSprint)",
+      "description": "Quando o Vitor aprova um PRD numa session vitoria_ask, a Vitoria aloca via tool allocate_ceremony_prd(prdId): resolve sprintId=PlanningCeremony.sprintId e chama allocatePrdToSprint (de projects-v2-planning), que escreve ProductRequirement.sprintId + deliveryStatus='todo'. NÃO usa link_prd_to_sprint (PlanningSessionPRD, mecanismo errado).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Tool allocate_ceremony_prd(prdId) existe na Vitoria",
+        "Resolve sprintId via PlanningCeremony.sprintId e chama allocatePrdToSprint (não link_prd_to_sprint)",
+        "Após alocar, ProductRequirement.sprintId é não-nulo e deliveryStatus='todo'"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM \"ProductRequirement\" pr JOIN \"DesignSession\" ds ON pr.\"designSessionId\"=ds.id WHERE ds.\"subKind\"='vitoria_ask' AND pr.\"sprintId\" IS NOT NULL;",
+          "expected": ">= 1 after an approved+allocated ceremony PRD"
+        }
+      ],
+      "dependsOn": [
+        "PV2V-005"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts"
+      ]
+    },
+    {
+      "id": "PV2V-007",
+      "title": "Marcador vitoria_ask queryable + render idêntico",
+      "description": "Sessions vitoria_ask listáveis como set (helper listVitoriaAskSessions) e renderizam idênticas a prd_session (mesmo two-pane PRD-tree, sem branch por subKind na UI de autoria).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Helper listVitoriaAskSessions filtra DesignSession por subKind='vitoria_ask'",
+        "Render do PRD-tree é o mesmo de prd_session (nenhum branch por subKind na UI de autoria)",
+        "Query de lineage (§13) retorna as sessions vitoria_ask da cerimônia"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM \"EntityLink\" el JOIN \"DesignSession\" ds ON el.\"designSessionId\"=ds.id WHERE ds.\"subKind\"='vitoria_ask' AND el.\"planningCeremonyId\" IS NOT NULL;",
+          "expected": ">= 1 after a summon"
+        }
+      ],
+      "dependsOn": [
+        "PV2V-006"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/sessions/prd-session/dal.ts"
+      ]
+    },
+    {
+      "id": "PV2V-008",
+      "title": "Roteamento dos hosts +New PRD (board) e Decompose (Spec) pra autoria do Vitor",
+      "description": "Resolver que liga os gatilhos hospedados em projects-v2-area — board '+ New PRD' (Vitor mini-context) e Spec 'Decompose' — à mesma entrada de autoria do Vitor. 'new_prd' → autoria com brief vazio; 'decompose' → passa Spec (userStoryId) como contexto. Sem nova UI aqui, só o resolver.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Função resolvePrdAuthoringTarget({ kind:'new_prd'|'decompose', projectId, userStoryId? }) existe",
+        "kind='new_prd' resolve pra entrada de autoria do Vitor (prd_session)",
+        "kind='decompose' passa userStoryId (Spec) como contexto da autoria"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "no errors"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "No board V2, clicar '+ New PRD' abre autoria do Vitor; numa Spec, 'Decompose' inicia fatiamento do Vitor com a Spec como contexto",
+          "expected": "Ambos roteiam pra Vitor"
+        }
+      ],
+      "dependsOn": [
+        "PV2V-007"
+      ],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/sessions/prd-session/dal.ts"
+      ]
+    }
+  ]
+}
