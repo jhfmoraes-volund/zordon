@@ -133,10 +133,10 @@ async function buildVitorContext(thread: ThreadRow) {
     .order("createdAt", { ascending: false })
     .limit(5);
 
-  // PRDs do projeto — todos (geralmente <20)
+  // PRDs do projeto — todos (geralmente <20). Pra modo informacional.
   const prdsPromise = supabase
     .from("ProductRequirement")
-    .select("id, reference, title, status, oneLiner")
+    .select("id, reference, title, status, oneLiner, designSessionId")
     .eq("projectId", session.projectId)
     .order("reference", { ascending: true });
 
@@ -233,6 +233,13 @@ async function buildVitorContext(thread: ThreadRow) {
       status: p.status,
       oneLiner: p.oneLiner,
     })),
+    // Conta PRDs criados NESTA DS específica. Foundation mode dispara
+    // quando session_prds === 0 (independente de quantos o projeto tem em
+    // outras DS). Permite "Quick-Ask" virgem disparar foundation mesmo
+    // se o projeto já tem outros PRDs de outras DSs.
+    sessionPrdsCount: (prds ?? []).filter(
+      (p) => p.designSessionId === session.id,
+    ).length,
     personas: (personas ?? []).map((p) => ({
       id: p.id,
       name: p.name,
@@ -259,7 +266,11 @@ async function buildVitoriaContext(thread: ThreadRow) {
       return { agent: { slug: "vitoria", name: "Vitoria" } };
     }
 
-    const [{ data: project }, { data: notes }] = await Promise.all([
+    const [
+      { data: project },
+      { data: notes },
+      { data: contextLinks },
+    ] = await Promise.all([
       pm.projectId
         ? supabase
             .from("Project")
@@ -274,7 +285,38 @@ async function buildVitoriaContext(thread: ThreadRow) {
         .is("dismissedAt", null)
         .order("generatedAt", { ascending: false })
         .limit(10),
+      supabase
+        .from("EntityLink")
+        .select(
+          `id, linkedAt, ContextSource:ContextSource!EntityLink_contextSourceId_fkey(id, kind, title, summary, externalUrl, capturedAt)`,
+        )
+        .eq("pmReviewId", pmReviewId)
+        .not("contextSourceId", "is", null)
+        .order("linkedAt", { ascending: false })
+        .limit(20),
     ]);
+
+    const attachments = (contextLinks ?? [])
+      .map((link) => {
+        const cs = link.ContextSource as {
+          id: string;
+          kind: string;
+          title: string;
+          summary: string | null;
+          externalUrl: string | null;
+          capturedAt: string | null;
+        } | null;
+        if (!cs) return null;
+        return {
+          id: cs.id,
+          kind: cs.kind,
+          title: cs.title,
+          summary: cs.summary,
+          externalUrl: cs.externalUrl,
+          capturedAt: cs.capturedAt,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
 
     return {
       agent: { slug: "vitoria", name: "Vitoria" },
@@ -296,6 +338,7 @@ async function buildVitoriaContext(thread: ThreadRow) {
         kind: n.kind,
         content: n.content,
       })),
+      attachments,
     };
   }
 

@@ -47,6 +47,11 @@ import {
   createListPrdsTool,
 } from "./tools/prd";
 import { createReadContextSourceTool } from "./tools/context-source";
+import {
+  createReadWorkspaceFileTool,
+  createGlobWorkspaceTool,
+  createGrepWorkspaceTool,
+} from "./tools/workspace";
 
 /**
  * Context passed pelo router pra cada factory. Campos opcionais — cada tool
@@ -58,6 +63,10 @@ export type ToolContext = {
   projectId: string;
   memberId?: string | null;
   pmReviewId?: string | null;
+  /** Path absoluto do workspace clonado na Forja (~/zordon-forge/workspaces/<key>/).
+   *  Null se projeto ainda não tem 1º Forge run. Workspace tools (read/glob/grep)
+   *  validam todo path contra este prefix. */
+  workspacePath?: string | null;
 };
 
 function requireSessionId(ctx: ToolContext): string {
@@ -139,7 +148,19 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
     createListOpenQuestionsTool(requireSessionId(ctx), ctx.projectId),
 
   // ── Anexos / ContextSource ────────────────────────────────────────────
-  read_context_source: () => createReadContextSourceTool(),
+  read_context_source: (ctx) =>
+    createReadContextSourceTool({
+      sessionId: ctx.sessionId,
+      pmReviewId: ctx.pmReviewId ?? null,
+    }),
+
+  // ── Workspace sandboxed (lê apenas dentro do workspace do projeto) ───
+  read_workspace_file: (ctx) =>
+    createReadWorkspaceFileTool({ workspacePath: ctx.workspacePath ?? null }),
+  glob_workspace: (ctx) =>
+    createGlobWorkspaceTool({ workspacePath: ctx.workspacePath ?? null }),
+  grep_workspace: (ctx) =>
+    createGrepWorkspaceTool({ workspacePath: ctx.workspacePath ?? null }),
 
   // ── PRDs (Vitor — sub-fase PRD_DRAFTING / PRD_REVIEW) ────────────────
   propose_prd: (ctx) =>
@@ -178,6 +199,7 @@ const VITOR_TOOLS = new Set([
   "add_open_question", "resolve_open_question", "list_open_questions",
   "propose_prd", "read_prd", "update_prd", "approve_prd", "link_prd_dependency", "list_prds",
   "read_context_source",
+  "read_workspace_file", "glob_workspace", "grep_workspace",
 ]);
 
 const VITORIA_TOOLS = new Set([

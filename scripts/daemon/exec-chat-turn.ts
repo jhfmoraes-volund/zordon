@@ -27,6 +27,7 @@ import { db } from "../../src/lib/db";
 import {
   appendChatTurnEvent,
   applyChatThreadCompact,
+  clearChatThreadSession,
   completeChatTurn,
   failChatTurn,
   getChatThreadSessionState,
@@ -210,10 +211,10 @@ async function main() {
   //    - Fresh (1ª turn ou pós-compact): system leve + summary (se houver)
   //      + bootstrap mínimo de history (apenas pra threads pré-migração,
   //      sem session ainda) + msg
-  let prompt: string;
-  if (hasResumableSession) {
-    prompt = lastUser!.content;
-  } else {
+  // Prompt fresh (system leve + summary/history bootstrap + msg nova). Em
+  // closure porque o fallback de resume-stale (sessão CC sumiu / cwd mudou)
+  // precisa reconstruir o prompt fresh pra retry sem perder a conversa.
+  const buildFreshPrompt = (): string => {
     const summaryBlock =
       sessionState?.lastSummary && sessionState.lastSummary.length > 0
         ? `\n\n---\n**Resumo da conversa anterior:** ${sessionState.lastSummary}`
@@ -233,8 +234,12 @@ async function main() {
             .join("\n\n")}`
         : "";
 
-    prompt = `${systemPrompt}${summaryBlock}${historyBlock}\n\n---\n**Mensagem do João:** ${lastUser!.content}`;
-  }
+    return `${systemPrompt}${summaryBlock}${historyBlock}\n\n---\n**Mensagem do João:** ${lastUser!.content}`;
+  };
+
+  // Resume (Claude tem memória nativa via sessionId) só manda a msg nova;
+  // fresh manda o prompt completo.
+  const prompt = hasResumableSession ? lastUser!.content : buildFreshPrompt();
 
   // 5. Roda Claude via SDK programático (não spawn da CLI).
   //    SDK usa MESMA binary, MESMA auth (~/.claude/), MESMA subscription.
@@ -247,38 +252,49 @@ async function main() {
 
   console.log(dim(`  SDK query (max_turns=${maxTurns}, mcp=zordon stdio)`));
 
-  let assistantText = "";
-  let tokensIn: number | null = null;
-  let tokensOut: number | null = null;
-  let costUsd: number | null = null;
-  let resultSubtype: string | null = null;
-  let capturedSessionId: string | null = null;
+  // streamTurn: roda 1 query (resume ou fresh) e acumula o resultado do
+  // stream. Extraído pra permitir retry fresh quando o resume falha porque a
+  // sessão CC não existe mais (ver fallback de resume-stale abaixo).
+  const streamTurn = async (turnPrompt: string, resumeId: string | null) => {
+    let assistantText = "";
+    let tokensIn: number | null = null;
+    let tokensOut: number | null = null;
+    let costUsd: number | null = null;
+    let resultSubtype: string | null = null;
+    let capturedSessionId: string | null = null;
 
-  try {
     const response = query({
-      prompt,
+      prompt: turnPrompt,
       options: {
         includePartialMessages: true,
         maxTurns,
+        // Raciocínio nativo (thinking adaptive): Claude decide quando pensar.
+        // O streaming separa thinking_delta (raciocínio, canal próprio) de
+        // text_delta (resposta) — a UI renderiza o raciocínio num bloco
+        // colapsável "Pensando…" e a resposta limpa em PT no balão. Sem isso,
+        // o modelo narra o raciocínio dentro do texto da resposta.
+        thinking: { type: "adaptive", display: "summarized" },
         // Resume nativo: Claude lembra de turns anteriores. Sem isso, daemon
         // seria stateless e cairia em loops "ler + propor + esperar ok" pq
         // o "ok" do user some na janela de history.
-        ...(sessionState?.ccSessionId
-          ? { resume: sessionState.ccSessionId }
-          : {}),
-        // Read-grounded: se projeto tem workspace clonado, cwd vira a pasta
-        // do projeto na Forja — Vitor pode usar Read/Grep/Glob no código real.
-        // Sem workspace, cai no cwd padrão (irrelevante porque sem tools
-        // de filesystem na whitelist).
-        ...(workspacePath ? { cwd: workspacePath } : {}),
-        // Whitelist explícita: Vitor é discovery, NÃO codifica.
-        // - mcp__zordon__* : domínio (entidades DS, decisões, PRDs, anexos)
-        // - Read/Grep/Glob : leitura do código pra ancorar discovery na
-        //   realidade da implementação atual (NÃO Write/Edit/Bash).
+        ...(resumeId ? { resume: resumeId } : {}),
+        // cwd ESTÁVEL = repoRoot. NÃO usar workspacePath aqui: o CC deriva o
+        // diretório de busca da sessão a partir do cwd, então mudar o cwd
+        // (ex: workspace terraformado depois do chat começar) faz o resume
+        // não achar a sessão e o turn morrer com "No conversation found".
+        // As tools de workspace usam ctx.workspacePath (resolvido server-side
+        // via prepare-context), não process.cwd() — então o cwd não as afeta.
+        cwd: repoRoot,
+        // Whitelist explícita: APENAS mcp__zordon__*.
+        // Read/Grep/Glob nativos do CC SDK FICAM disallowed — aceitam
+        // path absoluto e atravessam o disco inteiro (cwd só seta
+        // starting point). Pra leitura de código usamos as variantes
+        // mcp__zordon__read_workspace_file / glob_workspace /
+        // grep_workspace que VALIDAM o path contra o prefix do workspace.
         allowedTools: [
-          "Read",
-          "Grep",
-          "Glob",
+          "mcp__zordon__read_workspace_file",
+          "mcp__zordon__glob_workspace",
+          "mcp__zordon__grep_workspace",
           "mcp__zordon__read_product_vision",
           "mcp__zordon__read_scope",
           "mcp__zordon__read_persona",
@@ -319,6 +335,23 @@ async function main() {
           "mcp__zordon__add_pm_review_note",
           "mcp__zordon__update_pm_review_report",
           "mcp__zordon__get_project_indicators",
+        ],
+        // Guard-rail explícito: bloqueia tools que Claude conhece do training
+        // mas NÃO temos plugadas (Google Drive, Notion, Slack, etc) — sem
+        // isso ele tenta invocar `mcp__google_drive__*` e trava o turno.
+        // Não cobre tools desconhecidas (allowedTools acima é authoritative),
+        // mas elimina os candidatos óbvios + serve de sinal pro modelo.
+        disallowedTools: [
+          "Bash",
+          "Write",
+          "Edit",
+          "MultiEdit",
+          "NotebookEdit",
+          "Read",
+          "Grep",
+          "Glob",
+          "WebSearch",
+          "WebFetch",
         ],
         // Daemon roda local trusted, sem humano no loop. Tool router valida
         // ctx (member/session/project) no servidor — sem prompt de permissão.
@@ -366,6 +399,17 @@ async function main() {
             assistantText += text;
             void safeEmit("text_delta", { text });
             void broadcast("delta", { text });
+          }
+        } else if (
+          ev.type === "content_block_delta" &&
+          ev.delta.type === "thinking_delta"
+        ) {
+          // Raciocínio nativo — canal separado da resposta. Broadcast como
+          // "reasoning" (não "delta") pra UI renderizar no bloco "Pensando…".
+          const t = (ev.delta as { thinking?: string }).thinking;
+          if (t) {
+            void safeEmit("thinking_delta", { text: t });
+            void broadcast("reasoning", { text: t });
           }
         } else if (
           ev.type === "content_block_start" &&
@@ -446,6 +490,49 @@ async function main() {
         });
       }
     }
+
+    return {
+      assistantText,
+      tokensIn,
+      tokensOut,
+      costUsd,
+      resultSubtype,
+      capturedSessionId,
+    };
+  };
+
+  try {
+    // Tenta resume; se a sessão CC sumiu (pruned) ou o cwd mudou, o SDK joga
+    // "No conversation found with session ID" antes de produzir texto. Nesse
+    // caso limpa o ccSessionId morto e refaz fresh com o summary/history como
+    // bootstrap — a thread se auto-cura em vez de travar pra sempre.
+    let stream;
+    try {
+      stream = await streamTurn(prompt, sessionState?.ccSessionId ?? null);
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      const staleResume =
+        !!sessionState?.ccSessionId &&
+        /No conversation found with session ID/i.test(m);
+      if (!staleResume) throw err;
+      console.warn(
+        `[exec-chat-turn] resume stale (${sessionState!.ccSessionId}); retrying fresh`,
+      );
+      await safeEmit("resume_stale", {
+        ccSessionId: sessionState!.ccSessionId,
+      });
+      await clearChatThreadSession(turn.threadId);
+      stream = await streamTurn(buildFreshPrompt(), null);
+    }
+
+    const {
+      assistantText,
+      tokensIn,
+      tokensOut,
+      costUsd,
+      resultSubtype,
+      capturedSessionId,
+    } = stream;
 
     // 6. Finaliza turn — success path
     const hitMaxTurns = resultSubtype === "error_max_turns";
@@ -528,12 +615,12 @@ async function main() {
     await safeEmit("done", {
       ok: false,
       reason: "sdk_error",
-      responseText: assistantText,
+      responseText: "",
     });
     await broadcast("done", {
       ok: false,
       reason: "sdk_error",
-      responseText: assistantText,
+      responseText: "",
     });
     await new Promise((r) => setTimeout(r, 200));
     await broadcastChannel?.unsubscribe();

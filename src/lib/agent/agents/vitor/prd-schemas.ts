@@ -21,7 +21,7 @@ export const PrdMetric = z.object({
 
 export const PrdDependency = z.object({
   prdId: z.string().uuid(),
-  kind: z.enum(["blocks","enables","shares-data"]),
+  kind: z.enum(["depends_on","blocks","enables","shares-data"]),
 });
 
 export const PrdRiskOrAssumption = z.object({
@@ -59,5 +59,5 @@ export const ApprovePrdInput = z.object({ id: z.string().uuid() });
 export const LinkPrdDependencyInput = z.object({
   fromPrdId: z.string().uuid(),
   toPrdId: z.string().uuid(),
-  kind: z.enum(["blocks","enables","shares-data"]),
+  kind: z.enum(["depends_on","blocks","enables","shares-data"]),
 });

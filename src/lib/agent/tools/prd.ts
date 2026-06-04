@@ -130,7 +130,7 @@ export function createApprovePrdTool(memberId: string | null): Tool {
 export function createLinkPrdDependencyTool(memberId: string | null): Tool {
   return tool({
     description:
-      "Liga dois PRDs por uma dependencia (blocks/enables/shares-data). Edita o array dependencies do fromPrdId.",
+      "Liga dois PRDs por uma dependencia. Edita o array dependencies do fromPrdId. Direção do kind: 'depends_on' = from roda DEPOIS de to (to é pré-requisito) · 'blocks'/'enables' = from roda ANTES de to · 'shares-data' = sem ordem.",
     inputSchema: LinkPrdDependencyInput,
     execute: async ({ fromPrdId, toPrdId, kind }) => {
       const from = await getPrdById(fromPrdId);

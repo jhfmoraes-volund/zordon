@@ -727,7 +727,7 @@ PRD-000 (template-da-casa):
   acceptanceCriteria:
 ${acLines}
 
-O \`propose_prd\` retorna \`{ created: [{ id, reference, title, status }] }\`. Use esses ids: ligue CADA feature ao PRD-000 com \`link_prd_dependency({ fromPrdId: <id da feature>, toPrdId: <id do PRD-000>, kind: 'blocks' })\` — toda feature depende da fundação. NUNCA crie dependência de saída no PRD-000 (ele é a raiz).
+O \`propose_prd\` retorna \`{ created: [{ id, reference, title, status }] }\`. Use esses ids: ligue CADA feature ao PRD-000 com \`link_prd_dependency({ fromPrdId: <id da feature>, toPrdId: <id do PRD-000>, kind: 'depends_on' })\` — toda feature DEPENDE da fundação (a fundação roda primeiro). NUNCA crie dependência de saída no PRD-000 (ele é a raiz). Atenção à direção: \`depends_on\` = "eu venho depois"; \`blocks\`/\`enables\` = "eu venho antes".
 
 ### Nível MACRO (não detalhe demais agora)
 O scaffold é macro: title, oneLiner, problem e acceptanceCriteria objetivos. Não quebre em stories nem encha de detalhe — isso vem no refino e no preparo pra Forja. O objetivo é dar ao PM uma leitura estruturada rápida.
@@ -1370,7 +1370,7 @@ Para cada functionality unica (apos dedup dos cards do brainstorm):
    - successMetrics: o que mede sucesso (baseline opcional, target obrigatorio).
    - outOfScope: clarifica fronteira da functionality.
    - sourceCardIds: IDs dos cards do brainstorm que originaram este PRD (rastreabilidade).
-3. Liga dependencias entre PRDs via \`link_prd_dependency\` quando 2 PRDs se cruzam (blocks/enables/shares-data).
+3. Liga dependencias entre PRDs via \`link_prd_dependency\` quando 2 PRDs se cruzam. Direção importa: \`depends_on\` (o from vem DEPOIS do to) · \`blocks\`/\`enables\` (o from vem ANTES do to) · \`shares-data\` (sem ordem).
 4. **Voce NAO cria UserStory, Task, ou AcceptanceCriterion direto.** Tasks sao responsabilidade da Vitoria, que materializa PRDs aprovados em Tasks.
 5. Quando o PM revisar e aprovar (pela UI), o PRD vai pra \`status=approved\` — dai em diante a Vitoria pega.
 

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { type AgentId } from "./agent-themes";
 import { MessageBubble } from "./message-bubble";
 import { ThinkingIndicator } from "./thinking-indicator";
+import { extractReasoning, extractText } from "./message-utils";
 
 export type MessageListStatus = "idle" | "submitted" | "streaming" | "error" | "ready";
 
@@ -44,7 +45,17 @@ export function MessageList({
   const isWaiting = status === "streaming" || status === "submitted";
   const lastMsg = messages[messages.length - 1];
   const lastIsAssistant = lastMsg?.role === "assistant";
-  const showThinking = isWaiting && !lastIsAssistant;
+  // O proxy cria a mensagem do assistant cedo (chunk `start`), antes de
+  // qualquer conteúdo. Por isso o indicador não pode sumir só porque existe
+  // uma mensagem do assistant — ele fica até aparecer conteúdo visível
+  // (resposta OU raciocínio streamando). Quando o raciocínio começa, o
+  // disclosure "Pensando…" assume e o indicador some.
+  const lastAnswer =
+    lastIsAssistant && lastMsg ? extractText(lastMsg) : "";
+  const lastReasoning =
+    lastIsAssistant && lastMsg ? extractReasoning(lastMsg).text : "";
+  const showThinking =
+    isWaiting && lastAnswer.length === 0 && lastReasoning.length === 0;
 
   const itemCount = messages.length + (showThinking ? 1 : 0);
 

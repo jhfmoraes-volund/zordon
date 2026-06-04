@@ -22,6 +22,27 @@ export function extractText(message: UIMessage): string {
   return out;
 }
 
+export function extractReasoning(message: UIMessage): {
+  text: string;
+  streaming: boolean;
+} {
+  if (!message.parts) return { text: "", streaming: false };
+  let out = "";
+  let streaming = false;
+  for (const p of message.parts) {
+    if (p.type === "reasoning") {
+      const part = p as {
+        type: "reasoning";
+        text?: string;
+        state?: "streaming" | "done";
+      };
+      if (typeof part.text === "string") out += part.text;
+      if (part.state !== "done") streaming = true;
+    }
+  }
+  return { text: out, streaming };
+}
+
 export function extractToolParts(message: UIMessage): ToolPart[] {
   if (!message.parts) return [];
   const out: ToolPart[] = [];

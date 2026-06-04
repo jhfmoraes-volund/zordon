@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { existsSync } from "node:fs";
 import { db } from "@/lib/db";
 import { TOOL_REGISTRY } from "@/lib/agent/tools-registry";
+import { resolveWorkspacePath } from "@/lib/forge/paths";
 
 export const dynamic = "force-dynamic";
 // build-bump: 2026-06-02 read_prd
@@ -125,11 +127,29 @@ export async function POST(
     memberId = member?.id ?? null;
   }
 
+  // Resolve workspacePath se projeto tem workspace clonado na Forja.
+  // Workspace tools (read/glob/grep) validam todo path contra este prefix.
+  let workspacePath: string | null = null;
+  const { data: project } = await supabase
+    .from("Project")
+    .select("id, name, referenceKey")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (project) {
+    const candidate = resolveWorkspacePath({
+      id: project.id,
+      name: project.name,
+      referenceKey: project.referenceKey,
+    });
+    if (existsSync(candidate)) workspacePath = candidate;
+  }
+
   const ctx = {
     sessionId,
     projectId,
     pmReviewId,
     memberId,
+    workspacePath,
   };
 
   try {

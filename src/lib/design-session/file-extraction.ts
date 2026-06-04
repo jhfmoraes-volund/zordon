@@ -22,9 +22,15 @@ export async function extractTextFromBuffer(
     const lower = filename.toLowerCase();
 
     if (mimeType === "application/pdf" || lower.endsWith(".pdf")) {
+      // pdf-parse v2.x exporta classe PDFParse (mudou da função default da v1).
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse");
-      const result = await pdfParse(buffer);
+      const { PDFParse } = require("pdf-parse") as {
+        PDFParse: new (opts: { data: Buffer | Uint8Array }) => {
+          getText: () => Promise<{ text: string }>;
+        };
+      };
+      const parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
       return { text: result.text ?? "", status: "success" };
     }
 

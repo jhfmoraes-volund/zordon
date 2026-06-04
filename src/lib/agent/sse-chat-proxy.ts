@@ -41,6 +41,7 @@ export function streamViaClaudeDaemon(args: {
         writer.write({ type: "text-start", id: messageId });
 
         let assistantText = "";
+        let reasoningId: string | null = null;
         let finished = false;
         let resolveDone: (() => void) | null = null;
         const donePromise = new Promise<void>((r) => {
@@ -58,6 +59,18 @@ export function streamViaClaudeDaemon(args: {
             if (!text || finished) return;
             assistantText += text;
             writer.write({ type: "text-delta", delta: text, id: messageId });
+          })
+          .on("broadcast", { event: "reasoning" }, ({ payload }) => {
+            const text = (payload as { text?: string })?.text ?? "";
+            if (!text || finished) return;
+            // Raciocínio nativo (thinking) — parte separada da resposta. Abre
+            // o bloco de reasoning lazy no 1º delta; a UI renderiza num
+            // disclosure colapsável "Pensando…".
+            if (!reasoningId) {
+              reasoningId = randomUUID();
+              writer.write({ type: "reasoning-start", id: reasoningId });
+            }
+            writer.write({ type: "reasoning-delta", delta: text, id: reasoningId });
           })
           .on("broadcast", { event: "tool_use" }, ({ payload }) => {
             if (finished) return;
@@ -141,6 +154,9 @@ export function streamViaClaudeDaemon(args: {
           new Promise<void>((res) => setTimeout(res, TIMEOUT_MS)),
         ]);
 
+        if (reasoningId) {
+          writer.write({ type: "reasoning-end", id: reasoningId });
+        }
         writer.write({ type: "text-end", id: messageId });
         writer.write({ type: "finish" });
         await channel.unsubscribe();

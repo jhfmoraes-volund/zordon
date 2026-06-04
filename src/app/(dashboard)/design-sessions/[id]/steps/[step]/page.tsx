@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { PageTitle } from "@/components/app-shell";
 import { WizardLayout } from "@/components/design-session/wizard-layout";
 import { PersonaJourneyBoard, Persona } from "@/components/design-session/persona-journey-board";
 import { SolutionCardBoard } from "@/components/design-session/solution-card-board";
@@ -58,6 +59,14 @@ type Session = {
   selectedSteps: string[] | null;
 };
 
+// Espelha TYPE_LABELS de session-detail-sheet.tsx — mantém o rótulo do tipo
+// consistente entre o sheet do projeto e o header do wizard.
+const TYPE_LABELS: Record<string, string> = {
+  inception: "Inception",
+  continuous_improvement: "Melhoria contínua",
+  super: "Inception",
+};
+
 export default function StepPage({
   params,
 }: {
@@ -102,6 +111,11 @@ export default function StepPage({
 
   return (
     <div className="-mx-3 -my-4 h-[calc(100svh-3rem)] overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
+    <PageTitle
+      title={session.title}
+      subtitle={`${session.project.name} · ${TYPE_LABELS[session.type] ?? session.type}`}
+      backHref={`/projects/${session.projectId}?tab=sessions`}
+    />
     <DesignSessionProvider
       sessionId={id}
       sessionTitle={session.title}

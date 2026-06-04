@@ -187,9 +187,13 @@ export function PrdBriefingStep({ sessionId, projectId }: Props) {
     kickoffFiredRef.current = true;
 
     const brief = launcherBrief?.trim();
+    // Kickoff neutro: deixa o prompt do agente conduzir (Foundation Mode
+    // dispara automático quando a session não tem PRDs ainda — Vitor vai
+    // ler os anexos, sintetizar e iniciar as ondas de discovery). Antes
+    // forçava "proponha os PRDs" e atropelava o grilling.
     const text = brief
       ? brief
-      : "Analise os insumos que anexei e proponha os PRDs (incluindo o PRD-000 Setup & Stack).";
+      : "Vamos começar. Analisa os anexos primeiro, me conta o que você entendeu do projeto e me leva pelas perguntas que importam.";
 
     sendMessage({ text }, { body: { kickoff: true } });
   }, [

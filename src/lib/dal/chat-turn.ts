@@ -292,6 +292,20 @@ export async function saveChatThreadSession(args: {
 }
 
 /**
+ * Limpa o ccSessionId morto sem mexer em summary/contador. Usado quando o
+ * resume falha porque a sessão CC sumiu (pruned) ou o cwd mudou (workspace
+ * terraformado após o chat começar) — a próxima turn recomeça fresh.
+ */
+export async function clearChatThreadSession(threadId: string): Promise<void> {
+  const { error } = await db()
+    .from("ChatThread")
+    .update({ ccSessionId: null })
+    .eq("id", threadId);
+  if (error)
+    console.warn(`[chat-thread] clearSession(${threadId}) failed:`, error);
+}
+
+/**
  * Aplica compact: salva summary, zera sessionId (próxima turn fresh), zera contador.
  */
 export async function applyChatThreadCompact(args: {

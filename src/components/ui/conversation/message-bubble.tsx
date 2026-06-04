@@ -8,7 +8,8 @@ import { AGENT_THEMES, type AgentId } from "./agent-themes";
 import { AgentBadge } from "./agent-badge";
 import { ToolCallChip } from "./tool-call-chip";
 import { ToolCallSummary } from "./tool-call-summary";
-import { extractText, extractToolParts } from "./message-utils";
+import { ReasoningDisclosure } from "./reasoning-disclosure";
+import { extractReasoning, extractText, extractToolParts } from "./message-utils";
 
 type Props = {
   agent: AgentId;
@@ -23,15 +24,33 @@ export const MessageBubble = memo(function MessageBubble({
 }: Props) {
   const isUser = message.role === "user";
   const text = extractText(message);
+  const reasoning = isUser
+    ? { text: "", streaming: false }
+    : extractReasoning(message);
   const toolParts = extractToolParts(message);
   const doneCount = toolParts.filter((p) => p.state === "result").length;
   const threshold = AGENT_THEMES[agent].collapseThreshold;
   const shouldCollapse = doneCount >= threshold;
 
+  // Assistant sem nenhum conteúdo visível ainda (shell criado pelo chunk
+  // `start` antes do 1º delta) — não renderiza o balão só com o badge.
+  // O MessageList mostra o ThinkingIndicator nesse intervalo.
+  if (!isUser && !text && !reasoning.text && toolParts.length === 0) {
+    return null;
+  }
+
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div className="min-w-0 max-w-[85%] space-y-2">
         {!isUser && showAgentBadge && <AgentBadge agent={agent} size="sm" />}
+
+        {reasoning.text && (
+          <ReasoningDisclosure
+            text={reasoning.text}
+            streaming={reasoning.streaming}
+            hasAnswer={text.length > 0}
+          />
+        )}
 
         {text && (
           <div

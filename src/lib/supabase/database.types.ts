@@ -7854,6 +7854,32 @@ export type Database = {
       }
       can_view_meeting: { Args: { p_meeting_id: string }; Returns: boolean }
       can_view_project: { Args: { p_project_id: string }; Returns: boolean }
+      claim_next_job: {
+        Args: { p_daemon_id: string; p_kind: string }
+        Returns: {
+          assignToAnyone: boolean
+          claimedAt: string | null
+          claimedBy: string | null
+          createdAt: string
+          heartbeatAt: string | null
+          id: string
+          kind: string
+          maxStories: number | null
+          meta: Json
+          ownerId: string
+          prdSlug: string
+          projectId: string | null
+          runId: string | null
+          status: string
+          updatedAt: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ForgeJob"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       create_meeting_with_reviews: {
         Args: {
           p_attendees?: Json

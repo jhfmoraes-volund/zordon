@@ -1,0 +1,64 @@
+-- DRAFT — NÃO aplicado ainda. RLS pro zordon-daemon agir como o user (D3=combo).
+--
+-- Princípio: tudo ADITIVO (políticas são OR — não removo/afrouxo nada existente)
+-- e escopado por OWNERSHIP. O daemon, logado como o user, só toca dado do user.
+--
+-- Convenções de owner (pré-existentes, divergentes por tabela):
+--   ForgeJob.ownerId      = Member.id   (via my_member())
+--   ForgeDaemon.memberId  = Member.id
+--   ForgeRun.ownerId      = auth.uid()  (já coberto — sem mudança)
+--   Chat*.createdBy       = auth.uid()  (na ChatThread)
+
+-- ── Helper: Member.id do caller ────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.my_member()
+RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT id FROM public."Member" WHERE "userId" = auth.uid()
+$$;
+REVOKE ALL ON FUNCTION public.my_member() FROM public;
+GRANT EXECUTE ON FUNCTION public.my_member() TO authenticated;
+
+-- ── ChatThread: ler + atualizar a própria thread ───────────────────────────
+CREATE POLICY chat_thread_owner_read ON public."ChatThread"
+  FOR SELECT TO authenticated USING ("createdBy" = auth.uid());
+CREATE POLICY chat_thread_owner_update ON public."ChatThread"
+  FOR UPDATE TO authenticated
+  USING ("createdBy" = auth.uid()) WITH CHECK ("createdBy" = auth.uid());
+
+-- ── ChatTurn: atualizar turns da própria thread (markRunning/complete) ─────
+CREATE POLICY chat_turn_owner_update ON public."ChatTurn"
+  FOR UPDATE TO authenticated
+  USING (EXISTS (SELECT 1 FROM public."ChatThread" t
+                 WHERE t.id = "ChatTurn"."threadId" AND t."createdBy" = auth.uid()))
+  WITH CHECK (EXISTS (SELECT 1 FROM public."ChatThread" t
+                 WHERE t.id = "ChatTurn"."threadId" AND t."createdBy" = auth.uid()));
+
+-- ── ChatTurnEvent: append por delta (hot path) ─────────────────────────────
+CREATE POLICY chat_turn_event_owner_insert ON public."ChatTurnEvent"
+  FOR INSERT TO authenticated
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public."ChatTurn" ct
+      JOIN public."ChatThread" t ON t.id = ct."threadId"
+    WHERE ct.id = "ChatTurnEvent"."turnId" AND t."createdBy" = auth.uid()));
+
+-- ── ChatMessage: inserir resposta + ler histórico da própria thread ────────
+CREATE POLICY chat_message_owner_read ON public."ChatMessage"
+  FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public."ChatThread" t
+                 WHERE t.id = "ChatMessage"."threadId" AND t."createdBy" = auth.uid()));
+CREATE POLICY chat_message_owner_insert ON public."ChatMessage"
+  FOR INSERT TO authenticated
+  WITH CHECK (EXISTS (SELECT 1 FROM public."ChatThread" t
+                 WHERE t.id = "ChatMessage"."threadId" AND t."createdBy" = auth.uid()));
+
+-- ── ForgeDaemon: gerir a PRÓPRIA presença (memberId == meu Member.id) ──────
+CREATE POLICY forgedaemon_owner_write ON public."ForgeDaemon"
+  FOR ALL TO authenticated
+  USING ("memberId" = public.my_member())
+  WITH CHECK ("memberId" = public.my_member());
+
+-- ── ForgeJob: dono atualiza os próprios jobs (status/heartbeat pós-claim) ───
+--   (o claim em si é via RPC SECURITY DEFINER; isto cobre running/done/failed)
+CREATE POLICY job_owner_update ON public."ForgeJob"
+  FOR UPDATE TO authenticated
+  USING ("ownerId" = public.my_member())
+  WITH CHECK ("ownerId" = public.my_member());
