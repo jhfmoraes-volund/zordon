@@ -567,10 +567,28 @@ function topoSortByDependencies(
         d && typeof d === "object" && typeof d.prdId === "string"
           ? d.prdId
           : null;
-      if (pid && byId.has(pid)) {
-        adj.get(pid)!.push(p.id);
-        indeg.set(p.id, (indeg.get(p.id) ?? 0) + 1);
+      if (!pid || !byId.has(pid)) continue;
+      // O `kind` codifica a DIREÇÃO da aresta — não dá pra ignorá-lo:
+      //   • `depends_on`: o dono (p) depende de prdId → prdId vem ANTES de p.
+      //   • `blocks` / `enables`: o dono (p) é pré-requisito → p vem ANTES de prdId.
+      //   • `shares-data` / não-direcional: ignora (não impõe ordem).
+      const kind = String((d as Record<string, unknown>).kind ?? "depends_on")
+        .toLowerCase()
+        .replace(/-/g, "_");
+      let before: string;
+      let after: string;
+      if (kind === "blocks" || kind === "enables") {
+        before = p.id;
+        after = pid;
+      } else if (kind === "shares_data") {
+        continue;
+      } else {
+        // depends_on (default seguro p/ kinds desconhecidos)
+        before = pid;
+        after = p.id;
       }
+      adj.get(before)!.push(after);
+      indeg.set(after, (indeg.get(after) ?? 0) + 1);
     }
   }
   const queue = prds.filter((p) => (indeg.get(p.id) ?? 0) === 0).map((p) => p.id);
