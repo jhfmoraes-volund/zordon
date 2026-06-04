@@ -636,7 +636,14 @@ export async function createForgeRunFromSession(args: {
   let eligible = allPrds.filter(
     (p) => p.status === "approved" || p.status === "ready",
   );
+  if (eligible.length === 0) {
+    throw new Error(
+      "Nenhum PRD aprovado nesta session — aprove ao menos 1 PRD pra rodar a Forja.",
+    );
+  }
   if (prdRefsFilter && prdRefsFilter.length > 0) {
+    // Filtro explícito (retry de falha / re-run de PRD específico pelo painel):
+    // honra exatamente o que foi pedido, mesmo PRDs já concluídos.
     const refSet = new Set(prdRefsFilter);
     eligible = eligible.filter((p) => refSet.has(p.reference));
     if (eligible.length === 0) {
@@ -644,11 +651,20 @@ export async function createForgeRunFromSession(args: {
         "Nenhum dos PRDs filtrados está aprovado — não há nada pra rodar.",
       );
     }
-  }
-  if (eligible.length === 0) {
-    throw new Error(
-      "Nenhum PRD aprovado nesta session — aprove ao menos 1 PRD pra rodar a Forja.",
+  } else {
+    // Disparo "novo" sem filtro: roda só o que ainda NÃO foi concluído com
+    // sucesso (idle/failed). PRDs já 'done' ficam de fora pra não re-rodar tudo
+    // a cada clique. Pra re-rodar um concluído, use o botão "Disparar" no painel
+    // da PRD (passa prdRefs explícito).
+    eligible = eligible.filter(
+      (p) =>
+        (p as { lastRunStatus?: string | null }).lastRunStatus !== "done",
     );
+    if (eligible.length === 0) {
+      throw new Error(
+        "Todos os PRDs aprovados desta session já foram concluídos — nada novo pra rodar.",
+      );
+    }
   }
 
   const manifest = snapshotManifest(project.forgeSourceSessionId, eligible);

@@ -591,16 +591,22 @@ function SmartRunButton({
     return () => clearInterval(id);
   }, [activeRun]);
 
-  const readyCount = prds.filter(
+  const approvedPrds = prds.filter(
     (p) => p.status === "approved" || p.status === "ready",
-  ).length;
+  );
+  const readyCount = approvedPrds.length;
+  // PRDs aprovados que ainda NÃO concluíram com sucesso — é o que um disparo
+  // "novo" (sem filtro) realmente roda. Os já 'done' ficam de fora.
+  const pendingCount = approvedPrds.filter((p) => p.runState !== "done").length;
   const hasRepo = !!(project.githubRepoOwner && project.githubRepoName);
 
   const blockReason = !hasRepo
     ? "Conecte o repo GitHub deste projeto antes de rodar."
     : readyCount === 0
       ? "Aprove ao menos 1 PRD nesta session pra rodar a Forja."
-      : null;
+      : pendingCount === 0
+        ? "Todos os PRDs aprovados já foram concluídos. Re-rode um específico pelo painel da PRD."
+        : null;
 
   const handleRun = async (retryFailed = false) => {
     setBusy(true);
@@ -759,7 +765,7 @@ function SmartRunButton({
         ) : (
           <Flame className="size-3.5 mr-1.5" />
         )}
-        Disparar novo run
+        Rodar {pendingCount} restante{pendingCount > 1 ? "s" : ""}
       </Button>
     );
   }
