@@ -282,6 +282,7 @@ async function buildVitoriaContext(thread: ThreadRow) {
         .from("PMReviewNote")
         .select("id, content, kind, priority, generatedAt")
         .eq("pmReviewId", pmReviewId)
+        .eq("audience", "detail")
         .is("dismissedAt", null)
         .order("generatedAt", { ascending: false })
         .limit(10),

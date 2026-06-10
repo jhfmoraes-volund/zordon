@@ -29,7 +29,8 @@ type PMReviewNoteKind =
   | "risk"
   | "need"
   | "team_signal"
-  | "open_decision";
+  | "open_decision"
+  | "milestone";
 
 const KIND_LABEL: Record<PMReviewNoteKind, string> = {
   summary: "Panorama",
@@ -39,6 +40,7 @@ const KIND_LABEL: Record<PMReviewNoteKind, string> = {
   need: "Necessidade",
   team_signal: "Indicador",
   open_decision: "Decisão em aberto",
+  milestone: "Marco",
 };
 
 const KIND_TONE: Record<
@@ -79,6 +81,11 @@ const KIND_TONE: Record<
     bg: "bg-orange-100 dark:bg-orange-950/40",
     text: "text-orange-700 dark:text-orange-300",
     border: "border-orange-300 dark:border-orange-800",
+  },
+  milestone: {
+    bg: "bg-teal-100 dark:bg-teal-950/40",
+    text: "text-teal-700 dark:text-teal-300",
+    border: "border-teal-300 dark:border-teal-800",
   },
 };
 

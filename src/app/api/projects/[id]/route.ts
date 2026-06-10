@@ -5,6 +5,49 @@ import { OPEN_STATUSES } from "@/lib/function-points";
 import { getUser } from "@/lib/dal";
 import { isGuestActor } from "@/lib/guest-payload";
 
+// ─── Row types (boundary casts — evita `any`, espelha operacao-view) ───────
+
+type SprintTaskLite = {
+  status: string;
+  functionPoints: number | null;
+  dueDate: string | null;
+};
+type SprintRow = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  [key: string]: unknown;
+};
+type TaskAssignmentLite = {
+  member: { id: string; name?: string; fpCapacity?: number | null } | null;
+  [key: string]: unknown;
+};
+type TaskRow = {
+  status: string;
+  functionPoints: number | null;
+  dueDate: string | null;
+  assignments: TaskAssignmentLite[];
+  [key: string]: unknown;
+};
+type DesignSessionRow = {
+  visibility: string | null;
+  item_count: number;
+  [key: string]: unknown;
+};
+type ProjectMemberRow = {
+  fpAllocation: number | null;
+  member: {
+    id: string;
+    name: string;
+    role: string;
+    position: string | null;
+    fpCapacity: number;
+  };
+  [key: string]: unknown;
+};
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -52,20 +95,24 @@ export async function GET(
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const projectSquads = squadsRes.data ?? [];
-  const projectMembers = membersRes.data ?? [];
-  const rawSprints = sprintsRes.data ?? [];
-  const tasks = tasksRes.data ?? [];
-  const designSessions = (sessionsRes.data ?? []).map((s: any) => ({
-    ...s,
-    _count: { items: s.item_count },
-  }));
+  const projectMembers = (membersRes.data ?? []) as unknown as ProjectMemberRow[];
+  const rawSprints = (sprintsRes.data ?? []) as unknown as Array<
+    SprintRow & { tasks: SprintTaskLite[] }
+  >;
+  const tasks = (tasksRes.data ?? []) as unknown as TaskRow[];
+  const designSessions = ((sessionsRes.data ?? []) as unknown as DesignSessionRow[]).map(
+    (s) => ({
+      ...s,
+      _count: { items: s.item_count },
+    }),
+  );
 
   // ─── Sprint stats ──────────────────────────────────────
-  const sprints = rawSprints.map(({ tasks: sprintTasks, ...sprint }: any) => {
+  const sprints = rawSprints.map(({ tasks: sprintTasks, ...sprint }) => {
     const total = sprintTasks.length;
-    const done = sprintTasks.filter((t: any) => t.status === "done").length;
-    const totalFp = sprintTasks.reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0);
-    const fpDone = sprintTasks.filter((t: any) => t.status === "done").reduce((s: number, t: any) => s + (t.functionPoints ?? 0), 0);
+    const done = sprintTasks.filter((t) => t.status === "done").length;
+    const totalFp = sprintTasks.reduce((s, t) => s + (t.functionPoints ?? 0), 0);
+    const fpDone = sprintTasks.filter((t) => t.status === "done").reduce((s, t) => s + (t.functionPoints ?? 0), 0);
     return {
       ...sprint,
       taskStats: { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 },
@@ -87,7 +134,7 @@ export async function GET(
   // ─── Project health ────────────────────────────────────
   const now = new Date();
   const startDate = rawSprints.length > 0
-    ? rawSprints.reduce((min: string, s: any) => s.startDate < min ? s.startDate : min, rawSprints[0].startDate)
+    ? rawSprints.reduce((min, s) => (s.startDate < min ? s.startDate : min), rawSprints[0].startDate)
     : null;
 
   const totalTasks = tasks.length;
@@ -100,7 +147,7 @@ export async function GET(
     (t) => t.dueDate && new Date(t.dueDate) < now && t.status !== "done"
   );
 
-  const activeSprint = sprints.find((s: any) => s.status === "active");
+  const activeSprint = sprints.find((s) => s.status === "active");
   let sprintBehind = false;
   if (activeSprint) {
     const sprintStart = new Date(activeSprint.startDate).getTime();
@@ -137,14 +184,14 @@ export async function GET(
   }
 
   // ─── Member capacity (multi-project) ───────────────────
-  const allMemberIds = projectMembers.map((pm: any) => pm.member.id);
+  const allMemberIds = projectMembers.map((pm) => pm.member.id);
   const activeSprintIds = sprints
-    .filter((s: any) => s.status === "active" || s.status === "upcoming")
-    .map((s: any) => s.id);
+    .filter((s) => s.status === "active" || s.status === "upcoming")
+    .map((s) => s.id);
 
-  let fpByMember = new Map<string, number>();
-  let allocationOtherByMember = new Map<string, number>();
-  let planByMember = new Map<string, { planned: number; done: number; open: number }>();
+  const fpByMember = new Map<string, number>();
+  const allocationOtherByMember = new Map<string, number>();
+  const planByMember = new Map<string, { planned: number; done: number; open: number }>();
   if (allMemberIds.length > 0) {
     const [assignmentsRes, allocationsRes, sprintCapsRes] = await Promise.all([
       supabase
@@ -162,15 +209,23 @@ export async function GET(
             .from("sprint_member_capacity")
             .select("memberId, fp_planned, fp_done, fp_open")
             .in("sprintId", activeSprintIds)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] }),
     ]);
 
-    for (const a of (assignmentsRes.data ?? []) as any[]) {
+    const assignmentRows = (assignmentsRes.data ?? []) as unknown as Array<{
+      memberId: string | null;
+      task: { functionPoints: number | null; status: string };
+    }>;
+    for (const a of assignmentRows) {
       if (!a.memberId) continue;
       const fp = a.task.functionPoints ?? 0;
       fpByMember.set(a.memberId, (fpByMember.get(a.memberId) ?? 0) + fp);
     }
-    for (const a of (allocationsRes.data ?? []) as any[]) {
+    const allocationRows = (allocationsRes.data ?? []) as unknown as Array<{
+      memberId: string | null;
+      fpAllocation: number | null;
+    }>;
+    for (const a of allocationRows) {
       if (!a.memberId) continue;
       const fp = a.fpAllocation ?? 0;
       allocationOtherByMember.set(
@@ -178,7 +233,13 @@ export async function GET(
         (allocationOtherByMember.get(a.memberId) ?? 0) + fp,
       );
     }
-    for (const r of (sprintCapsRes.data ?? []) as any[]) {
+    const capRows = (sprintCapsRes.data ?? []) as unknown as Array<{
+      memberId: string | null;
+      fp_planned: number | null;
+      fp_done: number | null;
+      fp_open: number | null;
+    }>;
+    for (const r of capRows) {
       if (!r.memberId) continue;
       const existing = planByMember.get(r.memberId);
       if (existing) {
@@ -195,12 +256,13 @@ export async function GET(
     }
   }
 
-  const members = projectMembers.map((pm: any) => {
+  const members = projectMembers.map((pm) => {
     const member = pm.member;
     const fpThisProject = tasks
-      .filter((t) =>
-        [...OPEN_STATUSES].includes(t.status as any) &&
-        (t as any).assignments.some((a: any) => a.member?.id === member.id)
+      .filter(
+        (t) =>
+          ([...OPEN_STATUSES] as string[]).includes(t.status) &&
+          t.assignments.some((a) => a.member?.id === member.id),
       )
       .reduce((s, t) => s + (t.functionPoints ?? 0), 0);
 
@@ -255,14 +317,14 @@ export async function GET(
   // Guest: oculta DS internas, zera FP em tasks/sprints/projectMembers/members,
   // omite memberCapacity (relatório interno), e zera FP do health summary.
   const safeDesignSessions = guest
-    ? designSessions.filter((s: any) => s.visibility === "public")
+    ? designSessions.filter((s) => s.visibility === "public")
     : designSessions;
 
   const safeTasks = guest
-    ? tasks.map((t: any) => ({
+    ? tasks.map((t) => ({
         ...t,
         functionPoints: null,
-        assignments: (t.assignments ?? []).map((a: any) =>
+        assignments: (t.assignments ?? []).map((a) =>
           a.member
             ? { ...a, member: { ...a.member, fpCapacity: null } }
             : a,
@@ -271,11 +333,11 @@ export async function GET(
     : tasks;
 
   const safeSprints = guest
-    ? sprints.map((s: any) => ({ ...s, totalFp: null, fpDone: null }))
+    ? sprints.map((s) => ({ ...s, totalFp: null, fpDone: null }))
     : sprints;
 
   const safeProjectMembers = guest
-    ? projectMembers.map((pm: any) => ({
+    ? projectMembers.map((pm) => ({
         ...pm,
         fpAllocation: null,
         member: pm.member ? { ...pm.member, fpCapacity: null } : pm.member,
@@ -316,6 +378,19 @@ export async function PUT(
   const { id } = await params;
   const { memberIds, ...data } = await req.json();
   const supabase = db();
+
+  // phaseChangedAt marca a entrada na fase atual — alimenta "idade na fase"
+  // no Overview. Só estampa quando o patch de fato muda a phase.
+  if (data.phase !== undefined) {
+    const { data: current } = await supabase
+      .from("Project")
+      .select("phase")
+      .eq("id", id)
+      .single();
+    if (current && current.phase !== data.phase) {
+      data.phaseChangedAt = new Date().toISOString();
+    }
+  }
 
   if (memberIds !== undefined) {
     await supabase.from("ProjectMember").delete().eq("projectId", id);

@@ -5369,8 +5369,10 @@ export type Database = {
       }
       PMReviewNote: {
         Row: {
+          audience: string
           content: string
           dismissedAt: string | null
+          dueAt: string | null
           generatedAt: string
           generatedByAgent: string | null
           generatedByMemberId: string | null
@@ -5382,8 +5384,10 @@ export type Database = {
           sourceTranscriptIds: string[]
         }
         Insert: {
+          audience?: string
           content: string
           dismissedAt?: string | null
+          dueAt?: string | null
           generatedAt?: string
           generatedByAgent?: string | null
           generatedByMemberId?: string | null
@@ -5395,8 +5399,10 @@ export type Database = {
           sourceTranscriptIds?: string[]
         }
         Update: {
+          audience?: string
           content?: string
           dismissedAt?: string | null
+          dueAt?: string | null
           generatedAt?: string
           generatedByAgent?: string | null
           generatedByMemberId?: string | null
@@ -5543,9 +5549,13 @@ export type Database = {
           approvedAt: string | null
           approvedBy: string | null
           createdAt: string
+          deliveryStatus: string
           dependencies: Json
+          deployedToProductionAt: string | null
+          deployedToStagingAt: string | null
           designSessionId: string | null
           dismissedAt: string | null
+          estimateFp: number | null
           goal: string
           id: string
           lastRunFinishedAt: string | null
@@ -5554,6 +5564,7 @@ export type Database = {
           markdown: string
           moduleId: string | null
           oneLiner: string
+          originType: string | null
           outOfScope: string[]
           personaIds: string[]
           problem: string
@@ -5562,6 +5573,7 @@ export type Database = {
           risksAndAssumptions: Json
           sourceCardIds: string[]
           specMarkdown: string | null
+          sprintId: string | null
           status: string
           stories: Json
           successMetrics: Json
@@ -5569,6 +5581,7 @@ export type Database = {
           title: string
           updatedAt: string
           userJourney: Json
+          userStoryId: string | null
           version: number
         }
         Insert: {
@@ -5576,9 +5589,13 @@ export type Database = {
           approvedAt?: string | null
           approvedBy?: string | null
           createdAt?: string
+          deliveryStatus?: string
           dependencies?: Json
+          deployedToProductionAt?: string | null
+          deployedToStagingAt?: string | null
           designSessionId?: string | null
           dismissedAt?: string | null
+          estimateFp?: number | null
           goal?: string
           id?: string
           lastRunFinishedAt?: string | null
@@ -5587,6 +5604,7 @@ export type Database = {
           markdown?: string
           moduleId?: string | null
           oneLiner?: string
+          originType?: string | null
           outOfScope?: string[]
           personaIds?: string[]
           problem?: string
@@ -5595,6 +5613,7 @@ export type Database = {
           risksAndAssumptions?: Json
           sourceCardIds?: string[]
           specMarkdown?: string | null
+          sprintId?: string | null
           status?: string
           stories?: Json
           successMetrics?: Json
@@ -5602,6 +5621,7 @@ export type Database = {
           title: string
           updatedAt?: string
           userJourney?: Json
+          userStoryId?: string | null
           version?: number
         }
         Update: {
@@ -5609,9 +5629,13 @@ export type Database = {
           approvedAt?: string | null
           approvedBy?: string | null
           createdAt?: string
+          deliveryStatus?: string
           dependencies?: Json
+          deployedToProductionAt?: string | null
+          deployedToStagingAt?: string | null
           designSessionId?: string | null
           dismissedAt?: string | null
+          estimateFp?: number | null
           goal?: string
           id?: string
           lastRunFinishedAt?: string | null
@@ -5620,6 +5644,7 @@ export type Database = {
           markdown?: string
           moduleId?: string | null
           oneLiner?: string
+          originType?: string | null
           outOfScope?: string[]
           personaIds?: string[]
           problem?: string
@@ -5628,6 +5653,7 @@ export type Database = {
           risksAndAssumptions?: Json
           sourceCardIds?: string[]
           specMarkdown?: string | null
+          sprintId?: string | null
           status?: string
           stories?: Json
           successMetrics?: Json
@@ -5635,6 +5661,7 @@ export type Database = {
           title?: string
           updatedAt?: string
           userJourney?: Json
+          userStoryId?: string | null
           version?: number
         }
         Relationships: [
@@ -5699,6 +5726,27 @@ export type Database = {
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "Sprint"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_userStoryId_fkey"
+            columns: ["userStoryId"]
+            isOneToOne: false
+            referencedRelation: "user_story_overview"
+            referencedColumns: ["userStoryId"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_userStoryId_fkey"
+            columns: ["userStoryId"]
+            isOneToOne: false
+            referencedRelation: "UserStory"
             referencedColumns: ["id"]
           },
         ]
@@ -5769,6 +5817,60 @@ export type Database = {
           },
         ]
       }
+      ProductRequirementAssignee: {
+        Row: {
+          assignedAt: string
+          memberId: string
+          productRequirementId: string
+        }
+        Insert: {
+          assignedAt?: string
+          memberId: string
+          productRequirementId: string
+        }
+        Update: {
+          assignedAt?: string
+          memberId?: string
+          productRequirementId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProductRequirementAssignee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirementAssignee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirementAssignee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirementAssignee_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirementAssignee_productRequirementId_fkey"
+            columns: ["productRequirementId"]
+            isOneToOne: false
+            referencedRelation: "ProductRequirement"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       Project: {
         Row: {
           alphaHierarchyEnabled: boolean
@@ -5789,6 +5891,7 @@ export type Database = {
           memoryVersion: number
           name: string
           phase: string
+          phaseChangedAt: string
           planningActive: boolean
           planningCadence: string | null
           pmId: string | null
@@ -5819,6 +5922,7 @@ export type Database = {
           memoryVersion?: number
           name: string
           phase?: string
+          phaseChangedAt?: string
           planningActive?: boolean
           planningCadence?: string | null
           pmId?: string | null
@@ -5849,6 +5953,7 @@ export type Database = {
           memoryVersion?: number
           name?: string
           phase?: string
+          phaseChangedAt?: string
           planningActive?: boolean
           planningCadence?: string | null
           pmId?: string | null
@@ -7771,6 +7876,24 @@ export type Database = {
           sprintId: string | null
         }
         Relationships: []
+      }
+      sprint_prd_capacity: {
+        Row: {
+          fp_allocated: number | null
+          fp_done: number | null
+          fp_open: number | null
+          prd_count: number | null
+          sprintId: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProductRequirement_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "Sprint"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_story_overview: {
         Row: {

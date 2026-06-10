@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Clock,
-  AlertCircle,
-  UserX,
-  FolderKanban,
+  AlertTriangle,
+  ArrowUpRight,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FolderKanban,
   Pencil,
   SlidersHorizontal,
 } from "lucide-react";
@@ -25,12 +28,15 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Markdown } from "@/components/ui/markdown";
 import { StatusChip } from "@/components/ui/status-chip";
-import { lookupChip, PROJECT_PHASE, PROJECT_ENGAGEMENT } from "@/lib/status-chips";
+import {
+  lookupChip,
+  PROJECT_PHASE,
+  PROJECT_ENGAGEMENT,
+  type ChipTone,
+} from "@/lib/status-chips";
 import { fmtDate } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast } from "@/lib/optimistic/toast";
 import {
@@ -39,20 +45,22 @@ import {
 } from "@/components/projects/project-edit-sheet";
 import type {
   ProjectOverview,
-  ProjectCategory,
+  ProjectPhase,
   ProjectHealth,
+  ProjectStats,
   ProjectTeamMember,
+  PMReviewNoteLite,
+  FactoryStats,
+  PaceVerdict,
 } from "@/lib/dal/project-overview";
 
 // ─── Vocabulary ───────────────────────────────────────────
 
-const CATEGORY_ORDER: ProjectCategory[] = ["billable", "non_billable", "internal"];
+/** Seções do board seguem a fase do projeto (funil), não a categoria. */
+const PHASE_ORDER: ProjectPhase[] = ["commercial", "immersion", "ops", "post_ops"];
 
-const CATEGORY_LABEL: Record<ProjectCategory, string> = {
-  billable: "Billable",
-  non_billable: "Não-billable",
-  internal: "Internos",
-};
+/** Fases em que a produção (sprints) deveria existir. */
+const PRODUCING_PHASES: ProjectPhase[] = ["immersion", "ops"];
 
 const HEALTH_DOT: Record<ProjectHealth, string> = {
   red: "bg-red-500",
@@ -60,47 +68,48 @@ const HEALTH_DOT: Record<ProjectHealth, string> = {
   green: "bg-green-500",
 };
 
-const HEALTH_RING: Record<ProjectHealth, string> = {
-  red: "shadow-[0_0_0_3px_rgba(239,68,68,0.15)]",
-  amber: "shadow-[0_0_0_3px_rgba(234,179,8,0.15)]",
-  green: "shadow-[0_0_0_3px_rgba(34,197,94,0.12)]",
+const HEALTH_RANK: Record<ProjectHealth, number> = { red: 0, amber: 1, green: 2 };
+
+const PACE_META: Record<PaceVerdict, { label: string; cls: string }> = {
+  ahead: { label: "à frente", cls: "text-emerald-500" },
+  on_track: { label: "no ritmo", cls: "text-emerald-500" },
+  behind: { label: "atrás", cls: "text-yellow-500" },
+  critical: { label: "crítico", cls: "text-red-400" },
 };
 
-// Ordem + rótulo das notes tipadas do PM Review no sheet.
-const KIND_ORDER = [
-  "summary",
-  "project_direction",
-  "risk",
-  "need",
-  "open_decision",
-  "next_step",
-  "team_signal",
-] as const;
-
+// Digest do PM Review — 4 slots fixos (Panorama, Riscos, Próximos, Decisões).
+// Demais kinds (team_signal etc.) vivem só na review completa.
 const KIND_META: Record<string, { label: string; dot: string }> = {
-  summary: { label: "Panorama", dot: "bg-muted-foreground" },
-  project_direction: { label: "Rumo", dot: "bg-blue-500" },
   risk: { label: "Risco", dot: "bg-red-500" },
   need: { label: "Precisa", dot: "bg-yellow-500" },
-  open_decision: { label: "Decisão aberta", dot: "bg-yellow-500" },
+  open_decision: { label: "Decisão", dot: "bg-yellow-500" },
   next_step: { label: "Próximo", dot: "bg-green-500" },
-  team_signal: { label: "Time", dot: "bg-purple-500" },
 };
+
+/** Cap de notes visíveis por slot — excedente vira "+N". */
+const DIGEST_MAX = 3;
 
 // ─── Helpers ──────────────────────────────────────────────
 
-/** Frase curta de sinal pro card compacto. */
-function primarySignal(p: ProjectOverview): { text: string; tone: "red" | "amber" | "muted" } {
-  if (p.signals.overdue > 0)
-    return { text: `${p.signals.overdue} vencida${p.signals.overdue > 1 ? "s" : ""}`, tone: "red" };
-  const riskCount = p.pmReview?.notesByKind.risk?.length ?? 0;
-  if (riskCount > 0)
-    return { text: `${riskCount} risco${riskCount > 1 ? "s" : ""} no PM Review`, tone: "red" };
-  if (p.signals.blocked > 0)
-    return { text: `${p.signals.blocked} parada${p.signals.blocked > 1 ? "s" : ""} +3d`, tone: "amber" };
-  if (p.signals.unassigned > 0)
-    return { text: `${p.signals.unassigned} sem dono`, tone: "amber" };
-  return { text: "Sem pendências", tone: "muted" };
+/** Sinais do card compacto como chips ("3 riscos", "2 paradas") — sem frase. */
+function signalChips(p: ProjectOverview): Array<{ label: string; tone: ChipTone }> {
+  const chips: Array<{ label: string; tone: ChipTone }> = [];
+  const { overdue, blocked, unassigned } = p.signals;
+  const risks = p.pmReview?.notesByKind.risk?.length ?? 0;
+  if (overdue > 0) chips.push({ label: `${overdue} vencida${overdue > 1 ? "s" : ""}`, tone: "red" });
+  if (risks > 0) chips.push({ label: `${risks} risco${risks > 1 ? "s" : ""}`, tone: "red" });
+  if (blocked > 0) chips.push({ label: `${blocked} parada${blocked > 1 ? "s" : ""}`, tone: "amber" });
+  if (unassigned > 0) chips.push({ label: `${unassigned} sem dono`, tone: "amber" });
+  return chips;
+}
+
+/** Chip do próximo marco — tom por proximidade (passou=red, ≤14d=amber). */
+function milestoneChip(p: ProjectOverview): { label: string; tone: ChipTone } | null {
+  if (!p.milestone) return null;
+  const due = new Date(`${p.milestone.dueAt}T00:00:00`);
+  const days = Math.ceil((due.getTime() - Date.now()) / 86400000);
+  const tone: ChipTone = days < 0 ? "red" : days <= 14 ? "amber" : "slate";
+  return { label: `${p.milestone.label} · ${fmtDate(due)}`, tone };
 }
 
 /** "Contínuo" ou "Fim ~ DD/MM" — leitura de horizonte do projeto. */
@@ -139,361 +148,815 @@ function TeamStack({ team, max = 4 }: { team: ProjectTeamMember[]; max?: number 
   );
 }
 
-// ─── Card ─────────────────────────────────────────────────
+/** Média de uma lista ignorando nulls; null se vazia. */
+function meanOf(values: Array<number | null>): number | null {
+  const nums = values.filter((v): v is number => v !== null);
+  if (nums.length === 0) return null;
+  return Math.round((nums.reduce((s, v) => s + v, 0) / nums.length) * 10) / 10;
+}
 
-function ProjectCard({ p, onClick }: { p: ProjectOverview; onClick: () => void }) {
-  const sig = primarySignal(p);
+function fmtAvg(v: number | null): string {
+  return v === null ? "—" : `${v.toLocaleString("pt-BR")} FP/sp`;
+}
+
+// ─── Régua ────────────────────────────────────────────────
+
+/** Cor do segmento fechado pela entrega da sprint (sem FP = cinza neutro). */
+function segmentColor(deliveryPct: number | null): string {
+  if (deliveryPct === null) return "bg-muted-foreground/40";
+  if (deliveryPct >= 85) return "bg-emerald-500/70";
+  if (deliveryPct >= 50) return "bg-yellow-500/60";
+  return "bg-red-400/70";
+}
+
+function segmentTitle(g: ProjectStats["segments"][number]): string {
+  const week = `Semana de ${fmtDate(new Date(`${g.monday}T00:00:00Z`))}`;
+  if (g.kind === "hole") return `${week} — sem sprint (contrato queimou sem produção)`;
+  if (g.kind === "current")
+    return g.sprintId ? `${week} — sprint corrente` : `${week} — corrente, sem sprint ativa`;
+  if (g.kind === "future") return `${week} — futura`;
+  return g.deliveryPct === null
+    ? `${week} — sprint fechada (sem FP)`
+    : `${week} — entregue ${g.deliveryPct}% do planejado`;
+}
+
+/**
+ * A régua: um segmento por semana do contrato (ou por sprint, em rolling).
+ * Cor = entrega real; buraco = semana queimada sem sprint; ⚑ = marco.
+ * Pista não-cromática: texto "5/12" sempre ao lado + tooltip por segmento.
+ */
+function Regua({ stats, size = "sm" }: { stats: ProjectStats; size?: "sm" | "lg" }) {
+  const n = stats.segments.length;
+  if (n === 0) return null;
+  const h = size === "lg" ? "h-2.5" : "h-1.5";
+  const hasMilestone = stats.milestoneIndex !== null;
+  return (
+    <div className={cn("relative w-full", hasMilestone && "mt-3")}>
+      {hasMilestone && (
+        <span
+          className="absolute -top-3 -translate-x-1/2 text-[9px] leading-none text-muted-foreground"
+          style={{ left: `${((stats.milestoneIndex! + 0.5) / n) * 100}%` }}
+          title="Marco (PM Review)"
+        >
+          ⚑
+        </span>
+      )}
+      <div className={cn("flex w-full gap-px", h)}>
+        {stats.segments.map((g) => (
+          <span
+            key={g.monday}
+            title={segmentTitle(g)}
+            className={cn(
+              "min-w-0 flex-1 rounded-[2px]",
+              g.kind === "closed" && segmentColor(g.deliveryPct),
+              g.kind === "hole" && "border border-dashed border-yellow-500/50 bg-yellow-500/10",
+              g.kind === "current" &&
+                (g.sprintId
+                  ? "bg-primary/30 ring-1 ring-inset ring-primary/70"
+                  : "bg-transparent ring-1 ring-inset ring-yellow-500/70"),
+              g.kind === "future" && "bg-muted",
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Veredito de pace: gap = %escopo − %prazo. Uma subtração, zero opinião. */
+function PaceBadge({ stats }: { stats: ProjectStats }) {
+  if (stats.paceVerdict === null || stats.paceGapPp === null) return null;
+  const meta = PACE_META[stats.paceVerdict];
+  const arrow = stats.paceGapPp > 0 ? "▲" : stats.paceGapPp < 0 ? "▼" : "●";
+  const pp = stats.paceVerdict === "on_track" ? "" : ` ${Math.abs(stats.paceGapPp)}pp`;
+  return (
+    <span className={cn("whitespace-nowrap text-[11px] font-medium tabular-nums", meta.cls)}>
+      {arrow}
+      {pp} {meta.label}
+    </span>
+  );
+}
+
+/** Linha de stats compacta sob a régua (posição · pace · ritmo). */
+function RowStatsLine({ p }: { p: ProjectOverview }) {
+  const s = p.stats;
+  if (s.mode === "contract") {
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
+        <span className="font-medium text-foreground">
+          {s.weeksElapsed}/{s.weeksTotal}
+        </span>
+        <PaceBadge stats={s} />
+        {s.avgFpPerSprint !== null && <span className="hidden md:inline">{fmtAvg(s.avgFpPerSprint)}</span>}
+        {s.holes > 0 && (
+          <span className="text-yellow-500">
+            {s.holes} sem sprint
+          </span>
+        )}
+      </div>
+    );
+  }
+  if (s.mode === "rolling") {
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
+        <span>últimas {s.segments.length}</span>
+        {s.avgFpPerSprint !== null && (
+          <span className="font-medium text-foreground">{fmtAvg(s.avgFpPerSprint)}</span>
+        )}
+        {s.utilizationPct !== null && <span className="hidden md:inline">aprov. {s.utilizationPct}%</span>}
+      </div>
+    );
+  }
+  return null;
+}
+
+// ─── Ribbon do topo ───────────────────────────────────────
+
+type RibbonItem = {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "amber" | "red";
+};
+
+/** Banda fina de KPIs da fábrica — valor herói, label apagado, tabular-nums. */
+function OverviewRibbon({ items }: { items: RibbonItem[] }) {
+  return (
+    <div className="flex flex-wrap items-stretch gap-y-3 border-y border-border py-3">
+      {items.map((item, i) => (
+        <div
+          key={item.label}
+          title={item.hint}
+          className={cn(
+            "flex min-w-0 flex-col gap-0.5 pr-5",
+            i > 0 && "border-l border-border pl-5",
+          )}
+        >
+          <span
+            className={cn(
+              "text-xl font-semibold leading-none tabular-nums",
+              item.tone === "amber" && "text-yellow-500",
+              item.tone === "red" && "text-red-400",
+            )}
+          >
+            {item.value}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {item.label}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Linha de projeto (ribbon filho) ──────────────────────
+
+function ProjectRow({ p, onOpen }: { p: ProjectOverview; onOpen: () => void }) {
+  const milestone = milestoneChip(p);
+  const chips = signalChips(p);
+  const producing = PRODUCING_PHASES.includes(p.phase);
+
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="surface w-full text-left p-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-overview-row
+      onClick={onOpen}
+      className="surface block w-full p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <div className="flex items-start gap-2.5">
-        <span
-          className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", HEALTH_DOT[p.health], HEALTH_RING[p.health])}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <h3 className="truncate text-sm font-semibold">{p.name}</h3>
-            <StatusChip {...lookupChip(PROJECT_PHASE, p.phase)} size="sm" className="shrink-0" />
-          </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {p.clientName ?? "—"}
-            {p.pmName ? ` · PM ${p.pmName}` : ""}
-          </p>
-        </div>
-      </div>
-
-      {/* Horizonte + time */}
-      <div className="mt-2.5 flex items-center justify-between gap-2">
-        <span
-          className={cn(
-            "truncate text-[11px]",
-            p.engagementType === "continuous" ? "text-primary" : "text-muted-foreground",
-          )}
-        >
-          {horizonLabel(p)}
+      <div className="flex items-center gap-2.5">
+        <span className={cn("h-2 w-2 shrink-0 rounded-full", HEALTH_DOT[p.health])} />
+        <span className="truncate text-sm font-semibold">{p.name}</span>
+        <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+          {p.clientName ?? "—"}
+          {p.pmName ? ` · ${p.pmName}` : ""}
         </span>
-        <TeamStack team={p.team} />
+        {p.status === "paused" && (
+          <StatusChip label="pausado" tone="muted" variant="subtle" size="sm" />
+        )}
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {milestone && (
+            <StatusChip
+              label={milestone.label}
+              tone={milestone.tone}
+              variant="subtle"
+              size="sm"
+              className="max-w-[220px]"
+            />
+          )}
+          {chips.slice(0, 2).map((c) => (
+            <StatusChip key={c.label} label={c.label} tone={c.tone} variant="subtle" size="sm" />
+          ))}
+        </span>
       </div>
 
-      {/* Sprint */}
-      {p.sprint ? (
-        <div className="mt-3">
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span className="truncate">{p.sprint.name}</span>
-            <span className="tabular-nums">
-              {p.sprint.done}/{p.sprint.planned} FP · {p.sprint.pct}%
-            </span>
-          </div>
-          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn("h-full rounded-full", p.sprint.loadPct > 1 ? "bg-red-500" : "bg-primary")}
-              style={{ width: `${Math.min(100, p.sprint.pct)}%` }}
-            />
-          </div>
-        </div>
-      ) : (
-        <p className="mt-3 text-[11px] text-muted-foreground">Sem sprint nesta semana</p>
-      )}
-
-      {/* Sinal primário */}
-      <p
-        className={cn(
-          "mt-2 text-xs",
-          sig.tone === "red" && "text-red-400",
-          sig.tone === "amber" && "text-yellow-500",
-          sig.tone === "muted" && "text-muted-foreground",
+      <div className="mt-2 flex items-center gap-3 pl-[18px]">
+        {p.stats.mode !== "none" ? (
+          <>
+            <div className="min-w-0 flex-1">
+              <Regua stats={p.stats} />
+            </div>
+            <div className="shrink-0">
+              <RowStatsLine p={p} />
+            </div>
+          </>
+        ) : p.phase === "commercial" ? (
+          <p className="text-[11px] text-muted-foreground">
+            Em comercial há {p.daysInPhase}d · {horizonLabel(p)}
+          </p>
+        ) : producing ? (
+          <p className="flex items-center gap-1.5 text-[11px] text-yellow-500">
+            <AlertTriangle className="h-3 w-3" /> produção sem sprint — régua vazia
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">{horizonLabel(p)}</p>
         )}
-      >
-        {sig.text}
-      </p>
+      </div>
     </button>
   );
 }
 
-// ─── Detalhe (compartilhado entre sheet mobile + painel desktop) ──
+// ─── Ribbon Pai (grupo por fase, sticky) ──────────────────
 
-/** Cabeçalho do detalhe. `inSheet` ajusta o tipo do título e o gap do X. */
-function ProjectHeaderRow({
-  p,
-  onEdit,
-  inSheet,
+function PhaseHeader({
+  phase,
+  items,
+  collapsed,
+  onToggle,
 }: {
-  p: ProjectOverview;
-  onEdit: () => void;
-  inSheet: boolean;
+  phase: ProjectPhase;
+  items: ProjectOverview[];
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
+  const attention = items.filter((p) => p.health !== "green").length;
+  const worst = items.reduce<ProjectHealth>(
+    (acc, p) => (HEALTH_RANK[p.health] < HEALTH_RANK[acc] ? p.health : acc),
+    "green",
+  );
+  const avg = meanOf(items.map((p) => p.stats.avgFpPerSprint));
   return (
-    <>
-      <div className="flex items-center gap-2.5">
-        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", HEALTH_DOT[p.health])} />
-        {inSheet ? (
-          <ResponsiveSheetTitle className="truncate">{p.name}</ResponsiveSheetTitle>
-        ) : (
-          <h2 className="truncate text-lg font-semibold">{p.name}</h2>
+    <button
+      type="button"
+      onClick={onToggle}
+      className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-border bg-background/95 py-2 text-left backdrop-blur focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ChevronDown
+        className={cn(
+          "h-3.5 w-3.5 text-muted-foreground transition-transform",
+          collapsed && "-rotate-90",
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onEdit}
-          className={cn("ml-auto shrink-0 gap-1.5 text-muted-foreground", inSheet && "mr-8")}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Editar
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {CATEGORY_LABEL[p.category]}
-        {p.clientName ? ` · ${p.clientName}` : ""}
-        {p.pmName ? ` · PM ${p.pmName}` : ""}
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <StatusChip {...lookupChip(PROJECT_PHASE, p.phase)} size="sm" />
-        <StatusChip {...lookupChip(PROJECT_ENGAGEMENT, p.engagementType)} size="sm" />
-        {p.engagementType === "fixed_scope" && (
-          <span className="text-[11px] text-muted-foreground">{horizonLabel(p)}</span>
-        )}
-      </div>
-    </>
+      />
+      <span className="text-xs font-semibold uppercase tracking-wider">
+        {lookupChip(PROJECT_PHASE, phase).label}
+      </span>
+      <span className="text-xs tabular-nums text-muted-foreground">({items.length})</span>
+      {/* Grupo colapsado nunca esconde incêndio: pior health sempre visível */}
+      {worst !== "green" && <span className={cn("h-1.5 w-1.5 rounded-full", HEALTH_DOT[worst])} />}
+      <span className="ml-auto flex items-center gap-3 text-[11px] tabular-nums text-muted-foreground">
+        {attention > 0 && <span className="text-yellow-500">{attention} em atenção</span>}
+        {avg !== null && <span className="hidden sm:inline">média {fmtAvg(avg)}</span>}
+      </span>
+    </button>
   );
 }
 
-/** Corpo do detalhe: Time + Sinais + PM Review. Agnóstico de container. */
-function ProjectDetailBody({ p }: { p: ProjectOverview }) {
-  const notes = p.pmReview?.notesByKind ?? {};
-  const orderedKinds = KIND_ORDER.filter((k) => (notes[k]?.length ?? 0) > 0);
+// ─── Digest do PM Review (cards do drawer) ────────────────
+
+/** Slot Panorama — narrativa da semana (summary + rumo fundidos). Clique expande. */
+function PanoramaCard({ notes }: { notes: Record<string, PMReviewNoteLite[]> }) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = notes.summary?.[0]?.content;
+  const direction = notes.project_direction?.[0]?.content;
+  return (
+    <div className="surface-inset p-3">
+      <h5 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Panorama
+      </h5>
+      {!summary && !direction ? (
+        <p className="mt-1.5 text-xs text-muted-foreground">Sem panorama esta semana.</p>
+      ) : (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpanded((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setExpanded((v) => !v);
+            }
+          }}
+          className="mt-1.5 flex cursor-pointer items-start gap-1.5"
+          title={expanded ? "Recolher" : "Expandir"}
+        >
+          <div className="min-w-0 flex-1 space-y-1.5">
+            {summary && (
+              <p className={cn("text-sm leading-relaxed", !expanded && "line-clamp-4")}>
+                {summary}
+              </p>
+            )}
+            {direction && (
+              <p
+                className={cn(
+                  "text-xs leading-relaxed text-muted-foreground",
+                  !expanded && "line-clamp-2",
+                )}
+              >
+                <span className="text-[10px] font-medium uppercase tracking-wide">Rumo</span>{" "}
+                {direction}
+              </p>
+            )}
+          </div>
+          <ChevronDown
+            className={cn(
+              "mt-1 h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform",
+              expanded && "rotate-180",
+            )}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Slot fixo do digest — lista capada por priority; item clicado expande. */
+function DigestCard({
+  title,
+  items,
+  emptyText,
+  showKindLabel = false,
+}: {
+  title: string;
+  items: PMReviewNoteLite[];
+  emptyText: string;
+  /** Liga o mini-rótulo por item em slots que misturam kinds (Decisões/Precisa). */
+  showKindLabel?: boolean;
+}) {
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const shown = items.slice(0, DIGEST_MAX);
+  const overflow = items.length - shown.length;
+  function toggle(i: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+  return (
+    <div className="surface-inset p-3">
+      <h5 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+        {items.length > 0 && <span className="font-normal"> ({items.length})</span>}
+      </h5>
+      {items.length === 0 ? (
+        <p className="mt-1.5 text-xs text-muted-foreground">{emptyText}</p>
+      ) : (
+        <ul className="mt-1.5 space-y-1.5">
+          {shown.map((n, i) => (
+            <li key={i} className="flex gap-2">
+              <span
+                className={cn(
+                  "mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full",
+                  KIND_META[n.kind]?.dot ?? "bg-muted-foreground",
+                )}
+              />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => toggle(i)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggle(i);
+                  }
+                }}
+                title={expanded.has(i) ? "Recolher" : "Expandir"}
+                className="flex min-w-0 flex-1 cursor-pointer items-start gap-1.5"
+              >
+                <p
+                  className={cn(
+                    "min-w-0 flex-1 text-sm leading-relaxed",
+                    !expanded.has(i) && "line-clamp-2",
+                  )}
+                >
+                  {showKindLabel && (
+                    <span className="mr-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {KIND_META[n.kind]?.label ?? n.kind}
+                    </span>
+                  )}
+                  {n.content}
+                </p>
+                <ChevronDown
+                  className={cn(
+                    "mt-1 h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform",
+                    expanded.has(i) && "rotate-180",
+                  )}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {overflow > 0 && (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          +{overflow} no review completo
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Seção PM Review do drawer: chips de semana + 4 slots fixos. */
+function PMReviewSection({ p }: { p: ProjectOverview }) {
+  // Chips navegam entre as semanas da janela. null = default (semana corrente
+  // ou última). Troca de projeto se auto-corrige: id que não existe na janela
+  // nova cai no default via `?? p.pmReview`.
+  const [weekId, setWeekId] = useState<string | null>(null);
+  const shownReview = p.weeks.find((w) => w.review?.id === weekId)?.review ?? p.pmReview;
+  // Cards leem o digest: curado pela Vitoria quando existir, senão fallback
+  // mecânico nas notes detail. priority desc = mais importante primeiro.
+  const digest = shownReview?.digestByKind ?? {};
+  const decisions = [...(digest.open_decision ?? []), ...(digest.need ?? [])].sort(
+    (a, b) => b.priority - a.priority,
+  );
 
   return (
-    <>
-      {/* Time */}
-      {p.team.length > 0 && (
-        <section>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Time ({p.team.length})
-          </h4>
-          <div className="flex flex-wrap gap-1.5">
-            {p.team.map((m) => (
-              <span key={m.id} className="surface-inset px-2 py-1 text-xs">
-                {m.name}
-                {m.position ? <span className="ml-1 text-muted-foreground">{m.position}</span> : null}
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Sinais */}
-      <section>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Sinais
-        </h4>
-        <div className="grid grid-cols-3 gap-2">
-          <SignalStat icon={Clock} label="Vencidas" value={p.signals.overdue} tone="red" />
-          <SignalStat icon={AlertCircle} label="Paradas +3d" value={p.signals.blocked} tone="amber" />
-          <SignalStat icon={UserX} label="Sem dono" value={p.signals.unassigned} tone="amber" />
-        </div>
-        {p.sprint && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {p.sprint.name} — {p.sprint.done}/{p.sprint.planned} FP entregues · carga{" "}
-            {Math.round(p.sprint.loadPct * 100)}% da capacidade ({p.sprint.capacity} FP)
-          </p>
-        )}
-      </section>
-
-      {/* PM Review */}
-      <section>
-        <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <section>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           PM Review
-          {p.pmReview && (
+          {shownReview && (
             <span className="font-normal normal-case text-muted-foreground/80">
-              · semana {fmtDate(new Date(p.pmReview.referenceWeek))}
-              {p.pmReview.isCurrentWeek ? "" : " (última)"}
+              · semana {fmtDate(new Date(shownReview.referenceWeek))}
+              {shownReview.isCurrentWeek
+                ? ""
+                : shownReview.id === p.pmReview?.id
+                  ? " (última)"
+                  : ""}
             </span>
           )}
         </h4>
-
-        {!p.pmReview ? (
-          <p className="text-sm text-muted-foreground">Sem PM Review registrado.</p>
-        ) : (
-          <>
-            {orderedKinds.length > 0 ? (
-              <ul className="space-y-2">
-                {orderedKinds.map((kind) =>
-                  (notes[kind] ?? []).map((n, i) => (
-                    <li key={`${kind}-${i}`} className="surface-inset flex gap-2.5 p-2.5">
-                      <span className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", KIND_META[kind]?.dot)} />
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          {KIND_META[kind]?.label ?? kind}
-                        </span>
-                        <p className="text-sm">{n.content}</p>
-                      </div>
-                    </li>
-                  )),
-                )}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">Sem notes nesta semana.</p>
-            )}
-
-            {p.pmReview.reportMarkdown && (
-              <details className="mt-3 group">
-                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground">
-                  Report completo (Vitoria)
-                </summary>
-                <div className="mt-2">
-                  <Markdown>{p.pmReview.reportMarkdown}</Markdown>
-                </div>
-              </details>
-            )}
-          </>
+        {shownReview && (
+          <Link
+            href={`/pm-reviews/${shownReview.id}`}
+            className="shrink-0 text-xs font-medium text-primary hover:underline"
+          >
+            Abrir →
+          </Link>
         )}
-      </section>
-    </>
+      </div>
+
+      {/* Janela fixa: chip por semana, desabilitado quando não há review */}
+      <div className="mb-2 flex flex-wrap gap-1">
+        {p.weeks.map((w) => {
+          const review = w.review;
+          const label = fmtDate(new Date(w.week));
+          if (!review) {
+            return (
+              <span
+                key={w.week}
+                title="Sem PM Review nesta semana"
+                className="cursor-default rounded-full border border-dashed border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground/50"
+              >
+                {label}
+              </span>
+            );
+          }
+          const active = review.id === shownReview?.id;
+          return (
+            <button
+              key={w.week}
+              type="button"
+              onClick={() => setWeekId(review.id)}
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                active
+                  ? "border-primary/40 bg-primary/10 font-medium text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {!shownReview ? (
+        <p className="text-sm text-muted-foreground">Sem PM Review registrado.</p>
+      ) : (
+        // 1 card por linha (mesmo no desktop): largura inteira por frase —
+        // o clamp de 2 linhas segura a ideia completa, fonte maior.
+        <div className="space-y-2">
+          <PanoramaCard notes={digest} />
+          <DigestCard title="Riscos" items={digest.risk ?? []} emptyText="Sem riscos esta semana." />
+          <DigestCard
+            title="Próximos passos"
+            items={digest.next_step ?? []}
+            emptyText="Sem próximos passos."
+          />
+          <DigestCard
+            title="Decisões / Precisa"
+            items={decisions}
+            emptyText="Nada aguardando decisão."
+            showKindLabel
+          />
+        </div>
+      )}
+    </section>
   );
 }
 
-/** Wrapper mobile — detalhe dentro de uma ResponsiveSheet. */
-function ProjectSheet({ p, onEdit }: { p: ProjectOverview; onEdit: () => void }) {
+// ─── STATS (drawer) ───────────────────────────────────────
+
+function StatCol({
+  label,
+  value,
+  sub,
+  subTone,
+}: {
+  label: string;
+  value: string;
+  sub?: string | null;
+  subTone?: "amber" | "red";
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-0.5 truncate text-lg font-semibold tabular-nums">{value}</div>
+      {sub && (
+        <div
+          className={cn(
+            "truncate text-[11px] tabular-nums text-muted-foreground",
+            subTone === "amber" && "text-yellow-500",
+            subTone === "red" && "text-red-400",
+          )}
+        >
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Dossiê de STATS: régua grande + PRAZO / ENTREGA / RITMO + projeção.
+ * Fórmulas: docs/features/overview/stats-dictionary.md
+ */
+function StatsSection({ p }: { p: ProjectOverview }) {
+  const s = p.stats;
+  const producing = PRODUCING_PHASES.includes(p.phase);
+
+  if (s.mode === "none") {
+    return (
+      <section>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Stats
+        </h4>
+        {p.phase === "commercial" ? (
+          <p className="text-sm text-muted-foreground">
+            Em comercial há {p.daysInPhase}d · {horizonLabel(p)}. Sprints começam na Imersão.
+          </p>
+        ) : producing ? (
+          <p className="flex items-center gap-1.5 text-sm text-yellow-500">
+            <AlertTriangle className="h-4 w-4" /> Fase de produção sem nenhuma sprint — a régua
+            nasce na primeira sprint criada.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">{horizonLabel(p)}</p>
+        )}
+      </section>
+    );
+  }
+
+  const projectionDelta =
+    s.projectedEndWeek !== null && s.weeksTotal !== null ? s.projectedEndWeek - s.weeksTotal : null;
+
+  return (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Stats
+        </h4>
+        {s.mode === "contract" && p.startDate && p.endDate && (
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            {fmtDate(new Date(p.startDate))} → {fmtDate(new Date(p.endDate))}
+          </span>
+        )}
+      </div>
+
+      <Regua stats={s} size="lg" />
+
+      <div className="mt-3 grid grid-cols-3 gap-3">
+        {s.mode === "contract" ? (
+          <>
+            <StatCol
+              label="Prazo"
+              value={`${s.weeksElapsed}/${s.weeksTotal}`}
+              sub={`${s.timePct}% do prazo`}
+            />
+            <StatCol
+              label="Entrega"
+              value={`${s.sprintsClosed} fechada${s.sprintsClosed === 1 ? "" : "s"}`}
+              sub={
+                s.scopePct !== null
+                  ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
+                  : "sem FP estimado"
+              }
+            />
+            <StatCol
+              label="Ritmo"
+              value={fmtAvg(s.avgFpPerSprint)}
+              sub={
+                s.utilizationPct !== null
+                  ? `aproveitamento ${s.utilizationPct}%`
+                  : "últimas 6 fechadas"
+              }
+            />
+          </>
+        ) : (
+          <>
+            <StatCol
+              label="Janela"
+              value={`${s.segments.length} sprints`}
+              sub="contínuo — sem prazo"
+            />
+            <StatCol
+              label="Entrega"
+              value={`${s.sprintsClosed} fechada${s.sprintsClosed === 1 ? "" : "s"}`}
+              sub={
+                s.scopePct !== null
+                  ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
+                  : "sem FP estimado"
+              }
+            />
+            <StatCol
+              label="Ritmo"
+              value={fmtAvg(s.avgFpPerSprint)}
+              sub={
+                s.utilizationPct !== null
+                  ? `aproveitamento ${s.utilizationPct}%`
+                  : "últimas 6 fechadas"
+              }
+            />
+          </>
+        )}
+      </div>
+
+      {(s.paceVerdict !== null || projectionDelta !== null || s.holes > 0) && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
+          <PaceBadge stats={s} />
+          {s.projectedEndWeek !== null && projectionDelta !== null && (
+            <span className={cn(projectionDelta > 0 && "text-red-400")}>
+              ◆ projeção: termina na sprint {s.projectedEndWeek}
+              {projectionDelta > 0
+                ? ` (${projectionDelta} além do contrato)`
+                : projectionDelta < 0
+                  ? ` (${Math.abs(projectionDelta)} antes do fim)`
+                  : " (no limite do contrato)"}
+            </span>
+          )}
+          {s.holes > 0 && (
+            <span className="text-yellow-500">
+              {s.holes} semana{s.holes > 1 ? "s" : ""} queimada{s.holes > 1 ? "s" : ""} sem sprint
+            </span>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── Drawer ───────────────────────────────────────────────
+
+function ProjectDrawer({
+  p,
+  index,
+  total,
+  onPrev,
+  onNext,
+  onEdit,
+}: {
+  p: ProjectOverview;
+  index: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onEdit: () => void;
+}) {
+  const chips = signalChips(p);
+  const milestone = milestoneChip(p);
   return (
     <>
       <ResponsiveSheetHeader>
-        <ProjectHeaderRow p={p} onEdit={onEdit} inSheet />
+        <div className="mr-8 flex items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
+          <button
+            type="button"
+            onClick={onPrev}
+            disabled={index <= 0}
+            aria-label="Projeto anterior"
+            className="rounded p-0.5 hover:bg-muted disabled:opacity-30"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={index >= total - 1}
+            aria-label="Próximo projeto"
+            className="rounded p-0.5 hover:bg-muted disabled:opacity-30"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <span>
+            {index + 1} de {total}
+          </span>
+        </div>
+        <div className="mt-1 flex items-center gap-2.5">
+          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", HEALTH_DOT[p.health])} />
+          <ResponsiveSheetTitle className="truncate">{p.name}</ResponsiveSheetTitle>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {p.clientName ?? "—"}
+          {p.pmName ? ` · PM ${p.pmName}` : ""}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <StatusChip {...lookupChip(PROJECT_PHASE, p.phase)} variant="subtle" size="sm" />
+          <StatusChip {...lookupChip(PROJECT_ENGAGEMENT, p.engagementType)} variant="subtle" size="sm" />
+          {p.status === "paused" && (
+            <StatusChip label="pausado" tone="muted" variant="subtle" size="sm" />
+          )}
+          {milestone && (
+            <StatusChip label={milestone.label} tone={milestone.tone} variant="subtle" size="sm" />
+          )}
+          <span className="ml-auto flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onEdit}
+              className="gap-1.5 text-muted-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" /> Editar
+            </Button>
+            <Link
+              href={`/projects/${p.id}`}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              Ver projeto <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          </span>
+        </div>
       </ResponsiveSheetHeader>
+
       <ResponsiveSheetBody className="space-y-5">
-        <ProjectDetailBody p={p} />
+        <StatsSection p={p} />
+        <PMReviewSection p={p} />
+
+        {/* Rodapé quieto: sinais + time, sem caixas */}
+        <section className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+          <p className="text-[11px] tabular-nums text-muted-foreground">
+            {chips.length > 0
+              ? chips.map((c) => c.label).join(" · ")
+              : "sem pendências operacionais"}
+          </p>
+          <TeamStack team={p.team} max={6} />
+        </section>
       </ResponsiveSheetBody>
     </>
   );
 }
 
-/** Painel desktop — detalhe inline ao lado do side-nav. */
-function ProjectDetailPanel({ p, onEdit }: { p: ProjectOverview; onEdit: () => void }) {
-  return (
-    <div className="surface p-5">
-      <div className="border-b pb-4">
-        <ProjectHeaderRow p={p} onEdit={onEdit} inSheet={false} />
-      </div>
-      <div className="space-y-5 pt-4">
-        <ProjectDetailBody p={p} />
-      </div>
-    </div>
-  );
-}
-
-/** Card compacto do side-nav desktop. */
-function ProjectNavItem({
-  p,
-  active,
-  onClick,
-}: {
-  p: ProjectOverview;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const sig = primarySignal(p);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "surface w-full p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        active ? "border-primary/40 bg-primary/5" : "hover:bg-muted/40",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span className={cn("h-2 w-2 shrink-0 rounded-full", HEALTH_DOT[p.health])} />
-        <span className="truncate text-sm font-medium">{p.name}</span>
-      </div>
-      {p.sprint && (
-        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className={cn("h-full rounded-full", p.sprint.loadPct > 1 ? "bg-red-500" : "bg-primary")}
-            style={{ width: `${Math.min(100, p.sprint.pct)}%` }}
-          />
-        </div>
-      )}
-      <p
-        className={cn(
-          "mt-1.5 truncate text-[11px]",
-          sig.tone === "red" && "text-red-400",
-          sig.tone === "amber" && "text-yellow-500",
-          sig.tone === "muted" && "text-muted-foreground",
-        )}
-      >
-        {sig.text}
-      </p>
-    </button>
-  );
-}
-
-function SignalStat({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: typeof Clock;
-  label: string;
-  value: number;
-  tone: "red" | "amber";
-}) {
-  const active = value > 0;
-  return (
-    <div className="surface-inset p-2.5 text-center">
-      <Icon
-        className={cn(
-          "mx-auto h-4 w-4",
-          !active ? "text-muted-foreground/50" : tone === "red" ? "text-red-400" : "text-yellow-500",
-        )}
-      />
-      <div className={cn("mt-1 text-lg font-bold tabular-nums", !active && "text-muted-foreground")}>
-        {value}
-      </div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-    </div>
-  );
-}
-
-// ─── Big numbers ──────────────────────────────────────────
-
-function BigStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: "amber" | "red";
-}) {
-  return (
-    <div className="surface p-4">
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div
-        className={cn(
-          "mt-1 text-3xl font-bold tabular-nums",
-          tone === "amber" && "text-yellow-500",
-          tone === "red" && "text-red-400",
-        )}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
 // ─── Board ────────────────────────────────────────────────
 
-export function ProjetosBoard({ projects }: { projects: ProjectOverview[] }) {
+export function ProjetosBoard({
+  projects,
+  factory,
+}: {
+  projects: ProjectOverview[];
+  factory: FactoryStats;
+}) {
   const router = useRouter();
-  const isMobile = useIsMobile();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const rowsRef = useRef<HTMLDivElement>(null);
   const [showInternal, setShowInternal] = useState(false);
   const [showEval, setShowEval] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<ProjectPhase>>(new Set());
   const [editProject, setEditProject] = useState<ProjectEditInitial | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+
+  // Drawer endereçável: a seleção vive na URL (?project=) — F5 mantém, Back
+  // fecha, link compartilha. push abre (entra no histórico); replace fecha e
+  // navega entre projetos (não polui o histórico).
+  const selectedId = searchParams.get("project");
+  function navigate(id: string | null, mode: "push" | "replace") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id) params.set("project", id);
+    else params.delete("project");
+    const qs = params.toString();
+    const url = qs ? `?${qs}` : "/";
+    if (mode === "push") router.push(url, { scroll: false });
+    else router.replace(url, { scroll: false });
+  }
 
   // ProjectOverview não carrega os campos de edição — busca o registro
   // completo sob demanda ao abrir o editor.
@@ -540,18 +1003,33 @@ export function ProjetosBoard({ projects }: { projects: ProjectOverview[] }) {
   );
   const evalCount = useMemo(() => projects.filter((p) => p.isEval).length, [projects]);
 
-  // Big numbers — sempre sobre o universo de cliente (exclui internos + eval).
-  const stats = useMemo(() => {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const clientProjects = projects.filter((p) => p.category !== "internal" && !p.isEval);
-    return {
-      active: clientProjects.filter((p) => p.status === "active").length,
-      newThisMonth: clientProjects.filter((p) => new Date(p.createdAt) >= monthStart).length,
-      attention: clientProjects.filter((p) => p.status === "active" && p.health !== "green").length,
-      pipeline: clientProjects.filter((p) => p.phase === "commercial").length,
-    };
-  }, [projects]);
+  // Ribbon — sempre sobre o universo de cliente (exclui internos + eval).
+  const ribbon = useMemo<RibbonItem[]>(() => {
+    const universe = projects.filter((p) => p.category !== "internal" && !p.isEval);
+    const active = universe.filter((p) => p.status === "active");
+    const clientes = new Set(active.map((p) => p.clientName).filter(Boolean)).size;
+    const attention = active.filter((p) => p.health !== "green").length;
+    const avg = meanOf(active.map((p) => p.stats.avgFpPerSprint));
+    return [
+      { label: "Linhas ativas", value: String(active.length) },
+      { label: "Clientes ativos", value: String(clientes) },
+      {
+        label: "Em atenção",
+        value: String(attention),
+        tone: attention > 0 ? "amber" : undefined,
+      },
+      {
+        label: "Média da fábrica",
+        value: avg === null ? "—" : `${avg.toLocaleString("pt-BR")} FP/sp`,
+        hint: "Média das médias FP/sprint das linhas ativas (últimas 6 sprints fechadas de cada)",
+      },
+      {
+        label: "Builders",
+        value: `${factory.builders}/${factory.membersTotal}`,
+        hint: "Product-builders / membros totais da Volund",
+      },
+    ];
+  }, [projects, factory]);
 
   const grouped = useMemo(() => {
     const visible = projects.filter((p) => {
@@ -559,20 +1037,60 @@ export function ProjetosBoard({ projects }: { projects: ProjectOverview[] }) {
       if (p.category === "internal" && !showInternal) return false;
       return true;
     });
-    return CATEGORY_ORDER.map((cat) => ({
-      category: cat,
-      items: visible.filter((p) => p.category === cat),
+    return PHASE_ORDER.map((phase) => ({
+      phase,
+      items: visible.filter((p) => p.phase === phase),
     })).filter((g) => g.items.length > 0);
   }, [projects, showInternal, showEval]);
 
+  // Ordem de navegação ‹ › = ordem visível do board (ignora colapso de grupo).
   const visibleFlat = useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
 
-  // Clique explícito (mobile abre sheet; desktop fixa o painel).
-  const explicitSelected = selectedId
-    ? visibleFlat.find((p) => p.id === selectedId) ?? null
-    : null;
-  // Desktop sempre mostra algo: default no 1º projeto visível.
-  const desktopSelected = explicitSelected ?? visibleFlat[0] ?? null;
+  const selected = selectedId ? visibleFlat.find((p) => p.id === selectedId) ?? null : null;
+  const selectedIndex = selected ? visibleFlat.indexOf(selected) : -1;
+  const drawerOpen = !!selected && !editOpen;
+
+  // ← → navegam projetos com o drawer aberto (revisão seriada de segunda).
+  useEffect(() => {
+    if (!drawerOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const target = e.target as HTMLElement | null;
+      if (target && /^(input|textarea|select)$/i.test(target.tagName)) return;
+      const delta = e.key === "ArrowRight" ? 1 : -1;
+      const next = visibleFlat[selectedIndex + delta];
+      if (next) {
+        e.preventDefault();
+        navigate(next.id, "replace");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerOpen, selectedIndex, visibleFlat]);
+
+  // ↑ ↓ movem o foco entre linhas do board (Enter abre — nativo do button).
+  function onRowsKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const rows = Array.from(
+      rowsRef.current?.querySelectorAll<HTMLButtonElement>("[data-overview-row]") ?? [],
+    );
+    const idx = rows.indexOf(document.activeElement as HTMLButtonElement);
+    if (idx === -1) return;
+    e.preventDefault();
+    const next =
+      rows[Math.min(Math.max(idx + (e.key === "ArrowDown" ? 1 : -1), 0), rows.length - 1)];
+    next?.focus();
+  }
+
+  function togglePhase(phase: ProjectPhase) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(phase)) next.delete(phase);
+      else next.add(phase);
+      return next;
+    });
+  }
 
   if (projects.length === 0) {
     return (
@@ -584,64 +1102,32 @@ export function ProjetosBoard({ projects }: { projects: ProjectOverview[] }) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Big numbers — leitura do portfólio de cliente */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <BigStat label="Projetos ativos" value={stats.active} />
-        <BigStat label="Novos no mês" value={stats.newThisMonth} />
-        <BigStat
-          label="Em atenção"
-          value={stats.attention}
-          tone={stats.attention > 0 ? "amber" : undefined}
-        />
-        <BigStat label="Pipe comercial" value={stats.pipeline} />
-      </div>
+    <div className="space-y-5">
+      {/* Ribbon — leitura de 5 segundos da fábrica */}
+      <OverviewRibbon items={ribbon} />
 
-      {/* Mobile: grid de cards → abre sheet. Desktop: master-detail. */}
-      {grouped.length > 0 &&
-        (isMobile ? (
-          grouped.map((g) => (
-            <section key={g.category}>
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                {CATEGORY_LABEL[g.category]}
-                <span className="text-xs font-normal text-muted-foreground">({g.items.length})</span>
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {g.items.map((p) => (
-                  <ProjectCard key={p.id} p={p} onClick={() => setSelectedId(p.id)} />
-                ))}
-              </div>
-            </section>
-          ))
-        ) : (
-          <div className="grid grid-cols-[280px_1fr] items-start gap-4">
-            <div className="space-y-4">
-              {grouped.map((g) => (
-                <div key={g.category} className="space-y-1.5">
-                  <h3 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {CATEGORY_LABEL[g.category]}{" "}
-                    <span className="font-normal">({g.items.length})</span>
-                  </h3>
+      {/* Linhas de produção agrupadas por fase (funil), Pai sticky */}
+      {grouped.length > 0 && (
+        <div ref={rowsRef} onKeyDown={onRowsKeyDown} className="space-y-4">
+          {grouped.map((g) => (
+            <section key={g.phase}>
+              <PhaseHeader
+                phase={g.phase}
+                items={g.items}
+                collapsed={collapsed.has(g.phase)}
+                onToggle={() => togglePhase(g.phase)}
+              />
+              {!collapsed.has(g.phase) && (
+                <div className="mt-2 space-y-1.5">
                   {g.items.map((p) => (
-                    <ProjectNavItem
-                      key={p.id}
-                      p={p}
-                      active={p.id === desktopSelected?.id}
-                      onClick={() => setSelectedId(p.id)}
-                    />
+                    <ProjectRow key={p.id} p={p} onOpen={() => navigate(p.id, "push")} />
                   ))}
                 </div>
-              ))}
-            </div>
-            {desktopSelected && (
-              <ProjectDetailPanel
-                key={desktopSelected.id}
-                p={desktopSelected}
-                onEdit={() => openEdit(desktopSelected.id)}
-              />
-            )}
-          </div>
-        ))}
+              )}
+            </section>
+          ))}
+        </div>
+      )}
 
       {grouped.length === 0 && (
         <div className="surface flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
@@ -685,14 +1171,26 @@ export function ProjetosBoard({ projects }: { projects: ProjectOverview[] }) {
         </div>
       )}
 
-      {/* Detalhe mobile vive numa sheet; no desktop é o painel inline. */}
-      <ResponsiveSheet
-        open={isMobile && !!explicitSelected}
-        onOpenChange={(o) => !o && setSelectedId(null)}
-      >
+      {/* Drawer: desktop side-sheet, mobile bottom-sheet — um codepath só.
+          Some enquanto o editor está aberto (nunca 2 overlays; volta ao
+          salvar/cancelar porque ?project= continua na URL). */}
+      <ResponsiveSheet open={drawerOpen} onOpenChange={(o) => !o && navigate(null, "replace")}>
         <ResponsiveSheetContent size="lg">
-          {explicitSelected && (
-            <ProjectSheet p={explicitSelected} onEdit={() => openEdit(explicitSelected.id)} />
+          {selected && (
+            <ProjectDrawer
+              p={selected}
+              index={selectedIndex}
+              total={visibleFlat.length}
+              onPrev={() => {
+                const prev = visibleFlat[selectedIndex - 1];
+                if (prev) navigate(prev.id, "replace");
+              }}
+              onNext={() => {
+                const next = visibleFlat[selectedIndex + 1];
+                if (next) navigate(next.id, "replace");
+              }}
+              onEdit={() => openEdit(selected.id)}
+            />
           )}
         </ResponsiveSheetContent>
       </ResponsiveSheet>
@@ -702,7 +1200,6 @@ export function ProjetosBoard({ projects }: { projects: ProjectOverview[] }) {
         onOpenChange={setEditOpen}
         project={editProject}
         onSaved={() => {
-          setSelectedId(null);
           router.refresh();
         }}
       />

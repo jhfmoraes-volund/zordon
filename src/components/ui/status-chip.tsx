@@ -57,8 +57,19 @@ export type StatusChipProps = Omit<VariantProps<typeof chipVariants>, "tone"> & 
   label?: ReactNode;
   children?: ReactNode;
   dot?: boolean;
+  /**
+   * `solid` (default) — superfície tingida pelo tone (badge clássico).
+   * `subtle` — superfície neutra (borda fina, sem fundo, texto muted); o tone
+   * vive só no dot. Estilo Notion/Linear pra superfícies executivas onde cor
+   * de fundo vira ruído. `subtle` força o dot (sem ele o tone não aparece).
+   */
+  variant?: "solid" | "subtle";
   className?: string;
 };
+
+/** Superfície neutra da variante subtle — tone fica restrito ao dot. */
+const SUBTLE_SURFACE =
+  "border-border/70 bg-transparent text-muted-foreground";
 
 export function StatusChip({
   tone = "muted",
@@ -66,11 +77,18 @@ export function StatusChip({
   label,
   children,
   dot = false,
+  variant = "solid",
   className,
 }: StatusChipProps) {
+  const subtle = variant === "subtle";
+  // Subtle parte da superfície `muted` (única sem classes dark:) — o tone
+  // pedido colore apenas o dot.
+  const surfaceTone = subtle ? "muted" : tone;
   return (
-    <span className={cn(chipVariants({ tone, size }), className)}>
-      {dot ? <span className={dotVariants({ tone })} aria-hidden /> : null}
+    <span
+      className={cn(chipVariants({ tone: surfaceTone, size }), subtle && SUBTLE_SURFACE, className)}
+    >
+      {dot || subtle ? <span className={dotVariants({ tone })} aria-hidden /> : null}
       {children ?? label}
     </span>
   );

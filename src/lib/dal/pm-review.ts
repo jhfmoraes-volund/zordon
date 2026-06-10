@@ -38,7 +38,16 @@ export type PMReviewNoteKind =
   | "risk"
   | "need"
   | "team_signal"
-  | "open_decision";
+  | "open_decision"
+  | "milestone";
+
+/**
+ * Público da note (espelha CHECK constraint):
+ *   • detail    — review de trabalho (página da review + contexto da Vitoria).
+ *   • executive — digest enxuto que a Vitoria entrega junto do report;
+ *                 consumido pelo Overview de projetos.
+ */
+export type PMReviewNoteAudience = "detail" | "executive";
 
 export const PM_REVIEW_NOTE_KINDS: PMReviewNoteKind[] = [
   "summary",
@@ -48,6 +57,7 @@ export const PM_REVIEW_NOTE_KINDS: PMReviewNoteKind[] = [
   "need",
   "team_signal",
   "open_decision",
+  "milestone",
 ];
 
 /** Forma leve pra a tab Rituais (lista normalizada UNION com Planning). */
@@ -100,7 +110,10 @@ export type PMReviewDetail = PMReviewSummary & {
       meetingId: string | null;
     } | null;
   }>;
+  /** Notes da review de trabalho (audience='detail'). */
   notes: PMReviewNoteRow[];
+  /** Digest executivo (audience='executive') — gerado junto do report. */
+  executiveNotes: PMReviewNoteRow[];
   /**
    * Status do contexto que a Vitoria precisa pra sintetizar com qualidade.
    * Usado na UI pra gatear o botão "Sintetizar report" e mostrar o checklist
@@ -165,6 +178,7 @@ export async function listPMReviewsForProject(
       .from("PMReviewNote")
       .select("pmReviewId, kind")
       .in("pmReviewId", ids)
+      .eq("audience", "detail")
       .is("dismissedAt", null),
   ]);
 
@@ -259,7 +273,9 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
   if (notesRes.error) throw notesRes.error;
 
   const fac = row.facilitator as { name: string | null } | null;
-  const notes = (notesRes.data ?? []) as PMReviewNoteRow[];
+  const allNotes = (notesRes.data ?? []) as PMReviewNoteRow[];
+  const notes = allNotes.filter((n) => n.audience !== "executive");
+  const executiveNotes = allNotes.filter((n) => n.audience === "executive");
   const noteCountByKind: Partial<Record<PMReviewNoteKind, number>> = {};
   let noteTotal = 0;
   for (const n of notes) {
@@ -307,6 +323,7 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
         transcript: l.transcript as PMReviewDetail["linkedTranscripts"][number]["transcript"],
       })),
     notes,
+    executiveNotes,
     projectContext: {
       hasTranscripts: (transcriptsRes.data?.length ?? 0) > 0,
       hasActiveDS: (dsRes.count ?? 0) > 0,
@@ -493,6 +510,9 @@ export async function addPMReviewNote(input: {
   sourceTranscriptIds?: string[];
   sourceMeetingIds?: string[];
   priority?: number;
+  audience?: PMReviewNoteAudience;
+  /** Data do marco — obrigatória quando kind='milestone' (CHECK no DB). */
+  dueAt?: string | null;
   generatedByAgent?: "vitoria" | null;
   generatedByMemberId?: string | null;
 }): Promise<PMReviewNoteRow> {
@@ -506,6 +526,9 @@ export async function addPMReviewNote(input: {
       "PMReviewNote: passe exatamente um origin — generatedByAgent OU generatedByMemberId.",
     );
   }
+  if (input.kind === "milestone" && !input.dueAt) {
+    throw new Error("PMReviewNote: kind='milestone' exige dueAt (YYYY-MM-DD).");
+  }
   const { data: inserted, error } = await supabase
     .from("PMReviewNote")
     .insert({
@@ -515,6 +538,8 @@ export async function addPMReviewNote(input: {
       sourceTranscriptIds: input.sourceTranscriptIds ?? [],
       sourceMeetingIds: input.sourceMeetingIds ?? [],
       priority: input.priority ?? 0,
+      audience: input.audience ?? "detail",
+      dueAt: input.dueAt ?? null,
       generatedByAgent: input.generatedByAgent ?? null,
       generatedByMemberId: input.generatedByMemberId ?? null,
     })
@@ -522,6 +547,44 @@ export async function addPMReviewNote(input: {
     .single();
   if (error) throw error;
   return inserted as PMReviewNoteRow;
+}
+
+/**
+ * Substitui o digest executivo da review (audience='executive') de forma
+ * idempotente: apaga o digest anterior e insere o novo. Chamado pelo tool
+ * `update_pm_review_report` da Vitoria — report e digest nascem juntos.
+ *
+ * `priority` desc = mais importante primeiro (convenção da tabela); o índice
+ * do item vira 10 - i pra preservar a ordem que a Vitoria escolheu.
+ */
+export async function replaceExecutiveDigest(
+  pmReviewId: string,
+  items: Array<{ kind: PMReviewNoteKind; content: string }>,
+): Promise<number> {
+  const supabase = db();
+  const { error: delErr } = await supabase
+    .from("PMReviewNote")
+    .delete()
+    .eq("pmReviewId", pmReviewId)
+    .eq("audience", "executive");
+  if (delErr) throw delErr;
+
+  if (items.length === 0) return 0;
+
+  const { error: insErr } = await supabase.from("PMReviewNote").insert(
+    items.map((item, i) => ({
+      pmReviewId,
+      kind: item.kind,
+      content: item.content,
+      priority: Math.max(0, 10 - i),
+      audience: "executive" as const,
+      generatedByAgent: "vitoria",
+      sourceTranscriptIds: [],
+      sourceMeetingIds: [],
+    })),
+  );
+  if (insErr) throw insErr;
+  return items.length;
 }
 
 export async function updatePMReviewNote(

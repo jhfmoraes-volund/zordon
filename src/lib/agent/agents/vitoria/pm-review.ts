@@ -17,6 +17,7 @@ import { db } from "@/lib/db";
 import {
   addPMReviewNote,
   updatePMReview,
+  replaceExecutiveDigest,
   PM_REVIEW_NOTE_KINDS,
   type PMReviewNoteKind,
 } from "@/lib/dal/pm-review";
@@ -41,7 +42,7 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
         contextSourceId, weight,
         transcript:ContextSource!EntityLink_contextSourceId_fkey(id, title, source, capturedAt)
       ),
-      notes:PMReviewNote(id, kind, content, dismissedAt, priority, sourceTranscriptIds, sourceMeetingIds)
+      notes:PMReviewNote(id, kind, content, dismissedAt, priority, audience, sourceTranscriptIds, sourceMeetingIds)
       `,
     )
     .eq("id", pmReviewId)
@@ -51,6 +52,8 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
 
   if (!pm) throw new Error(`PMReview ${pmReviewId} não encontrado`);
 
+  // Só notes 'detail' entram no contexto de trabalho — o digest 'executive'
+  // é output da síntese, não insumo (evita a Vitoria reler o próprio digest).
   const activeNotes = (
     pm.notes as Array<{
       id: string;
@@ -58,11 +61,12 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
       content: string;
       dismissedAt: string | null;
       priority: number;
+      audience: string;
       sourceTranscriptIds: string[] | null;
       sourceMeetingIds: string[] | null;
     }>
   )
-    .filter((n) => !n.dismissedAt)
+    .filter((n) => !n.dismissedAt && n.audience !== "executive")
     .sort((a, b) => b.priority - a.priority);
 
   // Resolve sprint atual do projeto (endDate >= hoje, mais próxima de começar).
@@ -355,8 +359,13 @@ Seu output principal é um REPORT estruturado em 6 seções fixas:
 REGRAS:
   • NÃO proponha tasks. Não existe staging-commit aqui.
   • Toda observação vai em \`add_pm_review_note\` com kind ∈ {summary,
-    project_direction, next_step, risk, need, team_signal, open_decision}.
-    Use \`summary\` para um panorama curto que abre o report.
+    project_direction, next_step, risk, need, team_signal, open_decision,
+    milestone}. Use \`summary\` para um panorama curto que abre o report.
+  • MARCO DO PROJETO: registre no máximo 1 note kind=\`milestone\` por review —
+    o próximo marco relevante do projeto (go-live, entrega de fase, demo,
+    homologação), com \`dueAt\` (YYYY-MM-DD) e content curto (ex.: "Go-live
+    homologação"). Vira chip no Overview de projetos. Extraia de transcripts
+    e decisões; se nenhuma data-marco existir nas fontes, não invente.
   • Quando o PM pedir "atualiza o report" / "gera o report" / "sintetiza":
     1. Chame \`get_project_indicators\` PRIMEIRO — alimenta a seção
        "Indicadores do time" com velocity das últimas sprints, throughput,
@@ -368,6 +377,9 @@ REGRAS:
        organizado nas 6 seções fixas. Cite source IDs (transcriptRefId /
        meetingId) e referencie decisões/questões abertas do contexto DS
        (blocos abaixo) quando relevante.
+    4. O \`executiveDigest\` (mesma call) é a visão de PORTFÓLIO: o que um
+       executivo que tem 20 segundos precisa saber. Cure — não despeje as
+       notes. Frases curtas, autocontidas, sem markdown.
   • Read first, write later. NUNCA sintetize report sem antes ter pelo menos:
     1 transcript lido OU 3 notes ativas OU indicadores buscados.
 
@@ -522,7 +534,8 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
           .describe(
             "Tipo: summary (panorama), project_direction (rumo), next_step (próximos passos), " +
               "risk (risco), need (necessidade — recurso/decisão/input), " +
-              "team_signal (capacidade/moral/blockers), open_decision (decisão em aberto).",
+              "team_signal (capacidade/moral/blockers), open_decision (decisão em aberto), " +
+              "milestone (próximo marco do projeto — exige dueAt).",
           ),
         content: z
           .string()
@@ -543,8 +556,16 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
           .max(10)
           .optional()
           .describe("Prioridade 0-10. Default 5."),
+        dueAt: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional()
+          .describe("Data do marco (YYYY-MM-DD). Obrigatória quando kind=milestone."),
       }),
-      execute: async ({ kind, content, sourceMeetingIds, sourceTranscriptIds, priority }) => {
+      execute: async ({ kind, content, sourceMeetingIds, sourceTranscriptIds, priority, dueAt }) => {
+        if (kind === "milestone" && !dueAt) {
+          return { ok: false, error: "kind=milestone exige dueAt (YYYY-MM-DD)." };
+        }
         const note = await addPMReviewNote({
           pmReviewId,
           kind,
@@ -552,6 +573,7 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
           sourceMeetingIds: sourceMeetingIds ?? [],
           sourceTranscriptIds: sourceTranscriptIds ?? [],
           priority: priority ?? 5,
+          dueAt: dueAt ?? null,
           generatedByAgent: "vitoria",
         });
         return { ok: true, noteId: note.id, kind: note.kind };
@@ -560,26 +582,74 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
 
     update_pm_review_report: tool({
       description:
-        "Grava o markdown SINTETIZADO do report do PM Review. Substitui o anterior. " +
-        "Estrutura sugerida (mas pode variar conforme o contexto):\n" +
+        "Grava o markdown SINTETIZADO do report do PM Review + o digest executivo. Substitui os anteriores. " +
+        "Estrutura sugerida do markdown (mas pode variar conforme o contexto):\n" +
         "  ## Rumo do projeto\n  ## Próximos passos\n  ## Riscos\n  ## Necessidades\n" +
         "  ## Indicadores do time\n  ## Decisões em aberto\n" +
-        "Cite source IDs (transcriptRef / meeting) inline quando relevante.",
+        "Cite source IDs (transcriptRef / meeting) inline quando relevante.\n" +
+        "O executiveDigest alimenta o Overview de projetos (cards compactos): " +
+        "frases curtas e autocontidas, sem markdown, o item mais crítico primeiro.",
       inputSchema: z.object({
         markdown: z
           .string()
           .min(50)
           .describe("Markdown completo do report (substitui o anterior)."),
+        executiveDigest: z
+          .object({
+            panorama: z
+              .string()
+              .min(20)
+              .describe(
+                "2-3 frases: estado do projeto + rumo. É a primeira coisa que o gestor lê no portfólio.",
+              ),
+            risks: z
+              .array(z.string().min(10))
+              .describe(
+                "Até 3 riscos que importam pra um executivo, mais crítico primeiro — a ordem " +
+                  "comunica criticidade; NÃO escreva prefixos tipo 'CRÍTICO —'. UMA frase " +
+                  "(~140 caracteres) por risco. Vazio se não há.",
+              ),
+            nextSteps: z
+              .array(z.string().min(10))
+              .describe(
+                "Até 3 próximos passos da semana, mais relevante primeiro. UMA frase por item.",
+              ),
+            decisions: z
+              .array(z.string().min(10))
+              .describe(
+                "Até 3 decisões/necessidades APENAS PENDENTES esperando o gestor humano — " +
+                  "resolvida não entra no digest. UMA frase por item, sem prefixos de status. " +
+                  "Vazio se não há.",
+              ),
+          })
+          .describe(
+            "Visão executiva curada — NÃO é resumo mecânico das notes: selecione e reescreva pro portfólio.",
+          ),
       }),
-      execute: async ({ markdown }) => {
+      execute: async ({ markdown, executiveDigest }) => {
         const updated = await updatePMReview(pmReviewId, {
           reportMarkdown: markdown,
           reportGeneratedAt: new Date().toISOString(),
         });
+        // Digest nasce junto do report (mesma call) — clamp de 3 por slot
+        // fica aqui, não no schema (Anthropic recusa maxItems em arrays).
+        const digestCount = await replaceExecutiveDigest(pmReviewId, [
+          { kind: "summary" as const, content: executiveDigest.panorama },
+          ...executiveDigest.risks
+            .slice(0, 3)
+            .map((content) => ({ kind: "risk" as const, content })),
+          ...executiveDigest.nextSteps
+            .slice(0, 3)
+            .map((content) => ({ kind: "next_step" as const, content })),
+          ...executiveDigest.decisions
+            .slice(0, 3)
+            .map((content) => ({ kind: "open_decision" as const, content })),
+        ]);
         return {
           ok: true,
           pmReviewId,
           length: markdown.length,
+          digestCount,
           generatedAt: updated.reportGeneratedAt,
         };
       },

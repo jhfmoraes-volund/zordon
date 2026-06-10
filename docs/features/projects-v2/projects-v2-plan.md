@@ -1,6 +1,6 @@
 # Projects V2 — PRD-native project management
 
-> **Status:** Planning (draft) · **Owner:** João (admin-only pilot) · **Created:** 2026-06-04
+> **Status:** Planning — **design locked** (§12 all resolved 2026-06-04) · **Owner:** João (admin-only pilot) · **Created:** 2026-06-04
 >
 > Major change to the PM protocol. Zordon stops being Jira/Trello (Sprint → User Story → Task)
 > and becomes **PRD-native**: the unit you manage, drag, open-the-side-sheet-on, and *forge* is a
@@ -291,7 +291,7 @@ two side sheets**.
 | Area | Action |
 |------|--------|
 | Route | `projects-v2/page.tsx` + `[id]/page.tsx`, admin gate at entry |
-| Tabs | reuse tab pattern; tabs become Specs / Sprints / Forge / … |
+| Tabs (nav bar) | **1:1 mirror of today's nav** — same set + order, only relabel **Stories → Specs** (renders the `SpecPrdTree`). Full set: **Specs · Sprints · Rituais · Wiki · Sessions · Forge · Settings**. The nav bar is **inline in `page.tsx`** today (not a shared component, see [projects/[id]/page.tsx:530-562](../../../src/app/(dashboard)/projects/[id]/page.tsx#L530-L562) + `TABS` array [:79-87](../../../src/app/(dashboard)/projects/[id]/page.tsx#L79-L87)); the V2 clone reproduces it inline. Header (Hero) + Meta row + Sprint Ribbon are cloned **byte-for-byte** above the nav |
 | Board | **one shared `SpecPrdTree`** (`src/components/prd/spec-prd-tree.tsx`): PRDs grouped by Spec, collapsible Spec card, "Sem Spec" bucket — parameterized by `renderRowActions`/`renderBadge`. Consumed by **all three** PRD surfaces (V2 board, Vitor authoring screen, Sprint Planning) so the tree is built **once**, not three times. Derived from `story-hierarchy/stories-list.tsx` |
 | **Side sheet** | **merge** `story-hierarchy/task-sheet.tsx` (status/assignee/sprint/notes/AC/feed) **+** the PRD viewer (`specMarkdown`, `stories[]`) into one PRD sheet; action row = **Send to Forge** · **Copy** |
 | Hooks | new `_hooks/` that load PRDs (ProductRequirement) instead of Tasks |
@@ -330,17 +330,25 @@ two side sheets**.
 
 ---
 
-## 12. Open questions (need decisions before building)
+## 12. Open questions — ALL RESOLVED (design locked 2026-06-04, João)
 
 - ~~**Q1.** PRD production surface / handoff UX~~ — **RESOLVED** (D10–D15): Spec-first; reuse Vitor
   surfaces; Vitoria **background-summons** Vitor into a `vitoria_ask` session with clear messaging.
-- **Q2.** Sizing heuristic — confirm "1 PRD = 1 PR ≈ ≤30 min, 1–4 verifiable"? (§8)
-- **Q3.** Delivery-status vocabulary — adopt Task's exact set + `in_production`, or trim? (§4.2)
-- **Q4.** Production lane — manual PM toggle, or auto on PR-merge detection? (§4.2)
-- **Q5.** Does V2 fully replace the existing projects area eventually, or coexist long-term? (affects
-  whether we relabel-in-place vs. keep a parallel tree)
-- **Q6.** Spec layer — is it actively used in V2 (PM groups PRDs under Specs), or mostly a passthrough
-  while the real action is at PRD level? (decides how much Spec UI to build in Phase 1)
+- ~~**Q2.** Sizing heuristic~~ — **RESOLVED**: adopt the plan default **1 PRD = 1 PR ≈ a handful of
+  files + 1–4 `verifiable` + ≤~30 min agent time**. Encode as a Vitor decomposition rule **and** a
+  soft validator on `stories[]` length (warn, don't block). (§8)
+- ~~**Q3.** Delivery-status vocabulary~~ — **RESOLVED**: adopt **Task's full set + `in_production`** —
+  `backlog → todo → in_progress → review → done → in_production`, with `changes_requested` as the
+  kickback. Reuse `StatusChipSelect` 1:1 (no trimming). (§4.2)
+- ~~**Q4.** Production lane~~ — **RESOLVED**: **manual PM toggle in Phase 1** (PM marks
+  `in_production`, writing `deployedToProductionAt`). Auto-on-PR-merge detection is deferred to a
+  **Phase ≥ 2** evolution (backlog, not built now). (§4.2)
+- ~~**Q5.** Replace vs. coexist~~ — **RESOLVED**: **V2 is future-main** — it will eventually replace
+  the existing projects area (relabel-in-place when mature). Phase 1 still ships parallel/reversible,
+  but naming + migration choices should assume V2 wins. (§9)
+- ~~**Q6.** Spec layer~~ — **RESOLVED**: **passthrough** — Spec is a thin grouping layer (collapsible
+  card from Vitor), **no rich Spec UI / no drag-between-Specs in Phase 1**. All real action stays at
+  the PRD level. Keeps Phase-1 Spec build minimal. (§3.1, §7.2)
 
 ---
 

@@ -19,7 +19,8 @@ type PMReviewNoteKind =
   | "risk"
   | "need"
   | "team_signal"
-  | "open_decision";
+  | "open_decision"
+  | "milestone";
 
 type Note = {
   id: string;
@@ -37,11 +38,13 @@ const KIND_TITLE: Record<PMReviewNoteKind, string> = {
   need: "Necessidades",
   team_signal: "Indicadores do time",
   open_decision: "Decisões em aberto",
+  milestone: "Marco",
 };
 
 const SECTION_ORDER: PMReviewNoteKind[] = [
   "summary",
   "project_direction",
+  "milestone",
   "next_step",
   "risk",
   "need",
