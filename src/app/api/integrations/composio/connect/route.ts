@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCurrentMember } from "@/lib/dal";
-import { initiateConnection } from "@/lib/composio/client";
+import { initiateConnection, type ComposioToolkit } from "@/lib/composio/client";
+
+const SUPPORTED_TOOLKITS: ComposioToolkit[] = ["github", "googlesheets", "googledrive"];
 
 /**
  * POST /api/integrations/composio/connect
- *   Body: { toolkit: "github", returnTo?: string }
+ *   Body: { toolkit: "github" | "googlesheets" | "googledrive", returnTo?: string }
  *   Inicia a conexão OAuth via Composio e devolve { redirectUrl } pro
  *   frontend redirecionar o usuário.
  *
@@ -24,10 +26,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
   }
 
-  const toolkit = body.toolkit;
-  if (toolkit !== "github") {
+  const toolkit = body.toolkit as ComposioToolkit | undefined;
+  if (!toolkit || !SUPPORTED_TOOLKITS.includes(toolkit)) {
     return NextResponse.json(
-      { error: "Toolkit não suportado. Suportados: github" },
+      { error: `Toolkit não suportado. Suportados: ${SUPPORTED_TOOLKITS.join(", ")}` },
       { status: 400 },
     );
   }

@@ -45,10 +45,12 @@ async function getClient(): Promise<ComposioClient | null> {
     // SDK exige version explícita por tool execution; "latest" libera sem
     // hardcodar data específica (Composio v3 atualiza schemas continuamente).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    toolkitVersions: { github: "latest", googlesheets: "latest" } as any,
+    toolkitVersions: { github: "latest", googlesheets: "latest", googledrive: "latest" } as any,
   });
   return _client;
 }
+
+export type ComposioToolkit = "github" | "googlesheets" | "googledrive";
 
 // Aceita os 2 nomes — COMPOSIO_GITHUB_APP_ID é o que o usuário colocou no .env
 // inicialmente, AUTH_CONFIG_ID é o nome técnico correto (Composio chama de
@@ -65,9 +67,14 @@ function gsheetsAuthConfigId(): string | null {
   return process.env.COMPOSIO_GSHEETS_AUTH_CONFIG_ID ?? null;
 }
 
-function getAuthConfigId(toolkit: "github" | "googlesheets"): string | null {
+function gdriveAuthConfigId(): string | null {
+  return process.env.COMPOSIO_GDRIVE_AUTH_CONFIG_ID ?? null;
+}
+
+function getAuthConfigId(toolkit: ComposioToolkit): string | null {
   if (toolkit === "github") return githubAuthConfigId();
   if (toolkit === "googlesheets") return gsheetsAuthConfigId();
+  if (toolkit === "googledrive") return gdriveAuthConfigId();
   return null;
 }
 
@@ -84,7 +91,7 @@ export type ComposioConnectionStatus = {
  */
 export async function initiateConnection(
   userId: string,
-  toolkit: "github" | "googlesheets",
+  toolkit: ComposioToolkit,
   callbackUrl?: string,
 ): Promise<{ redirectUrl: string; connectionId: string } | { error: string }> {
   const client = await getClient();
@@ -94,7 +101,9 @@ export async function initiateConnection(
   if (!authConfigId) {
     const varName = toolkit === "github"
       ? "COMPOSIO_GITHUB_AUTH_CONFIG_ID (ou COMPOSIO_GITHUB_APP_ID)"
-      : "COMPOSIO_GSHEETS_AUTH_CONFIG_ID";
+      : toolkit === "googledrive"
+        ? "COMPOSIO_GDRIVE_AUTH_CONFIG_ID"
+        : "COMPOSIO_GSHEETS_AUTH_CONFIG_ID";
     return {
       error:
         `${varName} ausente. Crie um Auth Config no painel Composio (toolkit=${toolkit}, Composio-managed OAuth) e copie o ac_xxx pro .env.`,
@@ -123,7 +132,7 @@ export async function initiateConnection(
  */
 export async function getConnectionStatus(
   userId: string,
-  toolkit: "github" | "googlesheets",
+  toolkit: ComposioToolkit,
 ): Promise<ComposioConnectionStatus> {
   const client = await getClient();
   if (!client) {
@@ -160,7 +169,7 @@ export async function getConnectionStatus(
  */
 export async function disconnect(
   userId: string,
-  toolkit: "github" | "googlesheets",
+  toolkit: ComposioToolkit,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const client = await getClient();
   if (!client) return { ok: false, error: "Composio não configurado" };
@@ -185,7 +194,7 @@ export async function disconnect(
  */
 export async function getUserTools(
   userId: string,
-  toolkits: Array<"github" | "googlesheets">,
+  toolkits: Array<ComposioToolkit>,
   opts: { limit?: number; toolSlugs?: string[] } = {},
 ): Promise<ToolSet> {
   const client = await getClient();
@@ -220,7 +229,7 @@ const SLUG_CACHE = new Map<string, string>();
 
 export async function findToolSlug(
   userId: string,
-  toolkit: "github" | "googlesheets",
+  toolkit: ComposioToolkit,
   keywords: string[],
 ): Promise<string | null> {
   const cacheKey = `${toolkit}::${keywords.join("|").toLowerCase()}`;
@@ -292,7 +301,8 @@ export async function getComposioTools(
   toolkits: string[],
 ): Promise<ToolSet> {
   const supported = toolkits.filter(
-    (t): t is "github" | "googlesheets" => t === "github" || t === "googlesheets"
+    (t): t is ComposioToolkit =>
+      t === "github" || t === "googlesheets" || t === "googledrive"
   );
   if (supported.length === 0) return {};
   return getUserTools(userId, supported);

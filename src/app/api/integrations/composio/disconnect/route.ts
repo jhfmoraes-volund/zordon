@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCurrentMember } from "@/lib/dal";
-import { disconnect } from "@/lib/composio/client";
+import { disconnect, type ComposioToolkit } from "@/lib/composio/client";
+
+const SUPPORTED_TOOLKITS: ComposioToolkit[] = ["github", "googlesheets", "googledrive"];
 
 /**
  * POST /api/integrations/composio/disconnect
- *   Body: { toolkit: "github" }
+ *   Body: { toolkit: "github" | "googlesheets" | "googledrive" }
  *   Apaga a conexão do member com o toolkit (idempotente).
  */
 export async function POST(req: Request) {
@@ -20,14 +22,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
   }
 
-  if (body.toolkit !== "github") {
+  const toolkit = body.toolkit as ComposioToolkit | undefined;
+  if (!toolkit || !SUPPORTED_TOOLKITS.includes(toolkit)) {
     return NextResponse.json(
-      { error: "Toolkit não suportado. Suportados: github" },
+      { error: `Toolkit não suportado. Suportados: ${SUPPORTED_TOOLKITS.join(", ")}` },
       { status: 400 },
     );
   }
 
-  const result = await disconnect(member.id, body.toolkit);
+  const result = await disconnect(member.id, toolkit);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
