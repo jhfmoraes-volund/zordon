@@ -10,18 +10,20 @@ import { folderStage, STAGE_ORDER, type DriveStage } from "@/lib/drive/stage";
  *   driveLinkedBy) e espelha em ProjectDriveFile (upsert + delete dos que
  *   sumiram). Drive é o SSOT — só metadata entra no banco.
  *
- *   Desce exatamente 1 nível (runbook D3): raiz + conteúdo das 4 pastas
- *   canônicas (Comercial/Imersão/Ops/Pós-Ops → stage). As pastas canônicas
- *   não viram card; seus filhos herdam o stage. Demais arquivos: stage NULL.
+ *   Desce a árvore em BFS (Fase 1.5 — supersede D10): cada linha guarda
+ *   parentId (NULL = filho direto da raiz) pra UI navegar pelo índice sem
+ *   chamar o Google. Pastas canônicas (Comercial/Imersão/Ops/Pós-Ops) viram
+ *   linha como qualquer outra; elas e seus descendentes carregam o stage.
  *
  *   200 { files, syncedAt, truncated, missingStages }
  *   409 sem driveFolderId · 412 { connectUrl } sem auth-config/conexão · 502 erro Drive
- *   Cap: 200 na raiz + 100 por pasta canônica (D4) — acima, truncated=true.
+ *   Caps: profundidade 4 · 200 por pasta · 1000 total — acima, truncated=true.
  */
 
 const PAGE_SIZE = 100;
-const MAX_ROOT_FILES = 200;
-const MAX_STAGE_FILES = 100;
+const MAX_DEPTH = 4;
+const MAX_FOLDER_FILES = 200;
+const MAX_TOTAL_FILES = 1000;
 
 type DriveApiFile = {
   id?: string;
@@ -135,78 +137,85 @@ export async function POST(
     );
   }
 
-  // ── Raiz ──────────────────────────────────────────────────
-  const root = await listChildren(linkedBy, project.driveFolderId, MAX_ROOT_FILES);
-  if (!root.ok) {
-    return NextResponse.json(
-      { error: `Drive list falhou: ${root.error}` },
-      { status: 502 }
-    );
-  }
-  let truncated = root.truncated;
+  // ── BFS a partir da raiz ──────────────────────────────────
+  // parentId NULL = filho direto da pasta linkada. Pastas no nível raiz com
+  // nome canônico definem o stage; descendentes herdam. Dedup por fileId
+  // (Drive permite multi-parent) — BFS garante que o nível mais raso ganha.
+  type QueueItem = {
+    folderId: string;
+    depth: number;
+    stage: DriveStage | null;
+  };
 
-  // ── Pastas canônicas: 1 nível abaixo, filhos herdam stage ─
-  const stageFolders = new Map<DriveStage, string>();
-  for (const f of root.files) {
-    if (f.mimeType !== FOLDER_MIME || !f.id || !f.name) continue;
-    const stage = folderStage(f.name);
-    // Primeira ocorrência ganha — duas pastas com mesmo nome canônico é
-    // estado degenerado no Drive, não vale recursão dupla.
-    if (stage && !stageFolders.has(stage)) stageFolders.set(stage, f.id);
-  }
-  const missingStages = STAGE_ORDER.filter((s) => !stageFolders.has(s));
+  const queue: QueueItem[] = [
+    { folderId: project.driveFolderId, depth: 0, stage: null },
+  ];
+  const seen = new Set<string>();
+  const rootFolderNames: string[] = [];
+  const entries: Array<{ file: DriveApiFile & { id: string }; parentId: string | null; stage: DriveStage | null }> = [];
+  let truncated = false;
 
-  const staged: Array<{ file: DriveApiFile; stage: DriveStage }> = [];
-  for (const [stage, folderId] of stageFolders) {
-    const children = await listChildren(linkedBy, folderId, MAX_STAGE_FILES);
+  while (queue.length > 0 && entries.length < MAX_TOTAL_FILES) {
+    const node = queue.shift()!;
+    const cap = Math.min(MAX_FOLDER_FILES, MAX_TOTAL_FILES - entries.length);
+    const children = await listChildren(linkedBy, node.folderId, cap);
     if (!children.ok) {
       return NextResponse.json(
-        { error: `Drive list falhou (pasta ${stage}): ${children.error}` },
+        { error: `Drive list falhou: ${children.error}` },
         { status: 502 }
       );
     }
     truncated = truncated || children.truncated;
-    staged.push(...children.files.map((file) => ({ file, stage })));
-  }
 
-  // Pastas canônicas não viram card; raiz fica com stage NULL.
-  const canonicalIds = new Set(stageFolders.values());
-  const entries: Array<{ file: DriveApiFile; stage: DriveStage | null }> = [
-    ...root.files
-      .filter((f) => !f.id || !canonicalIds.has(f.id))
-      .map((file) => ({ file, stage: null })),
-    ...staged,
-  ];
+    for (const f of children.files) {
+      if (!f.id || seen.has(f.id)) continue;
+      seen.add(f.id);
+
+      const isFolder = f.mimeType === FOLDER_MIME;
+      if (isFolder && node.depth === 0 && f.name) rootFolderNames.push(f.name);
+
+      // Pasta canônica no nível raiz inaugura o stage; o resto herda.
+      const stage =
+        isFolder && node.depth === 0 && f.name
+          ? (folderStage(f.name) ?? node.stage)
+          : node.stage;
+
+      const parentId = node.depth === 0 ? null : node.folderId;
+      entries.push({ file: f as DriveApiFile & { id: string }, parentId, stage });
+
+      if (isFolder) {
+        if (node.depth + 1 < MAX_DEPTH) {
+          queue.push({ folderId: f.id, depth: node.depth + 1, stage });
+        } else {
+          // Pasta no limite de profundidade: conteúdo fica fora do índice.
+          truncated = true;
+        }
+      }
+    }
+  }
+  if (queue.length > 0) truncated = true;
+
+  const missingStages = STAGE_ORDER.filter(
+    (s) => !rootFolderNames.some((name) => folderStage(name) === s)
+  );
 
   const syncedAt = new Date().toISOString();
-  const seen = new Set<string>();
-  const normalized = entries
-    .filter((e): e is { file: DriveApiFile & { id: string }; stage: DriveStage | null } =>
-      Boolean(e.file.id)
-    )
-    // Drive permite multi-parent: dedup por fileId (staged entra por último e
-    // o reverse abaixo faz o staged ganhar do root em caso de duplicata).
-    .reverse()
-    .filter((e) => {
-      if (seen.has(e.file.id)) return false;
-      seen.add(e.file.id);
-      return true;
-    })
-    .map(({ file: f, stage }) => {
-      const mimeType = f.mimeType ?? "application/octet-stream";
-      return {
-        projectId: id,
-        fileId: f.id,
-        name: f.name ?? "(sem nome)",
-        mimeType,
-        sizeBytes: f.size != null ? Number(f.size) || null : null,
-        modifiedTime: f.modifiedTime ?? null,
-        webViewLink: f.webViewLink ?? fallbackWebViewLink(f.id, mimeType),
-        iconHint: mimeType === FOLDER_MIME ? "folder" : null,
-        stage,
-        syncedAt,
-      };
-    });
+  const normalized = entries.map(({ file: f, parentId, stage }) => {
+    const mimeType = f.mimeType ?? "application/octet-stream";
+    return {
+      projectId: id,
+      fileId: f.id,
+      name: f.name ?? "(sem nome)",
+      mimeType,
+      sizeBytes: f.size != null ? Number(f.size) || null : null,
+      modifiedTime: f.modifiedTime ?? null,
+      webViewLink: f.webViewLink ?? fallbackWebViewLink(f.id, mimeType),
+      iconHint: mimeType === FOLDER_MIME ? "folder" : null,
+      parentId,
+      stage,
+      syncedAt,
+    };
+  });
 
   // ── Espelha no índice: upsert + delete dos ausentes ──────
   if (normalized.length > 0) {

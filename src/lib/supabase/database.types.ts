@@ -6148,6 +6148,7 @@ export type Database = {
           mimeType: string
           modifiedTime: string | null
           name: string
+          parentId: string | null
           projectId: string
           sizeBytes: number | null
           stage: string | null
@@ -6161,6 +6162,7 @@ export type Database = {
           mimeType: string
           modifiedTime?: string | null
           name: string
+          parentId?: string | null
           projectId: string
           sizeBytes?: number | null
           stage?: string | null
@@ -6174,6 +6176,7 @@ export type Database = {
           mimeType?: string
           modifiedTime?: string | null
           name?: string
+          parentId?: string | null
           projectId?: string
           sizeBytes?: number | null
           stage?: string | null
@@ -8208,6 +8211,7 @@ export type Database = {
       is_manager: { Args: never; Returns: boolean }
       kick_granola_import_drain: { Args: never; Returns: undefined }
       kick_project_insight_drain: { Args: never; Returns: undefined }
+      kick_wiki_daily: { Args: never; Returns: undefined }
       next_task_reference: { Args: { p_project_id: string }; Returns: string }
       next_user_story_reference: {
         Args: { p_project_id: string }

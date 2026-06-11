@@ -26,10 +26,11 @@ export class ComposioConnectionMissing extends Error {
  */
 export async function resolveContent(
   supabase: SupabaseClient<Database>,
-  source: ContextSource
+  source: ContextSource,
+  opts?: { force?: boolean }
 ): Promise<ResolvedContent> {
-  // Se já temos fullText cacheado, retorna direto
-  if (source.fullText) {
+  // Se já temos fullText cacheado, retorna direto (force = refresh do cron D13)
+  if (source.fullText && !opts?.force) {
     return {
       fullText: source.fullText,
       snapshotAt: source.capturedAt || source.createdAt,
