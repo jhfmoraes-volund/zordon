@@ -189,7 +189,9 @@ function Regua({ stats, size = "sm" }: { stats: ProjectStats; size?: "sm" | "lg"
   const n = stats.segments.length;
   if (n === 0) return null;
   const h = size === "lg" ? "h-2.5" : "h-1.5";
-  const hasMilestone = stats.milestoneIndex !== null;
+  // ⚑ só no drawer: na linha do board ele variaria a altura entre rows
+  // (jitter de ritmo vertical) e o chip do marco já vive na própria linha.
+  const hasMilestone = stats.milestoneIndex !== null && size === "lg";
   return (
     <div className={cn("relative w-full", hasMilestone && "mt-3")}>
       {hasMilestone && (
@@ -224,13 +226,20 @@ function Regua({ stats, size = "sm" }: { stats: ProjectStats; size?: "sm" | "lg"
 }
 
 /** Veredito de pace: gap = %escopo − %prazo. Uma subtração, zero opinião. */
-function PaceBadge({ stats }: { stats: ProjectStats }) {
+function PaceBadge({ stats, hint }: { stats: ProjectStats; hint?: string }) {
   if (stats.paceVerdict === null || stats.paceGapPp === null) return null;
   const meta = PACE_META[stats.paceVerdict];
   const arrow = stats.paceGapPp > 0 ? "▲" : stats.paceGapPp < 0 ? "▼" : "●";
   const pp = stats.paceVerdict === "on_track" ? "" : ` ${Math.abs(stats.paceGapPp)}pp`;
   return (
-    <span className={cn("whitespace-nowrap text-[11px] font-medium tabular-nums", meta.cls)}>
+    <span
+      title={hint}
+      className={cn(
+        "whitespace-nowrap text-[11px] font-medium tabular-nums",
+        hint && "cursor-help",
+        meta.cls,
+      )}
+    >
       {arrow}
       {pp} {meta.label}
     </span>
@@ -238,18 +247,31 @@ function PaceBadge({ stats }: { stats: ProjectStats }) {
 }
 
 /** Linha de stats compacta sob a régua (posição · pace · ritmo). */
-function RowStatsLine({ p }: { p: ProjectOverview }) {
+function RowStatsLine({
+  p,
+  defenses,
+}: {
+  p: ProjectOverview;
+  defenses: Record<string, string>;
+}) {
   const s = p.stats;
   if (s.mode === "contract") {
     return (
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
-        <span className="font-medium text-foreground">
+        <span
+          className="cursor-help font-medium text-foreground"
+          title={defenses["project.sprints_elapsed"]}
+        >
           {s.weeksElapsed}/{s.weeksTotal}
         </span>
-        <PaceBadge stats={s} />
-        {s.avgFpPerSprint !== null && <span className="hidden md:inline">{fmtAvg(s.avgFpPerSprint)}</span>}
+        <PaceBadge stats={s} hint={defenses["project.pace_gap"]} />
+        {s.avgFpPerSprint !== null && (
+          <span className="hidden cursor-help md:inline" title={defenses["project.avg_fp_per_sprint"]}>
+            {fmtAvg(s.avgFpPerSprint)}
+          </span>
+        )}
         {s.holes > 0 && (
-          <span className="text-yellow-500">
+          <span className="cursor-help text-yellow-500" title={defenses["project.holes"]}>
             {s.holes} sem sprint
           </span>
         )}
@@ -261,9 +283,18 @@ function RowStatsLine({ p }: { p: ProjectOverview }) {
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
         <span>últimas {s.segments.length}</span>
         {s.avgFpPerSprint !== null && (
-          <span className="font-medium text-foreground">{fmtAvg(s.avgFpPerSprint)}</span>
+          <span
+            className="cursor-help font-medium text-foreground"
+            title={defenses["project.avg_fp_per_sprint"]}
+          >
+            {fmtAvg(s.avgFpPerSprint)}
+          </span>
         )}
-        {s.utilizationPct !== null && <span className="hidden md:inline">aprov. {s.utilizationPct}%</span>}
+        {s.utilizationPct !== null && (
+          <span className="hidden cursor-help md:inline" title={defenses["project.utilization"]}>
+            aprov. {s.utilizationPct}%
+          </span>
+        )}
       </div>
     );
   }
@@ -312,7 +343,15 @@ function OverviewRibbon({ items }: { items: RibbonItem[] }) {
 
 // ─── Linha de projeto (ribbon filho) ──────────────────────
 
-function ProjectRow({ p, onOpen }: { p: ProjectOverview; onOpen: () => void }) {
+function ProjectRow({
+  p,
+  defenses,
+  onOpen,
+}: {
+  p: ProjectOverview;
+  defenses: Record<string, string>;
+  onOpen: () => void;
+}) {
   const milestone = milestoneChip(p);
   const chips = signalChips(p);
   const producing = PRODUCING_PHASES.includes(p.phase);
@@ -357,7 +396,7 @@ function ProjectRow({ p, onOpen }: { p: ProjectOverview; onOpen: () => void }) {
               <Regua stats={p.stats} />
             </div>
             <div className="shrink-0">
-              <RowStatsLine p={p} />
+              <RowStatsLine p={p} defenses={defenses} />
             </div>
           </>
         ) : p.phase === "commercial" ? (
@@ -423,9 +462,12 @@ function PhaseHeader({
 
 // ─── Digest do PM Review (cards do drawer) ────────────────
 
-/** Slot Panorama — narrativa da semana (summary + rumo fundidos). Clique expande. */
+/**
+ * Slot Panorama — narrativa da semana (summary + rumo fundidos), texto
+ * integral. O drawer é a camada de leitura: truncar aqui forçaria um 4º
+ * nível de clique — quem precisa de menos texto resolve na origem (Vitoria).
+ */
 function PanoramaCard({ notes }: { notes: Record<string, PMReviewNoteLite[]> }) {
-  const [expanded, setExpanded] = useState(false);
   const summary = notes.summary?.[0]?.content;
   const direction = notes.project_direction?.[0]?.content;
   return (
@@ -436,50 +478,24 @@ function PanoramaCard({ notes }: { notes: Record<string, PMReviewNoteLite[]> }) 
       {!summary && !direction ? (
         <p className="mt-1.5 text-xs text-muted-foreground">Sem panorama esta semana.</p>
       ) : (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setExpanded((v) => !v)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setExpanded((v) => !v);
-            }
-          }}
-          className="mt-1.5 flex cursor-pointer items-start gap-1.5"
-          title={expanded ? "Recolher" : "Expandir"}
-        >
-          <div className="min-w-0 flex-1 space-y-1.5">
-            {summary && (
-              <p className={cn("text-sm leading-relaxed", !expanded && "line-clamp-4")}>
-                {summary}
-              </p>
-            )}
-            {direction && (
-              <p
-                className={cn(
-                  "text-xs leading-relaxed text-muted-foreground",
-                  !expanded && "line-clamp-2",
-                )}
-              >
-                <span className="text-[10px] font-medium uppercase tracking-wide">Rumo</span>{" "}
-                {direction}
-              </p>
-            )}
-          </div>
-          <ChevronDown
-            className={cn(
-              "mt-1 h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform",
-              expanded && "rotate-180",
-            )}
-          />
+        <div className="mt-1.5 space-y-1.5">
+          {summary && <p className="text-sm leading-relaxed">{summary}</p>}
+          {direction && (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              <span className="text-[10px] font-medium uppercase tracking-wide">Rumo</span>{" "}
+              {direction}
+            </p>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-/** Slot fixo do digest — lista capada por priority; item clicado expande. */
+/**
+ * Slot fixo do digest — lista capada por priority, texto integral (sem clamp:
+ * o drawer é a camada de leitura; o cap de itens + "+N" segura a altura).
+ */
 function DigestCard({
   title,
   items,
@@ -492,17 +508,8 @@ function DigestCard({
   /** Liga o mini-rótulo por item em slots que misturam kinds (Decisões/Precisa). */
   showKindLabel?: boolean;
 }) {
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const shown = items.slice(0, DIGEST_MAX);
   const overflow = items.length - shown.length;
-  function toggle(i: number) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
-      return next;
-    });
-  }
   return (
     <div className="surface-inset p-3">
       <h5 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -512,7 +519,7 @@ function DigestCard({
       {items.length === 0 ? (
         <p className="mt-1.5 text-xs text-muted-foreground">{emptyText}</p>
       ) : (
-        <ul className="mt-1.5 space-y-1.5">
+        <ul className="mt-1.5 space-y-2">
           {shown.map((n, i) => (
             <li key={i} className="flex gap-2">
               <span
@@ -521,39 +528,14 @@ function DigestCard({
                   KIND_META[n.kind]?.dot ?? "bg-muted-foreground",
                 )}
               />
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => toggle(i)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    toggle(i);
-                  }
-                }}
-                title={expanded.has(i) ? "Recolher" : "Expandir"}
-                className="flex min-w-0 flex-1 cursor-pointer items-start gap-1.5"
-              >
-                <p
-                  className={cn(
-                    "min-w-0 flex-1 text-sm leading-relaxed",
-                    !expanded.has(i) && "line-clamp-2",
-                  )}
-                >
-                  {showKindLabel && (
-                    <span className="mr-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {KIND_META[n.kind]?.label ?? n.kind}
-                    </span>
-                  )}
-                  {n.content}
-                </p>
-                <ChevronDown
-                  className={cn(
-                    "mt-1 h-3 w-3 shrink-0 text-muted-foreground/40 transition-transform",
-                    expanded.has(i) && "rotate-180",
-                  )}
-                />
-              </div>
+              <p className="min-w-0 flex-1 text-sm leading-relaxed">
+                {showKindLabel && (
+                  <span className="mr-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {KIND_META[n.kind]?.label ?? n.kind}
+                  </span>
+                )}
+                {n.content}
+              </p>
             </li>
           ))}
         </ul>
@@ -674,14 +656,17 @@ function StatCol({
   value,
   sub,
   subTone,
+  hint,
 }: {
   label: string;
   value: string;
   sub?: string | null;
   subTone?: "amber" | "red";
+  /** Defense do registry (D6) — a frase que explica o número, como tooltip. */
+  hint?: string;
 }) {
   return (
-    <div className="min-w-0">
+    <div className={cn("min-w-0", hint && "cursor-help")} title={hint}>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-0.5 truncate text-lg font-semibold tabular-nums">{value}</div>
       {sub && (
@@ -701,9 +686,15 @@ function StatCol({
 
 /**
  * Dossiê de STATS: régua grande + PRAZO / ENTREGA / RITMO + projeção.
- * Fórmulas: docs/features/overview/stats-dictionary.md
+ * Fórmulas: docs/features/overview/stats-dictionary.md (gerado do registry).
  */
-function StatsSection({ p }: { p: ProjectOverview }) {
+function StatsSection({
+  p,
+  defenses,
+}: {
+  p: ProjectOverview;
+  defenses: Record<string, string>;
+}) {
   const s = p.stats;
   const producing = PRODUCING_PHASES.includes(p.phase);
 
@@ -754,6 +745,7 @@ function StatsSection({ p }: { p: ProjectOverview }) {
               label="Prazo"
               value={`${s.weeksElapsed}/${s.weeksTotal}`}
               sub={`${s.timePct}% do prazo`}
+              hint={defenses["project.time_pct"]}
             />
             <StatCol
               label="Entrega"
@@ -763,6 +755,7 @@ function StatsSection({ p }: { p: ProjectOverview }) {
                   ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
                   : "sem FP estimado"
               }
+              hint={defenses["project.scope_pct"] ?? defenses["project.sprints_closed"]}
             />
             <StatCol
               label="Ritmo"
@@ -772,6 +765,7 @@ function StatsSection({ p }: { p: ProjectOverview }) {
                   ? `aproveitamento ${s.utilizationPct}%`
                   : "últimas 6 fechadas"
               }
+              hint={defenses["project.avg_fp_per_sprint"]}
             />
           </>
         ) : (
@@ -789,6 +783,7 @@ function StatsSection({ p }: { p: ProjectOverview }) {
                   ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
                   : "sem FP estimado"
               }
+              hint={defenses["project.scope_pct"] ?? defenses["project.sprints_closed"]}
             />
             <StatCol
               label="Ritmo"
@@ -798,6 +793,7 @@ function StatsSection({ p }: { p: ProjectOverview }) {
                   ? `aproveitamento ${s.utilizationPct}%`
                   : "últimas 6 fechadas"
               }
+              hint={defenses["project.avg_fp_per_sprint"]}
             />
           </>
         )}
@@ -805,9 +801,12 @@ function StatsSection({ p }: { p: ProjectOverview }) {
 
       {(s.paceVerdict !== null || projectionDelta !== null || s.holes > 0) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
-          <PaceBadge stats={s} />
+          <PaceBadge stats={s} hint={defenses["project.pace_gap"]} />
           {s.projectedEndWeek !== null && projectionDelta !== null && (
-            <span className={cn(projectionDelta > 0 && "text-red-400")}>
+            <span
+              className={cn("cursor-help", projectionDelta > 0 && "text-red-400")}
+              title={defenses["project.projected_end_sprint"]}
+            >
               ◆ projeção: termina na sprint {s.projectedEndWeek}
               {projectionDelta > 0
                 ? ` (${projectionDelta} além do contrato)`
@@ -817,7 +816,7 @@ function StatsSection({ p }: { p: ProjectOverview }) {
             </span>
           )}
           {s.holes > 0 && (
-            <span className="text-yellow-500">
+            <span className="cursor-help text-yellow-500" title={defenses["project.holes"]}>
               {s.holes} semana{s.holes > 1 ? "s" : ""} queimada{s.holes > 1 ? "s" : ""} sem sprint
             </span>
           )}
@@ -833,6 +832,7 @@ function ProjectDrawer({
   p,
   index,
   total,
+  defenses,
   onPrev,
   onNext,
   onEdit,
@@ -840,6 +840,7 @@ function ProjectDrawer({
   p: ProjectOverview;
   index: number;
   total: number;
+  defenses: Record<string, string>;
   onPrev: () => void;
   onNext: () => void;
   onEdit: () => void;
@@ -849,6 +850,7 @@ function ProjectDrawer({
   return (
     <>
       <ResponsiveSheetHeader>
+        {/* Linha utilitária: navegação seriada à esquerda, ações à direita */}
         <div className="mr-8 flex items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
           <button
             type="button"
@@ -871,6 +873,22 @@ function ProjectDrawer({
           <span>
             {index + 1} de {total}
           </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onEdit}
+              className="gap-1.5 text-muted-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" /> Editar
+            </Button>
+            <Link
+              href={`/projects/${p.id}`}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              Ver projeto <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          </span>
         </div>
         <div className="mt-1 flex items-center gap-2.5">
           <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", HEALTH_DOT[p.health])} />
@@ -889,27 +907,11 @@ function ProjectDrawer({
           {milestone && (
             <StatusChip label={milestone.label} tone={milestone.tone} variant="subtle" size="sm" />
           )}
-          <span className="ml-auto flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onEdit}
-              className="gap-1.5 text-muted-foreground"
-            >
-              <Pencil className="h-3.5 w-3.5" /> Editar
-            </Button>
-            <Link
-              href={`/projects/${p.id}`}
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-            >
-              Ver projeto <ArrowUpRight className="h-3 w-3" />
-            </Link>
-          </span>
         </div>
       </ResponsiveSheetHeader>
 
       <ResponsiveSheetBody className="space-y-5">
-        <StatsSection p={p} />
+        <StatsSection p={p} defenses={defenses} />
         <PMReviewSection p={p} />
 
         {/* Rodapé quieto: sinais + time, sem caixas */}
@@ -931,9 +933,12 @@ function ProjectDrawer({
 export function ProjetosBoard({
   projects,
   factory,
+  defenses,
 }: {
   projects: ProjectOverview[];
   factory: FactoryStats;
+  /** id do registry → defense (tooltip D6), resolvido no server. */
+  defenses: Record<string, string>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1120,7 +1125,12 @@ export function ProjetosBoard({
               {!collapsed.has(g.phase) && (
                 <div className="mt-2 space-y-1.5">
                   {g.items.map((p) => (
-                    <ProjectRow key={p.id} p={p} onOpen={() => navigate(p.id, "push")} />
+                    <ProjectRow
+                      key={p.id}
+                      p={p}
+                      defenses={defenses}
+                      onOpen={() => navigate(p.id, "push")}
+                    />
                   ))}
                 </div>
               )}
@@ -1181,6 +1191,7 @@ export function ProjetosBoard({
               p={selected}
               index={selectedIndex}
               total={visibleFlat.length}
+              defenses={defenses}
               onPrev={() => {
                 const prev = visibleFlat[selectedIndex - 1];
                 if (prev) navigate(prev.id, "replace");

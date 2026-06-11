@@ -26,7 +26,7 @@ import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { ProjectEditSheet } from "@/components/projects/project-edit-sheet";
 import { ProjectCeremoniesTab } from "@/components/project-ceremonies-tab";
 import { ProjectSessionsTab } from "@/components/project-sessions-tab";
-import { ProjectWiki } from "@/components/project-wiki";
+import { ProjectWikiSheet } from "@/components/project-wiki";
 import { SprintDialog } from "@/components/sprint-dialog";
 import { SprintContextSheet } from "@/components/sprint/sprint-context-sheet";
 import { SuggestSprintsSheet } from "@/components/sprint/suggest-sprints-sheet";
@@ -80,7 +80,6 @@ const TABS: { key: TabKey; label: string; icon: typeof BookOpen; minAccessLevel?
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "ceremonies", label: "Rituais", icon: CalendarClock },
-  { key: "wiki", label: "Wiki", icon: FileText },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
   { key: "forge", label: "Forge", icon: Flame, minAccessLevel: "manager" },
   { key: "settings", label: "Settings", icon: SettingsIcon },
@@ -113,10 +112,13 @@ export default function ProjectDetailPage({
   const searchParams = useSearchParams();
   const rawTabParam = searchParams.get("tab");
   // Legacy: `?tab=tasks` agora aponta pra Sprints → Todas. Mantém deep-links antigos vivos.
+  // `?tab=wiki` virou sheet no hero — cai na tab default com o sheet aberto.
   const tabParam: TabKey | null =
     rawTabParam === "tasks"
       ? "sprints"
-      : (rawTabParam as TabKey | null);
+      : rawTabParam === "wiki"
+        ? "stories"
+        : (rawTabParam as TabKey | null);
   const sprintParam = searchParams.get("sprint");
   const viewParam = searchParams.get("view");
   const taskParam = searchParams.get("task");
@@ -164,6 +166,7 @@ export default function ProjectDetailPage({
 
   const [accessOpen, setAccessOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [wikiOpen, setWikiOpen] = useState(rawTabParam === "wiki");
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(taskParam);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
@@ -459,6 +462,14 @@ export default function ProjectDetailPage({
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setWikiOpen(true)}
+          >
+            <FileText className="size-4" />
+            <span className="hidden sm:inline">Wiki</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setEditOpen(true)}
           >
             <Pencil className="size-4" />
@@ -628,8 +639,6 @@ export default function ProjectDetailPage({
         />
       ) : activeTab === "forge" ? (
         <ForgeTab projectId={id} />
-      ) : activeTab === "wiki" ? (
-        <ProjectWiki projectId={id} />
       ) : activeTab === "settings" ? (
         <SettingsTab
           project={project}
@@ -747,6 +756,14 @@ export default function ProjectDetailPage({
         open={accessOpen}
         onOpenChange={setAccessOpen}
         projectId={id}
+      />
+
+      {/* Wiki — botão no hero, sheet read-first */}
+      <ProjectWikiSheet
+        projectId={id}
+        projectName={project.name}
+        open={wikiOpen}
+        onOpenChange={setWikiOpen}
       />
 
       {/* Sprint create / edit dialog */}

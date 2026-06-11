@@ -5878,6 +5878,8 @@ export type Database = {
           clientId: string
           createdAt: string
           definitionOfDone: Json
+          driveFolderId: string | null
+          driveLinkedBy: string | null
           endDate: string | null
           engagementType: string
           forgeSourceSessionId: string | null
@@ -5909,6 +5911,8 @@ export type Database = {
           clientId: string
           createdAt?: string
           definitionOfDone?: Json
+          driveFolderId?: string | null
+          driveLinkedBy?: string | null
           endDate?: string | null
           engagementType?: string
           forgeSourceSessionId?: string | null
@@ -5940,6 +5944,8 @@ export type Database = {
           clientId?: string
           createdAt?: string
           definitionOfDone?: Json
+          driveFolderId?: string | null
+          driveLinkedBy?: string | null
           endDate?: string | null
           engagementType?: string
           forgeSourceSessionId?: string | null
@@ -5978,6 +5984,34 @@ export type Database = {
             columns: ["clientId"]
             isOneToOne: false
             referencedRelation: "client_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Project_driveLinkedBy_fkey"
+            columns: ["driveLinkedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Project_driveLinkedBy_fkey"
+            columns: ["driveLinkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Project_driveLinkedBy_fkey"
+            columns: ["driveLinkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Project_driveLinkedBy_fkey"
+            columns: ["driveLinkedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
             referencedColumns: ["id"]
           },
           {
@@ -6098,6 +6132,53 @@ export type Database = {
             foreignKeyName: "ProjectBusinessContext_projectId_fkey"
             columns: ["projectId"]
             isOneToOne: true
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProjectDriveFile: {
+        Row: {
+          fileId: string
+          iconHint: string | null
+          id: string
+          mimeType: string
+          modifiedTime: string | null
+          name: string
+          projectId: string
+          sizeBytes: number | null
+          syncedAt: string
+          webViewLink: string | null
+        }
+        Insert: {
+          fileId: string
+          iconHint?: string | null
+          id?: string
+          mimeType: string
+          modifiedTime?: string | null
+          name: string
+          projectId: string
+          sizeBytes?: number | null
+          syncedAt?: string
+          webViewLink?: string | null
+        }
+        Update: {
+          fileId?: string
+          iconHint?: string | null
+          id?: string
+          mimeType?: string
+          modifiedTime?: string | null
+          name?: string
+          projectId?: string
+          sizeBytes?: number | null
+          syncedAt?: string
+          webViewLink?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectDriveFile_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
             referencedRelation: "Project"
             referencedColumns: ["id"]
           },
