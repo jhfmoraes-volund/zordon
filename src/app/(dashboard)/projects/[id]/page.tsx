@@ -946,6 +946,7 @@ export default function ProjectDetailPage({
                 githubRepoOwner: project.githubRepoOwner,
                 githubRepoName: project.githubRepoName,
                 githubDefaultBranch: project.githubDefaultBranch,
+                driveFolderId: project.driveFolderId,
                 memberIds: rawMembers.map((m) => m.id),
               }
             : null

@@ -26,6 +26,8 @@ import { createClient } from "@/lib/supabase/client";
 import { isPmEligible, roleLabel } from "@/lib/roles";
 import { generateUniqueReferenceKey } from "@/lib/project-reference-key";
 import { showErrorToast } from "@/lib/optimistic/toast";
+import { parseDriveFolderId } from "@/lib/drive";
+import { useAuth } from "@/contexts/auth-context";
 
 type ClientOption = { id: string; name: string };
 type MemberOption = { id: string; name: string; role: string; position: string | null };
@@ -47,6 +49,8 @@ export type ProjectEditInitial = {
   githubRepoName: string | null;
   githubDefaultBranch: string | null;
   memberIds: string[];
+  /** Opcional — call sites que não carregam o campo só não prefill. */
+  driveFolderId?: string | null;
 };
 
 type Props = {
@@ -71,6 +75,7 @@ const EMPTY_FORM = {
   githubRepoOwner: "",
   githubRepoName: "",
   githubDefaultBranch: "main",
+  driveFolder: "",
   memberIds: [] as string[],
 };
 
@@ -94,11 +99,13 @@ function formFromProject(project: ProjectEditInitial | null): typeof EMPTY_FORM 
     githubRepoOwner: project.githubRepoOwner ?? "",
     githubRepoName: project.githubRepoName ?? "",
     githubDefaultBranch: project.githubDefaultBranch ?? "main",
+    driveFolder: project.driveFolderId ?? "",
     memberIds: project.memberIds,
   };
 }
 
 export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props) {
+  const { member } = useAuth();
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [saving, setSaving] = useState(false);
@@ -141,6 +148,19 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
     try {
       const supabase = createClient();
       const isContinuous = form.engagementType === "continuous";
+
+      // Drive: aceita URL ou ID; persiste só o folder ID. driveLinkedBy = quem
+      // configurou (o connected account dele executa o sync — ver runbook D3).
+      const driveInput = form.driveFolder.trim();
+      const parsedDriveFolderId = driveInput ? parseDriveFolderId(driveInput) : null;
+      if (driveInput && !parsedDriveFolderId) {
+        showErrorToast(new Error("URL/ID da pasta do Drive inválido"), {
+          label: "Pasta do Google Drive",
+        });
+        return;
+      }
+      const driveChanged = parsedDriveFolderId !== (project?.driveFolderId ?? null);
+
       const projectData = {
         name: form.name,
         repoUrl: form.repoUrl || null,
@@ -156,6 +176,12 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
         githubRepoName: form.githubRepoName || null,
         githubDefaultBranch: form.githubDefaultBranch || "main",
         updatedAt: new Date().toISOString(),
+        ...(driveChanged
+          ? {
+              driveFolderId: parsedDriveFolderId,
+              driveLinkedBy: parsedDriveFolderId ? member?.id ?? null : null,
+            }
+          : {}),
       };
 
       let projectId: string;
@@ -327,6 +353,20 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                   placeholder="https://github.com/..."
                 />
               </Field.Control>
+            </Field>
+
+            <Field name="project-drive-folder">
+              <Field.Label>Pasta do Google Drive</Field.Label>
+              <Field.Control>
+                <Input
+                  value={form.driveFolder}
+                  onChange={(e) => setForm({ ...form, driveFolder: e.target.value })}
+                  placeholder="https://drive.google.com/drive/folders/... ou ID"
+                />
+              </Field.Control>
+              <Field.Hint>
+                Aba Drive lista os arquivos desta pasta. Quem salvar vira o dono do sync.
+              </Field.Hint>
             </Field>
 
             <Field.Row cols={3}>

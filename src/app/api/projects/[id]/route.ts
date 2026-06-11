@@ -2,8 +2,9 @@ import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { OPEN_STATUSES } from "@/lib/function-points";
-import { getUser } from "@/lib/dal";
+import { getUser, getCurrentMember } from "@/lib/dal";
 import { isGuestActor } from "@/lib/guest-payload";
+import { parseDriveFolderId } from "@/lib/drive";
 
 // ─── Row types (boundary casts — evita `any`, espelha operacao-view) ───────
 
@@ -378,6 +379,26 @@ export async function PUT(
   const { id } = await params;
   const { memberIds, ...data } = await req.json();
   const supabase = db();
+
+  // Drive: aceita URL ou ID puro; persiste só o folder ID. driveLinkedBy =
+  // member da sessão (connected account dele executa o sync).
+  if (data.driveFolderId !== undefined) {
+    if (data.driveFolderId) {
+      const parsed = parseDriveFolderId(String(data.driveFolderId));
+      if (!parsed) {
+        return NextResponse.json(
+          { error: "driveFolderId inválido (URL ou ID da pasta do Drive)" },
+          { status: 400 },
+        );
+      }
+      const member = await getCurrentMember();
+      data.driveFolderId = parsed;
+      data.driveLinkedBy = member?.id ?? null;
+    } else {
+      data.driveFolderId = null;
+      data.driveLinkedBy = null;
+    }
+  }
 
   // phaseChangedAt marca a entrada na fase atual — alimenta "idade na fase"
   // no Overview. Só estampa quando o patch de fato muda a phase.

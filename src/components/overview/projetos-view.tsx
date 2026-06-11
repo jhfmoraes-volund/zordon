@@ -1,14 +1,27 @@
-import { getProjectOverviews, getFactoryStats } from "@/lib/dal/project-overview";
-import { listMetricDefs } from "@/lib/metrics/registry";
-import { ProjetosBoard } from "./projetos-board";
+import { getProjectOverviews } from "@/lib/dal/project-overview";
+import { getBuilderAllocation } from "@/lib/dal/capacity";
+import { getMetricDef, listMetricDefs } from "@/lib/metrics/registry";
+import { ProjetosBoard, type RegistryUi } from "./projetos-board";
 
 /** Server component — busca a inteligência por projeto e delega o render. */
 export async function ProjetosView() {
-  const [projects, factory] = await Promise.all([getProjectOverviews(), getFactoryStats()]);
-  // D6: a `defense` do registry é o tooltip da UI. Só as strings cruzam a
+  const [projects, buildersAllocated] = await Promise.all([
+    getProjectOverviews(),
+    getBuilderAllocation(),
+  ]);
+  // D6: name/defense do registry são o vocabulário da UI. Só strings cruzam a
   // fronteira server→client — o registry (compute) nunca entra no bundle.
-  const defenses = Object.fromEntries(
-    listMetricDefs("project").map((d) => [d.id, d.defense]),
+  const defs = listMetricDefs();
+  const registryUi: RegistryUi = {
+    names: Object.fromEntries(defs.map((d) => [d.id, d.name])),
+    defenses: Object.fromEntries(defs.map((d) => [d.id, d.defense])),
+    paceBands: getMetricDef("project.pace_gap")?.thresholds ?? [],
+  };
+  return (
+    <ProjetosBoard
+      projects={projects}
+      buildersAllocated={buildersAllocated}
+      registryUi={registryUi}
+    />
   );
-  return <ProjetosBoard projects={projects} factory={factory} defenses={defenses} />;
 }

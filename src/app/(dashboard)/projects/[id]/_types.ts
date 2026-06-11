@@ -32,6 +32,7 @@ export type ProjectMeta = {
   githubDefaultBranch: string | null;
   referenceKey: string | null;
   definitionOfDone: string[];
+  driveFolderId: string | null;
 };
 
 export type RawTask = {

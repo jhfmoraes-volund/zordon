@@ -30,6 +30,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   lookupChip,
   PROJECT_PHASE,
   PROJECT_ENGAGEMENT,
@@ -50,9 +56,22 @@ import type {
   ProjectStats,
   ProjectTeamMember,
   PMReviewNoteLite,
-  FactoryStats,
-  PaceVerdict,
 } from "@/lib/dal/project-overview";
+import type { Threshold } from "@/lib/metrics/types";
+
+/**
+ * Vocabulário do registry de métricas resolvido no server (projetos-view) —
+ * só strings/JSON cruzam a fronteira; o registry (compute) nunca entra no
+ * bundle client. D1/D6: label e tooltip nascem do mesmo lugar que o Alpha lê.
+ */
+export type RegistryUi = {
+  /** id do registry → name (label da UI). */
+  names: Record<string, string>;
+  /** id do registry → defense (tooltip D6). */
+  defenses: Record<string, string>;
+  /** thresholds de project.pace_gap — PaceBadge deriva label/tom daqui. */
+  paceBands: Threshold[];
+};
 
 // ─── Vocabulary ───────────────────────────────────────────
 
