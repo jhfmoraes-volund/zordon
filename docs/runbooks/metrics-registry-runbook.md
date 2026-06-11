@@ -49,6 +49,7 @@ de UM registry de métricas em código.
 | D7 | Snapshot agendado via **pg_cron + pg_net → POST rota Next** com bearer secret — padrão idêntico ao `run-alpha-insights` (ver `supabase/migrations/20260520_project_insights_drain_via_next.sql`). Fórmulas ficam em TS; pg_cron só dispara HTTP. |
 | D8 | Régua ganha trilho de fases (commercial → imersão → ops → pós-ops). Exige histórico de transição: tabela `ProjectPhaseEvent` (F5) — `phaseChangedAt` só guarda a última. |
 | D9 | **Toda resposta numérica do Alpha sobre operação passa por `compute_metric`.** Proibido aritmética de cabeça no prompt — mesma lição do `verify_sprint_distribution` (auditoria 2026-05-06: modelo fabrica totais). |
+| D10 | (2026-06-11, João) Catálogo vira **20** métricas: + `factory.committed_vs_capacity` (carga: Σ committed ÷ Σ capacity dos builders, faixas ociosidade <70 / saudável 70–100 / superlotação >100) e + `factory.commercial_buffer` (projetos em comercial = buffer da fábrica). No ribbon, "Builders alocados" sai (métrica continua no catálogo pro Alpha/snapshot); entram Carga + Em comercial. Headcount de pessoas crava em `Member.position`, nunca em elegibilidade. |
 
 ---
 
@@ -112,7 +113,7 @@ export type MetricDef = {
 e cache por request (não recomputar `computeStats` 10× pra 10 métricas do
 mesmo projeto — computar 1× e fatiar).
 
-### 2.3 Catálogo v1 — EXATAMENTE estas 18 métricas
+### 2.3 Catálogo v1 — EXATAMENTE estas 20 métricas (18 originais + 2 da D10)
 
 Fonte das fórmulas de projeto: [stats-dictionary.md](../features/overview/stats-dictionary.md)
 (que após F1 passa a ser gerado deste catálogo). `defense` abaixo é a frase
@@ -134,7 +135,7 @@ final — copiar como está.
 | `project.pace_gap` | pp | scopePct − timePct | "Queimei X% do tempo e entreguei Y% do escopo: Zpp de gap. Uma subtração, zero opinião." Thresholds: ≥+5 à frente · ≥−5 no ritmo · ≥−15 atrás · <−15 crítico. |
 | `project.projected_end_sprint` | sprints | elapsed + ceil((fpTotal − fpDone) ÷ avgFp) | "No ritmo médio recente, a matemática termina na sprint X. Não é palpite: é divisão." |
 
-**Capacidade & alocação (7) — DAL: `sprint_capacity_overview` + lógica de `getProjectCapacityForOpsTool` ([alpha-planner.ts](../../src/lib/agent/tools/alpha-planner.ts)); extrair o miolo pra `src/lib/dal/` se a tool for a única dona hoje:**
+**Capacidade & alocação (9) — DAL: `src/lib/dal/capacity.ts` (views `sprint_member_capacity` + `member_commitment_overview`):**
 
 | id | unit | fórmula | defense |
 |----|------|---------|---------|
@@ -142,6 +143,8 @@ final — copiar como está.
 | `member.committed_vs_capacity` | pct | Σ committed cross-projeto ÷ capacityTotal, sprint corrente | "Quanto da capacidade do builder já está prometida — acima de 100% é overbooking." |
 | `squad.utilization` | pct | Σ done ÷ Σ capacity dos membros do squad, janela 6 | "O squad como unidade: capacidade alocada virando entrega." |
 | `factory.utilization` | pct | média de `project.utilization` das linhas ativas | "A fábrica inteira: média das linhas ativas (já é a 'média da fábrica' do ribbon)." |
+| `factory.committed_vs_capacity` | pct | Σ committed ÷ Σ capacity dos product-builders internos (D10) | "De cada 100 FP de capacidade dos builders, quantos já estão prometidos a projetos. Abaixo de 70 há ociosidade; acima de 100 é superlotação. ⚠ committed soma alocações de todos os projetos com membro alocado, inclusive pausados." Thresholds: ≥101 superlotação · ≥70 saudável · abaixo ociosidade. |
+| `factory.commercial_buffer` | count | projetos ativos em fase commercial, sem internos/eval (D10) | "Projetos em comercial — o buffer da fábrica: contratos a caminho de virar linha de produção." |
 | `factory.builders_allocated` | count | Members `position='product-builder'` com alocação ativa / total | "Quantos builders estão em linha de produção agora." |
 | `factory.lines_active` | count | projetos em fase produtiva (immersion/ops) | "Linhas de produção rodando." |
 | `factory.clients_active` | count | distinct clients de linhas ativas (sem internos/eval) | "Clientes com produção ativa." |

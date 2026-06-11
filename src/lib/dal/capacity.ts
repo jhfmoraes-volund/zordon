@@ -143,6 +143,46 @@ export async function getMemberCommitment(memberId: string): Promise<{
   };
 }
 
+/**
+ * Carga da fábrica: Σ committed ÷ Σ capacity dos product-builders internos
+ * (view member_commitment_overview já exclui guests). committed soma
+ * fpAllocation de TODOS os projetos com ProjectMember — inclusive pausados;
+ * viés conhecido, registrado na defense.
+ */
+export async function getFactoryCommitment(): Promise<{
+  committed: number;
+  capacity: number;
+  builders: number;
+}> {
+  const { data, error } = await db()
+    .from("member_commitment_overview")
+    .select("capacity, committed, position")
+    .eq("position", "product-builder");
+  if (error) throw error;
+  const rows = data ?? [];
+  return {
+    committed: rows.reduce((sum, r) => sum + (Number(r.committed) || 0), 0),
+    capacity: rows.reduce((sum, r) => sum + (Number(r.capacity) || 0), 0),
+    builders: rows.length,
+  };
+}
+
+/**
+ * Buffer comercial: projetos ativos em fase commercial (pra começar),
+ * sem internos/eval — espelha o recorte de getActiveLines.
+ */
+export async function getCommercialBuffer(): Promise<number> {
+  const { data, error } = await db()
+    .from("Project")
+    .select("id, name, category")
+    .eq("status", "active")
+    .eq("phase", "commercial");
+  if (error) throw error;
+  return (data ?? []).filter(
+    (p) => (p.category ?? "billable") !== "internal" && !p.name.includes("__eval__"),
+  ).length;
+}
+
 /** Linhas ativas da fábrica (ver type ActiveLine). */
 export async function getActiveLines(): Promise<ActiveLine[]> {
   const { data, error } = await db()

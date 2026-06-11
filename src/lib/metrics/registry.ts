@@ -1,9 +1,10 @@
 /**
  * METRIC_REGISTRY — o dicionário vivo (D1: SSOT em código).
  *
- * Catálogo v1 = exatamente 18 métricas (§2.3 do runbook): 11 de
- * projeto/contrato + 7 de capacidade & alocação. Não adicionar métrica fora
- * do catálogo sem nova decisão (D2).
+ * Catálogo v1 = exatamente 20 métricas (§2.3 do runbook): 11 de
+ * projeto/contrato + 9 de capacidade & alocação (D10 somou carga da fábrica
+ * e buffer comercial). Não adicionar métrica fora do catálogo sem nova
+ * decisão (D2).
  *
  * O markdown `docs/features/overview/stats-dictionary.md` é GERADO daqui
  * (scripts/gen-metrics-doc.ts) — nunca editado à mão.

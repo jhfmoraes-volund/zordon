@@ -64,9 +64,11 @@ views `sprint_member_capacity` e `member_commitment_overview` via
 | Métrica | Unidade | Fórmula | Fonte | Defesa |
 |---|---|---|---|---|
 | **Aproveitamento da fábrica** (`factory.utilization`) 📸 | pct | média de project.utilization das linhas ativas | `Project`, `Sprint`, `sprint_capacity_overview` | *quanto da capacidade da fábrica vira entrega?* — A fábrica inteira: média das linhas ativas (já é a 'média da fábrica' do ribbon). |
+| **Carga da fábrica** (`factory.committed_vs_capacity`) 📸 | pct | Σ committed ÷ Σ capacity dos product-builders internos · Faixas: ≥ 101: superlotação · ≥ 70: saudável · abaixo: ociosidade. | `member_commitment_overview` | *a fábrica está ociosa ou superlotada?* — De cada 100 FP de capacidade dos builders, quantos já estão prometidos a projetos. Abaixo de 70 há ociosidade; acima de 100 é superlotação. ⚠ committed soma alocações de todos os projetos com membro alocado, inclusive pausados. |
 | **Builders alocados** (`factory.builders_allocated`) 📸 | count | Members `position='product-builder'` com alocação ativa / total | `Member`, `ProjectMember`, `Project` | *quantos builders estão em linha de produção?* — Quantos builders estão em linha de produção agora. |
 | **Linhas ativas** (`factory.lines_active`) 📸 | count | projetos em fase produtiva (immersion/ops) | `Project` | *quantas linhas de produção estão rodando?* — Linhas de produção rodando. |
 | **Clientes ativos** (`factory.clients_active`) 📸 | count | distinct clients de linhas ativas (sem internos/eval) | `Project`, `Client` | *quantos clientes têm produção ativa?* — Clientes com produção ativa. |
+| **Em comercial** (`factory.commercial_buffer`) 📸 | count | projetos ativos em fase commercial (sem internos/eval) | `Project` | *quantos projetos estão pra começar?* — Projetos em comercial — o buffer da fábrica: contratos a caminho de virar linha de produção. |
 
 ## Régua (a visualização)
 

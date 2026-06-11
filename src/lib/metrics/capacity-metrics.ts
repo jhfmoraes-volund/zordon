@@ -140,6 +140,48 @@ export const CAPACITY_METRICS: MetricDef[] = [
     },
   },
   {
+    id: "factory.committed_vs_capacity",
+    name: "Carga da fábrica",
+    question: "a fábrica está ociosa ou superlotada?",
+    unit: "pct",
+    scope: "factory",
+    formulaText: "Σ committed ÷ Σ capacity dos product-builders internos",
+    defense:
+      "De cada 100 FP de capacidade dos builders, quantos já estão prometidos a projetos. Abaixo de 70 há ociosidade; acima de 100 é superlotação. ⚠ committed soma alocações de todos os projetos com membro alocado, inclusive pausados.",
+    lineage: ["member_commitment_overview"],
+    thresholds: [
+      { label: "superlotação", tone: "red", gte: 101 },
+      { label: "saudável", tone: "green", gte: 70 },
+      { label: "ociosidade", tone: "amber", gte: null },
+    ],
+    snapshot: true,
+    compute: async (): Promise<MetricValue> => {
+      const { committed, capacity, builders } = await (await dal()).getFactoryCommitment();
+      if (capacity <= 0) return { value: null, asOf: asOfNow() };
+      return {
+        value: Math.round((committed / capacity) * 100),
+        components: { committed, capacity, builders },
+        asOf: asOfNow(),
+      };
+    },
+  },
+  {
+    id: "factory.commercial_buffer",
+    name: "Em comercial",
+    question: "quantos projetos estão pra começar?",
+    unit: "count",
+    scope: "factory",
+    formulaText: "projetos ativos em fase commercial (sem internos/eval)",
+    defense:
+      "Projetos em comercial — o buffer da fábrica: contratos a caminho de virar linha de produção.",
+    lineage: ["Project"],
+    snapshot: true,
+    compute: async (): Promise<MetricValue> => {
+      const buffer = await (await dal()).getCommercialBuffer();
+      return { value: buffer, asOf: asOfNow() };
+    },
+  },
+  {
     id: "factory.builders_allocated",
     name: "Builders alocados",
     question: "quantos builders estão em linha de produção?",

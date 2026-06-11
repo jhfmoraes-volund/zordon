@@ -57,7 +57,7 @@ import type {
   ProjectTeamMember,
   PMReviewNoteLite,
 } from "@/lib/dal/project-overview";
-import type { Threshold } from "@/lib/metrics/types";
+import type { MetricValue, Threshold } from "@/lib/metrics/types";
 
 /**
  * Vocabulário do registry de métricas resolvido no server (projetos-view) —
@@ -69,8 +69,8 @@ export type RegistryUi = {
   names: Record<string, string>;
   /** id do registry → defense (tooltip D6). */
   defenses: Record<string, string>;
-  /** thresholds de project.pace_gap — PaceBadge deriva label/tom daqui. */
-  paceBands: Threshold[];
+  /** id do registry → thresholds (badges derivam label/tom daqui). */
+  bands: Record<string, Threshold[]>;
 };
 
 // ─── Vocabulary ───────────────────────────────────────────
@@ -89,7 +89,7 @@ const HEALTH_DOT: Record<ProjectHealth, string> = {
 
 const HEALTH_RANK: Record<ProjectHealth, number> = { red: 0, amber: 1, green: 2 };
 
-/** Tom do registry → classe de texto (labels/faixas vêm de RegistryUi.paceBands). */
+/** Tom do registry → classe de texto (labels/faixas vêm de RegistryUi.bands). */
 const TONE_CLS: Record<Threshold["tone"], string> = {
   green: "text-emerald-500",
   amber: "text-yellow-500",
@@ -97,9 +97,9 @@ const TONE_CLS: Record<Threshold["tone"], string> = {
   critical: "text-red-400",
 };
 
-/** 1ª faixa (ordem decrescente de gte) onde o gap cai; gte null = catch-all. */
-function paceBand(gap: number, bands: Threshold[]): Threshold | null {
-  return bands.find((b) => b.gte === null || gap >= b.gte) ?? null;
+/** 1ª faixa (ordem decrescente de gte) onde o valor cai; gte null = catch-all. */
+function bandOf(value: number, bands: Threshold[]): Threshold | null {
+  return bands.find((b) => b.gte === null || value >= b.gte) ?? null;
 }
 
 // Digest do PM Review — 4 slots fixos (Panorama, Riscos, Próximos, Decisões).
@@ -297,7 +297,7 @@ function PaceBadge({
   hint?: string;
 }) {
   if (stats.paceGapPp === null) return null;
-  const band = paceBand(stats.paceGapPp, bands);
+  const band = bandOf(stats.paceGapPp, bands);
   if (!band) return null;
   const arrow = stats.paceGapPp > 0 ? "▲" : stats.paceGapPp < 0 ? "▼" : "●";
   const pp = stats.paceVerdict === "on_track" ? "" : ` ${Math.abs(stats.paceGapPp)}pp`;
@@ -328,7 +328,7 @@ function RowStatsLine({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
         >
           {s.weeksElapsed}/{s.weeksTotal}
         </span>
-        <PaceBadge stats={s} bands={ui.paceBands} hint={ui.defenses["project.pace_gap"]} />
+        <PaceBadge stats={s} bands={ui.bands["project.pace_gap"] ?? []} hint={ui.defenses["project.pace_gap"]} />
         {s.avgFpPerSprint !== null && (
           <span
             className="hidden cursor-help md:inline"
@@ -922,7 +922,7 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
         {(s.paceVerdict !== null || projectionDelta !== null || s.holes > 0) && (
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
             <StatTip hint={ui.defenses["project.pace_gap"]}>
-              <PaceBadge stats={s} bands={ui.paceBands} />
+              <PaceBadge stats={s} bands={ui.bands["project.pace_gap"] ?? []} />
             </StatTip>
             {s.projectedEndWeek !== null && projectionDelta !== null && (
               <StatTip hint={ui.defenses["project.projected_end_sprint"]}>
@@ -1057,13 +1057,13 @@ function ProjectDrawer({
 
 export function ProjetosBoard({
   projects,
-  buildersAllocated,
+  factoryLoad,
   registryUi: ui,
 }: {
   projects: ProjectOverview[];
-  /** factory.builders_allocated computado no server (DAL capacity). */
-  buildersAllocated: { allocated: number; total: number };
-  /** Vocabulário do registry (names/defenses/paceBands), resolvido no server. */
+  /** factory.committed_vs_capacity computado no server (computeMetric). */
+  factoryLoad: MetricValue;
+  /** Vocabulário do registry (names/defenses/bands), resolvido no server. */
   registryUi: RegistryUi;
 }) {
   const router = useRouter();
@@ -1142,14 +1142,27 @@ export function ProjetosBoard({
     const lines = universe.filter(
       (p) => p.status === "active" && PRODUCING_PHASES.includes(p.phase),
     );
+    const buffer = universe.filter(
+      (p) => p.status === "active" && p.phase === "commercial",
+    ).length;
     const clientes = new Set(lines.map((p) => p.clientName).filter(Boolean)).size;
     const attention = lines.filter((p) => p.health !== "green").length;
+    const sampled = lines.filter((p) => p.stats.utilizationPct !== null).length;
     const util = meanOf(lines.map((p) => p.stats.utilizationPct));
+    const loadBand =
+      factoryLoad.value !== null
+        ? bandOf(factoryLoad.value, ui.bands["factory.committed_vs_capacity"] ?? [])
+        : null;
     return [
       {
         label: ui.names["factory.lines_active"] ?? "Linhas ativas",
         value: String(lines.length),
         hint: ui.defenses["factory.lines_active"],
+      },
+      {
+        label: ui.names["factory.commercial_buffer"] ?? "Em comercial",
+        value: String(buffer),
+        hint: ui.defenses["factory.commercial_buffer"],
       },
       {
         label: ui.names["factory.clients_active"] ?? "Clientes ativos",
@@ -1165,15 +1178,29 @@ export function ProjetosBoard({
       {
         label: ui.names["factory.utilization"] ?? "Aproveitamento da fábrica",
         value: util === null ? "—" : `${Math.round(util)}%`,
-        hint: ui.defenses["factory.utilization"],
+        hint: `${ui.defenses["factory.utilization"] ?? ""} Amostra: ${sampled} de ${lines.length} linhas com FP.`,
       },
       {
-        label: ui.names["factory.builders_allocated"] ?? "Builders alocados",
-        value: `${buildersAllocated.allocated}/${buildersAllocated.total}`,
-        hint: ui.defenses["factory.builders_allocated"],
+        label: ui.names["factory.committed_vs_capacity"] ?? "Carga da fábrica",
+        // Faixa verde fica só na cor (sem sufixo); alerta ganha o nome da faixa.
+        value:
+          factoryLoad.value === null
+            ? "—"
+            : `${factoryLoad.value}%${loadBand && loadBand.tone !== "green" ? ` ${loadBand.label}` : ""}`,
+        tone:
+          loadBand?.tone === "red" || loadBand?.tone === "critical"
+            ? "red"
+            : loadBand?.tone === "amber"
+              ? "amber"
+              : undefined,
+        hint: `${ui.defenses["factory.committed_vs_capacity"] ?? ""}${
+          factoryLoad.components
+            ? ` Hoje: ${factoryLoad.components.committed}/${factoryLoad.components.capacity} FP em ${factoryLoad.components.builders} builders.`
+            : ""
+        }`,
       },
     ];
-  }, [projects, buildersAllocated, ui]);
+  }, [projects, factoryLoad, ui]);
 
   const grouped = useMemo(() => {
     const visible = projects.filter((p) => {

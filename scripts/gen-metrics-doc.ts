@@ -53,9 +53,11 @@ const SECTIONS: Section[] = [
     title: "FÁBRICA (o agregado — ribbon do topo)",
     ids: [
       "factory.utilization",
+      "factory.committed_vs_capacity",
       "factory.builders_allocated",
       "factory.lines_active",
       "factory.clients_active",
+      "factory.commercial_buffer",
     ],
   },
 ];
