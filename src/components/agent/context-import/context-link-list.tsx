@@ -46,6 +46,7 @@ const KIND_BADGE: Record<Database["public"]["Enums"]["context_source_kind"], str
   github_issue: "Issue",
   document: "Documento",
   notion: "Notion",
+  gdrive_file: "Drive",
 };
 
 export default function ContextLinkList({

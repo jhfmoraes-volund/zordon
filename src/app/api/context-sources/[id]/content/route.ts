@@ -10,6 +10,9 @@ import * as meetingAdapter from "@/lib/context-sources/adapters/meeting";
 import * as csvAdapter from "@/lib/context-sources/adapters/csv";
 import * as gsheetsAdapter from "@/lib/context-sources/adapters/gsheets";
 import * as githubAdapter from "@/lib/context-sources/adapters/github";
+import * as documentAdapter from "@/lib/context-sources/adapters/document";
+import * as notionAdapter from "@/lib/context-sources/adapters/notion";
+import * as driveAdapter from "@/lib/context-sources/adapters/drive";
 
 export async function GET(
   _req: NextRequest,
@@ -49,6 +52,15 @@ export async function GET(
       case "github_pr":
       case "github_issue":
         resolvedContent = await githubAdapter.resolveContent(supabase, source);
+        break;
+      case "document":
+        resolvedContent = await documentAdapter.resolveContent(supabase, source);
+        break;
+      case "notion":
+        resolvedContent = await notionAdapter.resolveContent(supabase, source);
+        break;
+      case "gdrive_file":
+        resolvedContent = await driveAdapter.resolveContent(supabase, source);
         break;
       default:
         return NextResponse.json(

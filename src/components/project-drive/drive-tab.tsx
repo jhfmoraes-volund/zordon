@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
+  BrainCircuit,
+  Check,
   ExternalLink,
   File,
   FileText,
   Folder,
   FolderOpen,
   Image as ImageIcon,
+  Loader2,
   Presentation,
   RefreshCw,
   Table2,
@@ -39,6 +42,7 @@ type FilesPayload = {
   files: DriveFile[];
   syncedAt: string | null;
   folderId: string | null;
+  importedFileIds?: string[];
 };
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -94,12 +98,16 @@ export function ProjectDriveTab({
   const [truncated, setTruncated] = useState(false);
   const [missingStages, setMissingStages] = useState<DriveStage[]>([]);
   const [connectUrl, setConnectUrl] = useState<string | null>(null);
+  const [imported, setImported] = useState<Set<string>>(() => new Set());
+  const [importingId, setImportingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/projects/${projectId}/drive/files`);
       if (!res.ok) throw new Error(`GET drive/files ${res.status}`);
-      setPayload((await res.json()) as FilesPayload);
+      const body = (await res.json()) as FilesPayload;
+      setPayload(body);
+      setImported(new Set(body.importedFileIds ?? []));
     } catch {
       toast.error("Erro ao carregar arquivos do Drive");
       setPayload({ files: [], syncedAt: null, folderId: driveFolderId });
@@ -153,6 +161,49 @@ export function ProjectDriveTab({
       setSyncing(false);
     }
   }, [projectId, syncing, driveFolderId]);
+
+  // Import explícito (D5): curadoria humana — nem tudo no Drive vira contexto.
+  const importToContext = useCallback(
+    async (file: DriveFile) => {
+      if (importingId) return;
+      setImportingId(file.fileId);
+      try {
+        const res = await fetch("/api/context-sources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "gdrive_file",
+            projectId,
+            fileId: file.fileId,
+          }),
+        });
+        const body = (await res.json()) as {
+          existing?: boolean;
+          error?: string;
+          connectUrl?: string;
+        };
+        if (res.status === 412) {
+          toast.error(body.error ?? "Conexão Google Drive necessária");
+          return;
+        }
+        if (!res.ok) {
+          toast.error(body.error ?? "Falha ao importar pro contexto");
+          return;
+        }
+        setImported((prev) => new Set(prev).add(file.fileId));
+        toast.success(
+          body.existing
+            ? `${file.name} já estava no contexto`
+            : `${file.name} importado pro contexto`
+        );
+      } catch {
+        toast.error("Sem conexão — import não concluído");
+      } finally {
+        setImportingId(null);
+      }
+    },
+    [projectId, importingId]
+  );
 
   // ── Estado: sem pasta configurada ─────────────────────────
   if (!driveFolderId) {
@@ -260,7 +311,14 @@ export function ProjectDriveTab({
             </h3>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {sectionFiles.map((f) => (
-                <DriveFileCard key={f.id} file={f} stage={stage} />
+                <DriveFileCard
+                  key={f.id}
+                  file={f}
+                  stage={stage}
+                  isImported={imported.has(f.fileId)}
+                  isImporting={importingId === f.fileId}
+                  onImport={() => importToContext(f)}
+                />
               ))}
             </div>
           </section>
@@ -273,20 +331,21 @@ export function ProjectDriveTab({
 function DriveFileCard({
   file: f,
   stage,
+  isImported,
+  isImporting,
+  onImport,
 }: {
   file: DriveFile;
   stage: DriveStage | null;
+  isImported: boolean;
+  isImporting: boolean;
+  onImport: () => void;
 }) {
   void stage;
   const Icon = FILE_ICONS[fileIconKey(f.mimeType)];
   const isFolder = f.mimeType === FOLDER_MIME;
   return (
-    <a
-      href={f.webViewLink ?? "#"}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group surface flex items-start gap-3 p-3 transition-colors hover:bg-muted/60"
-    >
+    <div className="group surface flex items-start gap-3 p-3 transition-colors hover:bg-muted/60">
       <Icon
         className={cn(
           "mt-0.5 h-5 w-5 shrink-0",
@@ -294,16 +353,52 @@ function DriveFileCard({
         )}
       />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{f.name}</p>
-        <p className="text-xs text-muted-foreground">
+        <a
+          href={f.webViewLink ?? "#"}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:underline"
+        >
+          <p className="truncate text-sm font-medium">{f.name}</p>
+        </a>
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           {isFolder
             ? "pasta"
             : f.modifiedTime
               ? fmtDate(f.modifiedTime)
               : "—"}
+          {isImported && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-500/10 px-1 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              <Check className="h-2.5 w-2.5" /> no contexto
+            </span>
+          )}
         </p>
       </div>
-      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-    </a>
+      <div className="flex shrink-0 items-center gap-1">
+        {!isFolder && !isImported && (
+          <button
+            type="button"
+            title="Importar pro contexto"
+            disabled={isImporting}
+            onClick={onImport}
+            className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 disabled:opacity-100"
+          >
+            {isImporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <BrainCircuit className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
+        <a
+          href={f.webViewLink ?? "#"}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      </div>
+    </div>
   );
 }

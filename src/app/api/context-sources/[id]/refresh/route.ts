@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import * as gsheetsAdapter from "@/lib/context-sources/adapters/gsheets";
 import * as githubAdapter from "@/lib/context-sources/adapters/github";
+import * as notionAdapter from "@/lib/context-sources/adapters/notion";
+import * as driveAdapter from "@/lib/context-sources/adapters/drive";
 
 export async function POST(
   _req: NextRequest,
@@ -48,6 +50,15 @@ export async function POST(
       case "github_pr":
       case "github_issue":
         resolvedContent = await githubAdapter.resolveContent(supabase, source);
+        break;
+      case "notion":
+        resolvedContent = await notionAdapter.resolveContent(supabase, source);
+        break;
+      case "gdrive_file":
+        // force: re-resolve ignorando o fullText cacheado (o adapter persiste).
+        resolvedContent = await driveAdapter.resolveContent(supabase, source, {
+          force: true,
+        });
         break;
       default:
         return NextResponse.json(

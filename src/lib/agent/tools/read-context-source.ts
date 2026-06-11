@@ -8,6 +8,7 @@ import * as gsheetsAdapter from "@/lib/context-sources/adapters/gsheets";
 import * as githubAdapter from "@/lib/context-sources/adapters/github";
 import * as documentAdapter from "@/lib/context-sources/adapters/document";
 import * as notionAdapter from "@/lib/context-sources/adapters/notion";
+import * as driveAdapter from "@/lib/context-sources/adapters/drive";
 
 /**
  * Factory de tool read_context_source — compartilhada entre Vitoria e Vitor.
@@ -79,6 +80,12 @@ export function createReadContextSourceTool() {
             break;
           case "notion":
             resolvedContent = await notionAdapter.resolveContent(
+              supabase,
+              source
+            );
+            break;
+          case "gdrive_file":
+            resolvedContent = await driveAdapter.resolveContent(
               supabase,
               source
             );

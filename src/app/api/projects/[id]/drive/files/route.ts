@@ -5,8 +5,10 @@ import { getUser } from "@/lib/dal";
 /**
  * GET /api/projects/[id]/drive/files
  *   Lê o índice ProjectDriveFile (espelho da pasta linkada) — nunca chama o
- *   Google aqui. Refresh é via POST /drive/sync.
- *   200 { files, syncedAt, folderId }
+ *   Google aqui. Refresh é via POST /drive/sync. `importedFileIds` traz os
+ *   externalId dos ContextSource kind='gdrive_file' do projeto (badge
+ *   "no contexto" na aba, sem query no client).
+ *   200 { files, syncedAt, folderId, importedFileIds }
  */
 export async function GET(
   _req: NextRequest,
@@ -18,7 +20,7 @@ export async function GET(
   const { id } = await params;
   const supabase = db();
 
-  const [projectRes, filesRes] = await Promise.all([
+  const [projectRes, filesRes, importedRes] = await Promise.all([
     supabase.from("Project").select("driveFolderId").eq("id", id).maybeSingle(),
     supabase
       .from("ProjectDriveFile")
@@ -26,6 +28,11 @@ export async function GET(
       .eq("projectId", id)
       .order("mimeType")
       .order("name"),
+    supabase
+      .from("ContextSource")
+      .select("externalId")
+      .eq("projectId", id)
+      .eq("kind", "gdrive_file"),
   ]);
 
   if (projectRes.error) {
@@ -36,6 +43,9 @@ export async function GET(
   }
   if (filesRes.error) {
     return NextResponse.json({ error: filesRes.error.message }, { status: 500 });
+  }
+  if (importedRes.error) {
+    return NextResponse.json({ error: importedRes.error.message }, { status: 500 });
   }
 
   const files = filesRes.data ?? [];
@@ -48,5 +58,8 @@ export async function GET(
     files,
     syncedAt,
     folderId: projectRes.data.driveFolderId ?? null,
+    importedFileIds: (importedRes.data ?? [])
+      .map((s) => s.externalId)
+      .filter(Boolean),
   });
 }

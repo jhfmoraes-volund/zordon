@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getActorMemberId } from "@/lib/dal";
 import { extractTextFromBuffer } from "@/lib/design-session/file-extraction";
+import * as driveAdapter from "@/lib/context-sources/adapters/drive";
 import { z } from "zod";
 
 // Schema Zod para CSV upload
@@ -51,12 +52,21 @@ const NotionCreateSchema = z.object({
   externalUrl: z.string().url().describe("Notion page/database URL"),
 });
 
+// Schema Zod para arquivo do Drive (import explícito da aba Drive — D5).
+// Metadata (title/mimeType/stage) vem do índice ProjectDriveFile do projeto.
+const GDriveFileCreateSchema = z.object({
+  kind: z.literal("gdrive_file"),
+  projectId: z.string().uuid(),
+  fileId: z.string().min(1).describe("Drive fileId (já sincronizado no índice)"),
+});
+
 const CreateContextSourceSchema = z.discriminatedUnion("kind", [
   CSVCreateSchema,
   DocumentCreateSchema,
   GSheetsCreateSchema,
   GitHubCreateSchema,
   NotionCreateSchema,
+  GDriveFileCreateSchema,
 ]);
 
 export async function POST(req: NextRequest) {
@@ -169,6 +179,80 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({ id: source.id, kind: source.kind, title: source.title });
+    }
+
+    // Handle Drive file import (metadata vem do índice; texto extraído na hora)
+    if (data.kind === "gdrive_file") {
+      const { data: driveFile, error: driveFileError } = await supabase
+        .from("ProjectDriveFile")
+        .select("fileId, name, mimeType, stage, webViewLink")
+        .eq("projectId", data.projectId)
+        .eq("fileId", data.fileId)
+        .maybeSingle();
+      if (driveFileError) throw new Error(driveFileError.message);
+      if (!driveFile) {
+        return NextResponse.json(
+          { error: "Arquivo não está no índice do Drive — sincronize a aba Drive primeiro" },
+          { status: 404 },
+        );
+      }
+
+      // Dedup por (kind, externalId=fileId, projectId) — D6: reimport devolve
+      // o existente, não duplica.
+      const { data: existing, error: existingError } = await supabase
+        .from("ContextSource")
+        .select("id, kind, title")
+        .eq("kind", "gdrive_file")
+        .eq("externalId", data.fileId)
+        .eq("projectId", data.projectId)
+        .maybeSingle();
+      if (existingError) throw new Error(existingError.message);
+      if (existing) {
+        return NextResponse.json({ ...existing, existing: true });
+      }
+
+      const { data: source, error: sourceError } = await supabase
+        .from("ContextSource")
+        .insert({
+          kind: data.kind,
+          title: driveFile.name,
+          projectId: data.projectId,
+          externalId: data.fileId,
+          externalUrl: driveFile.webViewLink,
+          createdBy: memberId,
+          payload: {
+            fileId: data.fileId,
+            mimeType: driveFile.mimeType,
+            stage: driveFile.stage,
+          },
+        })
+        .select()
+        .single();
+      if (sourceError || !source) {
+        throw new Error(sourceError?.message || "Failed to create ContextSource");
+      }
+
+      // Extrai o texto já no import (mesma semântica do kind document) — o
+      // adapter persiste fullText + capturedAt. Falhou → rollback da row.
+      try {
+        await driveAdapter.resolveContent(supabase, source);
+      } catch (err) {
+        await supabase.from("ContextSource").delete().eq("id", source.id);
+        if (err instanceof driveAdapter.ComposioConnectionMissing) {
+          return NextResponse.json(
+            { error: "Conexão Google Drive necessária", connectUrl: err.connectUrl },
+            { status: 412 },
+          );
+        }
+        throw err;
+      }
+
+      return NextResponse.json({
+        id: source.id,
+        kind: source.kind,
+        title: source.title,
+        existing: false,
+      });
     }
 
     // Handle GSheets or GitHub (no file upload needed)

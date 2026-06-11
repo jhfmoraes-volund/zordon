@@ -129,13 +129,18 @@ function signalChips(p: ProjectOverview): Array<{ label: string; tone: ChipTone 
   return chips;
 }
 
+/** Dias até uma data YYYY-MM-DD (negativo = venceu), no fuso local. */
+function daysUntil(dueAt: string): number {
+  const due = new Date(`${dueAt}T00:00:00`);
+  return Math.ceil((due.getTime() - Date.now()) / 86400000);
+}
+
 /** Chip do próximo marco — tom por proximidade (passou=red, ≤14d=amber). */
 function milestoneChip(p: ProjectOverview): { label: string; tone: ChipTone } | null {
   if (!p.milestone) return null;
-  const due = new Date(`${p.milestone.dueAt}T00:00:00`);
-  const days = Math.ceil((due.getTime() - Date.now()) / 86400000);
+  const days = daysUntil(p.milestone.dueAt);
   const tone: ChipTone = days < 0 ? "red" : days <= 14 ? "amber" : "slate";
-  return { label: `${p.milestone.label} · ${fmtDate(due)}`, tone };
+  return { label: `${p.milestone.label} · ${fmtDate(new Date(`${p.milestone.dueAt}T00:00:00`))}`, tone };
 }
 
 /** "Contínuo" ou "Fim ~ DD/MM" — leitura de horizonte do projeto. */
@@ -1147,7 +1152,7 @@ function MilestoneStatCol({ p }: { p: ProjectOverview }) {
     return <StatCol label="Marco" value="—" sub="sem marco declarado" hint={hint} />;
   }
   const due = new Date(`${p.milestone.dueAt}T00:00:00`);
-  const days = Math.ceil((due.getTime() - Date.now()) / 86400000);
+  const days = daysUntil(p.milestone.dueAt);
   const sub =
     days < 0
       ? `${p.milestone.label} · venceu há ${Math.abs(days)}d`
@@ -1222,16 +1227,7 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
                 sub={`${s.timePct}% do contrato consumido`}
                 hint={ui.defenses["project.time_pct"]}
               />
-              <StatCol
-                label="Entrega"
-                value={`${s.sprintsClosed} fechada${s.sprintsClosed === 1 ? "" : "s"}`}
-                sub={
-                  s.scopePct !== null
-                    ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
-                    : "sem FP estimado"
-                }
-                hint={ui.defenses["project.scope_pct"] ?? ui.defenses["project.sprints_closed"]}
-              />
+              <MilestoneStatCol p={p} />
               <StatCol
                 label="Ritmo"
                 value={fmtAvg(s.avgFpPerSprint)}
@@ -1250,16 +1246,7 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
                 value={`${s.segments.length} sprint${s.segments.length === 1 ? "" : "s"}`}
                 sub="contínuo — sem prazo"
               />
-              <StatCol
-                label="Entrega"
-                value={`${s.sprintsClosed} fechada${s.sprintsClosed === 1 ? "" : "s"}`}
-                sub={
-                  s.scopePct !== null
-                    ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
-                    : "sem FP estimado"
-                }
-                hint={ui.defenses["project.scope_pct"] ?? ui.defenses["project.sprints_closed"]}
-              />
+              <MilestoneStatCol p={p} />
               <StatCol
                 label="Ritmo"
                 value={fmtAvg(s.avgFpPerSprint)}
@@ -1298,7 +1285,6 @@ function ProjectDrawer({
   onEdit: () => void;
 }) {
   const chips = signalChips(p);
-  const milestone = milestoneChip(p);
   return (
     <>
       <ResponsiveSheetHeader>
@@ -1355,9 +1341,6 @@ function ProjectDrawer({
           <StatusChip {...lookupChip(PROJECT_ENGAGEMENT, p.engagementType)} variant="subtle" size="sm" />
           {p.status === "paused" && (
             <StatusChip label="pausado" tone="muted" variant="subtle" size="sm" />
-          )}
-          {milestone && (
-            <StatusChip label={milestone.label} tone={milestone.tone} variant="subtle" size="sm" />
           )}
         </div>
       </ResponsiveSheetHeader>
