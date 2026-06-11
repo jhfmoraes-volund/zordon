@@ -9,6 +9,7 @@ import {
   CalendarClock,
   FileText,
   Flame,
+  FolderOpen,
   Lightbulb,
   Pencil,
   Settings as SettingsIcon,
@@ -27,6 +28,7 @@ import { ProjectEditSheet } from "@/components/projects/project-edit-sheet";
 import { ProjectCeremoniesTab } from "@/components/project-ceremonies-tab";
 import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { ProjectWikiSheet } from "@/components/project-wiki";
+import { ProjectDriveTab } from "@/components/project-drive/drive-tab";
 import { SprintDialog } from "@/components/sprint-dialog";
 import { SprintContextSheet } from "@/components/sprint/sprint-context-sheet";
 import { SuggestSprintsSheet } from "@/components/sprint/suggest-sprints-sheet";
@@ -80,6 +82,7 @@ const TABS: { key: TabKey; label: string; icon: typeof BookOpen; minAccessLevel?
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
   { key: "ceremonies", label: "Rituais", icon: CalendarClock },
+  { key: "drive", label: "Drive", icon: FolderOpen },
   { key: "sessions", label: "Sessions", icon: Lightbulb },
   { key: "forge", label: "Forge", icon: Flame, minAccessLevel: "manager" },
   { key: "settings", label: "Settings", icon: SettingsIcon },
@@ -636,6 +639,12 @@ export default function ProjectDetailPage({
           projectId={id}
           projectName={project.name}
           canManage={canManageSprint}
+        />
+      ) : activeTab === "drive" ? (
+        <ProjectDriveTab
+          projectId={id}
+          driveFolderId={project.driveFolderId}
+          onConfigureFolder={() => setEditOpen(true)}
         />
       ) : activeTab === "forge" ? (
         <ForgeTab projectId={id} />

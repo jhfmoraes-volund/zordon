@@ -89,12 +89,18 @@ const HEALTH_DOT: Record<ProjectHealth, string> = {
 
 const HEALTH_RANK: Record<ProjectHealth, number> = { red: 0, amber: 1, green: 2 };
 
-const PACE_META: Record<PaceVerdict, { label: string; cls: string }> = {
-  ahead: { label: "à frente", cls: "text-emerald-500" },
-  on_track: { label: "no ritmo", cls: "text-emerald-500" },
-  behind: { label: "atrás", cls: "text-yellow-500" },
-  critical: { label: "crítico", cls: "text-red-400" },
+/** Tom do registry → classe de texto (labels/faixas vêm de RegistryUi.paceBands). */
+const TONE_CLS: Record<Threshold["tone"], string> = {
+  green: "text-emerald-500",
+  amber: "text-yellow-500",
+  red: "text-red-400",
+  critical: "text-red-400",
 };
+
+/** 1ª faixa (ordem decrescente de gte) onde o gap cai; gte null = catch-all. */
+function paceBand(gap: number, bands: Threshold[]): Threshold | null {
+  return bands.find((b) => b.gte === null || gap >= b.gte) ?? null;
+}
 
 // Digest do PM Review — 4 slots fixos (Panorama, Riscos, Próximos, Decisões).
 // Demais kinds (team_signal etc.) vivem só na review completa.
@@ -189,65 +195,110 @@ function segmentColor(deliveryPct: number | null): string {
 }
 
 function segmentTitle(g: ProjectStats["segments"][number]): string {
-  const week = `Semana de ${fmtDate(new Date(`${g.monday}T00:00:00Z`))}`;
-  if (g.kind === "hole") return `${week} — sem sprint (contrato queimou sem produção)`;
+  const sprint = `Sprint de ${fmtDate(new Date(`${g.monday}T00:00:00Z`))}`;
+  if (g.kind === "hole") return `${sprint} — desligada: contrato queimou sem produção`;
   if (g.kind === "current")
-    return g.sprintId ? `${week} — sprint corrente` : `${week} — corrente, sem sprint ativa`;
-  if (g.kind === "future") return `${week} — futura`;
+    return g.sprintId ? `${sprint} — corrente` : `${sprint} — corrente, sem sprint ativa`;
+  if (g.kind === "future") return `${sprint} — futura`;
   return g.deliveryPct === null
-    ? `${week} — sprint fechada (sem FP)`
-    : `${week} — entregue ${g.deliveryPct}% do planejado`;
+    ? `${sprint} — fechada (sem FP)`
+    : `${sprint} — entregue ${g.deliveryPct}% do planejado`;
+}
+
+/** Estado visual da célula — semana é unidade atômica: produziu / desligada / corrente / futura. */
+function cellClass(g: ProjectStats["segments"][number]): string {
+  if (g.kind === "closed") return segmentColor(g.deliveryPct);
+  if (g.kind === "hole") return "border border-dashed border-muted-foreground/30 bg-transparent";
+  if (g.kind === "current")
+    return g.sprintId
+      ? "bg-primary/30 ring-1 ring-inset ring-primary/70"
+      : "bg-transparent ring-1 ring-inset ring-yellow-500/70";
+  return "bg-muted/50"; // future
 }
 
 /**
- * A régua: um segmento por semana do contrato (ou por sprint, em rolling).
- * Cor = entrega real; buraco = semana queimada sem sprint; ⚑ = marco.
- * Pista não-cromática: texto "5/12" sempre ao lado + tooltip por segmento.
+ * A régua: uma CÉLULA ATÔMICA por sprint do contrato (ou por sprint, em
+ * rolling) — largura fixa, alinhada à esquerda; contrato longo quebra linha.
+ * Célula acesa = produção real (cor = entrega); apagada tracejada = sprint do
+ * contrato desligada (sem produção). Pista não-cromática: texto "5/12" sempre
+ * ao lado + tooltip por célula. Legenda: ReguaLegend (drawer).
  */
 function Regua({ stats, size = "sm" }: { stats: ProjectStats; size?: "sm" | "lg" }) {
-  const n = stats.segments.length;
-  if (n === 0) return null;
-  const h = size === "lg" ? "h-2.5" : "h-1.5";
+  if (stats.segments.length === 0) return null;
+  const lg = size === "lg";
   // ⚑ só no drawer: na linha do board ele variaria a altura entre rows
   // (jitter de ritmo vertical) e o chip do marco já vive na própria linha.
-  const hasMilestone = stats.milestoneIndex !== null && size === "lg";
+  const milestoneIdx = lg ? stats.milestoneIndex : null;
   return (
-    <div className={cn("relative w-full", hasMilestone && "mt-3")}>
-      {hasMilestone && (
-        <span
-          className="absolute -top-3 -translate-x-1/2 text-[9px] leading-none text-muted-foreground"
-          style={{ left: `${((stats.milestoneIndex! + 0.5) / n) * 100}%` }}
-          title="Marco (PM Review)"
-        >
-          ⚑
-        </span>
+    <div
+      title="1 bloco = 1 sprint do contrato · cor = entrega real"
+      className={cn(
+        "flex flex-wrap items-center",
+        lg ? "gap-1" : "gap-[3px]",
+        milestoneIdx !== null && "mt-3",
       )}
-      <div className={cn("flex w-full gap-px", h)}>
-        {stats.segments.map((g) => (
-          <span
-            key={g.monday}
-            title={segmentTitle(g)}
-            className={cn(
-              "min-w-0 flex-1 rounded-[2px]",
-              g.kind === "closed" && segmentColor(g.deliveryPct),
-              g.kind === "hole" && "border border-dashed border-yellow-500/50 bg-yellow-500/10",
-              g.kind === "current" &&
-                (g.sprintId
-                  ? "bg-primary/30 ring-1 ring-inset ring-primary/70"
-                  : "bg-transparent ring-1 ring-inset ring-yellow-500/70"),
-              g.kind === "future" && "bg-muted",
-            )}
-          />
-        ))}
-      </div>
+    >
+      {stats.segments.map((g, i) => (
+        <span
+          key={g.monday}
+          title={segmentTitle(g)}
+          className={cn("relative rounded-[3px]", lg ? "h-3 w-5" : "h-2 w-3", cellClass(g))}
+        >
+          {milestoneIdx === i && (
+            <span
+              title="Marco (PM Review)"
+              className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[9px] leading-none text-muted-foreground"
+            >
+              ⚑
+            </span>
+          )}
+        </span>
+      ))}
     </div>
   );
 }
 
-/** Veredito de pace: gap = %escopo − %prazo. Uma subtração, zero opinião. */
-function PaceBadge({ stats, hint }: { stats: ProjectStats; hint?: string }) {
-  if (stats.paceVerdict === null || stats.paceGapPp === null) return null;
-  const meta = PACE_META[stats.paceVerdict];
+/** Legenda da régua — só no drawer; o board explica por tooltip. */
+function ReguaLegend({ contract }: { contract: boolean }) {
+  const sw = "inline-block h-2 w-3 shrink-0 rounded-[3px]";
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+      {contract && <span className="font-medium">1 bloco = 1 sprint do contrato</span>}
+      <span className="flex items-center gap-1">
+        <i className={cn(sw, "bg-emerald-500/70")} /> entregue
+      </span>
+      <span className="flex items-center gap-1">
+        <i className={cn(sw, "bg-yellow-500/60")} /> parcial
+      </span>
+      <span className="flex items-center gap-1">
+        <i className={cn(sw, "bg-red-400/70")} /> baixa
+      </span>
+      <span className="flex items-center gap-1">
+        <i className={cn(sw, "border border-dashed border-muted-foreground/40")} /> desligada
+      </span>
+      <span className="flex items-center gap-1">
+        <i className={cn(sw, "bg-primary/30 ring-1 ring-inset ring-primary/70")} /> corrente
+      </span>
+      <span className="flex items-center gap-1">
+        <i className={cn(sw, "bg-muted/50")} /> futura
+      </span>
+    </div>
+  );
+}
+
+/** Veredito de pace: gap = %escopo − %prazo. Label/tom vêm do registry (D6). */
+function PaceBadge({
+  stats,
+  bands,
+  hint,
+}: {
+  stats: ProjectStats;
+  bands: Threshold[];
+  hint?: string;
+}) {
+  if (stats.paceGapPp === null) return null;
+  const band = paceBand(stats.paceGapPp, bands);
+  if (!band) return null;
   const arrow = stats.paceGapPp > 0 ? "▲" : stats.paceGapPp < 0 ? "▼" : "●";
   const pp = stats.paceVerdict === "on_track" ? "" : ` ${Math.abs(stats.paceGapPp)}pp`;
   return (
@@ -256,41 +307,38 @@ function PaceBadge({ stats, hint }: { stats: ProjectStats; hint?: string }) {
       className={cn(
         "whitespace-nowrap text-[11px] font-medium tabular-nums",
         hint && "cursor-help",
-        meta.cls,
+        TONE_CLS[band.tone],
       )}
     >
       {arrow}
-      {pp} {meta.label}
+      {pp} {band.label}
     </span>
   );
 }
 
 /** Linha de stats compacta sob a régua (posição · pace · ritmo). */
-function RowStatsLine({
-  p,
-  defenses,
-}: {
-  p: ProjectOverview;
-  defenses: Record<string, string>;
-}) {
+function RowStatsLine({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   const s = p.stats;
   if (s.mode === "contract") {
     return (
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
         <span
           className="cursor-help font-medium text-foreground"
-          title={defenses["project.sprints_elapsed"]}
+          title={ui.defenses["project.sprints_elapsed"]}
         >
           {s.weeksElapsed}/{s.weeksTotal}
         </span>
-        <PaceBadge stats={s} hint={defenses["project.pace_gap"]} />
+        <PaceBadge stats={s} bands={ui.paceBands} hint={ui.defenses["project.pace_gap"]} />
         {s.avgFpPerSprint !== null && (
-          <span className="hidden cursor-help md:inline" title={defenses["project.avg_fp_per_sprint"]}>
+          <span
+            className="hidden cursor-help md:inline"
+            title={ui.defenses["project.avg_fp_per_sprint"]}
+          >
             {fmtAvg(s.avgFpPerSprint)}
           </span>
         )}
         {s.holes > 0 && (
-          <span className="cursor-help text-yellow-500" title={defenses["project.holes"]}>
+          <span className="cursor-help text-yellow-500" title={ui.defenses["project.holes"]}>
             {s.holes} sem sprint
           </span>
         )}
@@ -300,17 +348,17 @@ function RowStatsLine({
   if (s.mode === "rolling") {
     return (
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
-        <span>últimas {s.segments.length}</span>
+        <span>últimas {s.segments.length} sprints</span>
         {s.avgFpPerSprint !== null && (
           <span
             className="cursor-help font-medium text-foreground"
-            title={defenses["project.avg_fp_per_sprint"]}
+            title={ui.defenses["project.avg_fp_per_sprint"]}
           >
             {fmtAvg(s.avgFpPerSprint)}
           </span>
         )}
         {s.utilizationPct !== null && (
-          <span className="hidden cursor-help md:inline" title={defenses["project.utilization"]}>
+          <span className="hidden cursor-help md:inline" title={ui.defenses["project.utilization"]}>
             aprov. {s.utilizationPct}%
           </span>
         )}
@@ -364,11 +412,11 @@ function OverviewRibbon({ items }: { items: RibbonItem[] }) {
 
 function ProjectRow({
   p,
-  defenses,
+  ui,
   onOpen,
 }: {
   p: ProjectOverview;
-  defenses: Record<string, string>;
+  ui: RegistryUi;
   onOpen: () => void;
 }) {
   const milestone = milestoneChip(p);
@@ -415,7 +463,7 @@ function ProjectRow({
               <Regua stats={p.stats} />
             </div>
             <div className="shrink-0">
-              <RowStatsLine p={p} defenses={defenses} />
+              <RowStatsLine p={p} ui={ui} />
             </div>
           </>
         ) : p.phase === "commercial" ? (
@@ -670,6 +718,29 @@ function PMReviewSection({ p }: { p: ProjectOverview }) {
 
 // ─── STATS (drawer) ───────────────────────────────────────
 
+/**
+ * Tooltip de defesa (D6) no drawer — Base UI abre por hover/focus, então o
+ * trigger focável cobre tap no mobile (title nativo não cobre).
+ */
+function StatTip({ hint, children }: { hint?: string; children: React.ReactNode }) {
+  if (!hint) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            tabIndex={0}
+            className="cursor-help rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function StatCol({
   label,
   value,
@@ -684,8 +755,8 @@ function StatCol({
   /** Defense do registry (D6) — a frase que explica o número, como tooltip. */
   hint?: string;
 }) {
-  return (
-    <div className={cn("min-w-0", hint && "cursor-help")} title={hint}>
+  const body = (
+    <>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-0.5 truncate text-lg font-semibold tabular-nums">{value}</div>
       {sub && (
@@ -699,7 +770,23 @@ function StatCol({
           {sub}
         </div>
       )}
-    </div>
+    </>
+  );
+  if (!hint) return <div className="min-w-0">{body}</div>;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <div
+            tabIndex={0}
+            className="min-w-0 cursor-help rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        }
+      >
+        {body}
+      </TooltipTrigger>
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -707,13 +794,7 @@ function StatCol({
  * Dossiê de STATS: régua grande + PRAZO / ENTREGA / RITMO + projeção.
  * Fórmulas: docs/features/overview/stats-dictionary.md (gerado do registry).
  */
-function StatsSection({
-  p,
-  defenses,
-}: {
-  p: ProjectOverview;
-  defenses: Record<string, string>;
-}) {
+function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   const s = p.stats;
   const producing = PRODUCING_PHASES.includes(p.phase);
 
@@ -743,105 +824,112 @@ function StatsSection({
     s.projectedEndWeek !== null && s.weeksTotal !== null ? s.projectedEndWeek - s.weeksTotal : null;
 
   return (
-    <section>
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Stats
-        </h4>
-        {s.mode === "contract" && p.startDate && p.endDate && (
-          <span className="text-[11px] tabular-nums text-muted-foreground">
-            {fmtDate(new Date(p.startDate))} → {fmtDate(new Date(p.endDate))}
-          </span>
-        )}
-      </div>
-
-      <Regua stats={s} size="lg" />
-
-      <div className="mt-3 grid grid-cols-3 gap-3">
-        {s.mode === "contract" ? (
-          <>
-            <StatCol
-              label="Prazo"
-              value={`${s.weeksElapsed}/${s.weeksTotal}`}
-              sub={`${s.timePct}% do prazo`}
-              hint={defenses["project.time_pct"]}
-            />
-            <StatCol
-              label="Entrega"
-              value={`${s.sprintsClosed} fechada${s.sprintsClosed === 1 ? "" : "s"}`}
-              sub={
-                s.scopePct !== null
-                  ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
-                  : "sem FP estimado"
-              }
-              hint={defenses["project.scope_pct"] ?? defenses["project.sprints_closed"]}
-            />
-            <StatCol
-              label="Ritmo"
-              value={fmtAvg(s.avgFpPerSprint)}
-              sub={
-                s.utilizationPct !== null
-                  ? `aproveitamento ${s.utilizationPct}%`
-                  : "últimas 6 fechadas"
-              }
-              hint={defenses["project.avg_fp_per_sprint"]}
-            />
-          </>
-        ) : (
-          <>
-            <StatCol
-              label="Janela"
-              value={`${s.segments.length} sprints`}
-              sub="contínuo — sem prazo"
-            />
-            <StatCol
-              label="Entrega"
-              value={`${s.sprintsClosed} fechada${s.sprintsClosed === 1 ? "" : "s"}`}
-              sub={
-                s.scopePct !== null
-                  ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
-                  : "sem FP estimado"
-              }
-              hint={defenses["project.scope_pct"] ?? defenses["project.sprints_closed"]}
-            />
-            <StatCol
-              label="Ritmo"
-              value={fmtAvg(s.avgFpPerSprint)}
-              sub={
-                s.utilizationPct !== null
-                  ? `aproveitamento ${s.utilizationPct}%`
-                  : "últimas 6 fechadas"
-              }
-              hint={defenses["project.avg_fp_per_sprint"]}
-            />
-          </>
-        )}
-      </div>
-
-      {(s.paceVerdict !== null || projectionDelta !== null || s.holes > 0) && (
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
-          <PaceBadge stats={s} hint={defenses["project.pace_gap"]} />
-          {s.projectedEndWeek !== null && projectionDelta !== null && (
-            <span
-              className={cn("cursor-help", projectionDelta > 0 && "text-red-400")}
-              title={defenses["project.projected_end_sprint"]}
-            >
-              ◆ projeção: termina na sprint {s.projectedEndWeek}
-              {projectionDelta > 0
-                ? ` (${projectionDelta} além do contrato)`
-                : projectionDelta < 0
-                  ? ` (${Math.abs(projectionDelta)} antes do fim)`
-                  : " (no limite do contrato)"}
-            </span>
-          )}
-          {s.holes > 0 && (
-            <span className="cursor-help text-yellow-500" title={defenses["project.holes"]}>
-              {s.holes} semana{s.holes > 1 ? "s" : ""} queimada{s.holes > 1 ? "s" : ""} sem sprint
+    <TooltipProvider>
+      <section>
+        <div className="mb-2 flex items-baseline justify-between gap-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Stats
+          </h4>
+          {s.mode === "contract" && p.startDate && p.endDate && (
+            <span className="text-[11px] tabular-nums text-muted-foreground">
+              {fmtDate(new Date(p.startDate))} → {fmtDate(new Date(p.endDate))}
             </span>
           )}
         </div>
-      )}
-    </section>
+
+        <Regua stats={s} size="lg" />
+        <ReguaLegend contract={s.mode === "contract"} />
+
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          {s.mode === "contract" ? (
+            <>
+              <StatCol
+                label="Contrato"
+                value={`sprint ${s.weeksElapsed}/${s.weeksTotal}`}
+                sub={`${s.timePct}% do contrato consumido`}
+                hint={ui.defenses["project.time_pct"]}
+              />
+              <StatCol
+                label="Entrega"
+                value={`${s.sprintsClosed} fechada${s.sprintsClosed === 1 ? "" : "s"}`}
+                sub={
+                  s.scopePct !== null
+                    ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
+                    : "sem FP estimado"
+                }
+                hint={ui.defenses["project.scope_pct"] ?? ui.defenses["project.sprints_closed"]}
+              />
+              <StatCol
+                label="Ritmo"
+                value={fmtAvg(s.avgFpPerSprint)}
+                sub={
+                  s.utilizationPct !== null
+                    ? `aproveitamento ${s.utilizationPct}%`
+                    : "ritmo das últimas 6 sprints fechadas"
+                }
+                hint={ui.defenses["project.avg_fp_per_sprint"]}
+              />
+            </>
+          ) : (
+            <>
+              <StatCol
+                label="Janela"
+                value={`${s.segments.length} sprints`}
+                sub="contínuo — sem prazo"
+              />
+              <StatCol
+                label="Entrega"
+                value={`${s.sprintsClosed} fechada${s.sprintsClosed === 1 ? "" : "s"}`}
+                sub={
+                  s.scopePct !== null
+                    ? `${s.scopePct}% do escopo (${s.fpDone}/${s.fpTotal} FP)`
+                    : "sem FP estimado"
+                }
+                hint={ui.defenses["project.scope_pct"] ?? ui.defenses["project.sprints_closed"]}
+              />
+              <StatCol
+                label="Ritmo"
+                value={fmtAvg(s.avgFpPerSprint)}
+                sub={
+                  s.utilizationPct !== null
+                    ? `aproveitamento ${s.utilizationPct}%`
+                    : "ritmo das últimas 6 sprints fechadas"
+                }
+                hint={ui.defenses["project.avg_fp_per_sprint"]}
+              />
+            </>
+          )}
+        </div>
+
+        {(s.paceVerdict !== null || projectionDelta !== null || s.holes > 0) && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
+            <StatTip hint={ui.defenses["project.pace_gap"]}>
+              <PaceBadge stats={s} bands={ui.paceBands} />
+            </StatTip>
+            {s.projectedEndWeek !== null && projectionDelta !== null && (
+              <StatTip hint={ui.defenses["project.projected_end_sprint"]}>
+                <span className={cn(projectionDelta > 0 && "text-red-400")}>
+                  ◆ projeção: termina na sprint {s.projectedEndWeek}
+                  {projectionDelta > 0
+                    ? ` (${projectionDelta} além do contrato)`
+                    : projectionDelta < 0
+                      ? ` (${Math.abs(projectionDelta)} antes do fim)`
+                      : " (no limite do contrato)"}
+                </span>
+              </StatTip>
+            )}
+            {s.holes > 0 && (
+              <StatTip hint={ui.defenses["project.holes"]}>
+                <span className="text-yellow-500">
+                  {s.holes} sprint{s.holes > 1 ? "s" : ""} do contrato queimada
+                  {s.holes > 1 ? "s" : ""} sem produção
+                </span>
+              </StatTip>
+            )}
+          </div>
+        )}
+      </section>
+    </TooltipProvider>
   );
 }
 
@@ -851,7 +939,7 @@ function ProjectDrawer({
   p,
   index,
   total,
-  defenses,
+  ui,
   onPrev,
   onNext,
   onEdit,
@@ -859,7 +947,7 @@ function ProjectDrawer({
   p: ProjectOverview;
   index: number;
   total: number;
-  defenses: Record<string, string>;
+  ui: RegistryUi;
   onPrev: () => void;
   onNext: () => void;
   onEdit: () => void;
@@ -930,7 +1018,7 @@ function ProjectDrawer({
       </ResponsiveSheetHeader>
 
       <ResponsiveSheetBody className="space-y-5">
-        <StatsSection p={p} defenses={defenses} />
+        <StatsSection p={p} ui={ui} />
         <PMReviewSection p={p} />
 
         {/* Rodapé quieto: sinais + time, sem caixas */}
@@ -951,13 +1039,14 @@ function ProjectDrawer({
 
 export function ProjetosBoard({
   projects,
-  factory,
-  defenses,
+  buildersAllocated,
+  registryUi: ui,
 }: {
   projects: ProjectOverview[];
-  factory: FactoryStats;
-  /** id do registry → defense (tooltip D6), resolvido no server. */
-  defenses: Record<string, string>;
+  /** factory.builders_allocated computado no server (DAL capacity). */
+  buildersAllocated: { allocated: number; total: number };
+  /** Vocabulário do registry (names/defenses/paceBands), resolvido no server. */
+  registryUi: RegistryUi;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1027,33 +1116,46 @@ export function ProjetosBoard({
   );
   const evalCount = useMemo(() => projects.filter((p) => p.isEval).length, [projects]);
 
-  // Ribbon — sempre sobre o universo de cliente (exclui internos + eval).
+  // Ribbon — labels/tooltips/fórmulas do catálogo de métricas (D1): linha
+  // ativa = projeto ativo em fase produtiva, sem internos/eval. "Em atenção"
+  // é sinal local de health, não métrica do registry.
   const ribbon = useMemo<RibbonItem[]>(() => {
     const universe = projects.filter((p) => p.category !== "internal" && !p.isEval);
-    const active = universe.filter((p) => p.status === "active");
-    const clientes = new Set(active.map((p) => p.clientName).filter(Boolean)).size;
-    const attention = active.filter((p) => p.health !== "green").length;
-    const avg = meanOf(active.map((p) => p.stats.avgFpPerSprint));
+    const lines = universe.filter(
+      (p) => p.status === "active" && PRODUCING_PHASES.includes(p.phase),
+    );
+    const clientes = new Set(lines.map((p) => p.clientName).filter(Boolean)).size;
+    const attention = lines.filter((p) => p.health !== "green").length;
+    const util = meanOf(lines.map((p) => p.stats.utilizationPct));
     return [
-      { label: "Linhas ativas", value: String(active.length) },
-      { label: "Clientes ativos", value: String(clientes) },
+      {
+        label: ui.names["factory.lines_active"] ?? "Linhas ativas",
+        value: String(lines.length),
+        hint: ui.defenses["factory.lines_active"],
+      },
+      {
+        label: ui.names["factory.clients_active"] ?? "Clientes ativos",
+        value: String(clientes),
+        hint: ui.defenses["factory.clients_active"],
+      },
       {
         label: "Em atenção",
         value: String(attention),
         tone: attention > 0 ? "amber" : undefined,
+        hint: "Linhas ativas com health diferente de verde (sinal local)",
       },
       {
-        label: "Média da fábrica",
-        value: avg === null ? "—" : `${avg.toLocaleString("pt-BR")} FP/sp`,
-        hint: "Média das médias FP/sprint das linhas ativas (últimas 6 sprints fechadas de cada)",
+        label: ui.names["factory.utilization"] ?? "Aproveitamento da fábrica",
+        value: util === null ? "—" : `${Math.round(util)}%`,
+        hint: ui.defenses["factory.utilization"],
       },
       {
-        label: "Builders",
-        value: `${factory.builders}/${factory.membersTotal}`,
-        hint: "Product-builders / membros totais da Volund",
+        label: ui.names["factory.builders_allocated"] ?? "Builders alocados",
+        value: `${buildersAllocated.allocated}/${buildersAllocated.total}`,
+        hint: ui.defenses["factory.builders_allocated"],
       },
     ];
-  }, [projects, factory]);
+  }, [projects, buildersAllocated, ui]);
 
   const grouped = useMemo(() => {
     const visible = projects.filter((p) => {
@@ -1147,7 +1249,7 @@ export function ProjetosBoard({
                     <ProjectRow
                       key={p.id}
                       p={p}
-                      defenses={defenses}
+                      ui={ui}
                       onOpen={() => navigate(p.id, "push")}
                     />
                   ))}
@@ -1210,7 +1312,7 @@ export function ProjetosBoard({
               p={selected}
               index={selectedIndex}
               total={visibleFlat.length}
-              defenses={defenses}
+              ui={ui}
               onPrev={() => {
                 const prev = visibleFlat[selectedIndex - 1];
                 if (prev) navigate(prev.id, "replace");

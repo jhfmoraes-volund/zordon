@@ -5,6 +5,7 @@ export type TabKey =
   | "sprints"
   | "sessions"
   | "ceremonies"
+  | "drive"
   | "forge"
   | "settings";
 
