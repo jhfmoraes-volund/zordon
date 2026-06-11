@@ -4,6 +4,7 @@ import { fmtDate } from "@/lib/date-utils";
 import { OverviewTabs, type OverviewTab } from "@/components/overview/overview-tabs";
 import { OperacaoView } from "@/components/overview/operacao-view";
 import { ProjetosView } from "@/components/overview/projetos-view";
+import { InsightsView } from "@/components/overview/insights-view";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,8 @@ export default async function OverviewPage({
 }) {
   await requireMinLevel(MANAGER, { redirectTo: "/projects" });
   const sp = await searchParams;
-  const tab: OverviewTab = sp?.tab === "ops" ? "ops" : "projetos";
+  const tab: OverviewTab =
+    sp?.tab === "ops" ? "ops" : sp?.tab === "insights" ? "insights" : "projetos";
 
   const now = new Date();
   const weekStart = startOfWeek(now);
@@ -46,7 +48,13 @@ export default async function OverviewPage({
 
       <OverviewTabs current={tab} />
 
-      {tab === "projetos" ? <ProjetosView /> : <OperacaoView />}
+      {tab === "projetos" ? (
+        <ProjetosView />
+      ) : tab === "insights" ? (
+        <InsightsView />
+      ) : (
+        <OperacaoView />
+      )}
     </div>
   );
 }

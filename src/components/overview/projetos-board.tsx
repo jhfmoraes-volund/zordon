@@ -348,7 +348,10 @@ function RowStatsLine({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   if (s.mode === "rolling") {
     return (
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
-        <span>últimas {s.segments.length} sprints</span>
+        <span>
+          última{s.segments.length === 1 ? "" : "s"} {s.segments.length} sprint
+          {s.segments.length === 1 ? "" : "s"}
+        </span>
         {s.avgFpPerSprint !== null && (
           <span
             className="cursor-help font-medium text-foreground"
@@ -719,17 +722,20 @@ function PMReviewSection({ p }: { p: ProjectOverview }) {
 // ─── STATS (drawer) ───────────────────────────────────────
 
 /**
- * Tooltip de defesa (D6) no drawer — Base UI abre por hover/focus, então o
- * trigger focável cobre tap no mobile (title nativo não cobre).
+ * Tooltip de defesa (D6) no drawer — controlled mirror: hover/focus do Base UI
+ * continuam valendo (todo onOpenChange é espelhado) e o onClick cobre tap no
+ * mobile, que o Base UI ignora por design.
  */
 function StatTip({ hint, children }: { hint?: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
   if (!hint) return <>{children}</>;
   return (
-    <Tooltip>
+    <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger
         render={
           <span
             tabIndex={0}
+            onClick={() => setOpen((o) => !o)}
             className="cursor-help rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         }
@@ -773,21 +779,7 @@ function StatCol({
     </>
   );
   if (!hint) return <div className="min-w-0">{body}</div>;
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <div
-            tabIndex={0}
-            className="min-w-0 cursor-help rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        }
-      >
-        {body}
-      </TooltipTrigger>
-      <TooltipContent>{hint}</TooltipContent>
-    </Tooltip>
-  );
+  return <StatTip hint={hint}>{body}</StatTip>;
 }
 
 /**
@@ -874,7 +866,7 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
             <>
               <StatCol
                 label="Janela"
-                value={`${s.segments.length} sprints`}
+                value={`${s.segments.length} sprint${s.segments.length === 1 ? "" : "s"}`}
                 sub="contínuo — sem prazo"
               />
               <StatCol

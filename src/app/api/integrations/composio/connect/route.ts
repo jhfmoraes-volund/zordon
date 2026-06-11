@@ -34,13 +34,21 @@ export async function POST(req: Request) {
     );
   }
 
+  // Callback pós-OAuth: deriva do origin do request (funciona em local e prod
+  // sem env). Env explícita ganha, se setada.
+  const forwardedHost = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const isLocal = forwardedHost?.startsWith("localhost") || forwardedHost?.startsWith("127.");
+  const forwardedProto =
+    req.headers.get("x-forwarded-proto") ?? (isLocal ? "http" : "https");
+  const requestOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : null;
   const appUrl =
-    process.env.APP_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    requestOrigin ||
     process.env.NEXT_PUBLIC_SITE_URL;
   if (!appUrl) {
     return NextResponse.json(
-      { error: "APP_URL/NEXT_PUBLIC_SITE_URL ausente — não dá pra montar callback" },
+      { error: "Não foi possível determinar a URL do app pro callback OAuth" },
       { status: 500 },
     );
   }

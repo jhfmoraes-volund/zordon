@@ -65,12 +65,8 @@ export async function POST(
   // Sync roda com o connected account de quem linkou a pasta (runbook D3) —
   // qualquer membro pode disparar sem ter Drive conectado.
   const linkedBy = project.driveLinkedBy;
-  const appUrl =
-    process.env.APP_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    "http://localhost:3000";
-  const connectUrl = `${appUrl.replace(/\/$/, "")}/settings/integrations`;
+  // Relativo de propósito: resolve no domínio onde o usuário está (local/prod).
+  const connectUrl = "/settings/integrations";
 
   if (!process.env.COMPOSIO_GDRIVE_AUTH_CONFIG_ID || !linkedBy) {
     return NextResponse.json(

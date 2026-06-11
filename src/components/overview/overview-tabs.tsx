@@ -1,10 +1,11 @@
 import Link from "next/link";
 
-export type OverviewTab = "ops" | "projetos";
+export type OverviewTab = "ops" | "projetos" | "insights";
 
 const TABS: Array<{ key: OverviewTab; label: string }> = [
   { key: "projetos", label: "Projetos" },
   { key: "ops", label: "Operação" },
+  { key: "insights", label: "Insights" },
 ];
 
 export function OverviewTabs({ current }: { current: OverviewTab }) {
