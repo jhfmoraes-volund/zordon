@@ -17,6 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/date-utils";
+import {
+  STAGE_LABELS,
+  STAGE_ORDER,
+  type DriveStage,
+} from "@/lib/drive/stage";
 
 type DriveFile = {
   id: string;
@@ -26,6 +31,7 @@ type DriveFile = {
   sizeBytes: number | null;
   modifiedTime: string | null;
   webViewLink: string | null;
+  stage: DriveStage | null;
   syncedAt: string;
 };
 
@@ -37,14 +43,30 @@ type FilesPayload = {
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
-function fileIcon(mimeType: string): typeof File {
-  if (mimeType === FOLDER_MIME) return Folder;
-  if (mimeType === "application/vnd.google-apps.document") return FileText;
-  if (mimeType === "application/vnd.google-apps.spreadsheet") return Table2;
-  if (mimeType === "application/vnd.google-apps.presentation") return Presentation;
-  if (mimeType === "application/pdf") return FileText;
-  if (mimeType.startsWith("image/")) return ImageIcon;
-  return File;
+/** Seções na ordem do funil + "Geral" (stage NULL) por último. */
+const SECTION_ORDER: Array<DriveStage | null> = [...STAGE_ORDER, null];
+
+function sectionLabel(stage: DriveStage | null): string {
+  return stage ? STAGE_LABELS[stage] : "Geral";
+}
+
+const FILE_ICONS = {
+  folder: Folder,
+  doc: FileText,
+  sheet: Table2,
+  slides: Presentation,
+  image: ImageIcon,
+  generic: File,
+} as const;
+
+function fileIconKey(mimeType: string): keyof typeof FILE_ICONS {
+  if (mimeType === FOLDER_MIME) return "folder";
+  if (mimeType === "application/vnd.google-apps.document") return "doc";
+  if (mimeType === "application/vnd.google-apps.spreadsheet") return "sheet";
+  if (mimeType === "application/vnd.google-apps.presentation") return "slides";
+  if (mimeType === "application/pdf") return "doc";
+  if (mimeType.startsWith("image/")) return "image";
+  return "generic";
 }
 
 function agoLabel(iso: string): string {
@@ -70,6 +92,7 @@ export function ProjectDriveTab({
   const [payload, setPayload] = useState<FilesPayload | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [truncated, setTruncated] = useState(false);
+  const [missingStages, setMissingStages] = useState<DriveStage[]>([]);
   const [connectUrl, setConnectUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -99,6 +122,7 @@ export function ProjectDriveTab({
         files?: DriveFile[];
         syncedAt?: string;
         truncated?: boolean;
+        missingStages?: DriveStage[];
         error?: string;
         connectUrl?: string;
       };
@@ -121,6 +145,7 @@ export function ProjectDriveTab({
         folderId: driveFolderId,
       });
       setTruncated(Boolean(body.truncated));
+      setMissingStages(body.missingStages ?? []);
       toast.success("Drive sincronizado");
     } catch {
       toast.error("Sem conexão — sync não concluído");
@@ -155,6 +180,12 @@ export function ProjectDriveTab({
   }
 
   const { files, syncedAt } = payload;
+
+  const sections = SECTION_ORDER.map((stage) => ({
+    stage,
+    label: sectionLabel(stage),
+    files: files.filter((f) => (f.stage ?? null) === stage),
+  })).filter((s) => s.files.length > 0);
 
   return (
     <div className="space-y-3">
@@ -195,11 +226,19 @@ export function ProjectDriveTab({
 
       {truncated && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Mostrando os primeiros 200 itens — abra a pasta no Drive pra ver tudo.
+          Índice truncado — abra a pasta no Drive pra ver tudo.
         </p>
       )}
 
-      {/* Grid de arquivos (do índice — sem chamada ao Google) */}
+      {missingStages.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Pastas da taxonomia não encontradas no Drive:{" "}
+          {missingStages.map((s) => STAGE_LABELS[s]).join(", ")}. Crie-as na
+          pasta do projeto pra organizar por etapa.
+        </p>
+      )}
+
+      {/* Índice agrupado por etapa (do banco — sem chamada ao Google) */}
       {files.length === 0 ? (
         <div className="surface flex flex-col items-center gap-3 p-10 text-center">
           <p className="text-sm text-muted-foreground">
@@ -211,40 +250,60 @@ export function ProjectDriveTab({
           </Button>
         </div>
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {files.map((f) => {
-            const Icon = fileIcon(f.mimeType);
-            const isFolder = f.mimeType === FOLDER_MIME;
-            return (
-              <a
-                key={f.id}
-                href={f.webViewLink ?? "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group surface flex items-start gap-3 p-3 transition-colors hover:bg-muted/60"
-              >
-                <Icon
-                  className={cn(
-                    "mt-0.5 h-5 w-5 shrink-0",
-                    isFolder ? "text-blue-400" : "text-muted-foreground"
-                  )}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{f.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {isFolder
-                      ? "pasta"
-                      : f.modifiedTime
-                        ? fmtDate(f.modifiedTime)
-                        : "—"}
-                  </p>
-                </div>
-                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-              </a>
-            );
-          })}
-        </div>
+        sections.map(({ stage, label, files: sectionFiles }) => (
+          <section key={label} className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {label}
+              <span className="ml-1.5 font-normal normal-case">
+                · {sectionFiles.length}
+              </span>
+            </h3>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {sectionFiles.map((f) => (
+                <DriveFileCard key={f.id} file={f} stage={stage} />
+              ))}
+            </div>
+          </section>
+        ))
       )}
     </div>
+  );
+}
+
+function DriveFileCard({
+  file: f,
+  stage,
+}: {
+  file: DriveFile;
+  stage: DriveStage | null;
+}) {
+  void stage;
+  const Icon = FILE_ICONS[fileIconKey(f.mimeType)];
+  const isFolder = f.mimeType === FOLDER_MIME;
+  return (
+    <a
+      href={f.webViewLink ?? "#"}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group surface flex items-start gap-3 p-3 transition-colors hover:bg-muted/60"
+    >
+      <Icon
+        className={cn(
+          "mt-0.5 h-5 w-5 shrink-0",
+          isFolder ? "text-blue-400" : "text-muted-foreground"
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{f.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {isFolder
+            ? "pasta"
+            : f.modifiedTime
+              ? fmtDate(f.modifiedTime)
+              : "—"}
+        </p>
+      </div>
+      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+    </a>
   );
 }

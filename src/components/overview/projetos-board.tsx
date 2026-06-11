@@ -1137,7 +1137,36 @@ function StatCol({
 }
 
 /**
- * Dossiê de STATS: régua grande + PRAZO / ENTREGA / RITMO + projeção.
+ * Coluna "Marco" — próxima grande data do projeto (go-live, demo, entrega de
+ * fase), declarada pela Vitoria no PM Review (note kind='milestone' + dueAt).
+ */
+function MilestoneStatCol({ p }: { p: ProjectOverview }) {
+  const hint =
+    "Próxima grande data do projeto (go-live, demo, entrega de fase). A Vitoria declara no PM Review semanal — sem review com marco, a coluna fica vazia.";
+  if (!p.milestone) {
+    return <StatCol label="Marco" value="—" sub="sem marco declarado" hint={hint} />;
+  }
+  const due = new Date(`${p.milestone.dueAt}T00:00:00`);
+  const days = Math.ceil((due.getTime() - Date.now()) / 86400000);
+  const sub =
+    days < 0
+      ? `${p.milestone.label} · venceu há ${Math.abs(days)}d`
+      : days === 0
+        ? `${p.milestone.label} · é hoje`
+        : `${p.milestone.label} · em ${days}d`;
+  return (
+    <StatCol
+      label="Marco"
+      value={fmtDate(due)}
+      sub={sub}
+      subTone={days < 0 ? "red" : days <= 14 ? "amber" : undefined}
+      hint={hint}
+    />
+  );
+}
+
+/**
+ * Dossiê de STATS: régua grande + PRAZO / MARCO / RITMO + projeção.
  * Fórmulas: docs/features/overview/stats-dictionary.md (gerado do registry).
  */
 function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
@@ -1664,7 +1693,7 @@ export function ProjetosBoard({
           Some enquanto o editor está aberto (nunca 2 overlays; volta ao
           salvar/cancelar porque ?project= continua na URL). */}
       <ResponsiveSheet open={drawerOpen} onOpenChange={(o) => !o && navigate(null, "replace")}>
-        <ResponsiveSheetContent size="lg">
+        <ResponsiveSheetContent size="3xl">
           {selected && (
             <ProjectDrawer
               p={selected}

@@ -53,7 +53,7 @@ function ResponsiveSheetTrigger(props: TriggerProps) {
   return <SheetTrigger {...props} />
 }
 
-type Size = "sm" | "md" | "lg" | "xl" | "2xl"
+type Size = "sm" | "md" | "lg" | "xl" | "2xl" | "3xl"
 
 const SIZE_CLASS: Record<Size, string> = {
   sm: "sm:max-w-[480px]",
@@ -61,6 +61,7 @@ const SIZE_CLASS: Record<Size, string> = {
   lg: "sm:max-w-[760px]",
   xl: "sm:max-w-[1024px]",
   "2xl": "sm:max-w-[1280px]",
+  "3xl": "sm:max-w-[1520px]",
 }
 
 type Side = "left" | "right"

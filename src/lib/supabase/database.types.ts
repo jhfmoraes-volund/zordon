@@ -6147,6 +6147,7 @@ export type Database = {
           name: string
           projectId: string
           sizeBytes: number | null
+          stage: string | null
           syncedAt: string
           webViewLink: string | null
         }
@@ -6159,6 +6160,7 @@ export type Database = {
           name: string
           projectId: string
           sizeBytes?: number | null
+          stage?: string | null
           syncedAt?: string
           webViewLink?: string | null
         }
@@ -6171,6 +6173,7 @@ export type Database = {
           name?: string
           projectId?: string
           sizeBytes?: number | null
+          stage?: string | null
           syncedAt?: string
           webViewLink?: string | null
         }
