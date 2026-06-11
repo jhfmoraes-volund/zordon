@@ -3,27 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { SECTION_ORDER } from "./constants";
-import { DescriptionSection } from "./description";
-import { LinksSection } from "./links";
-import { SponsorsSection } from "./sponsors";
-import { IndicatorsSection } from "./indicators";
-import { ObjectivesSection } from "./objectives";
-import { EnvironmentsSection } from "./environments";
-import { AccessSection } from "./access";
-import type { SectionProps, WikiSection } from "./types";
+import { sectionComponentMap } from "./section-map";
+import type { WikiSection } from "./types";
 
-const sectionComponentMap: Record<
-  string,
-  React.ComponentType<SectionProps>
-> = {
-  description: DescriptionSection,
-  links: LinksSection,
-  sponsors: SponsorsSection,
-  success_indicators: IndicatorsSection,
-  objectives: ObjectivesSection,
-  environments: EnvironmentsSection,
-  access: AccessSection,
-};
+export { ProjectWikiSheet } from "./wiki-sheet";
 
 export function ProjectWiki({ projectId }: { projectId: string }) {
   const [sections, setSections] = useState<WikiSection[]>([]);
