@@ -143,26 +143,45 @@ export async function getMemberCommitment(memberId: string): Promise<{
   };
 }
 
+export type BuilderCommitment = {
+  memberId: string;
+  name: string;
+  committed: number;
+  capacity: number;
+};
+
 /**
- * Carga da fábrica: Σ committed ÷ Σ capacity dos product-builders internos
- * (view member_commitment_overview já exclui guests). committed soma
- * fpAllocation de TODOS os projetos com ProjectMember — inclusive pausados;
- * viés conhecido, registrado na defense.
+ * Carga por builder: committed (Σ fpAllocation cross-projeto) vs capacity de
+ * cada product-builder interno (view member_commitment_overview já exclui
+ * guests). committed soma TODOS os projetos com ProjectMember — inclusive
+ * pausados; viés conhecido, registrado na defense da métrica.
  */
+export async function getBuilderCommitments(): Promise<BuilderCommitment[]> {
+  const { data, error } = await db()
+    .from("member_commitment_overview")
+    .select("id, name, capacity, committed, position")
+    .eq("position", "product-builder");
+  if (error) throw error;
+  return (data ?? [])
+    .filter((r): r is typeof r & { id: string } => !!r.id)
+    .map((r) => ({
+      memberId: r.id,
+      name: r.name ?? "—",
+      committed: Number(r.committed) || 0,
+      capacity: Number(r.capacity) || 0,
+    }));
+}
+
+/** Carga da fábrica agregada — Σ das linhas de getBuilderCommitments. */
 export async function getFactoryCommitment(): Promise<{
   committed: number;
   capacity: number;
   builders: number;
 }> {
-  const { data, error } = await db()
-    .from("member_commitment_overview")
-    .select("capacity, committed, position")
-    .eq("position", "product-builder");
-  if (error) throw error;
-  const rows = data ?? [];
+  const rows = await getBuilderCommitments();
   return {
-    committed: rows.reduce((sum, r) => sum + (Number(r.committed) || 0), 0),
-    capacity: rows.reduce((sum, r) => sum + (Number(r.capacity) || 0), 0),
+    committed: rows.reduce((sum, r) => sum + r.committed, 0),
+    capacity: rows.reduce((sum, r) => sum + r.capacity, 0),
     builders: rows.length,
   };
 }

@@ -401,56 +401,330 @@ function RowStatsLine({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
 
 // ─── Ribbon do topo ───────────────────────────────────────
 
+/** Eixos do ribbon — cada um abre um painel de detalhe abaixo da banda. */
+type RibbonAxis = "lines" | "buffer" | "clients" | "attention" | "utilization" | "load";
+
 type RibbonItem = {
+  key: RibbonAxis;
   label: string;
   value: string;
-  hint?: string;
   tone?: "amber" | "red";
 };
 
 /**
  * Banda fina de KPIs da fábrica — valor herói, label apagado, tabular-nums.
- * Cada item com hint abre a defesa do registry por hover OU click/tap
- * (StatTip) — title nativo não responde a click e falha o "número se explica".
+ * Cada item é trigger de um painel expansível abaixo da banda (RibbonPanel),
+ * espelhando o padrão do SprintRibbon da página de projeto.
  */
-function OverviewRibbon({ items }: { items: RibbonItem[] }) {
+function OverviewRibbon({
+  items,
+  active,
+  onToggle,
+}: {
+  items: RibbonItem[];
+  active: RibbonAxis | null;
+  onToggle: (axis: RibbonAxis) => void;
+}) {
   return (
-    <TooltipProvider>
-      <div className="flex flex-wrap items-stretch gap-y-3 border-y border-border py-3">
-        {items.map((item, i) => {
-          const body = (
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <span
+    <div className="flex flex-wrap items-stretch gap-y-3 border-y border-border py-3">
+      {items.map((item, i) => (
+        <div key={item.key} className={cn("pr-5", i > 0 && "border-l border-border pl-5")}>
+          <button
+            type="button"
+            onClick={() => onToggle(item.key)}
+            aria-expanded={active === item.key}
+            aria-controls="overview-ribbon-panel"
+            className={cn(
+              "-mx-1.5 -my-1 flex min-w-0 flex-col gap-0.5 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              active === item.key && "bg-muted/40",
+            )}
+          >
+            <span
+              className={cn(
+                "text-xl font-semibold leading-none tabular-nums",
+                item.tone === "amber" && "text-yellow-500",
+                item.tone === "red" && "text-red-400",
+              )}
+            >
+              {item.value}
+            </span>
+            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+              {item.label}
+              <ChevronDown
                 className={cn(
-                  "text-xl font-semibold leading-none tabular-nums",
-                  item.tone === "amber" && "text-yellow-500",
-                  item.tone === "red" && "text-red-400",
+                  "h-3 w-3 opacity-50 transition-transform",
+                  active === item.key && "rotate-180",
                 )}
-              >
-                {item.value}
+              />
+            </span>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Painel do ribbon (detalhe por eixo) ──────────────────
+
+/** Linha de projeto dentro do painel — clique abre o drawer do projeto. */
+function PanelProjectRow({
+  p,
+  right,
+  onOpen,
+}: {
+  p: ProjectOverview;
+  right?: React.ReactNode;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", HEALTH_DOT[p.health])} />
+      <span className="truncate font-medium">{p.name}</span>
+      <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+        {p.clientName ?? "—"}
+      </span>
+      {right && (
+        <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+          {right}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** Barra horizontal simples 0–100 (capada) pros breakdowns do painel. */
+function PanelBar({ pct, cls = "bg-primary/60" }: { pct: number; cls?: string }) {
+  return (
+    <span className="h-1.5 w-20 shrink-0 overflow-hidden rounded bg-muted sm:w-28">
+      <span
+        className={cn("block h-full rounded", cls)}
+        style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+      />
+    </span>
+  );
+}
+
+/**
+ * Painel expansível abaixo do ribbon — espelha o RibbonDrawer do SprintRibbon
+ * (max-height + opacity). Abre com a defense do registry (D6) e o detalhamento
+ * do eixo; linhas de projeto abrem o drawer do projeto.
+ */
+function RibbonPanel({
+  axis,
+  projects,
+  factoryLoad,
+  builderLoads,
+  ui,
+  onOpenProject,
+}: {
+  axis: RibbonAxis | null;
+  projects: ProjectOverview[];
+  factoryLoad: MetricValue;
+  builderLoads: Array<{ memberId: string; name: string; committed: number; capacity: number }>;
+  ui: RegistryUi;
+  onOpenProject: (id: string) => void;
+}) {
+  const open = axis !== null;
+  const universe = projects.filter((p) => p.category !== "internal" && !p.isEval);
+  const lines = universe.filter(
+    (p) => p.status === "active" && PRODUCING_PHASES.includes(p.phase),
+  );
+
+  let defense: string | undefined;
+  let content: React.ReactNode = null;
+
+  if (axis === "lines") {
+    defense = ui.defenses["factory.lines_active"];
+    content = (
+      <div className="space-y-0.5">
+        {lines.map((p) => (
+          <PanelProjectRow
+            key={p.id}
+            p={p}
+            onOpen={() => onOpenProject(p.id)}
+            right={
+              <>
+                <span className="hidden sm:inline">{lookupChip(PROJECT_PHASE, p.phase).label}</span>
+                <PaceBadge stats={p.stats} bands={ui.bands["project.pace_gap"] ?? []} />
+              </>
+            }
+          />
+        ))}
+        {lines.length === 0 && (
+          <p className="px-2 text-xs text-muted-foreground">Nenhuma linha em produção.</p>
+        )}
+      </div>
+    );
+  } else if (axis === "buffer") {
+    const buffer = universe.filter((p) => p.status === "active" && p.phase === "commercial");
+    defense = ui.defenses["factory.commercial_buffer"];
+    content = (
+      <div className="space-y-0.5">
+        {buffer.map((p) => (
+          <PanelProjectRow
+            key={p.id}
+            p={p}
+            onOpen={() => onOpenProject(p.id)}
+            right={
+              <span>
+                em comercial há {p.daysInPhase}d · {horizonLabel(p)}
               </span>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                {item.label}
+            }
+          />
+        ))}
+        {buffer.length === 0 && (
+          <p className="px-2 text-xs text-muted-foreground">Buffer vazio — nada em comercial.</p>
+        )}
+      </div>
+    );
+  } else if (axis === "clients") {
+    const byClient = new Map<string, ProjectOverview[]>();
+    for (const p of lines) {
+      if (!p.clientName) continue;
+      byClient.set(p.clientName, [...(byClient.get(p.clientName) ?? []), p]);
+    }
+    defense = ui.defenses["factory.clients_active"];
+    content = (
+      <div className="space-y-2">
+        {[...byClient.entries()]
+          .sort((a, b) => b[1].length - a[1].length)
+          .map(([client, ps]) => (
+            <div key={client} className="px-2 text-sm">
+              <span className="font-medium">{client}</span>{" "}
+              <span className="text-xs text-muted-foreground">
+                — {ps.length} linha{ps.length === 1 ? "" : "s"}: {ps.map((p) => p.name).join(", ")}
               </span>
             </div>
-          );
+          ))}
+        {byClient.size === 0 && (
+          <p className="px-2 text-xs text-muted-foreground">Nenhum cliente com produção ativa.</p>
+        )}
+      </div>
+    );
+  } else if (axis === "attention") {
+    const attention = lines.filter((p) => p.health !== "green");
+    defense = "Linhas ativas com health diferente de verde — os motivos ao lado (sinal local, não métrica do registry).";
+    content = (
+      <div className="space-y-0.5">
+        {attention.map((p) => {
+          const reasons = signalChips(p).map((c) => c.label);
+          if ((p.pmReview?.notesByKind.risk?.length ?? 0) === 0 && reasons.length === 0)
+            reasons.push("carga/decisões pendentes");
           return (
-            <div
-              key={item.label}
-              className={cn("pr-5", i > 0 && "border-l border-border pl-5")}
-            >
-              {item.hint ? (
-                <StatTip hint={item.hint} block>
-                  {body}
-                </StatTip>
-              ) : (
-                body
-              )}
+            <PanelProjectRow
+              key={p.id}
+              p={p}
+              onOpen={() => onOpenProject(p.id)}
+              right={<span className="truncate">{reasons.join(" · ")}</span>}
+            />
+          );
+        })}
+        {attention.length === 0 && (
+          <p className="px-2 text-xs text-muted-foreground">Tudo verde.</p>
+        )}
+      </div>
+    );
+  } else if (axis === "utilization") {
+    const sampled = lines.filter((p) => p.stats.utilizationPct !== null);
+    const noSample = lines.filter((p) => p.stats.utilizationPct === null);
+    defense = ui.defenses["factory.utilization"];
+    content = (
+      <div className="space-y-0.5">
+        {sampled
+          .sort((a, b) => (b.stats.utilizationPct ?? 0) - (a.stats.utilizationPct ?? 0))
+          .map((p) => (
+            <PanelProjectRow
+              key={p.id}
+              p={p}
+              onOpen={() => onOpenProject(p.id)}
+              right={
+                <>
+                  <PanelBar pct={p.stats.utilizationPct ?? 0} />
+                  <span className="w-9 text-right">{p.stats.utilizationPct}%</span>
+                </>
+              }
+            />
+          ))}
+        {sampled.length === 0 && (
+          <p className="px-2 text-xs text-muted-foreground">Nenhuma linha com amostra de FP.</p>
+        )}
+        {noSample.length > 0 && (
+          <p className="px-2 pt-1.5 text-xs text-muted-foreground/70">
+            Sem amostra (sprints fechadas sem FP): {noSample.map((p) => p.name).join(", ")}
+          </p>
+        )}
+      </div>
+    );
+  } else if (axis === "load") {
+    const bands = ui.bands["factory.committed_vs_capacity"] ?? [];
+    defense = ui.defenses["factory.committed_vs_capacity"];
+    const rows = [...builderLoads].sort(
+      (a, b) =>
+        (a.capacity > 0 ? a.committed / a.capacity : 0) -
+        (b.capacity > 0 ? b.committed / b.capacity : 0),
+    );
+    content = (
+      <div className="space-y-0.5">
+        {factoryLoad.components && (
+          <p className="px-2 pb-1.5 text-xs text-muted-foreground">
+            Total: {factoryLoad.components.committed}/{factoryLoad.components.capacity} FP
+            comprometidos em {factoryLoad.components.builders} builders. Ociosos primeiro:
+          </p>
+        )}
+        {rows.map((b) => {
+          const pct = b.capacity > 0 ? Math.round((b.committed / b.capacity) * 100) : null;
+          const band = pct !== null ? bandOf(pct, bands) : null;
+          return (
+            <div key={b.memberId} className="flex items-center gap-2 px-2 py-1 text-sm">
+              <span className="truncate">{b.name}</span>
+              <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+                <span>
+                  {b.committed}/{b.capacity} FP
+                </span>
+                <PanelBar
+                  pct={pct ?? 0}
+                  cls={
+                    band?.tone === "red" || band?.tone === "critical"
+                      ? "bg-red-400/80"
+                      : band?.tone === "amber"
+                        ? "bg-yellow-500/70"
+                        : "bg-emerald-500/70"
+                  }
+                />
+                <span className={cn("w-24 text-right", band && TONE_CLS[band.tone])}>
+                  {pct === null ? "sem capacity" : `${pct}% ${band?.label ?? ""}`}
+                </span>
+              </span>
             </div>
           );
         })}
+        {rows.length === 0 && (
+          <p className="px-2 text-xs text-muted-foreground">Nenhum product-builder cadastrado.</p>
+        )}
       </div>
-    </TooltipProvider>
+    );
+  }
+
+  return (
+    <div
+      id="overview-ribbon-panel"
+      role="region"
+      aria-label="Detalhe do indicador"
+      aria-hidden={!open}
+      className={cn(
+        "overflow-hidden border-b bg-muted/30 transition-[max-height,opacity] duration-200 ease-out",
+        open ? "max-h-[480px] opacity-100" : "max-h-0 border-transparent opacity-0",
+      )}
+    >
+      <div className="max-h-[460px] overflow-y-auto px-2 py-3">
+        {defense && <p className="px-2 pb-2 text-xs text-muted-foreground">{defense}</p>}
+        {content}
+      </div>
+    </div>
   );
 }
 
@@ -1082,11 +1356,14 @@ function ProjectDrawer({
 export function ProjetosBoard({
   projects,
   factoryLoad,
+  builderLoads,
   registryUi: ui,
 }: {
   projects: ProjectOverview[];
   /** factory.committed_vs_capacity computado no server (computeMetric). */
   factoryLoad: MetricValue;
+  /** Carga por builder (member_commitment_overview) — painel do eixo "load". */
+  builderLoads: Array<{ memberId: string; name: string; committed: number; capacity: number }>;
   /** Vocabulário do registry (names/defenses/bands), resolvido no server. */
   registryUi: RegistryUi;
 }) {
@@ -1098,6 +1375,8 @@ export function ProjetosBoard({
   const [collapsed, setCollapsed] = useState<Set<ProjectPhase>>(new Set());
   const [editProject, setEditProject] = useState<ProjectEditInitial | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  /** Eixo do ribbon expandido — null = painel fechado. */
+  const [ribbonAxis, setRibbonAxis] = useState<RibbonAxis | null>(null);
 
   // Drawer endereçável: a seleção vive na URL (?project=) — F5 mantém, Back
   // fecha, link compartilha. push abre (entra no histórico); replace fecha e
@@ -1171,7 +1450,6 @@ export function ProjetosBoard({
     ).length;
     const clientes = new Set(lines.map((p) => p.clientName).filter(Boolean)).size;
     const attention = lines.filter((p) => p.health !== "green").length;
-    const sampled = lines.filter((p) => p.stats.utilizationPct !== null).length;
     const util = meanOf(lines.map((p) => p.stats.utilizationPct));
     const loadBand =
       factoryLoad.value !== null
@@ -1179,32 +1457,33 @@ export function ProjetosBoard({
         : null;
     return [
       {
+        key: "lines",
         label: ui.names["factory.lines_active"] ?? "Linhas ativas",
         value: String(lines.length),
-        hint: ui.defenses["factory.lines_active"],
       },
       {
+        key: "buffer",
         label: ui.names["factory.commercial_buffer"] ?? "Em comercial",
         value: String(buffer),
-        hint: ui.defenses["factory.commercial_buffer"],
       },
       {
+        key: "clients",
         label: ui.names["factory.clients_active"] ?? "Clientes ativos",
         value: String(clientes),
-        hint: ui.defenses["factory.clients_active"],
       },
       {
+        key: "attention",
         label: "Em atenção",
         value: String(attention),
         tone: attention > 0 ? "amber" : undefined,
-        hint: "Linhas ativas com health diferente de verde (sinal local)",
       },
       {
+        key: "utilization",
         label: ui.names["factory.utilization"] ?? "Aproveitamento da fábrica",
         value: util === null ? "—" : `${Math.round(util)}%`,
-        hint: `${ui.defenses["factory.utilization"] ?? ""} Amostra: ${sampled} de ${lines.length} linhas com FP.`,
       },
       {
+        key: "load",
         label: ui.names["factory.committed_vs_capacity"] ?? "Carga da fábrica",
         // Faixa verde fica só na cor (sem sufixo); alerta ganha o nome da faixa.
         value:
@@ -1217,11 +1496,6 @@ export function ProjetosBoard({
             : loadBand?.tone === "amber"
               ? "amber"
               : undefined,
-        hint: `${ui.defenses["factory.committed_vs_capacity"] ?? ""}${
-          factoryLoad.components
-            ? ` Hoje: ${factoryLoad.components.committed}/${factoryLoad.components.capacity} FP em ${factoryLoad.components.builders} builders.`
-            : ""
-        }`,
       },
     ];
   }, [projects, factoryLoad, ui]);
@@ -1298,8 +1572,23 @@ export function ProjetosBoard({
 
   return (
     <div className="space-y-5">
-      {/* Ribbon — leitura de 5 segundos da fábrica */}
-      <OverviewRibbon items={ribbon} />
+      {/* Ribbon — leitura de 5 segundos da fábrica; click no KPI expande o
+          painel do eixo logo abaixo (padrão SprintRibbon) */}
+      <div>
+        <OverviewRibbon
+          items={ribbon}
+          active={ribbonAxis}
+          onToggle={(axis) => setRibbonAxis((prev) => (prev === axis ? null : axis))}
+        />
+        <RibbonPanel
+          axis={ribbonAxis}
+          projects={projects}
+          factoryLoad={factoryLoad}
+          builderLoads={builderLoads}
+          ui={ui}
+          onOpenProject={(id) => navigate(id, "push")}
+        />
+      </div>
 
       {/* Linhas de produção agrupadas por fase (funil), Pai sticky */}
       {grouped.length > 0 && (

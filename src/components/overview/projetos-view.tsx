@@ -1,4 +1,5 @@
 import { getProjectOverviews } from "@/lib/dal/project-overview";
+import { getBuilderCommitments } from "@/lib/dal/capacity";
 import { computeMetric, createMetricCtx } from "@/lib/metrics/compute";
 import { listMetricDefs } from "@/lib/metrics/registry";
 import { ProjetosBoard, type RegistryUi } from "./projetos-board";
@@ -6,9 +7,10 @@ import { ProjetosBoard, type RegistryUi } from "./projetos-board";
 /** Server component — busca a inteligência por projeto e delega o render. */
 export async function ProjetosView() {
   const ctx = createMetricCtx();
-  const [projects, factoryLoad] = await Promise.all([
+  const [projects, factoryLoad, builderLoads] = await Promise.all([
     getProjectOverviews(),
     computeMetric(ctx, "factory.committed_vs_capacity"),
+    getBuilderCommitments(),
   ]);
   // D6: name/defense/thresholds do registry são o vocabulário da UI. Só
   // strings/JSON cruzam a fronteira server→client — o registry (compute)
@@ -22,6 +24,11 @@ export async function ProjetosView() {
     ),
   };
   return (
-    <ProjetosBoard projects={projects} factoryLoad={factoryLoad} registryUi={registryUi} />
+    <ProjetosBoard
+      projects={projects}
+      factoryLoad={factoryLoad}
+      builderLoads={builderLoads}
+      registryUi={registryUi}
+    />
   );
 }
