@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { createClient } from "@/lib/supabase/client";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
+import type { ConfirmState } from "@/components/ui/confirm-dialog";
 import type { SprintFormData } from "@/components/sprint-dialog";
 import type { SprintContextSheetMode } from "@/components/sprint/sprint-context-sheet";
 import type {
@@ -13,8 +14,9 @@ import type {
 } from "@/components/sprint";
 
 /**
- * Estado de UI de sprint (dialogs/sheets) + os 9 handlers de sprint:
- * create/update, request/handle de activate/reopen, complete, e delete.
+ * Estado de UI de sprint (dialogs/sheets) + os handlers de sprint:
+ * create/update, generate (grade do prazo), request/handle de activate/reopen,
+ * complete, e delete.
  *
  * Sem optimistic — create usa `supabase.from("Sprint").insert`, o resto usa
  * `fetchOrThrow` + `loadTasksAndSprints`. `deleteSprint` lê `sprintView` para
@@ -28,9 +30,17 @@ export function useSprintActions(args: {
   loadTasksAndSprints: () => Promise<void>;
   sprintView: NavValue | null;
   setSprintView: (v: NavValue | null) => void;
+  setConfirmState: (v: ConfirmState | null) => void;
 }) {
-  const { id, supabase, sprints, loadTasksAndSprints, sprintView, setSprintView } =
-    args;
+  const {
+    id,
+    supabase,
+    sprints,
+    loadTasksAndSprints,
+    sprintView,
+    setSprintView,
+    setConfirmState,
+  } = args;
 
   const [sprintDialogOpen, setSprintDialogOpen] = useState(false);
   const [suggestSheetOpen, setSuggestSheetOpen] = useState(false);
@@ -80,6 +90,85 @@ export function useSprintActions(args: {
     if (form.autoFillFromBacklog) {
       setSuggestSheetTargetId(newId);
       setSuggestSheetOpen(true);
+    }
+  }
+
+  /**
+   * Gera todas as sprints faltantes da semana corrente até o prazo do projeto.
+   * Fluxo em 2 passos: dryRun calcula o plano no servidor → ConfirmDialog
+   * resume (quantas, período, ativação, buracos passados) → POST de verdade.
+   */
+  async function handleGenerateSprints() {
+    type GeneratePlan = {
+      totalWeeks: number;
+      count: number;
+      pastHoles: number;
+      willActivateCurrentWeek: boolean;
+      firstStart: string | null;
+      lastStart: string | null;
+    };
+    const fmt = (iso: string) =>
+      new Date(`${iso}T00:00:00`).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+      });
+    try {
+      const res = await fetchOrThrow(`/api/projects/${id}/generate-sprints`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun: true }),
+      });
+      const plan: GeneratePlan = await res.json();
+
+      if (plan.count === 0) {
+        toast.info(
+          plan.pastHoles > 0
+            ? "Nada a criar daqui pra frente — só restam semanas passadas sem sprint, e elas não são criadas retroativamente."
+            : "Todas as semanas do prazo já têm sprint.",
+        );
+        return;
+      }
+
+      const parts = [
+        `Cria ${plan.count} ${plan.count > 1 ? "sprints semanais" : "sprint semanal"} (seg→dom), de ${fmt(plan.firstStart!)} até ${fmt(plan.lastStart!)}, cobrindo o prazo do projeto.`,
+      ];
+      if (plan.willActivateCurrentWeek) {
+        parts.push("A sprint da semana atual será ativada.");
+      }
+      if (plan.pastHoles > 0) {
+        parts.push(
+          `${plan.pastHoles} semana${plan.pastHoles > 1 ? "s" : ""} passada${plan.pastHoles > 1 ? "s" : ""} sem sprint fica${plan.pastHoles > 1 ? "m" : ""} de fora (sem backfill).`,
+        );
+      }
+
+      setConfirmState({
+        title: "Criar sprints até o fim do prazo?",
+        description: parts.join(" "),
+        confirmLabel: "Criar sprints",
+        onConfirm: async () => {
+          try {
+            const execRes = await fetchOrThrow(
+              `/api/projects/${id}/generate-sprints`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+              },
+            );
+            const result: { created: number } = await execRes.json();
+            toast.success(
+              result.created === 1
+                ? "1 sprint criada"
+                : `${result.created} sprints criadas`,
+            );
+            await loadTasksAndSprints();
+          } catch (e) {
+            showErrorToast(e, { label: "Falha ao gerar sprints" });
+          }
+        },
+      });
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao calcular sprints do prazo" });
     }
   }
 
@@ -198,6 +287,7 @@ export function useSprintActions(args: {
     sprintContextSheet,
     setSprintContextSheet,
     handleCreateSprint,
+    handleGenerateSprints,
     handleUpdateSprint,
     requestActivateSprint,
     requestCompleteSprint,

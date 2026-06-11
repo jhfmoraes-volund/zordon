@@ -205,7 +205,8 @@ async function extractTextPayload(data: unknown): Promise<string | null> {
     if (typeof c === "string" && c.length > 0) return c;
   }
   // Wrapper de arquivo (s3url/uri) — alguns tools devolvem o export como file.
-  const fileObj = d.file ?? d.downloaded_file ?? d.s3file;
+  const fileObj =
+    d.downloaded_file_content ?? d.file ?? d.downloaded_file ?? d.s3file;
   const buffer = await fetchFileWrapper(fileObj ?? d);
   return buffer ? buffer.toString("utf-8") : null;
 }
@@ -229,7 +230,10 @@ async function extractBinaryPayload(data: unknown): Promise<Buffer | null> {
       return null;
     }
   }
-  const fileObj = d.file ?? d.downloaded_file ?? d.s3file ?? d;
+  // Shape real do GOOGLEDRIVE_DOWNLOAD_FILE (observado 2026-06-11):
+  // { downloaded_file_content: { s3url, uri (path local), file_downloaded } }
+  const fileObj =
+    d.downloaded_file_content ?? d.file ?? d.downloaded_file ?? d.s3file ?? d;
   return fetchFileWrapper(fileObj);
 }
 

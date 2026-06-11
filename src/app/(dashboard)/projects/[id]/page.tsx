@@ -302,7 +302,11 @@ export default function ProjectDetailPage({
     loadTasksAndSprints,
     sprintView,
     setSprintView,
+    setConfirmState,
   });
+  // Gerar grade de sprints exige as datas de prazo do projeto.
+  const canGenerateSprints =
+    canManageSprint && !!project?.startDate && !!project?.endDate;
 
   /**
    * Build per-(sprint × member) capacity rows.
@@ -603,12 +607,14 @@ export default function ProjectDetailPage({
           isSyntheticView={isSyntheticView}
           sprintView={sprintView}
           canManageSprint={canManageSprint}
+          canGenerateSprints={canGenerateSprints}
           setSprintView={setSprintView}
           setSelectedTaskRef={setSelectedTaskRef}
           setSprintContextSheet={sprintActions.setSprintContextSheet}
           setSprintDialogOpen={sprintActions.setSprintDialogOpen}
           setSuggestSheetOpen={sprintActions.setSuggestSheetOpen}
           setSprintEditingId={sprintActions.setSprintEditingId}
+          handleGenerateSprints={sprintActions.handleGenerateSprints}
           requestActivateSprint={sprintActions.requestActivateSprint}
           requestCompleteSprint={sprintActions.requestCompleteSprint}
           requestReopenSprint={sprintActions.requestReopenSprint}

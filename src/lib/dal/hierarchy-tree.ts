@@ -36,6 +36,13 @@ export type HierarchyFilter =
       sprintId: string;
       /** Inclui tasks sem sprint dos mesmos módulos da sprint. Default true. */
       includeBacklogEligible?: boolean;
+      /**
+       * Stories a ancorar mesmo sem task real no escopo (renderizam com zero
+       * tasks). Planning usa pra dar esqueleto aos ghosts de propostas create
+       * pendentes — sem isso, em projeto sem task committed a árvore vem
+       * vazia e as propostas ficam invisíveis.
+       */
+      anchorStoryIds?: string[];
     };
 
 export type BuildHierarchyOptions = {
@@ -150,28 +157,30 @@ export async function buildHierarchyTree(
     if (committedTasksRes.error) throw committedTasksRes.error;
     const committedTasks = (committedTasksRes.data ?? []) as TaskRow[];
 
-    // Stories ancoradoras: aquelas referenciadas pelas committed tasks.
-    const storyIdsFromCommitted = new Set(
+    // Stories ancoradoras: referenciadas pelas committed tasks + extras do
+    // caller (ex: âncoras de propostas pendentes da planning).
+    const anchorStoryIdSet = new Set(
       committedTasks
         .map((t) => t.userStoryId)
         .filter((id): id is string => id !== null),
     );
+    for (const sid of filter.anchorStoryIds ?? []) anchorStoryIdSet.add(sid);
 
     // Carrega essas stories pra descobrir os módulos.
     const anchorStoriesRes =
-      storyIdsFromCommitted.size > 0
+      anchorStoryIdSet.size > 0
         ? await supabase
             .from("UserStory")
             .select(
               "id, reference, title, want, soThat, refinementStatus, moduleId, proposedModuleName, personaId",
             )
-            .in("id", Array.from(storyIdsFromCommitted))
+            .in("id", Array.from(anchorStoryIdSet))
             .is("dismissedAt", null)
         : { data: [] as StoryRow[], error: null };
     if (anchorStoriesRes.error) throw anchorStoriesRes.error;
     const anchorStories = (anchorStoriesRes.data ?? []) as StoryRow[];
 
-    const moduleIdsFromCommitted = new Set(
+    const moduleIdsFromAnchors = new Set(
       anchorStories
         .map((s) => s.moduleId)
         .filter((id): id is string => id !== null),
@@ -180,14 +189,14 @@ export async function buildHierarchyTree(
     let eligibleTasks: TaskRow[] = [];
     let eligibleStories: StoryRow[] = [];
 
-    if (includeEligible && moduleIdsFromCommitted.size > 0) {
+    if (includeEligible && moduleIdsFromAnchors.size > 0) {
       // Pega stories de módulos tocados (incluindo as anchor).
       const moduleStoriesRes = await supabase
         .from("UserStory")
         .select(
           "id, reference, title, want, soThat, refinementStatus, moduleId, proposedModuleName, personaId",
         )
-        .in("moduleId", Array.from(moduleIdsFromCommitted))
+        .in("moduleId", Array.from(moduleIdsFromAnchors))
         .is("dismissedAt", null);
       if (moduleStoriesRes.error) throw moduleStoriesRes.error;
       eligibleStories = (moduleStoriesRes.data ?? []) as StoryRow[];

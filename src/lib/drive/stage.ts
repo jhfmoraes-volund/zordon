@@ -35,6 +35,9 @@ export function folderStage(name: string): DriveStage | null {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/g, "");
+    .replace(/[^a-z0-9]/g, "")
+    // Prefixo numérico de ordenação ("1. Comercial", "4. Pós-Ops") cai fora —
+    // convenção real das pastas de projeto no Drive.
+    .replace(/^[0-9]+/, "");
   return STAGE_BY_NORMALIZED[normalized] ?? null;
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   BrainCircuit,
   Check,
+  ChevronRight,
   ExternalLink,
   File,
   FileText,
@@ -14,17 +15,15 @@ import {
   Loader2,
   Presentation,
   RefreshCw,
+  Search,
   Table2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/date-utils";
-import {
-  STAGE_LABELS,
-  STAGE_ORDER,
-  type DriveStage,
-} from "@/lib/drive/stage";
+import { STAGE_LABELS, type DriveStage } from "@/lib/drive/stage";
 
 type DriveFile = {
   id: string;
@@ -34,6 +33,7 @@ type DriveFile = {
   sizeBytes: number | null;
   modifiedTime: string | null;
   webViewLink: string | null;
+  parentId: string | null;
   stage: DriveStage | null;
   syncedAt: string;
 };
@@ -46,13 +46,6 @@ type FilesPayload = {
 };
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-
-/** Seções na ordem do funil + "Geral" (stage NULL) por último. */
-const SECTION_ORDER: Array<DriveStage | null> = [...STAGE_ORDER, null];
-
-function sectionLabel(stage: DriveStage | null): string {
-  return stage ? STAGE_LABELS[stage] : "Geral";
-}
 
 const FILE_ICONS = {
   folder: Folder,
@@ -84,6 +77,16 @@ function agoLabel(iso: string): string {
   return `há ${d}d`;
 }
 
+/** lowercase + sem acento — mesmo critério do folderStage. */
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+type Crumb = { id: string; name: string };
+
 export function ProjectDriveTab({
   projectId,
   driveFolderId,
@@ -100,6 +103,8 @@ export function ProjectDriveTab({
   const [connectUrl, setConnectUrl] = useState<string | null>(null);
   const [imported, setImported] = useState<Set<string>>(() => new Set());
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [path, setPath] = useState<Crumb[]>([]);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -205,6 +210,84 @@ export function ProjectDriveTab({
     [projectId, importingId]
   );
 
+  const files = useMemo(() => payload?.files ?? [], [payload]);
+
+  const byFileId = useMemo(() => {
+    const map = new Map<string, DriveFile>();
+    for (const f of files) map.set(f.fileId, f);
+    return map;
+  }, [files]);
+
+  const childCount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const f of files) {
+      if (!f.parentId) continue;
+      map.set(f.parentId, (map.get(f.parentId) ?? 0) + 1);
+    }
+    return map;
+  }, [files]);
+
+  // Pasta atual pode ter sumido num re-sync — apara o path até um nó válido.
+  const validPath = useMemo(() => {
+    const valid: Crumb[] = [];
+    for (const crumb of path) {
+      if (!byFileId.has(crumb.id)) break;
+      valid.push(crumb);
+    }
+    return valid;
+  }, [path, byFileId]);
+
+  const currentId = validPath.at(-1)?.id ?? null;
+
+  /** Cadeia raiz→pasta (pra navegar direto a partir da busca). */
+  const pathTo = useCallback(
+    (folderId: string): Crumb[] => {
+      const chain: Crumb[] = [];
+      let cursor: DriveFile | undefined = byFileId.get(folderId);
+      while (cursor) {
+        chain.unshift({ id: cursor.fileId, name: cursor.name });
+        cursor = cursor.parentId ? byFileId.get(cursor.parentId) : undefined;
+      }
+      return chain;
+    },
+    [byFileId]
+  );
+
+  const openFolder = useCallback(
+    (f: DriveFile) => {
+      setQuery("");
+      setPath([...validPath, { id: f.fileId, name: f.name }]);
+    },
+    [validPath]
+  );
+
+  const openSearchResult = useCallback(
+    (f: DriveFile) => {
+      if (f.mimeType === FOLDER_MIME) {
+        setPath(pathTo(f.fileId));
+        setQuery("");
+      } else if (f.webViewLink) {
+        window.open(f.webViewLink, "_blank", "noopener,noreferrer");
+      }
+    },
+    [pathTo]
+  );
+
+  const sortedVisible = useMemo(() => {
+    const q = normalize(query.trim());
+    const pool = q
+      ? files.filter((f) => normalize(f.name).includes(q))
+      : files.filter((f) => (f.parentId ?? null) === currentId);
+    return [...pool].sort((a, b) => {
+      const aFolder = a.mimeType === FOLDER_MIME;
+      const bFolder = b.mimeType === FOLDER_MIME;
+      if (aFolder !== bFolder) return aFolder ? -1 : 1;
+      return a.name.localeCompare(b.name, "pt-BR");
+    });
+  }, [files, query, currentId]);
+
+  const searching = query.trim().length > 0;
+
   // ── Estado: sem pasta configurada ─────────────────────────
   if (!driveFolderId) {
     return (
@@ -222,45 +305,93 @@ export function ProjectDriveTab({
 
   if (!payload) {
     return (
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="space-y-2">
         {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 w-full" />
+          <Skeleton key={i} className="h-11 w-full" />
         ))}
       </div>
     );
   }
 
-  const { files, syncedAt } = payload;
-
-  const sections = SECTION_ORDER.map((stage) => ({
-    stage,
-    label: sectionLabel(stage),
-    files: files.filter((f) => (f.stage ?? null) === stage),
-  })).filter((s) => s.files.length > 0);
+  const { syncedAt } = payload;
+  const currentFolderLink = currentId
+    ? (byFileId.get(currentId)?.webViewLink ??
+      `https://drive.google.com/drive/folders/${currentId}`)
+    : `https://drive.google.com/drive/folders/${driveFolderId}`;
 
   return (
     <div className="space-y-3">
-      {/* Header: status do sync + ações */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <FolderOpen className="h-4 w-4" />
+      {/* Header: busca + status do sync + ações */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar em todas as pastas..."
+            className="h-8 pl-8 text-sm"
+          />
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {syncedAt && (
+            <span className="hidden text-xs text-muted-foreground sm:inline">
+              sincronizado {agoLabel(syncedAt)}
+            </span>
+          )}
           <a
-            href={`https://drive.google.com/drive/folders/${driveFolderId}`}
+            href={currentFolderLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:underline"
           >
-            Pasta do projeto
+            <Button variant="outline" size="sm">
+              <ExternalLink className="h-4 w-4" />
+              <span className="hidden sm:inline">Abrir no Drive</span>
+            </Button>
           </a>
-          {syncedAt && <span>· sincronizado {agoLabel(syncedAt)}</span>}
+          <Button variant="outline" size="sm" onClick={sync} disabled={syncing}>
+            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            <span className="hidden sm:inline">
+              {syncing ? "Sincronizando..." : "Sincronizar"}
+            </span>
+          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={sync} disabled={syncing}>
-          <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
-          <span className="hidden sm:inline">
-            {syncing ? "Sincronizando..." : "Sincronizar"}
-          </span>
-        </Button>
       </div>
+
+      {/* Breadcrumb (escondido durante busca) */}
+      {!searching && (
+        <nav className="flex flex-wrap items-center gap-1 text-sm">
+          <button
+            type="button"
+            onClick={() => setPath([])}
+            className={cn(
+              "flex items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-muted",
+              validPath.length === 0
+                ? "font-medium text-foreground"
+                : "text-muted-foreground"
+            )}
+          >
+            <FolderOpen className="h-4 w-4" />
+            Drive
+          </button>
+          {validPath.map((crumb, i) => (
+            <span key={crumb.id} className="flex items-center gap-1">
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <button
+                type="button"
+                onClick={() => setPath(validPath.slice(0, i + 1))}
+                className={cn(
+                  "max-w-[180px] truncate rounded px-1.5 py-0.5 hover:bg-muted",
+                  i === validPath.length - 1
+                    ? "font-medium text-foreground"
+                    : "text-muted-foreground"
+                )}
+              >
+                {crumb.name}
+              </button>
+            </span>
+          ))}
+        </nav>
+      )}
 
       {connectUrl && (
         <div className="surface flex items-center justify-between gap-3 border-amber-500/40 p-3">
@@ -277,11 +408,12 @@ export function ProjectDriveTab({
 
       {truncated && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Índice truncado — abra a pasta no Drive pra ver tudo.
+          Índice parcial (limite de profundidade/volume) — o que faltar, abra
+          no Drive.
         </p>
       )}
 
-      {missingStages.length > 0 && (
+      {!searching && validPath.length === 0 && missingStages.length > 0 && (
         <p className="text-xs text-muted-foreground">
           Pastas da taxonomia não encontradas no Drive:{" "}
           {missingStages.map((s) => STAGE_LABELS[s]).join(", ")}. Crie-as na
@@ -289,7 +421,7 @@ export function ProjectDriveTab({
         </p>
       )}
 
-      {/* Índice agrupado por etapa (do banco — sem chamada ao Google) */}
+      {/* Lista navegável (do banco — sem chamada ao Google por clique) */}
       {files.length === 0 ? (
         <div className="surface flex flex-col items-center gap-3 p-10 text-center">
           <p className="text-sm text-muted-foreground">
@@ -300,87 +432,126 @@ export function ProjectDriveTab({
             Sincronizar agora
           </Button>
         </div>
+      ) : sortedVisible.length === 0 ? (
+        <div className="surface flex flex-col items-center gap-3 p-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            {searching
+              ? "Nada com esse nome no índice."
+              : "Pasta vazia no índice — pode haver conteúdo além da profundidade sincronizada."}
+          </p>
+          {!searching && (
+            <a
+              href={currentFolderLink}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="outline" size="sm">
+                <ExternalLink className="h-4 w-4" />
+                Abrir no Drive
+              </Button>
+            </a>
+          )}
+        </div>
       ) : (
-        sections.map(({ stage, label, files: sectionFiles }) => (
-          <section key={label} className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {label}
-              <span className="ml-1.5 font-normal normal-case">
-                · {sectionFiles.length}
-              </span>
-            </h3>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {sectionFiles.map((f) => (
-                <DriveFileCard
-                  key={f.id}
-                  file={f}
-                  stage={stage}
-                  isImported={imported.has(f.fileId)}
-                  isImporting={importingId === f.fileId}
-                  onImport={() => importToContext(f)}
-                />
-              ))}
-            </div>
-          </section>
-        ))
+        <div className="surface divide-y divide-border/60 overflow-hidden">
+          {sortedVisible.map((f) => (
+            <DriveFileRow
+              key={f.id}
+              file={f}
+              subtitle={
+                searching
+                  ? pathTo(f.fileId)
+                      .slice(0, -1)
+                      .map((c) => c.name)
+                      .join(" / ") || "raiz"
+                  : null
+              }
+              childCount={childCount.get(f.fileId) ?? 0}
+              isImported={imported.has(f.fileId)}
+              isImporting={importingId === f.fileId}
+              onImport={() => importToContext(f)}
+              onOpen={() =>
+                searching
+                  ? openSearchResult(f)
+                  : f.mimeType === FOLDER_MIME
+                    ? openFolder(f)
+                    : f.webViewLink &&
+                      window.open(f.webViewLink, "_blank", "noopener,noreferrer")
+              }
+            />
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-function DriveFileCard({
+function DriveFileRow({
   file: f,
-  stage,
+  subtitle,
+  childCount,
   isImported,
   isImporting,
   onImport,
+  onOpen,
 }: {
   file: DriveFile;
-  stage: DriveStage | null;
+  subtitle: string | null;
+  childCount: number;
   isImported: boolean;
   isImporting: boolean;
   onImport: () => void;
+  onOpen: () => void;
 }) {
-  void stage;
   const Icon = FILE_ICONS[fileIconKey(f.mimeType)];
   const isFolder = f.mimeType === FOLDER_MIME;
   return (
-    <div className="group surface flex items-start gap-3 p-3 transition-colors hover:bg-muted/60">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="group flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
+    >
       <Icon
         className={cn(
-          "mt-0.5 h-5 w-5 shrink-0",
+          "h-5 w-5 shrink-0",
           isFolder ? "text-blue-400" : "text-muted-foreground"
         )}
       />
       <div className="min-w-0 flex-1">
-        <a
-          href={f.webViewLink ?? "#"}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:underline"
-        >
-          <p className="truncate text-sm font-medium">{f.name}</p>
-        </a>
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          {isFolder
-            ? "pasta"
-            : f.modifiedTime
-              ? fmtDate(f.modifiedTime)
-              : "—"}
-          {isImported && (
-            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-500/10 px-1 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-              <Check className="h-2.5 w-2.5" /> no contexto
-            </span>
-          )}
-        </p>
+        <p className="truncate text-sm font-medium">{f.name}</p>
+        {subtitle && (
+          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+        )}
       </div>
+      {isImported && (
+        <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-500/10 px-1 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+          <Check className="h-2.5 w-2.5" /> no contexto
+        </span>
+      )}
+      <span className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground sm:inline">
+        {isFolder
+          ? `${childCount} ${childCount === 1 ? "item" : "itens"}`
+          : f.modifiedTime
+            ? fmtDate(f.modifiedTime)
+            : "—"}
+      </span>
       <div className="flex shrink-0 items-center gap-1">
         {!isFolder && !isImported && (
           <button
             type="button"
             title="Importar pro contexto"
             disabled={isImporting}
-            onClick={onImport}
+            onClick={(e) => {
+              e.stopPropagation();
+              onImport();
+            }}
             className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 disabled:opacity-100"
           >
             {isImporting ? (
@@ -394,6 +565,8 @@ function DriveFileCard({
           href={f.webViewLink ?? "#"}
           target="_blank"
           rel="noopener noreferrer"
+          title="Abrir no Drive"
+          onClick={(e) => e.stopPropagation()}
           className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
         >
           <ExternalLink className="h-3.5 w-3.5" />

@@ -59,6 +59,16 @@ export async function applyPendingActionsForPlanning(
   const list = actions ?? [];
   if (list.length === 0) return { applied: 0, failed: 0, skipped: 0, details: [] };
 
+  // Sprint da planning = destino default dos creates. Propostas da Vitoria não
+  // carregam sprint (targetSprintId é contrato do move); sem este fallback as
+  // tasks criadas no conclude caíam no backlog em vez da sprint planejada.
+  const { data: planning, error: planningErr } = await supabase
+    .from("PlanningCeremony")
+    .select("sprintId")
+    .eq("id", planningCeremonyId)
+    .single();
+  if (planningErr) throw new Error(`Failed to load planning sprint: ${planningErr.message}`);
+
   // Auto-aprova em batch antes de aplicar — apply* assume action.decision já
   // resolvido (e usa decidedById em apply create pra carimbar createdById).
   const nowIso = new Date().toISOString();
@@ -76,10 +86,14 @@ export async function applyPendingActionsForPlanning(
     decidedById,
   }));
 
-  return applyActions(supabase, refreshed);
+  return applyActions(supabase, refreshed, planning.sprintId);
 }
 
-async function applyActions(supabase: Supabase, actions: ActionRow[]): Promise<ApplyResult> {
+async function applyActions(
+  supabase: Supabase,
+  actions: ActionRow[],
+  fallbackSprintId: string | null = null,
+): Promise<ApplyResult> {
   const sorted = actions.slice().sort((a, b) => ORDER[a.type] - ORDER[b.type]);
 
   const result: ApplyResult = { applied: 0, failed: 0, skipped: 0, details: [] };
@@ -88,7 +102,7 @@ async function applyActions(supabase: Supabase, actions: ActionRow[]): Promise<A
     try {
       switch (action.type) {
         case "create":
-          await applyCreate(supabase, action);
+          await applyCreate(supabase, action, fallbackSprintId);
           break;
         case "update":
           await applyUpdate(supabase, action);
@@ -173,7 +187,11 @@ function coerceAcTexts(raw: unknown): string[] {
 
 // ─── Per-type apply ──────────────────────────────────────
 
-async function applyCreate(supabase: Supabase, action: ActionRow) {
+async function applyCreate(
+  supabase: Supabase,
+  action: ActionRow,
+  fallbackSprintId: string | null = null,
+) {
   const p = (action.payload ?? {}) as Record<string, unknown>;
 
   const { data: reference, error: rpcErr } = await supabase.rpc(
@@ -203,7 +221,9 @@ async function applyCreate(supabase: Supabase, action: ActionRow) {
   }
 
   const taskId = crypto.randomUUID();
-  const sprintId = (p.sprintId as string | null) ?? null;
+  // Precedência: payload explícito > targetSprintId da action > sprint da planning.
+  const sprintId =
+    (p.sprintId as string | null) ?? action.targetSprintId ?? fallbackSprintId;
   // Default de status acompanha sprintId: sem sprint = backlog, com sprint = todo.
   // Protege contra Alpha propondo create sem sprint+status (resultado seria
   // task "todo" órfã, que não aparece no kanban da sprint nem no backlog).

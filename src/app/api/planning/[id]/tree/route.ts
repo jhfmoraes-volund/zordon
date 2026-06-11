@@ -18,7 +18,10 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireProjectViewApi } from "@/lib/dal";
-import { getPlanningById } from "@/lib/dal/planning";
+import {
+  getPlanningById,
+  getPendingCreateAnchorStoryIds,
+} from "@/lib/dal/planning";
 import { buildHierarchyTree } from "@/lib/dal/hierarchy-tree";
 import { isGuestActor } from "@/lib/guest-payload";
 
@@ -61,7 +64,12 @@ export async function GET(
     });
   }
 
-  const guest = await isGuestActor();
+  const [guest, anchorStoryIds] = await Promise.all([
+    isGuestActor(),
+    // Stories âncora de propostas create pendentes: renderizam mesmo sem task
+    // real, pros ghosts terem esqueleto em projeto sem nada committed.
+    getPendingCreateAnchorStoryIds(id),
+  ]);
 
   const { tree, stats } = await buildHierarchyTree({
     projectId: planning.projectId,
@@ -69,6 +77,7 @@ export async function GET(
       kind: "sprint",
       sprintId: planning.sprintId,
       includeBacklogEligible: true,
+      anchorStoryIds,
     },
     includeEmptyModules: false, // Planning só mostra módulos tocados pela sprint
     guest,

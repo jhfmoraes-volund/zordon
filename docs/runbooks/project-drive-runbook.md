@@ -37,7 +37,19 @@ Cada projeto linka uma pasta do Google Drive; uma aba "Drive" lista os arquivos 
 | D7 | Aba `drive` entra no TABS na posição da antiga `wiki` (label "Drive", ícone `FolderOpen`), visível pra quem via a Wiki | Slot e visibilidade preservados |
 | D8 | RLS: `SELECT` via `can_view_project("projectId")`; INSERT/UPDATE/DELETE revogados de `authenticated` (writes só server-side pela API) | Padrão do repo (ver `20260530e_project_wiki_section_source_table.sql`) |
 | D9 | Configuração da pasta no `ProjectEditSheet`: campo "Pasta do Google Drive" aceita URL ou ID; parse extrai o folder ID de `drive.google.com/drive/folders/<id>` | UX simples; PM cola a URL |
-| D10 | Subpastas aparecem no índice (`mimeType = application/vnd.google-apps.folder`) como cards clicáveis pro Drive — sem navegação interna | Fase 1 mínima; navegação em árvore só se houver demanda |
+| D10 | ~~Subpastas aparecem no índice como cards clicáveis pro Drive — sem navegação interna~~ **Supersedida pela Fase 1.5 (2026-06-11)** — ver seção abaixo | A demanda por navegação chegou |
+
+## 4b. Fase 1.5 — navegação em árvore (2026-06-11, supersede D10)
+
+A aba virou um navegador de arquivos in-app, simulando o Drive: clicar numa pasta navega pra dentro dela na própria área de conteúdo; botão "Abrir no Drive" (no header e por linha) é o atalho externo.
+
+| # | Decisão | Por quê |
+|---|---------|---------|
+| D11 | `ProjectDriveFile.parentId` (text, NULL = filho direto da raiz) + índice `(projectId, parentId)` — migration `20260611g_project_drive_file_parent.sql` | Navegação filtra o índice local (`parentId === pastaAtual`), zero chamada ao Google por clique |
+| D12 | Sync em BFS: profundidade ≤ 4, ≤ 200 por pasta, ≤ 1000 total; acima → `truncated: true`. Dedup por `fileId` (multi-parent): nível mais raso ganha | Caps protegem timeout do POST inline (D6); calibrar com dado real de `truncated` nos projetos |
+| D13 | Pastas canônicas (Comercial/Imersão/Ops/Pós-Ops) viram **linha** como qualquer outra; elas e descendentes carregam `stage`. Raiz é espelho fiel (sem sections por etapa) | UI = espelho do Drive; `stage` segue alimentando agentes/import (`gdrive_file`) |
+| D14 | UI em **lista** (não cards): pastas primeiro, nome asc pt-BR; breadcrumb; busca client-side sobre o índice inteiro (nome normalizado sem acento), resultado mostra o caminho | Sem thumbnail, card perde a vantagem; lista dá nome inteiro + densidade. Busca resolve "achar o doc" sem navegar |
+| D15 | Pasta vazia no índice → empty-state com "Abrir no Drive" | Cobre tanto pasta realmente vazia quanto conteúdo além da profundidade sincronizada |
 
 ## 5. Mapa do código (reusar, não recriar)
 

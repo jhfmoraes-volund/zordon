@@ -161,9 +161,19 @@ export function PlanningTree({ planningId, sprintId, onStatsChange }: Props) {
   }, [data?.projectId, planningId, loadAll]);
 
   // ── Indexar actions ativas ──────────────────────────────────────────────
+  // storyIdsInTree: ghost de create só renderiza pendurado num nó de story —
+  // se a story-alvo não está na árvore (ex: dismissada), a proposta cai no
+  // bucket de órfãs em vez de ficar invisível. null enquanto a árvore carrega.
+  const storyIdsInTree = useMemo(() => {
+    if (!data) return null;
+    const ids = new Set<string>();
+    for (const g of data.tree) for (const s of g.stories) ids.add(s.id);
+    return ids;
+  }, [data]);
+
   const decorations = useMemo(
-    () => buildDecorations(actions, sprintId),
-    [actions, sprintId],
+    () => buildDecorations(actions, sprintId, storyIdsInTree),
+    [actions, sprintId, storyIdsInTree],
   );
 
   // ── Reportar stats ─────────────────────────────────────────────────────
@@ -269,6 +279,7 @@ type DecorationsIndex = {
 function buildDecorations(
   actions: PlanningAction[],
   planningSprintId: string | null,
+  storyIdsInTree: Set<string> | null,
 ): DecorationsIndex {
   const byTaskId = new Map<string, RowDecoration[]>();
   const byStoryId = new Map<string, RowDecoration[]>();
@@ -292,7 +303,7 @@ function buildDecorations(
     switch (a.type) {
       case "create": {
         const storyId = (a.payload?.userStoryId as string | null) ?? null;
-        if (!storyId) {
+        if (!storyId || (storyIdsInTree && !storyIdsInTree.has(storyId))) {
           orphans.push(a);
           break;
         }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { existsSync } from "node:fs";
+import type { ZodTypeAny } from "zod";
 import { db } from "@/lib/db";
 import { TOOL_REGISTRY } from "@/lib/agent/tools-registry";
 import { resolveWorkspacePath } from "@/lib/forge/paths";
@@ -172,7 +173,27 @@ export async function POST(
         { status: 500 },
       );
     }
-    const result = await execute(body.args ?? {}, {});
+    // Valida args contra o inputSchema ANTES de executar. O MCP client valida
+    // contra o schema do lado do daemon — que pode estar dessincronizado deste
+    // deploy (caso .panorama, calibração 0ca428d4). Sem este parse, campo
+    // faltante vira TypeError dentro do execute; com ele, o modelo recebe o
+    // nome do campo que faltou e consegue se corrigir.
+    let toolArgs: Record<string, unknown> = body.args ?? {};
+    const inputSchema = (tool as { inputSchema?: ZodTypeAny }).inputSchema;
+    if (inputSchema && typeof inputSchema.safeParse === "function") {
+      const parsed = inputSchema.safeParse(toolArgs);
+      if (!parsed.success) {
+        const detail = parsed.error.issues
+          .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+          .join("; ");
+        return NextResponse.json(
+          { ok: false, error: `invalid_args — ${detail}` },
+          { status: 400 },
+        );
+      }
+      toolArgs = parsed.data as Record<string, unknown>;
+    }
+    const result = await execute(toolArgs, {});
     return NextResponse.json({ ok: true, result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

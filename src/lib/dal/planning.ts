@@ -373,6 +373,34 @@ export async function getPlanningPhaseContext(
   };
 }
 
+/**
+ * Stories âncora das propostas `create` ainda vivas desta planning
+ * (payload.userStoryId). O tree endpoint injeta esses IDs em
+ * `buildHierarchyTree` pra story renderizar mesmo sem task real — sem isso,
+ * em projeto sem task committed os ghosts das propostas não têm onde
+ * pendurar e a árvore vem vazia (cold-start).
+ */
+export async function getPendingCreateAnchorStoryIds(
+  planningCeremonyId: string,
+): Promise<string[]> {
+  const supabase = db();
+  const { data, error } = await supabase
+    .from("MeetingTaskAction")
+    .select("payload")
+    .eq("planningCeremonyId", planningCeremonyId)
+    .eq("type", "create")
+    .eq("execution", "pending")
+    .neq("decision", "rejected");
+  if (error) throw error;
+
+  const ids = new Set<string>();
+  for (const row of data ?? []) {
+    const sid = (row.payload as Record<string, unknown> | null)?.userStoryId;
+    if (typeof sid === "string" && sid) ids.add(sid);
+  }
+  return Array.from(ids);
+}
+
 // ─── Mutations: PlanningCeremony core ─────────────────────────────────────
 
 /**

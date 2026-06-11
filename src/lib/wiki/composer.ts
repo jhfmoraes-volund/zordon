@@ -338,6 +338,31 @@ function parseJson(text: string): unknown | null {
   }
 }
 
+/**
+ * O modelo às vezes inventa o `source.type` (ex: "documento") mesmo copiando
+ * o id certo. O id é a chave de grounding — corrige o type server-side a
+ * partir do mapa de insumos, recursivamente, antes do Zod.
+ */
+function normalizeSourceTypes(
+  node: unknown,
+  typeById: Map<string, SourceRef["type"]>
+): void {
+  if (Array.isArray(node)) {
+    for (const item of node) normalizeSourceTypes(item, typeById);
+    return;
+  }
+  if (typeof node !== "object" || node === null) return;
+  const obj = node as Record<string, unknown>;
+  const source = obj.source as { id?: unknown; type?: unknown } | undefined;
+  if (source && typeof source.id === "string") {
+    const known = typeById.get(source.id);
+    if (known) source.type = known;
+  }
+  for (const value of Object.values(obj)) {
+    normalizeSourceTypes(value, typeById);
+  }
+}
+
 /** Mock determinístico pra teste local sem gastar LLM (WIKI-011). */
 function dryRunOutput(spec: SectionSpec, items: ContextItem[]): unknown {
   const src = items[0]?.ref ?? { type: "context_source", id: "" };
@@ -585,11 +610,13 @@ export async function composeWiki(
         continue;
       }
 
+      const typeById = new Map(items.map((i) => [i.ref.id, i.ref.type]));
+      normalizeSourceTypes(raw, typeById);
       const parsed = spec.parse(raw);
       if (!parsed.ok) {
         // Output inválido → mantém versão anterior + log (PRD §6.3).
         console.error(
-          `[wiki-composer] schema inválido (seção ${spec.key}): ${parsed.error.slice(0, 500)}`
+          `[wiki-composer] schema inválido (seção ${spec.key}): ${parsed.error.slice(0, 500)}\n  raw: ${JSON.stringify(raw).slice(0, 1500)}`
         );
         result.sections[spec.key] = "error";
         result.errors.push(`${spec.key}: output fora do schema`);

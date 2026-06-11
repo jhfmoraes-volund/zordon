@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CalendarRange,
   CheckCircle2,
   MoreHorizontal,
   Pencil,
@@ -63,6 +64,8 @@ export type SprintsTabProps = {
   isSyntheticView: boolean;
   sprintView: NavValue | null;
   canManageSprint: boolean;
+  /** Manager+ e projeto com datas de início/prazo definidas. */
+  canGenerateSprints: boolean;
 
   /** Navigation */
   setSprintView: (v: NavValue | null) => void;
@@ -75,6 +78,7 @@ export type SprintsTabProps = {
   setSprintDialogOpen: (open: boolean) => void;
   setSuggestSheetOpen: (open: boolean) => void;
   setSprintEditingId: (id: string | null) => void;
+  handleGenerateSprints: () => void | Promise<void>;
 
   /** Sprint actions */
   requestActivateSprint: (targetId: string) => void;
@@ -129,12 +133,14 @@ export function SprintsTab({
   isSyntheticView,
   sprintView,
   canManageSprint,
+  canGenerateSprints,
   setSprintView,
   setSelectedTaskRef,
   setSprintContextSheet,
   setSprintDialogOpen,
   setSuggestSheetOpen,
   setSprintEditingId,
+  handleGenerateSprints,
   requestActivateSprint,
   requestCompleteSprint,
   requestReopenSprint,
@@ -222,6 +228,15 @@ export function SprintsTab({
                 <Sparkles className="size-3.5" />
                 Sugestão de sprint
               </DropdownMenuItem>
+              {canGenerateSprints ? (
+                <DropdownMenuItem
+                  className="whitespace-nowrap"
+                  onClick={() => handleGenerateSprints()}
+                >
+                  <CalendarRange className="size-3.5" />
+                  Sprints do prazo
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
 
