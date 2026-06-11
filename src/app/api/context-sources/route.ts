@@ -43,11 +43,20 @@ const GitHubCreateSchema = z.object({
   externalUrl: z.string().url().describe("GitHub URL"),
 });
 
+// Schema Zod para Notion (página ou base)
+const NotionCreateSchema = z.object({
+  kind: z.literal("notion"),
+  title: z.string().min(1),
+  projectId: z.string().uuid(),
+  externalUrl: z.string().url().describe("Notion page/database URL"),
+});
+
 const CreateContextSourceSchema = z.discriminatedUnion("kind", [
   CSVCreateSchema,
   DocumentCreateSchema,
   GSheetsCreateSchema,
   GitHubCreateSchema,
+  NotionCreateSchema,
 ]);
 
 export async function POST(req: NextRequest) {

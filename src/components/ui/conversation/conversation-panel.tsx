@@ -9,6 +9,7 @@ import {
   type ChatComposerHandle,
 } from "@/components/ui/chat-composer";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { StatusChip } from "@/components/ui/status-chip";
 import { cn } from "@/lib/utils";
 import { AGENT_THEMES, type AgentId } from "./agent-themes";
 import { AgentBadge } from "./agent-badge";
@@ -37,6 +38,11 @@ export type ConversationPanelProps = {
   placeholder?: string;
   emptyState?: ReactNode;
   headerSlot?: ReactNode;
+  /**
+   * Resposta veio pelo fallback OpenRouter (daemon offline). Renderiza uma tag
+   * discreta no header — só informa, não alarma. Ver header `X-Mode-Fallback`.
+   */
+  fallbackActive?: boolean;
   composerLeftActions?: ReactNode;
   composerAboveSlot?: ReactNode;
 
@@ -100,6 +106,7 @@ function PanelBody({
   placeholder,
   emptyState,
   headerSlot,
+  fallbackActive,
   composerLeftActions,
   composerAboveSlot,
   composerSubmitDisabled,
@@ -148,10 +155,15 @@ function PanelBody({
 
   return (
     <>
-      {(headerSlot || onClose) && (
+      {(headerSlot || onClose || fallbackActive) && (
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/50 bg-muted/30 px-4">
           <AgentBadge agent={agent} size="sm" />
           <div className="flex items-center gap-2">
+            {fallbackActive && (
+              <span title="Daemon offline — respondendo via OpenRouter">
+                <StatusChip tone="amber" variant="subtle" size="sm" label="OpenRouter" />
+              </span>
+            )}
             {headerSlot}
             {onClose && (
               <Button

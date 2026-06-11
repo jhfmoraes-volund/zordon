@@ -42,6 +42,7 @@ export default function PMReviewPage({
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [wizardExpanded, setWizardExpanded] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [isFallback, setIsFallback] = useState(false);
 
   const threadIdRef = useRef<string | null>(null);
   threadIdRef.current = threadId;
@@ -90,6 +91,7 @@ export default function PMReviewPage({
           const res = await fetch(input as RequestInfo, init);
           const tid = res.headers.get("X-Thread-Id");
           if (tid) setThreadId(tid);
+          setIsFallback(res.headers.get("X-Mode-Fallback") === "true");
           return res;
         },
       }),
@@ -253,6 +255,7 @@ export default function PMReviewPage({
       onOpenChange={setMobileOpen}
       planMode={planMode}
       onPlanModeChange={setPlanMode}
+      fallbackActive={isFallback}
       className="h-full"
     />
   );

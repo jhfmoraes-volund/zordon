@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import {
+  BookText,
   File,
   FileSpreadsheet,
   FileText,
@@ -20,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type PillKind = "transcript" | "spreadsheet" | "github" | "document";
+type PillKind = "transcript" | "spreadsheet" | "github" | "document" | "notion";
 
 /** Formatos aceitos no upload de documentos — espelha o backend de extração. */
 const FILE_ACCEPT = ".pdf,.docx,.txt,.md,.html,.htm,.csv,.xlsx,.xls";
@@ -109,6 +110,7 @@ interface ContextSheetCapabilities {
   spreadsheet?: boolean;
   github?: boolean;
   file?: boolean;
+  notion?: boolean;
 }
 
 interface ContextSheetHandlers {
@@ -116,6 +118,7 @@ interface ContextSheetHandlers {
   onImportTranscript?: () => void;
   onImportSpreadsheet?: () => void;
   onImportGitHub?: () => void;
+  onImportNotion?: () => void;
   onUploadFiles?: (files: FileList) => void;
 }
 
@@ -155,6 +158,8 @@ export default function ContextSheet({
         handlers.onImportSpreadsheet();
       } else if (kind === "github" && handlers.onImportGitHub) {
         handlers.onImportGitHub();
+      } else if (kind === "notion" && handlers.onImportNotion) {
+        handlers.onImportNotion();
       }
     }, 50);
   };
@@ -169,6 +174,7 @@ export default function ContextSheet({
   const documentCount = linkedItems.filter(
     (item) => item.kind === "document",
   ).length;
+  const notionCount = linkedItems.filter((item) => item.kind === "notion").length;
 
   const togglePill = (kind: PillKind) =>
     setActivePill((cur) => (cur === kind ? null : kind));
@@ -182,6 +188,9 @@ export default function ContextSheet({
     }
     if (kind === "document") {
       return <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+    }
+    if (kind === "notion") {
+      return <BookText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
     }
     return <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
   }
@@ -227,6 +236,15 @@ export default function ContextSheet({
                   onClick={() => togglePill("document")}
                 />
               )}
+              {capabilities.notion && (
+                <ContextPill
+                  icon={<BookText className="h-3.5 w-3.5" />}
+                  label="Notion"
+                  count={notionCount}
+                  active={activePill === "notion"}
+                  onClick={() => togglePill("notion")}
+                />
+              )}
               {/* GitHub sempre por último — chip à direita. */}
               {capabilities.github && (
                 <ContextPill
@@ -268,6 +286,14 @@ export default function ContextSheet({
                   />
                 )}
               </div>
+            )}
+
+            {activePill === "notion" && capabilities.notion && (
+              <InlinePanel
+                description="Linkar uma página ou base do Notion como contexto."
+                cta="Importar do Notion"
+                onClick={() => openImport("notion")}
+              />
             )}
 
             {activePill === "document" && capabilities.file && (

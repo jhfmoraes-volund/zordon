@@ -88,6 +88,11 @@ export async function POST(
   let projectId: string | null = null;
   let pmReviewId: string | null = null;
 
+  // Alpha (ops) roda GLOBAL: thread channel='web', agentName='alpha', sem
+  // sessionId nem projeto. Suas tools de leitura filtram via supabase direto
+  // (não usam ctx.projectId), então dispensamos a resolução de projeto.
+  const isAlpha = thread.agentName === "alpha";
+
   if (thread.sessionId) {
     // DS thread
     sessionId = thread.sessionId;
@@ -108,7 +113,7 @@ export async function POST(
     projectId = pm?.projectId ?? null;
   }
 
-  if (!projectId) {
+  if (!projectId && !isAlpha) {
     return NextResponse.json(
       { ok: false, error: "project_not_resolvable" },
       { status: 404 },
@@ -129,24 +134,27 @@ export async function POST(
 
   // Resolve workspacePath se projeto tem workspace clonado na Forja.
   // Workspace tools (read/glob/grep) validam todo path contra este prefix.
+  // Alpha global não tem projeto → pula.
   let workspacePath: string | null = null;
-  const { data: project } = await supabase
-    .from("Project")
-    .select("id, name, referenceKey")
-    .eq("id", projectId)
-    .maybeSingle();
-  if (project) {
-    const candidate = resolveWorkspacePath({
-      id: project.id,
-      name: project.name,
-      referenceKey: project.referenceKey,
-    });
-    if (existsSync(candidate)) workspacePath = candidate;
+  if (projectId) {
+    const { data: project } = await supabase
+      .from("Project")
+      .select("id, name, referenceKey")
+      .eq("id", projectId)
+      .maybeSingle();
+    if (project) {
+      const candidate = resolveWorkspacePath({
+        id: project.id,
+        name: project.name,
+        referenceKey: project.referenceKey,
+      });
+      if (existsSync(candidate)) workspacePath = candidate;
+    }
   }
 
   const ctx = {
     sessionId,
-    projectId,
+    projectId: projectId ?? "",
     pmReviewId,
     memberId,
     workspacePath,

@@ -52,6 +52,7 @@ import {
   createGlobWorkspaceTool,
   createGrepWorkspaceTool,
 } from "./tools/workspace";
+import { assembleAlphaTools } from "./agents/alpha/tools";
 
 /**
  * Context passed pelo router pra cada factory. Campos opcionais — cada tool
@@ -188,6 +189,39 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
       .get_project_indicators,
 };
 
+// ── Alpha (ops) — subset read-only GLOBAL pro daemon ──────────────────────
+// Reusa assembleAlphaTools sem rota (contexto global = sem routeProjectId) e
+// sem writeTools (só leitura). As tools route-scoped (list_modules,
+// get_project_capacity…), as de escrita (create_task, manage_allocation…) e
+// Composio (GitHub/Calendar, token per-user) ficam FORA do daemon — seguem no
+// path OpenRouter. Ver memory feedback_agent_chat_daemon_only.
+const ALPHA_READ_TOOL_NAMES = [
+  "get_sprint_overview",
+  "get_tasks",
+  "get_alerts",
+  "list_sprints",
+  "get_backlog",
+  "get_allocated_project_members",
+  "load_heuristic",
+  "get_pending_actions",
+] as const;
+
+function alphaReadTool(name: string): ToolFactory {
+  return (ctx) => {
+    const tools = assembleAlphaTools(
+      { maxSteps: 30, writeTools: false, readTools: true },
+      { currentMemberId: ctx.memberId ?? undefined },
+    );
+    const t = tools[name] as Tool | undefined;
+    if (!t) throw new Error(`alpha tool "${name}" not assembled`);
+    return t;
+  };
+}
+
+for (const name of ALPHA_READ_TOOL_NAMES) {
+  TOOL_REGISTRY[name] = alphaReadTool(name);
+}
+
 const VITOR_TOOLS = new Set([
   "read_product_vision", "read_scope", "read_persona", "read_brainstorm",
   "read_priority", "read_risk", "read_gap", "read_tech_specs", "read_hypothesis",
@@ -210,11 +244,14 @@ const VITORIA_TOOLS = new Set([
   "get_project_indicators",
 ]);
 
+const ALPHA_TOOLS = new Set<string>(ALPHA_READ_TOOL_NAMES);
+
 /**
  * Quais tools cada agente expõe via MCP. Filtra o registry global por slug.
  */
 export function getToolNamesForAgent(agentSlug: string): string[] {
   if (agentSlug === "vitor") return [...VITOR_TOOLS];
   if (agentSlug === "vitoria") return [...VITORIA_TOOLS];
+  if (agentSlug === "alpha") return [...ALPHA_TOOLS];
   return [];
 }

@@ -15,6 +15,9 @@ export function useDesignSessionChat() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
+  // True quando o turno caiu no fallback OpenRouter (daemon offline). Cada
+  // resposta POST re-seta o valor a partir do header X-Mode-Fallback.
+  const [isFallback, setIsFallback] = useState(false);
   const { planMode, setPlanMode } = useChatPlanMode("vitor");
 
   const transport = useMemo(
@@ -26,6 +29,11 @@ export function useDesignSessionChat() {
           currentStepKey: ctx.currentStepKey,
           threadId,
           planMode,
+        },
+        fetch: async (input, init) => {
+          const res = await fetch(input as RequestInfo, init);
+          setIsFallback(res.headers.get("X-Mode-Fallback") === "true");
+          return res;
         },
       }),
     [ctx.sessionId, ctx.currentStepKey, threadId, planMode]
@@ -83,6 +91,7 @@ export function useDesignSessionChat() {
     input,
     setInput,
     threadId,
+    isFallback,
     isOpen,
     toggle,
     open,

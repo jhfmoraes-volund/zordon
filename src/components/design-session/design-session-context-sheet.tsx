@@ -6,6 +6,7 @@ import ContextSheet from "@/components/agent/context-import/context-sheet";
 import {
   TranscriptModal,
   GitHubSourceModal,
+  NotionSourceModal,
 } from "@/components/agent/context-import";
 import {
   ConfirmDialog,
@@ -44,8 +45,9 @@ type ContextLinkRow = {
 
 function kindToPill(
   kind: string,
-): "transcript" | "spreadsheet" | "github" | "document" {
+): "transcript" | "spreadsheet" | "github" | "document" | "notion" {
   if (kind === "document") return "document";
+  if (kind === "notion") return "notion";
   if (kind.startsWith("spreadsheet")) return "spreadsheet";
   if (kind.startsWith("github")) return "github";
   return "transcript";
@@ -78,6 +80,7 @@ export function DesignSessionContextSheet({
   const [links, setLinks] = useState<ContextLinkRow[]>([]);
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
   const [githubModalOpen, setGithubModalOpen] = useState(false);
+  const [notionModalOpen, setNotionModalOpen] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
@@ -198,12 +201,14 @@ export function DesignSessionContextSheet({
           transcript: true,
           file: true,
           github: true,
+          notion: true,
         }}
         uploadingFile={uploadingFile}
         handlers={{
           onUnlink: handleUnlink,
           onImportTranscript: () => setTranscriptModalOpen(true),
           onImportGitHub: () => setGithubModalOpen(true),
+          onImportNotion: () => setNotionModalOpen(true),
           onUploadFiles: handleUploadFiles,
         }}
       />
@@ -223,6 +228,16 @@ export function DesignSessionContextSheet({
         projectId={projectId}
         open={githubModalOpen}
         onOpenChange={setGithubModalOpen}
+        onImported={(id) => {
+          void linkSource(id);
+        }}
+      />
+
+      <NotionSourceModal
+        apiUrl="/api/context-sources"
+        projectId={projectId}
+        open={notionModalOpen}
+        onOpenChange={setNotionModalOpen}
         onImported={(id) => {
           void linkSource(id);
         }}

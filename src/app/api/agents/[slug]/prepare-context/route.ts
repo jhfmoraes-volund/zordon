@@ -56,6 +56,11 @@ export async function POST(
   if (slug === "vitoria") {
     return NextResponse.json(await buildVitoriaContext(thread));
   }
+  if (slug === "alpha") {
+    // Alpha (ops) roda global no daemon — contexto leve; o estado vivo
+    // (sprint, tasks, alertas) o agente puxa via tools em runtime.
+    return NextResponse.json({ agent: { slug: "alpha", name: "Alpha" } });
+  }
 
   return NextResponse.json({ agent: { slug } });
 }

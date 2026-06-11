@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   GitBranch,
   FolderOpen,
+  BookText,
   CheckCircle2,
   Loader2,
   AlertCircle,
@@ -20,7 +21,7 @@ type Status = {
 };
 
 type ToolkitConfig = {
-  toolkit: "github" | "googledrive";
+  toolkit: "github" | "googledrive" | "notion";
   title: string;
   icon: LucideIcon;
   description: string;
@@ -188,6 +189,18 @@ export function GoogleDriveIntegrationCard() {
       icon={FolderOpen}
       description="Conecte seu Google Drive pra sincronizar a pasta de documentos dos projetos (aba Drive). Quem salva a pasta no projeto vira o dono do sync. Conexão via Composio (OAuth gerenciado)."
       connectLabel="Conectar Google Drive"
+    />
+  );
+}
+
+export function NotionIntegrationCard() {
+  return (
+    <ComposioIntegrationCard
+      toolkit="notion"
+      title="Notion"
+      icon={BookText}
+      description="Conecte seu Notion pra importar páginas e bases como contexto dos projetos (insumos lidos pelos agentes e, futuramente, pela Wiki). Conexão via Composio (OAuth gerenciado)."
+      connectLabel="Conectar Notion"
     />
   );
 }

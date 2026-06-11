@@ -54,6 +54,8 @@ type AlphaChatValue = {
   /** Visibility of the history sheet (separate dialog from the chat panel). */
   historyOpen: boolean;
   setHistoryOpen: (next: boolean) => void;
+  /** Última resposta veio pelo fallback OpenRouter (daemon offline). */
+  isFallback: boolean;
 };
 
 const STUB: AlphaChatValue = {
@@ -71,6 +73,7 @@ const STUB: AlphaChatValue = {
   newConversation: () => {},
   historyOpen: false,
   setHistoryOpen: () => {},
+  isFallback: false,
 };
 
 /** Convert raw DB messages into UIMessages the AI SDK chat expects. */
@@ -112,6 +115,7 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [isFallback, setIsFallback] = useState(false);
   const lastOpenedAtRef = useRef<number | null>(null);
 
   const transport = useMemo(
@@ -125,6 +129,8 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
           const res = await fetch(input, init);
           const tid = res.headers.get("X-Thread-Id");
           if (tid) setThreadId(tid);
+          // Daemon offline → respondeu via OpenRouter. UI mostra tag discreta.
+          setIsFallback(res.headers.get("X-Mode-Fallback") === "true");
           return res;
         },
       }),
@@ -252,6 +258,7 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
     newConversation,
     historyOpen,
     setHistoryOpen,
+    isFallback,
   };
 
   return <AlphaChatContext.Provider value={value}>{children}</AlphaChatContext.Provider>;

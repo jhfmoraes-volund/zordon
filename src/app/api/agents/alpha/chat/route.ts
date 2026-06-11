@@ -5,11 +5,14 @@ import { runAgent } from "@/lib/agent/engine";
 import {
   ensureAgentThread,
   persistResponseMessage,
-  persistUserMessage,
 } from "@/lib/agent/context";
 import { alphaAgent } from "@/lib/agent/agents/alpha";
 import { parseRoute } from "@/lib/agent/agents/alpha/route-context";
 import { getMemberIntegrationToken } from "@/lib/member-integrations";
+import {
+  streamViaClaudeDaemon,
+  isDaemonOnline,
+} from "@/lib/agent/sse-chat-proxy";
 import type { Capabilities } from "@/lib/agent/types";
 
 export const maxDuration = 300;
@@ -161,7 +164,13 @@ export async function POST(req: NextRequest) {
     .eq("id", threadId)
     .maybeSingle();
 
-  await persistUserMessage(threadId, message);
+  // Persiste a mensagem do user retornando o id — o branch claude-daemon
+  // precisa dele pra parear o ChatTurn.
+  const { data: userMsg } = await db()
+    .from("ChatMessage")
+    .insert({ threadId, role: "user", content: message })
+    .select("id")
+    .single();
 
   // First message in this thread becomes its title (truncated for the sidebar).
   // Always bump updatedAt so recently-active threads sort to the top.
@@ -172,6 +181,31 @@ export async function POST(req: NextRequest) {
     updates.title = message.length > 80 ? `${message.slice(0, 80).trimEnd()}…` : message;
   }
   await db().from("ChatThread").update(updates).eq("id", threadId);
+
+  // Branch por AgentMode('alpha'): claude-daemon (default) roda no daemon
+  // always-on; openrouter é o fallback automático quando o daemon está offline.
+  const { data: modeRow } = await db()
+    .from("AgentMode")
+    .select("mode")
+    .eq("userId", member.id)
+    .eq("agentSlug", "alpha")
+    .maybeSingle();
+
+  let fallbackReason: string | null = null;
+  if (modeRow?.mode === "claude-daemon") {
+    if (await isDaemonOnline()) {
+      if (!userMsg) {
+        return new Response("Failed to persist user message", { status: 500 });
+      }
+      return streamViaClaudeDaemon({
+        threadId,
+        userMessageId: userMsg.id,
+        agentSlug: "alpha",
+        ownerId: member.id,
+      });
+    }
+    fallbackReason = "daemon_offline";
+  }
 
   // Build capabilities — load per-PM transcript-provider tokens.
   // Each token is null when the member hasn't connected that provider.
@@ -203,6 +237,11 @@ export async function POST(req: NextRequest) {
 
   const headers = new Headers(response.headers);
   headers.set("X-Thread-Id", threadId);
+  if (fallbackReason) {
+    // Daemon estava offline — caiu pro OpenRouter. UI mostra tag discreta.
+    headers.set("X-Mode-Fallback", "true");
+    headers.set("X-Mode-Fallback-Reason", fallbackReason);
+  }
 
   return new Response(response.body, {
     status: response.status,

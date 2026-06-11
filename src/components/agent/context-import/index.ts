@@ -3,3 +3,4 @@ export { default as ContextLinkList, type ContextLinkItem } from './context-link
 export { default as ContextSheet } from './context-sheet';
 export { InsumosButton } from './insumos-button';
 export { GitHubSourceModal } from './github-source-modal';
+export { NotionSourceModal } from './notion-source-modal';

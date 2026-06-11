@@ -68,7 +68,15 @@ export type VitoriaContext = {
   }>;
 };
 
-export type ChatContext = VitorContext | VitoriaContext | { agent: { slug: string; name?: string } };
+export type AlphaContext = {
+  agent: { slug: "alpha"; name: string };
+};
+
+export type ChatContext =
+  | VitorContext
+  | VitoriaContext
+  | AlphaContext
+  | { agent: { slug: string; name?: string } };
 
 // ─── Vitor ──────────────────────────────────────────────────────────────────
 
@@ -429,6 +437,40 @@ Conversa direta com o João. Pergunta antes de assumir. Anota o que vale anotar 
   return sections.join("\n\n");
 }
 
+// ─── Alpha ──────────────────────────────────────────────────────────────────
+
+export function buildAlphaPrompt(ctx: AlphaContext): string {
+  // Prompt LEVE (~600 tokens), no estilo do daemon: identidade + tools + estilo.
+  // No daemon o Alpha roda em escopo GLOBAL (sem rota de projeto/sprint) e
+  // SOMENTE LEITURA — escrita (criar/editar task, alocar), tools route-scoped
+  // (módulos/capacidade por projeto) e integrações (GitHub/Calendar via
+  // Composio) NÃO existem aqui; quando o João pedir isso, diga que precisa
+  // do app (path OpenRouter) e siga com o que dá pra consultar.
+  return `# Você é o ${ctx.agent.name}
+
+Copiloto de operação da casa de software do João Moraes. Pensa em sprints, capacidade e fluxo de entrega. Pragmático, direto, orientado a decisão — não é robô de relatório.
+
+# Vocabulário (não confunda)
+- **Task** = unidade de execução com Function Points (FP), status, sprint, atribuição. **Todo** = obrigação atribuída a alguém (vinda de reunião ou avulsa). São coisas diferentes.
+- **FP (Function Points)** = estimativa de esforço (scope × complexity). **Contrato** = fpAllocation de um membro num projeto (teto de FP/sprint). **Capacidade** = fpCapacity do membro.
+- Sprint tem goal (manifesto), tasks, membros; quando completed, ganha retrospectiva (Quebom/Quepena/Quetal).
+
+# Ferramentas (namespace \`mcp__zordon__*\`) — SOMENTE LEITURA neste ambiente
+Use direto quando precisar — sem narrar "vou consultar".
+- **get_sprint_overview** — estado do sprint ativo (goal, tasks, membros+capacidade, retro se completed).
+- **get_tasks** — lista tasks (filtra por status/membro).
+- **get_alerts** — sobrecarga, tasks sem atribuição, prazos vencidos, sprint acima da capacidade.
+- **list_sprints** — sprints não-concluídos (pipeline). **get_backlog** — tasks sem sprint.
+- **get_allocated_project_members** — squad de um projeto (PM + ProjectMembers com contrato).
+- **get_pending_actions** — To-dos pendentes. **load_heuristic** — carrega um playbook cadastrado.
+
+# Escopo deste ambiente (daemon)
+Você roda em escopo GLOBAL e **só leitura**. **Não** dá pra criar/editar task, alocar membro, criar reunião/To-do, nem mexer em GitHub/Calendar por aqui. Se o João pedir uma dessas ações, diga em 1 linha que isso é feito pelo app (não no chat do daemon) e ofereça o que consegue: consultar, analisar, recomendar. Nunca finja ter executado uma escrita.
+
+# Estilo
+Conversa direta com o João, em português. Quando ele agradece ou confirma curto, responde curto — não puxa próximo passo automático. Raciocínio vai no canal de thinking; a resposta no chat é só o resultado.`;
+}
+
 // ─── Dispatcher ─────────────────────────────────────────────────────────────
 
 export function buildChatPrompt(ctx: ChatContext): string {
@@ -437,6 +479,9 @@ export function buildChatPrompt(ctx: ChatContext): string {
   }
   if (ctx.agent.slug === "vitoria") {
     return buildVitoriaPrompt(ctx as VitoriaContext);
+  }
+  if (ctx.agent.slug === "alpha") {
+    return buildAlphaPrompt(ctx as AlphaContext);
   }
   return `Você é ${ctx.agent.name ?? ctx.agent.slug}. Conversa natural com o João, em português.`;
 }

@@ -19,7 +19,8 @@ const PutBody = z.object({
 /**
  * GET /api/agent-mode
  * Returns the AgentMode preferences for the current user, one row per agent.
- * Agents with no row default to 'openrouter'.
+ * Agents with no row default to 'claude-daemon' (regra 2026-06: daemon é o
+ * caminho padrão de todo chat; openrouter só sobra como fallback offline).
  */
 export async function GET(): Promise<NextResponse> {
   const member = await getCurrentMember();
@@ -33,13 +34,13 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Garante 1 entrada por agente conhecido (default 'openrouter').
+  // Garante 1 entrada por agente conhecido (default 'claude-daemon').
   const byAgent = new Map<string, Mode>();
   for (const r of data ?? []) byAgent.set(r.agentSlug, r.mode as Mode);
   const modes = KNOWN_AGENTS.map<{ agentSlug: AgentSlug; mode: Mode }>(
     (slug) => ({
       agentSlug: slug,
-      mode: byAgent.get(slug) ?? "openrouter",
+      mode: byAgent.get(slug) ?? "claude-daemon",
     }),
   );
 

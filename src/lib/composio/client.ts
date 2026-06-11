@@ -45,12 +45,12 @@ async function getClient(): Promise<ComposioClient | null> {
     // SDK exige version explícita por tool execution; "latest" libera sem
     // hardcodar data específica (Composio v3 atualiza schemas continuamente).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    toolkitVersions: { github: "latest", googlesheets: "latest", googledrive: "latest" } as any,
+    toolkitVersions: { github: "latest", googlesheets: "latest", googledrive: "latest", notion: "latest" } as any,
   });
   return _client;
 }
 
-export type ComposioToolkit = "github" | "googlesheets" | "googledrive";
+export type ComposioToolkit = "github" | "googlesheets" | "googledrive" | "notion";
 
 // Aceita os 2 nomes — COMPOSIO_GITHUB_APP_ID é o que o usuário colocou no .env
 // inicialmente, AUTH_CONFIG_ID é o nome técnico correto (Composio chama de
@@ -71,10 +71,15 @@ function gdriveAuthConfigId(): string | null {
   return process.env.COMPOSIO_GDRIVE_AUTH_CONFIG_ID ?? null;
 }
 
+function notionAuthConfigId(): string | null {
+  return process.env.COMPOSIO_NOTION_AUTH_CONFIG_ID ?? null;
+}
+
 function getAuthConfigId(toolkit: ComposioToolkit): string | null {
   if (toolkit === "github") return githubAuthConfigId();
   if (toolkit === "googlesheets") return gsheetsAuthConfigId();
   if (toolkit === "googledrive") return gdriveAuthConfigId();
+  if (toolkit === "notion") return notionAuthConfigId();
   return null;
 }
 
@@ -103,7 +108,9 @@ export async function initiateConnection(
       ? "COMPOSIO_GITHUB_AUTH_CONFIG_ID (ou COMPOSIO_GITHUB_APP_ID)"
       : toolkit === "googledrive"
         ? "COMPOSIO_GDRIVE_AUTH_CONFIG_ID"
-        : "COMPOSIO_GSHEETS_AUTH_CONFIG_ID";
+        : toolkit === "notion"
+          ? "COMPOSIO_NOTION_AUTH_CONFIG_ID"
+          : "COMPOSIO_GSHEETS_AUTH_CONFIG_ID";
     return {
       error:
         `${varName} ausente. Crie um Auth Config no painel Composio (toolkit=${toolkit}, Composio-managed OAuth) e copie o ac_xxx pro .env.`,
@@ -302,7 +309,7 @@ export async function getComposioTools(
 ): Promise<ToolSet> {
   const supported = toolkits.filter(
     (t): t is ComposioToolkit =>
-      t === "github" || t === "googlesheets" || t === "googledrive"
+      t === "github" || t === "googlesheets" || t === "googledrive" || t === "notion"
   );
   if (supported.length === 0) return {};
   return getUserTools(userId, supported);

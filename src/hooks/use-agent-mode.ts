@@ -10,7 +10,8 @@ type AgentModeRow = { agentSlug: AgentSlug; mode: AgentChatMode };
 /**
  * Hook que lê e escreve a preferência de modo do agente (openrouter | claude-daemon).
  *
- * - Default 'openrouter' até carregar do servidor.
+ * - Default 'claude-daemon' até carregar do servidor (regra 2026-06: daemon é o
+ *   caminho padrão; openrouter só sobra como fallback offline).
  * - `setMode` faz PUT otimista (atualiza local instantâneo, rollback em erro).
  * - Decisão é global por (user, agentSlug). Não muda por thread.
  *
@@ -23,7 +24,7 @@ export function useAgentMode(agentSlug: AgentSlug): {
   isLoading: boolean;
   error: string | null;
 } {
-  const [mode, setLocalMode] = useState<AgentChatMode>("openrouter");
+  const [mode, setLocalMode] = useState<AgentChatMode>("claude-daemon");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +35,7 @@ export function useAgentMode(agentSlug: AgentSlug): {
       .then((data: { modes: AgentModeRow[] }) => {
         if (cancelled) return;
         const row = data.modes?.find((m) => m.agentSlug === agentSlug);
-        setLocalMode(row?.mode ?? "openrouter");
+        setLocalMode(row?.mode ?? "claude-daemon");
         setIsLoading(false);
       })
       .catch((e) => {

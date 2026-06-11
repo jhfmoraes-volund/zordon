@@ -75,10 +75,20 @@ export default function OpsPage() {
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [isFallback, setIsFallback] = useState(false);
   const kickoffFiredRef = useRef(false);
 
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/agents/alpha/chat" }),
+    () =>
+      new DefaultChatTransport({
+        api: "/api/agents/alpha/chat",
+        // Daemon offline → respondeu via OpenRouter. UI mostra tag discreta.
+        fetch: async (input, init) => {
+          const res = await fetch(input as RequestInfo, init);
+          setIsFallback(res.headers.get("X-Mode-Fallback") === "true");
+          return res;
+        },
+      }),
     [],
   );
 
@@ -290,6 +300,7 @@ export default function OpsPage() {
             input={input}
             onInputChange={setInput}
             onSubmit={handleSubmit}
+            fallbackActive={isFallback}
             placeholder="Pergunte sobre o sprint, alocação ou crie tasks..."
           />
         </div>

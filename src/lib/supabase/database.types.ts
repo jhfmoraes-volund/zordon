@@ -8293,6 +8293,7 @@ export type Database = {
         | "github_pr"
         | "github_issue"
         | "document"
+        | "notion"
       OpportunityStatus:
         | "discovery"
         | "evaluating"
@@ -8436,6 +8437,7 @@ export const Constants = {
         "github_pr",
         "github_issue",
         "document",
+        "notion",
       ],
       OpportunityStatus: [
         "discovery",

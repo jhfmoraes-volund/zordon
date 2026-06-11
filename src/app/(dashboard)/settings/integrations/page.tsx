@@ -1,5 +1,9 @@
 import { RoamIntegrationCard, GranolaIntegrationCard } from "../integrations-card";
-import { GitHubIntegrationCard, GoogleDriveIntegrationCard } from "../composio-card";
+import {
+  GitHubIntegrationCard,
+  GoogleDriveIntegrationCard,
+  NotionIntegrationCard,
+} from "../composio-card";
 import { TelegramCard } from "@/components/settings/telegram-card";
 
 export default function IntegrationsSettingsPage() {
@@ -9,6 +13,7 @@ export default function IntegrationsSettingsPage() {
       <GranolaIntegrationCard />
       <GitHubIntegrationCard />
       <GoogleDriveIntegrationCard />
+      <NotionIntegrationCard />
       <TelegramCard />
     </div>
   );

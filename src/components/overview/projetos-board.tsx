@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderKanban,
+  Info,
   Pencil,
   SlidersHorizontal,
 } from "lucide-react";
@@ -221,9 +222,18 @@ function cellClass(g: ProjectStats["segments"][number]): string {
  * rolling) — largura fixa, alinhada à esquerda; contrato longo quebra linha.
  * Célula acesa = produção real (cor = entrega); apagada tracejada = sprint do
  * contrato desligada (sem produção). Pista não-cromática: texto "5/12" sempre
- * ao lado + tooltip por célula. Legenda: ReguaLegend (drawer).
+ * ao lado + tooltip por célula. Breakdown por status: ReguaSummary (drawer).
  */
-function Regua({ stats, size = "sm" }: { stats: ProjectStats; size?: "sm" | "lg" }) {
+function Regua({
+  stats,
+  size = "sm",
+  legend = true,
+}: {
+  stats: ProjectStats;
+  size?: "sm" | "lg";
+  /** Título nativo de legenda no container. Off quando a régua já vive dentro de um tooltip. */
+  legend?: boolean;
+}) {
   if (stats.segments.length === 0) return null;
   const lg = size === "lg";
   // ⚑ só no drawer: na linha do board ele variaria a altura entre rows
@@ -231,7 +241,7 @@ function Regua({ stats, size = "sm" }: { stats: ProjectStats; size?: "sm" | "lg"
   const milestoneIdx = lg ? stats.milestoneIndex : null;
   return (
     <div
-      title="1 bloco = 1 sprint do contrato · cor = entrega real"
+      title={legend ? "1 bloco = 1 sprint do contrato · cor = entrega real" : undefined}
       className={cn(
         "flex flex-wrap items-center",
         lg ? "gap-1" : "gap-[3px]",
@@ -258,30 +268,48 @@ function Regua({ stats, size = "sm" }: { stats: ProjectStats; size?: "sm" | "lg"
   );
 }
 
-/** Legenda da régua — só no drawer; o board explica por tooltip. */
-function ReguaLegend({ contract }: { contract: boolean }) {
-  const sw = "inline-block h-2 w-3 shrink-0 rounded-[3px]";
+/**
+ * Resumo da régua — breakdown por status, agora servido como TOOLTIP da régua
+ * (em vez de frase inline, que poluía o drawer). Conta os blocos por status e
+ * mostra só as categorias presentes; o número herda a cor do status (ecoa a
+ * régua). A cor/semântica de cada bloco continua no tooltip por célula
+ * (segmentTitle). "sprint X/Y" não entra aqui — já vive no StatCol "Contrato".
+ */
+function reguaSummaryParts(stats: ProjectStats) {
+  const c = { entregue: 0, parcial: 0, baixa: 0, desligada: 0, corrente: 0, futura: 0 };
+  for (const g of stats.segments) {
+    if (g.kind === "hole") c.desligada++;
+    else if (g.kind === "current") c.corrente++;
+    else if (g.kind === "future") c.futura++;
+    else if (g.deliveryPct === null || g.deliveryPct >= 85) c.entregue++;
+    else if (g.deliveryPct >= 50) c.parcial++;
+    else c.baixa++;
+  }
+  return [
+    { one: "entregue", many: "entregues", n: c.entregue, tone: "text-emerald-500" },
+    { one: "parcial", many: "parciais", n: c.parcial, tone: "text-yellow-500" },
+    { one: "baixa", many: "baixas", n: c.baixa, tone: "text-red-400" },
+    { one: "desligada", many: "desligadas", n: c.desligada, tone: "text-yellow-500" },
+    { one: "corrente", many: "correntes", n: c.corrente, tone: "text-primary" },
+    { one: "futura", many: "futuras", n: c.futura, tone: undefined },
+  ].filter((p) => p.n > 0);
+}
+
+function ReguaSummaryTip({ stats }: { stats: ProjectStats }) {
+  const parts = reguaSummaryParts(stats);
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-      {contract && <span className="font-medium">1 bloco = 1 sprint do contrato</span>}
-      <span className="flex items-center gap-1">
-        <i className={cn(sw, "bg-emerald-500/70")} /> entregue
-      </span>
-      <span className="flex items-center gap-1">
-        <i className={cn(sw, "bg-yellow-500/60")} /> parcial
-      </span>
-      <span className="flex items-center gap-1">
-        <i className={cn(sw, "bg-red-400/70")} /> baixa
-      </span>
-      <span className="flex items-center gap-1">
-        <i className={cn(sw, "border border-dashed border-muted-foreground/40")} /> desligada
-      </span>
-      <span className="flex items-center gap-1">
-        <i className={cn(sw, "bg-primary/30 ring-1 ring-inset ring-primary/70")} /> corrente
-      </span>
-      <span className="flex items-center gap-1">
-        <i className={cn(sw, "bg-muted/50")} /> futura
-      </span>
+    <div className="space-y-1.5">
+      <div className="text-muted-foreground">1 bloco = 1 sprint do contrato · cor = entrega real</div>
+      {parts.length > 0 && (
+        <div className="flex flex-wrap items-center tabular-nums">
+          {parts.map((p, i) => (
+            <span key={p.one}>
+              {i > 0 && <span className="mx-1.5 opacity-40">·</span>}
+              <span className={cn("font-medium", p.tone)}>{p.n}</span> {p.n === 1 ? p.one : p.many}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -380,34 +408,49 @@ type RibbonItem = {
   tone?: "amber" | "red";
 };
 
-/** Banda fina de KPIs da fábrica — valor herói, label apagado, tabular-nums. */
+/**
+ * Banda fina de KPIs da fábrica — valor herói, label apagado, tabular-nums.
+ * Cada item com hint abre a defesa do registry por hover OU click/tap
+ * (StatTip) — title nativo não responde a click e falha o "número se explica".
+ */
 function OverviewRibbon({ items }: { items: RibbonItem[] }) {
   return (
-    <div className="flex flex-wrap items-stretch gap-y-3 border-y border-border py-3">
-      {items.map((item, i) => (
-        <div
-          key={item.label}
-          title={item.hint}
-          className={cn(
-            "flex min-w-0 flex-col gap-0.5 pr-5",
-            i > 0 && "border-l border-border pl-5",
-          )}
-        >
-          <span
-            className={cn(
-              "text-xl font-semibold leading-none tabular-nums",
-              item.tone === "amber" && "text-yellow-500",
-              item.tone === "red" && "text-red-400",
-            )}
-          >
-            {item.value}
-          </span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {item.label}
-          </span>
-        </div>
-      ))}
-    </div>
+    <TooltipProvider>
+      <div className="flex flex-wrap items-stretch gap-y-3 border-y border-border py-3">
+        {items.map((item, i) => {
+          const body = (
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span
+                className={cn(
+                  "text-xl font-semibold leading-none tabular-nums",
+                  item.tone === "amber" && "text-yellow-500",
+                  item.tone === "red" && "text-red-400",
+                )}
+              >
+                {item.value}
+              </span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {item.label}
+              </span>
+            </div>
+          );
+          return (
+            <div
+              key={item.label}
+              className={cn("pr-5", i > 0 && "border-l border-border pl-5")}
+            >
+              {item.hint ? (
+                <StatTip hint={item.hint} block>
+                  {body}
+                </StatTip>
+              ) : (
+                body
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -532,6 +575,18 @@ function PhaseHeader({
 
 // ─── Digest do PM Review (cards do drawer) ────────────────
 
+/** Slot sem conteúdo — uma linha (título + estado vazio juntos), sem caixa cheia. */
+function EmptySlot({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="surface-inset flex items-baseline gap-2 px-3 py-1.5">
+      <h5 className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h5>
+      <p className="truncate text-xs text-muted-foreground/60">{text}</p>
+    </div>
+  );
+}
+
 /**
  * Slot Panorama — narrativa da semana (summary + rumo fundidos), texto
  * integral. O drawer é a camada de leitura: truncar aqui forçaria um 4º
@@ -540,24 +595,23 @@ function PhaseHeader({
 function PanoramaCard({ notes }: { notes: Record<string, PMReviewNoteLite[]> }) {
   const summary = notes.summary?.[0]?.content;
   const direction = notes.project_direction?.[0]?.content;
+  if (!summary && !direction) {
+    return <EmptySlot title="Panorama" text="Sem panorama esta semana." />;
+  }
   return (
     <div className="surface-inset p-3">
       <h5 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         Panorama
       </h5>
-      {!summary && !direction ? (
-        <p className="mt-1.5 text-xs text-muted-foreground">Sem panorama esta semana.</p>
-      ) : (
-        <div className="mt-1.5 space-y-1.5">
-          {summary && <p className="text-sm leading-relaxed">{summary}</p>}
-          {direction && (
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="text-[10px] font-medium uppercase tracking-wide">Rumo</span>{" "}
-              {direction}
-            </p>
-          )}
-        </div>
-      )}
+      <div className="mt-1.5 space-y-1.5">
+        {summary && <p className="text-sm leading-relaxed">{summary}</p>}
+        {direction && (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            <span className="text-[10px] font-medium uppercase tracking-wide">Rumo</span>{" "}
+            {direction}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -580,17 +634,17 @@ function DigestCard({
 }) {
   const shown = items.slice(0, DIGEST_MAX);
   const overflow = items.length - shown.length;
+  if (items.length === 0) {
+    return <EmptySlot title={title} text={emptyText} />;
+  }
   return (
     <div className="surface-inset p-3">
       <h5 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
-        {items.length > 0 && <span className="font-normal"> ({items.length})</span>}
+        <span className="font-normal"> ({items.length})</span>
       </h5>
-      {items.length === 0 ? (
-        <p className="mt-1.5 text-xs text-muted-foreground">{emptyText}</p>
-      ) : (
-        <ul className="mt-1.5 space-y-2">
-          {shown.map((n, i) => (
+      <ul className="mt-1.5 space-y-2">
+        {shown.map((n, i) => (
             <li key={i} className="flex gap-2">
               <span
                 className={cn(
@@ -607,9 +661,8 @@ function DigestCard({
                 {n.content}
               </p>
             </li>
-          ))}
-        </ul>
-      )}
+        ))}
+      </ul>
       {overflow > 0 && (
         <p className="mt-1.5 text-[11px] text-muted-foreground">
           +{overflow} no review completo
@@ -731,7 +784,7 @@ function StatTip({
   block = false,
   children,
 }: {
-  hint?: string;
+  hint?: React.ReactNode;
   /** Trigger como div block (célula de grid) em vez de span inline. */
   block?: boolean;
   children: React.ReactNode;
@@ -783,9 +836,16 @@ function StatCol({
   /** Defense do registry (D6) — a frase que explica o número, como tooltip. */
   hint?: string;
 }) {
-  const body = (
-    <>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+        {hint && (
+          <StatTip hint={hint}>
+            <Info className="h-3 w-3 shrink-0 opacity-50 transition-opacity hover:opacity-100" />
+          </StatTip>
+        )}
+      </div>
       <div className="mt-0.5 truncate text-lg font-semibold tabular-nums">{value}</div>
       {sub && (
         <div
@@ -798,13 +858,7 @@ function StatCol({
           {sub}
         </div>
       )}
-    </>
-  );
-  if (!hint) return <div className="min-w-0">{body}</div>;
-  return (
-    <StatTip hint={hint} block>
-      {body}
-    </StatTip>
+    </div>
   );
 }
 
@@ -838,9 +892,6 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
     );
   }
 
-  const projectionDelta =
-    s.projectedEndWeek !== null && s.weeksTotal !== null ? s.projectedEndWeek - s.weeksTotal : null;
-
   return (
     <TooltipProvider>
       <section>
@@ -855,8 +906,9 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
           )}
         </div>
 
-        <Regua stats={s} size="lg" />
-        <ReguaLegend contract={s.mode === "contract"} />
+        <StatTip hint={<ReguaSummaryTip stats={s} />} block>
+          <Regua stats={s} size="lg" legend={false} />
+        </StatTip>
 
         <div className="mt-3 grid grid-cols-3 gap-3">
           {s.mode === "contract" ? (
@@ -918,34 +970,6 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
             </>
           )}
         </div>
-
-        {(s.paceVerdict !== null || projectionDelta !== null || s.holes > 0) && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
-            <StatTip hint={ui.defenses["project.pace_gap"]}>
-              <PaceBadge stats={s} bands={ui.bands["project.pace_gap"] ?? []} />
-            </StatTip>
-            {s.projectedEndWeek !== null && projectionDelta !== null && (
-              <StatTip hint={ui.defenses["project.projected_end_sprint"]}>
-                <span className={cn(projectionDelta > 0 && "text-red-400")}>
-                  ◆ projeção: termina na sprint {s.projectedEndWeek}
-                  {projectionDelta > 0
-                    ? ` (${projectionDelta} além do contrato)`
-                    : projectionDelta < 0
-                      ? ` (${Math.abs(projectionDelta)} antes do fim)`
-                      : " (no limite do contrato)"}
-                </span>
-              </StatTip>
-            )}
-            {s.holes > 0 && (
-              <StatTip hint={ui.defenses["project.holes"]}>
-                <span className="text-yellow-500">
-                  {s.holes} sprint{s.holes > 1 ? "s" : ""} do contrato queimada
-                  {s.holes > 1 ? "s" : ""} sem produção
-                </span>
-              </StatTip>
-            )}
-          </div>
-        )}
       </section>
     </TooltipProvider>
   );

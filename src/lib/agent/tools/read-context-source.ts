@@ -7,6 +7,7 @@ import * as csvAdapter from "@/lib/context-sources/adapters/csv";
 import * as gsheetsAdapter from "@/lib/context-sources/adapters/gsheets";
 import * as githubAdapter from "@/lib/context-sources/adapters/github";
 import * as documentAdapter from "@/lib/context-sources/adapters/document";
+import * as notionAdapter from "@/lib/context-sources/adapters/notion";
 
 /**
  * Factory de tool read_context_source — compartilhada entre Vitoria e Vitor.
@@ -16,7 +17,7 @@ import * as documentAdapter from "@/lib/context-sources/adapters/document";
 export function createReadContextSourceTool() {
   return tool({
     description:
-      "Lê o conteúdo de uma fonte de contexto linkada (transcript, meeting, documento/anexo, planilha, GitHub). Use para extrair insights detalhados antes de criar notas ou propostas — inclusive para ler documentos anexados (PDF/DOCX/HTML/TXT/MD/CSV) pelo seu contextSourceId.",
+      "Lê o conteúdo de uma fonte de contexto linkada (transcript, meeting, documento/anexo, planilha, GitHub, Notion). Use para extrair insights detalhados antes de criar notas ou propostas — inclusive para ler documentos anexados (PDF/DOCX/HTML/TXT/MD/CSV) ou páginas do Notion pelo seu contextSourceId.",
     inputSchema: z.object({
       sourceId: z.string().uuid().describe("ID do ContextSource"),
     }),
@@ -72,6 +73,12 @@ export function createReadContextSourceTool() {
             break;
           case "document":
             resolvedContent = await documentAdapter.resolveContent(
+              supabase,
+              source
+            );
+            break;
+          case "notion":
+            resolvedContent = await notionAdapter.resolveContent(
               supabase,
               source
             );

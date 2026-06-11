@@ -34,6 +34,7 @@ export function AlphaChatPanel() {
     isLoading,
     sendMessage,
     setHistoryOpen,
+    isFallback,
   } = useAlphaChat();
   const isMobile = useIsMobile();
   const [input, setInput] = useState("");
@@ -82,6 +83,7 @@ export function AlphaChatPanel() {
     onInputChange: setInput,
     onSubmit: handleSend,
     headerSlot,
+    fallbackActive: isFallback,
     placeholder: "Pergunte ao Alpha...",
   };
 

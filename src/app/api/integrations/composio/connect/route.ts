@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentMember } from "@/lib/dal";
 import { initiateConnection, type ComposioToolkit } from "@/lib/composio/client";
 
-const SUPPORTED_TOOLKITS: ComposioToolkit[] = ["github", "googlesheets", "googledrive"];
+const SUPPORTED_TOOLKITS: ComposioToolkit[] = ["github", "googlesheets", "googledrive", "notion"];
 
 /**
  * POST /api/integrations/composio/connect

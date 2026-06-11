@@ -75,6 +75,7 @@ export function WizardLayout({
     onPlanModeChange: chat.setPlanMode,
     onExecutePlan: () => chat.sendMessage("vai"),
     headerSlot: stepBadge,
+    fallbackActive: chat.isFallback,
   };
 
   const ribbonLeft = backHref ? (
