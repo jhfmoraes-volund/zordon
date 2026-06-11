@@ -189,7 +189,7 @@ por sprint = v2). Honestidade > marketing.
 | # | Tema | Status |
 |---|------|--------|
 | 1 | Registry core + doc gerado | `[LOCKED]` |
-| 2 | UI consome registry (vocabulário sprint + tooltips) | `[OPEN]` |
+| 2 | UI consome registry (vocabulário sprint + tooltips) | `[LOCKED]` |
 | 3 | MetricSnapshot + cron | `[OPEN]` |
 | 4 | Alpha analyst (4 tools + prompt D9 + eval) | `[OPEN]` |
 | 5 | Trilho de fases na régua | `[OPEN]` |
@@ -238,34 +238,48 @@ Zero mudança visível na UI.
 
 ---
 
-### FASE 2 — UI CONSOME REGISTRY `[OPEN]`
+### FASE 2 — UI CONSOME REGISTRY `[LOCKED]` (2026-06-10)
 
 **Objetivo:** resolver a confusão original do Overview. Labels, tooltips e
 thresholds saem do registry; vocabulário vira sprint (D5, tabela §2.4).
 
+**Como foi implementado (desvios deliberados):** em vez de importar o registry
+no client, o server component `projetos-view.tsx` resolve `RegistryUi`
+(names/defenses/paceBands) e passa só strings — registry/compute nunca entram
+no bundle. Junto entrou a **Régua v2 atômica** (pedido do João 2026-06-10):
+célula de largura fixa por sprint, alinhada à esquerda, contrato longo quebra
+linha; semana sem sprint = célula "desligada" (tracejada neutra, sai o âmbar
+gritante); legenda no drawer. Ribbon alinhado às fórmulas do catálogo
+(linhas ativas = fase produtiva; "média da fábrica" → `factory.utilization`;
+builders → `factory.builders_allocated` via DAL).
+
 **Tarefas:**
 
-- [ ] `StatsSection`/`StatCol` ([projetos-board.tsx](../../src/components/overview/projetos-board.tsx))
-      recebem `metricId` e puxam `name`/`defense`/`unit` de `getMetricDef` —
-      tooltip via `Tooltip` de `src/components/ui/`.
-- [ ] Aplicar TODAS as substituições do §2.4 (régua, badges, subs, rolling).
-- [ ] `PaceBadge` lê thresholds do registry (não mais do `PACE_META` local).
-- [ ] Tooltip na régua-como-conjunto (hoje só por segmento): 1 frase do que
-      a linha é — "1 segmento = 1 sprint do contrato; cor = entrega real".
-- [ ] Ribbon do topo: cada item com `metricId` + tooltip de defesa.
-- [ ] Modos `rolling` e `none` continuam funcionando (degradação intacta).
+- [x] `StatsSection`/`StatCol` ([projetos-board.tsx](../../src/components/overview/projetos-board.tsx))
+      puxam `name`/`defense` do registry via `RegistryUi` — tooltip via
+      `Tooltip` de `src/components/ui/` (StatTip, com toggle pra tap mobile).
+- [x] Aplicar TODAS as substituições do §2.4 (régua, badges, subs, rolling).
+- [x] `PaceBadge` lê thresholds do registry (não mais do `PACE_META` local).
+- [x] Tooltip na régua-como-conjunto: "1 bloco = 1 sprint do contrato · cor =
+      entrega real" (board) + legenda completa no drawer.
+- [x] Ribbon do topo: cada item com name/defense do registry.
+- [x] Modos `rolling` e `none` continuam funcionando (degradação intacta).
+- [x] Régua v2 atômica (células fixas + estados ligada/desligada/corrente/futura).
 
 **Acceptance gate:**
 
-- [ ] `npx tsc --noEmit` && eslint nos arquivos tocados clean
-- [ ] Browser: drawer de projeto fixed_scope mostra "Contrato · sprint 4/4",
-      hover em cada stat mostra a defense; nenhum "semana" visível em stats
-- [ ] Browser: projeto continuous (rolling) e projeto em commercial (none)
-      renderizam sem regressão
-- [ ] Mobile 375px: tooltips acessíveis (tap), grid 3 col não quebra
-- [ ] Zero string de label/defesa hardcoded restante no componente (grep)
+- [x] `npx tsc --noEmit` && eslint nos arquivos tocados clean
+- [x] Browser (Playwright em localhost:3333): drawer HITz mostra "Contrato ·
+      sprint 4/4 · 100% do contrato consumido", hover mostra defense; nenhum
+      "semana" visível em stats (PM Review continua semanal, fora do escopo)
+- [x] Browser: rolling (Escalas Médicas) e commercial (none) sem regressão;
+      PGF (34 sprints) quebra linha e fica legível
+- [x] Mobile 375px: tooltips abrem por tap (StatTip controlled), grid 3 col ok
+- [x] Labels/defenses de stats vêm do registry; únicas strings locais são
+      headers de coluna compostos (Contrato/Entrega/Ritmo/Janela) e o sinal
+      local "Em atenção" (health, não é métrica)
 
-**Commit:** `ZRD-JM-NN: metrics — fase 2 — UI lê registry, vocabulário sprint`
+**Commit:** `ZRD-JM-140: metrics — fase 2 — UI lê registry, vocabulário sprint + régua atômica`
 
 ---
 
@@ -393,3 +407,8 @@ não dá pra desenhar o trilho com ele.
 - Baseline de escopo original (scope-creep tracking) — v2.
 - Snapshot intra-semana por evento (fechamento de sprint) — v1.1 se a foto
   de segunda se provar grossa demais. Risco aceito conscientemente.
+- **Pausa contratual legítima** (semana off acordada que NÃO conta contra o
+  contrato) — decidido 2026-06-10 (F2): por ora semana sem sprint = célula
+  "desligada" só no visual e segue contando como buraco. Promover a estado de
+  dado exige tabela de janelas de pausa + ajuste em `computeStats`
+  (timePct/holes) — candidata a decisão futura, não entra sem Dn novo.

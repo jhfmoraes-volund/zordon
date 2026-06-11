@@ -726,18 +726,40 @@ function PMReviewSection({ p }: { p: ProjectOverview }) {
  * continuam valendo (todo onOpenChange é espelhado) e o onClick cobre tap no
  * mobile, que o Base UI ignora por design.
  */
-function StatTip({ hint, children }: { hint?: string; children: React.ReactNode }) {
+function StatTip({
+  hint,
+  block = false,
+  children,
+}: {
+  hint?: string;
+  /** Trigger como div block (célula de grid) em vez de span inline. */
+  block?: boolean;
+  children: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
+  const lastToggle = useRef(0);
   if (!hint) return <>{children}</>;
+  const onToggle = () => {
+    lastToggle.current = Date.now();
+    setOpen((o) => !o);
+  };
+  // Base UI fecha tooltip no press do trigger — ignora esse close imediato
+  // pra não desfazer o toggle do tap.
+  const onOpenChange = (o: boolean) => {
+    if (!o && Date.now() - lastToggle.current < 400) return;
+    setOpen(o);
+  };
+  const triggerCls =
+    "cursor-help rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
+    <Tooltip open={open} onOpenChange={onOpenChange}>
       <TooltipTrigger
         render={
-          <span
-            tabIndex={0}
-            onClick={() => setOpen((o) => !o)}
-            className="cursor-help rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
+          block ? (
+            <div tabIndex={0} onClick={onToggle} className={cn("min-w-0", triggerCls)} />
+          ) : (
+            <span tabIndex={0} onClick={onToggle} className={triggerCls} />
+          )
         }
       >
         {children}
@@ -779,7 +801,11 @@ function StatCol({
     </>
   );
   if (!hint) return <div className="min-w-0">{body}</div>;
-  return <StatTip hint={hint}>{body}</StatTip>;
+  return (
+    <StatTip hint={hint} block>
+      {body}
+    </StatTip>
+  );
 }
 
 /**
