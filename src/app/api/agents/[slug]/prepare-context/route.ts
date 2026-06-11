@@ -285,7 +285,7 @@ async function buildVitoriaContext(thread: ThreadRow) {
         : Promise.resolve({ data: null }),
       supabase
         .from("PMReviewNote")
-        .select("id, content, kind, priority, generatedAt")
+        .select("id, content, kind, priority, stance, generatedAt")
         .eq("pmReviewId", pmReviewId)
         .eq("audience", "detail")
         .is("dismissedAt", null)
@@ -342,6 +342,7 @@ async function buildVitoriaContext(thread: ThreadRow) {
       notes: (notes ?? []).map((n) => ({
         id: n.id.slice(0, 8),
         kind: n.kind,
+        stance: n.stance,
         content: n.content,
       })),
       attachments,

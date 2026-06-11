@@ -28,6 +28,23 @@ type Note = {
   content: string;
   priority: number;
   dismissedAt: string | null;
+  /** Postura do risco — só kind='risk' preenche. */
+  stance?: string | null;
+};
+
+const STANCE_BADGE: Record<string, { label: string; className: string }> = {
+  managed: {
+    label: "mitigação em curso",
+    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  },
+  needs_action: {
+    label: "ação necessária",
+    className: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  },
+  escalate: {
+    label: "escalar",
+    className: "bg-red-500/10 text-red-700 dark:text-red-400",
+  },
 };
 
 const KIND_TITLE: Record<PMReviewNoteKind, string> = {
@@ -177,7 +194,19 @@ export function PMReviewReport({
                           className="flex items-start gap-2 text-xs text-muted-foreground"
                         >
                           <StickyNote className="mt-0.5 size-3 shrink-0 opacity-50" />
-                          <span className="leading-relaxed">{n.content}</span>
+                          <span className="leading-relaxed">
+                            {n.stance && STANCE_BADGE[n.stance] && (
+                              <span
+                                className={cn(
+                                  "mr-1.5 inline-block rounded px-1 py-px align-middle text-[10px] font-medium",
+                                  STANCE_BADGE[n.stance].className,
+                                )}
+                              >
+                                {STANCE_BADGE[n.stance].label}
+                              </span>
+                            )}
+                            {n.content}
+                          </span>
                         </li>
                       ))}
                   </ul>

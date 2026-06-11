@@ -11,7 +11,9 @@ import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
 import {
   addPMReviewNote,
   PM_REVIEW_NOTE_KINDS,
+  PM_REVIEW_RISK_STANCES,
   type PMReviewNoteKind,
+  type PMReviewRiskStance,
 } from "@/lib/dal/pm-review";
 
 export async function POST(
@@ -41,6 +43,7 @@ export async function POST(
     sourceMeetingIds?: string[];
     sourceTranscriptIds?: string[];
     priority?: number;
+    stance?: string;
   } | null;
 
   if (!body?.kind || !body.content) {
@@ -52,6 +55,15 @@ export async function POST(
   if (!PM_REVIEW_NOTE_KINDS.includes(body.kind as PMReviewNoteKind)) {
     return NextResponse.json(
       { error: `kind inválido. Use: ${PM_REVIEW_NOTE_KINDS.join(", ")}` },
+      { status: 400 },
+    );
+  }
+  if (
+    body.stance !== undefined &&
+    !PM_REVIEW_RISK_STANCES.includes(body.stance as PMReviewRiskStance)
+  ) {
+    return NextResponse.json(
+      { error: `stance inválido. Use: ${PM_REVIEW_RISK_STANCES.join(", ")}` },
       { status: 400 },
     );
   }
@@ -68,6 +80,7 @@ export async function POST(
       sourceMeetingIds: body.sourceMeetingIds ?? [],
       sourceTranscriptIds: body.sourceTranscriptIds ?? [],
       priority: body.priority ?? 0,
+      stance: (body.stance as PMReviewRiskStance | undefined) ?? null,
       generatedByMemberId: memberId,
     });
     return NextResponse.json(note, { status: 201 });

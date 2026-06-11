@@ -5382,6 +5382,7 @@ export type Database = {
           priority: number
           sourceMeetingIds: string[]
           sourceTranscriptIds: string[]
+          stance: string | null
         }
         Insert: {
           audience?: string
@@ -5397,6 +5398,7 @@ export type Database = {
           priority?: number
           sourceMeetingIds?: string[]
           sourceTranscriptIds?: string[]
+          stance?: string | null
         }
         Update: {
           audience?: string
@@ -5412,6 +5414,7 @@ export type Database = {
           priority?: number
           sourceMeetingIds?: string[]
           sourceTranscriptIds?: string[]
+          stance?: string | null
         }
         Relationships: [
           {
@@ -6484,6 +6487,7 @@ export type Database = {
           generatedAt: string | null
           generatedBy: string | null
           id: string
+          inputsHash: string | null
           order: number
           projectId: string
           schemaVersion: number | null
@@ -6498,6 +6502,7 @@ export type Database = {
           generatedAt?: string | null
           generatedBy?: string | null
           id?: string
+          inputsHash?: string | null
           order?: number
           projectId: string
           schemaVersion?: number | null
@@ -6512,6 +6517,7 @@ export type Database = {
           generatedAt?: string | null
           generatedBy?: string | null
           id?: string
+          inputsHash?: string | null
           order?: number
           projectId?: string
           schemaVersion?: number | null
@@ -7707,6 +7713,47 @@ export type Database = {
           },
         ]
       }
+      WikiJob: {
+        Row: {
+          createdAt: string
+          error: string | null
+          finishedAt: string | null
+          id: string
+          projectId: string
+          startedAt: string | null
+          status: string
+          trigger: string
+        }
+        Insert: {
+          createdAt?: string
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          projectId: string
+          startedAt?: string | null
+          status?: string
+          trigger?: string
+        }
+        Update: {
+          createdAt?: string
+          error?: string | null
+          finishedAt?: string | null
+          id?: string
+          projectId?: string
+          startedAt?: string | null
+          status?: string
+          trigger?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "WikiJob_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       agent_quality_metrics: {
@@ -8121,6 +8168,7 @@ export type Database = {
           generatedAt: string | null
           generatedBy: string | null
           id: string
+          inputsHash: string | null
           order: number
           projectId: string
           schemaVersion: number | null

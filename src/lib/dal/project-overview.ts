@@ -33,6 +33,8 @@ export type PMReviewNoteLite = {
   priority: number;
   /** Data do marco — só kind='milestone' preenche. */
   dueAt: string | null;
+  /** Postura do risco — só kind='risk' preenche (managed | needs_action | escalate). */
+  stance: string | null;
 };
 
 // ─── STATS ──────────────────────────────────────────────────────────────────
@@ -229,6 +231,7 @@ type NoteRow = {
   priority: number | null;
   audience: string;
   dueAt: string | null;
+  stance: string | null;
 };
 type ProjectRow = {
   id: string;
@@ -699,7 +702,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
   if (selectedReviewIds.length > 0) {
     const { data: noteRows } = await supabase
       .from("PMReviewNote")
-      .select("pmReviewId, kind, content, priority, audience, dueAt")
+      .select("pmReviewId, kind, content, priority, audience, dueAt, stance")
       .in("pmReviewId", selectedReviewIds)
       .is("dismissedAt", null)
       .order("priority", { ascending: false });
@@ -711,6 +714,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
         content: n.content,
         priority: n.priority ?? 0,
         dueAt: n.dueAt,
+        stance: n.stance,
       });
       target.set(n.pmReviewId, byKind);
     }
@@ -790,21 +794,35 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
       now,
     });
 
-    const hasRisk = (notesByKind.risk?.length ?? 0) > 0;
+    // Risco pesa pelo stance, não pela existência (calibração 0ca428d4):
+    //   escalate → red · needs_action (ou nota antiga sem stance) → amber ·
+    //   managed → não altera health.
+    const riskNotes = notesByKind.risk ?? [];
+    const hasEscalatedRisk = riskNotes.some((n) => n.stance === "escalate");
+    const hasActionableRisk = riskNotes.some((n) => n.stance !== "managed");
     const hasNeedOrDecision =
       (notesByKind.need?.length ?? 0) > 0 || (notesByKind.open_decision?.length ?? 0) > 0;
     const overcommit = !!sprint && sprint.capacity > 0 && sprint.planned > sprint.capacity;
     const overloaded = !!sprint && sprint.loadPct > 0.85;
 
+    // Fase-aware: risco só puxa red em projeto operacional (fase ops/post_ops
+    // com ≥1 sprint fechada). Em discovery/imersão — ou ops recém-começado —
+    // red fica reservado a sinais operacionais (overdue, overcommit).
+    const phase = (p.phase ?? "ops") as ProjectPhase;
+    const operational =
+      (phase === "ops" || phase === "post_ops") && stats.sprintsClosed > 0;
+
     let health: ProjectHealth = "green";
-    if (signals.overdue > 0 || hasRisk || overcommit) health = "red";
-    else if (signals.blocked > 0 || hasNeedOrDecision || overloaded) health = "amber";
+    if (signals.overdue > 0 || overcommit || (hasEscalatedRisk && operational))
+      health = "red";
+    else if (signals.blocked > 0 || hasNeedOrDecision || overloaded || hasActionableRisk)
+      health = "amber";
 
     return {
       id: p.id,
       name: p.name,
       category: (p.category ?? "billable") as ProjectCategory,
-      phase: (p.phase ?? "ops") as ProjectPhase,
+      phase,
       engagementType: (p.engagementType ?? "fixed_scope") as ProjectEngagement,
       startDate: p.startDate ?? null,
       endDate: p.endDate ?? null,

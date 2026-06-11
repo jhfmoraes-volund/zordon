@@ -19,7 +19,9 @@ import {
   updatePMReview,
   replaceExecutiveDigest,
   PM_REVIEW_NOTE_KINDS,
+  PM_REVIEW_RISK_STANCES,
   type PMReviewNoteKind,
+  type PMReviewRiskStance,
 } from "@/lib/dal/pm-review";
 import { buildProjectProfile } from "./profile";
 import type { PromptContext, SystemPrompt } from "../../types";
@@ -42,7 +44,7 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
         contextSourceId, weight,
         transcript:ContextSource!EntityLink_contextSourceId_fkey(id, title, source, capturedAt)
       ),
-      notes:PMReviewNote(id, kind, content, dismissedAt, priority, audience, sourceTranscriptIds, sourceMeetingIds)
+      notes:PMReviewNote(id, kind, content, dismissedAt, priority, audience, stance, sourceTranscriptIds, sourceMeetingIds)
       `,
     )
     .eq("id", pmReviewId)
@@ -62,6 +64,7 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
       dismissedAt: string | null;
       priority: number;
       audience: string;
+      stance: string | null;
       sourceTranscriptIds: string[] | null;
       sourceMeetingIds: string[] | null;
     }>
@@ -196,6 +199,7 @@ export function buildPMReviewPrompt(ctx: PromptContext): SystemPrompt {
     kind: string;
     content: string;
     priority: number;
+    stance?: string | null;
   }>) ?? [];
 
   const linkedTranscriptsBlock =
@@ -226,7 +230,10 @@ export function buildPMReviewPrompt(ctx: PromptContext): SystemPrompt {
     activeNotes.length === 0
       ? "(nenhuma)"
       : activeNotes
-          .map((n) => `- [${n.kind}] (p${n.priority}) noteId=${n.id} · ${n.content.slice(0, 180)}`)
+          .map(
+            (n) =>
+              `- [${n.kind}${n.stance ? `:${n.stance}` : ""}] (p${n.priority}) noteId=${n.id} · ${n.content.slice(0, 180)}`,
+          )
           .join("\n");
 
   // ─── Camada 3 — DS (decisions/open questions/business/active sessions) ───
@@ -361,6 +368,10 @@ REGRAS:
   • Toda observação vai em \`add_pm_review_note\` com kind ∈ {summary,
     project_direction, next_step, risk, need, team_signal, open_decision,
     milestone}. Use \`summary\` para um panorama curto que abre o report.
+  • RISCO: toda note kind=\`risk\` leva \`stance\` — a postura dirige o health
+    do projeto no portfólio. managed = mitigação em curso; needs_action =
+    PM/time precisa agir; escalate = fora da alçada, escalar já. Não infle:
+    risco com plano rodando é managed.
   • MARCO DO PROJETO: registre no máximo 1 note kind=\`milestone\` por review —
     o próximo marco relevante do projeto (go-live, entrega de fase, demo,
     homologação), com \`dueAt\` (YYYY-MM-DD) e content curto (ex.: "Go-live
@@ -561,10 +572,29 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
           .regex(/^\d{4}-\d{2}-\d{2}$/)
           .optional()
           .describe("Data do marco (YYYY-MM-DD). Obrigatória quando kind=milestone."),
+        stance: z
+          .enum(PM_REVIEW_RISK_STANCES as [PMReviewRiskStance, ...PMReviewRiskStance[]])
+          .optional()
+          .describe(
+            "Postura do risco. OBRIGATÓRIA quando kind=risk; não use em outros kinds. " +
+              "managed (mitigação em curso / sob controle — não derruba o health do projeto), " +
+              "needs_action (exige ação do PM/time esta semana — amber no portfólio), " +
+              "escalate (fora da alçada do time, exige escalação humana JÁ — red no portfólio). " +
+              "Risco com plano de mitigação rodando é managed, não escalate.",
+          ),
       }),
-      execute: async ({ kind, content, sourceMeetingIds, sourceTranscriptIds, priority, dueAt }) => {
+      execute: async ({ kind, content, sourceMeetingIds, sourceTranscriptIds, priority, dueAt, stance }) => {
         if (kind === "milestone" && !dueAt) {
           return { ok: false, error: "kind=milestone exige dueAt (YYYY-MM-DD)." };
+        }
+        if (kind === "risk" && !stance) {
+          return {
+            ok: false,
+            error: "kind=risk exige stance (managed | needs_action | escalate).",
+          };
+        }
+        if (stance && kind !== "risk") {
+          return { ok: false, error: "stance só se aplica a kind=risk." };
         }
         const note = await addPMReviewNote({
           pmReviewId,
@@ -574,6 +604,7 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
           sourceTranscriptIds: sourceTranscriptIds ?? [],
           priority: priority ?? 5,
           dueAt: dueAt ?? null,
+          stance: stance ?? null,
           generatedByAgent: "vitoria",
         });
         return { ok: true, noteId: note.id, kind: note.kind };

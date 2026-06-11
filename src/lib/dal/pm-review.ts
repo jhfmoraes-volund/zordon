@@ -60,6 +60,21 @@ export const PM_REVIEW_NOTE_KINDS: PMReviewNoteKind[] = [
   "milestone",
 ];
 
+/**
+ * Postura do risco — só kind='risk' (espelha CHECK constraint):
+ *   • managed      — mitigação em curso / sob controle. Não altera health.
+ *   • needs_action — exige ação do PM/time. Segura amber no Overview.
+ *   • escalate     — fora da alçada do time, exige escalação humana.
+ *                    Red no Overview (apenas em projeto operacional).
+ */
+export type PMReviewRiskStance = "managed" | "needs_action" | "escalate";
+
+export const PM_REVIEW_RISK_STANCES: PMReviewRiskStance[] = [
+  "managed",
+  "needs_action",
+  "escalate",
+];
+
 /** Forma leve pra a tab Rituais (lista normalizada UNION com Planning). */
 export type PMReviewSummary = {
   id: string;
@@ -513,6 +528,8 @@ export async function addPMReviewNote(input: {
   audience?: PMReviewNoteAudience;
   /** Data do marco — obrigatória quando kind='milestone' (CHECK no DB). */
   dueAt?: string | null;
+  /** Postura do risco — só kind='risk' (CHECK no DB). Default 'needs_action'. */
+  stance?: PMReviewRiskStance | null;
   generatedByAgent?: "vitoria" | null;
   generatedByMemberId?: string | null;
 }): Promise<PMReviewNoteRow> {
@@ -529,6 +546,9 @@ export async function addPMReviewNote(input: {
   if (input.kind === "milestone" && !input.dueAt) {
     throw new Error("PMReviewNote: kind='milestone' exige dueAt (YYYY-MM-DD).");
   }
+  if (input.stance && input.kind !== "risk") {
+    throw new Error("PMReviewNote: stance só se aplica a kind='risk'.");
+  }
   const { data: inserted, error } = await supabase
     .from("PMReviewNote")
     .insert({
@@ -540,6 +560,7 @@ export async function addPMReviewNote(input: {
       priority: input.priority ?? 0,
       audience: input.audience ?? "detail",
       dueAt: input.dueAt ?? null,
+      stance: input.kind === "risk" ? (input.stance ?? "needs_action") : null,
       generatedByAgent: input.generatedByAgent ?? null,
       generatedByMemberId: input.generatedByMemberId ?? null,
     })
@@ -594,6 +615,7 @@ export async function updatePMReviewNote(
     content?: string;
     priority?: number;
     dismissedAt?: string | null;
+    stance?: PMReviewRiskStance | null;
   },
 ): Promise<PMReviewNoteRow> {
   const supabase = db();
