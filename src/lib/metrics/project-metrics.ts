@@ -194,6 +194,29 @@ export const PROJECT_METRICS: MetricDef[] = [
   ),
   projectDef(
     {
+      id: "project.delivery_rate",
+      name: "Entrega do planejado",
+      question: "das FP planejadas nas sprints, quantas viraram done?",
+      unit: "pct",
+      formulaText: "Σ done ÷ Σ planned, últimas 6 fechadas com planned > 0",
+      defense:
+        "Das FP que o time puxou pra sprint, quantas saíram. Planejado e entregue na mesma escala — erro de calibração de FP cancela dos dois lados. Razão ponderada, não média de percentuais: sprint grande pesa mais.",
+      lineage: ["Sprint", "sprint_delivery_overview"],
+      thresholds: [
+        { label: "entrega alta", tone: "green", gte: 85 },
+        { label: "entrega parcial", tone: "amber", gte: 50 },
+        { label: "entrega baixa", tone: "red", gte: null },
+      ],
+      snapshot: true,
+    },
+    (s) => ({
+      value: s.deliveryRatePct,
+      components:
+        s.deliveryRatePct !== null ? { sprints: s.deliverySprints } : undefined,
+    }),
+  ),
+  projectDef(
+    {
       id: "project.pace_gap",
       name: "Pace",
       question: "estamos no ritmo do contrato?",

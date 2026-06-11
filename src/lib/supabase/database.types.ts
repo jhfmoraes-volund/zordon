@@ -7997,6 +7997,23 @@ export type Database = {
         }
         Relationships: []
       }
+      sprint_delivery_overview: {
+        Row: {
+          done: number | null
+          planned: number | null
+          sprintId: string | null
+          tasks_sem_fp: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Task_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "Sprint"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sprint_member_capacity: {
         Row: {
           fp_allocation: number | null

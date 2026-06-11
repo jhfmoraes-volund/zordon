@@ -189,7 +189,8 @@ export default function AgentsSettingsPage() {
           </div>
           {!daemonOnline && (
             <p className="text-xs text-muted-foreground">
-              Pra ativar: <code className="font-mono">bash scripts/daemon/daemon-ctl.sh start</code>
+              Pra ativar: <code className="font-mono">npm start</code> no repo{" "}
+              <code className="font-mono">zordon-daemon</code> (setup: README de lá)
             </p>
           )}
         </CardContent>

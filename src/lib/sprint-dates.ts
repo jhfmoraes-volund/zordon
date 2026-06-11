@@ -24,6 +24,22 @@ export function sundayOf(monday: Date): Date {
   );
 }
 
+/**
+ * Janela seg→dom CONTENDO `d` (mondayOf arredonda pra frente — serve pra
+ * criar a próxima sprint, não pra "sprint corrente"). `monday` é 00:00 local;
+ * `nextMonday` é o limite exclusivo pra filtros de timestamp.
+ */
+export function sprintWeekOf(d: Date): { monday: Date; sunday: Date; nextMonday: Date } {
+  const day = d.getDay(); // 0=Sun … 6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff);
+  return {
+    monday,
+    sunday: sundayOf(monday),
+    nextMonday: new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7),
+  };
+}
+
 /** Local YYYY-MM-DD — avoids the toISOString() UTC drift. */
 export function toDateStr(d: Date): string {
   const y = d.getFullYear();

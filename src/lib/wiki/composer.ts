@@ -178,10 +178,12 @@ export async function loadWikiContext(
 // ── Hash guard (D11) ────────────────────────────────────────
 
 function computeInputsHash(items: ContextItem[]): string {
+  // Sem label (carrega data do snapshot) e sem linhas "Capturado em:" do
+  // corpo (gsheets/notion embedam timestamp) — senão o refresh noturno do
+  // cron muda o hash toda noite e paga LLM sem mudança real de conteúdo.
   const canonical = items.map((i) => ({
     ref: i.ref,
-    label: i.label,
-    body: i.body,
+    body: i.body.replace(/^\*\*Capturado em:\*\*.*$/gm, ""),
   }));
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }

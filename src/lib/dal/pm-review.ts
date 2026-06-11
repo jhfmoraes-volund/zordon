@@ -11,7 +11,8 @@
  * lib `src/lib/pm-review/status.ts`. Esta camada não decide regras.
  */
 // Sem "server-only": esse DAL é importado transitivamente pelo MCP server
-// (scripts/daemon/mcp-server.ts via tools-registry → agents/vitoria/pm-review).
+// (mcp-server do repo zordon-daemon via tools-registry → agents/vitoria/pm-review,
+// que espelham este arquivo).
 // "server-only" é defensivo pra bundler do Next contra Client Components —
 // quebra em CLI tsx. A camada continua só-servidor por usar `db()` (service_role).
 import { db } from "@/lib/db";

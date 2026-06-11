@@ -222,7 +222,7 @@ export default function PMReviewPage({
     return <div className="p-6 text-muted-foreground text-sm">Carregando…</div>;
   }
 
-  const backHref = `/projects/${pmReview.projectId}?tab=ceremonies`;
+  const backHref = `/projects/${pmReview.projectId}?tab=apps&app=ceremonies`;
   const hasReport = pmReview.reportMarkdown !== null;
   const refreshing = status === "streaming" || status === "submitted";
 

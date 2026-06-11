@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+// GFM (tabelas, strikethrough, task lists, autolinks) — sem isso, tabela
+// pipe de report de agente renderiza como parágrafo de texto cru.
+const remarkPlugins = [remarkGfm];
 
 const COLLAPSED_PREVIEW_CHARS = 5000;
 
@@ -30,16 +35,26 @@ const components = {
   ),
   li: ({ children }: { children?: React.ReactNode }) => <li className="mb-0.5">{children}</li>,
   hr: () => <hr className="my-3 border-t border-border/40" />,
+  // Tabelas no padrão console (HUD da Forge): header uppercase tracking-wider,
+  // hairlines, células densas com align-top.
   table: ({ children }: { children?: React.ReactNode }) => (
-    <div className="overflow-hidden w-full mb-2 last:mb-0">
-      <table className="w-full text-xs table-fixed">{children}</table>
+    <div className="mb-2 w-full overflow-x-auto rounded-md border border-border/60 last:mb-0">
+      <table className="w-full text-xs">{children}</table>
     </div>
   ),
+  thead: ({ children }: { children?: React.ReactNode }) => (
+    <thead className="bg-muted/30">{children}</thead>
+  ),
+  tbody: ({ children }: { children?: React.ReactNode }) => (
+    <tbody className="divide-y divide-border/40">{children}</tbody>
+  ),
   th: ({ children }: { children?: React.ReactNode }) => (
-    <th className="text-left font-semibold px-1 py-0.5 break-words">{children}</th>
+    <th className="break-words border-b border-border/60 px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      {children}
+    </th>
   ),
   td: ({ children }: { children?: React.ReactNode }) => (
-    <td className="px-1 py-0.5 break-words">{children}</td>
+    <td className="break-words px-2 py-1.5 align-top">{children}</td>
   ),
   pre: ({ children }: { children?: React.ReactNode }) => (
     <pre className="whitespace-pre-wrap break-words bg-black/10 dark:bg-white/10 rounded p-2 mb-2 last:mb-0 text-xs font-mono overflow-hidden">
@@ -79,7 +94,9 @@ export function Markdown({
     const remainingChars = children.length - COLLAPSED_PREVIEW_CHARS;
     return (
       <>
-        <ReactMarkdown components={components}>{preview}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+          {preview}
+        </ReactMarkdown>
         <div className="my-2 border-t border-border/30 pt-2">
           <button
             type="button"
@@ -93,5 +110,9 @@ export function Markdown({
     );
   }
 
-  return <ReactMarkdown components={components}>{children}</ReactMarkdown>;
+  return (
+    <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+      {children}
+    </ReactMarkdown>
+  );
 }

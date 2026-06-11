@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  *
  * Endpoint LEVE pro daemon mode — devolve FATOS vivos da sessão como JSON
  * estruturado (~1-2KB), não prompt prosa. Daemon usa pra montar um prompt
- * curto e identitário (~600 tokens) via scripts/daemon/chat-prompts.ts.
+ * curto e identitário (~600 tokens) via chat-prompts.ts (repo zordon-daemon).
  *
  * Contraste com /prepare-turn (~20KB de prompt) que ainda serve o path
  * OpenRouter — single source of truth pra dados, mas estratégias diferentes

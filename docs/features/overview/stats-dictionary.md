@@ -2,14 +2,16 @@
      SSOT: src/lib/metrics/registry.ts. Pra mudar fórmula/defesa, mude o
      registry (e o DAL, se for o caso) e rode: npx tsx scripts/gen-metrics-doc.ts -->
 
-# STATS — dicionário de métricas do Overview de Projetos
+# STATS — dicionário de métricas & alertas do Overview
 
-Toda métrica exibida na aba Projetos do Overview (`/`) é **derivada** — nada é
-coluna editável. Este dicionário é a defesa de cada número: fórmula exata,
-fonte e a frase que explica pro CEO (a `defense` é o tooltip da UI **e** a
-resposta do Alpha — D6). SSOT: `METRIC_REGISTRY` em
-[`src/lib/metrics/registry.ts`](../../../src/lib/metrics/registry.ts); motor de
-projeto: `computeStats()` em
+Todo número exibido no Overview (`/`) é **derivado** — nada é coluna
+editável. Este dicionário é a defesa de cada número: fórmula exata, fonte e a
+frase que explica pro CEO (a `defense` é o tooltip da UI **e** a resposta do
+Alpha — D6). SSOT: `METRIC_REGISTRY` em
+[`src/lib/metrics/registry.ts`](../../../src/lib/metrics/registry.ts) e
+`ALERT_REGISTRY` em
+[`src/lib/metrics/alerts.ts`](../../../src/lib/metrics/alerts.ts) (D11); motor
+de projeto: `computeStats()` em
 [`src/lib/dal/project-overview.ts`](../../../src/lib/dal/project-overview.ts).
 
 Organização: todo stat responde a uma pergunta — *quanto tempo queimou? quanto
@@ -44,6 +46,7 @@ prazo — fingir que há seria indefensável; viram `mode: "rolling"` (janela da
 |---|---|---|---|---|
 | **Média FP/sprint** (`project.avg_fp_per_sprint`) 📸 | fp_per_sprint | Σ done ÷ n, últimas 6 fechadas com planned > 0 | `Sprint`, `sprint_capacity_overview` | *qual o ritmo real recente da linha?* — Ritmo real recente da linha — o time como está agora. |
 | **Aproveitamento** (`project.utilization`) 📸 | pct | Σ done ÷ Σ capacity, mesma janela | `Sprint`, `sprint_capacity_overview` | *quanto da capacidade alocada vira entrega?* — De cada 100 FP de capacidade alocada, quantos viraram entrega. |
+| **Entrega do planejado** (`project.delivery_rate`) 📸 | pct | Σ done ÷ Σ planned, últimas 6 fechadas com planned > 0 · Faixas: ≥ 85: entrega alta · ≥ 50: entrega parcial · abaixo: entrega baixa. | `Sprint`, `sprint_delivery_overview` | *das FP planejadas nas sprints, quantas viraram done?* — Das FP que o time puxou pra sprint, quantas saíram. Planejado e entregue na mesma escala — erro de calibração de FP cancela dos dois lados. Razão ponderada, não média de percentuais: sprint grande pesa mais. |
 | **Pace** (`project.pace_gap`) 📸 | pp | scopePct − timePct · Faixas: ≥ 5: à frente · ≥ -5: no ritmo · ≥ -15: atrás · abaixo: crítico. | `Project`, `Task` | *estamos no ritmo do contrato?* — Queimei X% do tempo e entreguei Y% do escopo: Zpp de gap. Uma subtração, zero opinião. |
 | **Projeção de término** (`project.projected_end_sprint`) 📸 | sprints | elapsed + ceil((fpTotal − fpDone) ÷ avgFp) | `Project`, `Task`, `sprint_capacity_overview` | *no ritmo atual, em que sprint o escopo termina?* — No ritmo médio recente, a matemática termina na sprint X. Não é palpite: é divisão. |
 
@@ -69,6 +72,21 @@ views `sprint_member_capacity` e `member_commitment_overview` via
 | **Linhas ativas** (`factory.lines_active`) 📸 | count | projetos em fase produtiva (immersion/ops) | `Project` | *quantas linhas de produção estão rodando?* — Linhas de produção rodando. |
 | **Clientes ativos** (`factory.clients_active`) 📸 | count | distinct clients de linhas ativas (sem internos/eval) | `Project`, `Client` | *quantos clientes têm produção ativa?* — Clientes com produção ativa. |
 | **Em comercial** (`factory.commercial_buffer`) 📸 | count | projetos ativos em fase commercial (sem internos/eval) | `Project` | *quantos projetos estão pra começar?* — Projetos em comercial — o buffer da fábrica: contratos a caminho de virar linha de produção. |
+
+## ALERTAS OPERACIONAIS (aba Operação)
+
+Pontos de atenção da aba Operação — SSOT irmã do registry de métricas
+(`ALERT_REGISTRY` em `src/lib/metrics/alerts.ts`, D11). Alerta ≠ métrica:
+aponta ocorrências que pedem ação, não mede ritmo. Mesma disciplina:
+alerta só existe se está no registry; regra nunca muda sem `defense` junto.
+
+| Alerta | Severidade | Regra | Fonte | Defesa |
+|---|---|---|---|---|
+| **Tasks com prazo vencido** (`alert.tasks_overdue`) | critical | dueDate < hoje, status fora de done/draft, sem dismiss | `Task`, `Project`, `TaskAssignment` | *o que já furou o combinado?* — O prazo combinado passou e a task segue aberta — ou o prazo era irreal ou a entrega travou; os dois pedem ação hoje. |
+| **Tasks sem responsável em sprint ativa** (`alert.tasks_unassigned`) | warning | tasks abertas em sprint ativa sem TaskAssignment (RPC) | `unassigned_active_task_count`, `Task`, `Sprint`, `TaskAssignment` | *o que está em sprint ativa sem dono?* — Task em sprint ativa sem dono não anda sozinha — alguém puxa ou ela vira buraco na sprint. |
+| **Tasks paradas** (`alert.tasks_stuck`) | warning | in_progress sem update há 3+ dias, sem dismiss | `Task`, `Project`, `TaskAssignment` | *o que está em andamento mas não anda?* — Task em andamento sem movimento há 3+ dias costuma ser bloqueio não-dito — melhor perguntar do que esperar. |
+| **Builders em overbooking** (`alert.builders_overbooked`) | warning | committed > capacity, product-builders (member_commitment_overview) | `member_commitment_overview` | *quem prometeu mais do que cabe?* — Mesma régua do member.committed_vs_capacity: acima de 100% é overbooking. Substituiu o threshold local de 85% da aba (D11) — uma régua só, na UI e na boca do Alpha. |
+| **Builders sem alocação** (`alert.builders_idle`) | info | committed = 0 com capacity > 0, product-builders (member_commitment_overview) | `member_commitment_overview` | *quem está com capacidade ociosa?* — Builder com capacidade e zero FP prometida em qualquer projeto — ociosidade visível, não acusação. Substituiu o threshold local de 10% da aba (D11). |
 
 ## Régua (a visualização)
 

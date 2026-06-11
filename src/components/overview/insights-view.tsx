@@ -1,10 +1,11 @@
-import { Users, Smile, Building2, AlertTriangle } from "lucide-react";
+import { Users, Smile, Building2, AlertTriangle, FolderKanban } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
-import type { ChipTone } from "@/lib/status-chips";
+import { PROJECT_PHASE, type ChipTone } from "@/lib/status-chips";
 import {
   getInsightsOverview,
   type ScoreStat,
   type ClientHealthRow,
+  type PmDistributionRow,
 } from "@/lib/dal/insights-overview";
 
 /** Health do ClientInsight → chip (label pt-BR + tom). */
@@ -88,6 +89,60 @@ function initials(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
+/** Cor da fase (Project.phase) nos segmentos da barra e nos dots da legenda. */
+const PHASE_COLOR: Record<string, string> = {
+  commercial: "bg-purple-400",
+  immersion: "bg-cyan-400",
+  ops: "bg-blue-400",
+  post_ops: "bg-teal-400",
+};
+const phaseColor = (phase: string) => PHASE_COLOR[phase] ?? "bg-muted-foreground/50";
+const phaseLabel = (phase: string) =>
+  (PROJECT_PHASE as Record<string, { label: string }>)[phase]?.label ?? phase;
+
+/** Linha do bloco PMs — avatar + nome + barra empilhada por fase + split + total. */
+function PmLine({ p, max }: { p: PmDistributionRow; max: number }) {
+  const pct = max > 0 ? (p.activeProjects / max) * 100 : 0;
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+        {p.id ? initials(p.name) : "?"}
+      </span>
+      <span
+        className={[
+          "w-44 shrink-0 truncate text-sm",
+          p.id ? "font-medium" : "text-muted-foreground",
+        ].join(" ")}
+      >
+        {p.name}
+      </span>
+      <span className="min-w-0 flex-1">
+        {p.activeProjects > 0 && (
+          <span className="flex h-1.5 overflow-hidden rounded-full" style={{ width: `${pct}%` }}>
+            {p.byPhase.map((s) => (
+              <span
+                key={s.phase}
+                className={phaseColor(s.phase)}
+                style={{ width: `${(s.count / p.activeProjects) * 100}%` }}
+                title={`${s.count} ${phaseLabel(s.phase)}`}
+              />
+            ))}
+          </span>
+        )}
+      </span>
+      <span className="flex shrink-0 items-center gap-2.5 text-[11px] tabular-nums text-muted-foreground">
+        {p.byPhase.map((s) => (
+          <span key={s.phase} className="flex items-center gap-1">
+            <span className={`h-1.5 w-1.5 rounded-full ${phaseColor(s.phase)}`} />
+            {s.count} {phaseLabel(s.phase)}
+          </span>
+        ))}
+      </span>
+      <span className="w-10 shrink-0 text-right text-sm tabular-nums">{p.activeProjects}</span>
+    </div>
+  );
+}
+
 function ClientLine({ c }: { c: ClientHealthRow }) {
   const chip = c.health ? HEALTH_CHIP[c.health] : null;
   return (
@@ -113,9 +168,18 @@ function ClientLine({ c }: { c: ClientHealthRow }) {
   );
 }
 
-/** Aba Insights — três blocos de peso igual (time / satisfação / clientes). */
+/** Aba Insights — quatro blocos de peso igual (time / PMs / satisfação / clientes). */
 export async function InsightsView() {
-  const { team, satisfaction, clients } = await getInsightsOverview();
+  const { team, pms, satisfaction, clients } = await getInsightsOverview();
+  const pmActiveTotal = pms.reduce((s, p) => s + p.activeProjects, 0);
+  const pmMax = Math.max(0, ...pms.map((p) => p.activeProjects));
+  const phaseTotals = new Map<string, number>();
+  for (const p of pms)
+    for (const s of p.byPhase) phaseTotals.set(s.phase, (phaseTotals.get(s.phase) ?? 0) + s.count);
+  const phaseSub = Object.keys(PROJECT_PHASE)
+    .filter((k) => (phaseTotals.get(k) ?? 0) > 0)
+    .map((k) => `${phaseTotals.get(k)} ${phaseLabel(k)}`)
+    .join(" · ");
 
   return (
     <div className="space-y-5">
@@ -139,7 +203,27 @@ export async function InsightsView() {
         )}
       </section>
 
-      {/* ── Bloco 2: Satisfação ── */}
+      {/* ── Bloco 2: Projetos por PM ── */}
+      <section className="surface p-4">
+        <BlockHeader
+          icon={FolderKanban}
+          title="Projetos por PM"
+          sub={`${pmActiveTotal} ativo${pmActiveTotal === 1 ? "" : "s"}${phaseSub ? ` · ${phaseSub}` : ""}`}
+        />
+        {pms.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Nenhum PM ou projeto ativo.
+          </p>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {pms.map((p) => (
+              <PmLine key={p.id ?? "unassigned"} p={p} max={pmMax} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Bloco 3: Satisfação ── */}
       <section className="surface p-4">
         <BlockHeader
           icon={Smile}
@@ -176,7 +260,7 @@ export async function InsightsView() {
         )}
       </section>
 
-      {/* ── Bloco 3: Clientes × projetos ── */}
+      {/* ── Bloco 4: Clientes × projetos ── */}
       <section className="surface p-4">
         <BlockHeader icon={Building2} title="Clientes" sub={`${clients.length} no total`} />
         {clients.length === 0 ? (

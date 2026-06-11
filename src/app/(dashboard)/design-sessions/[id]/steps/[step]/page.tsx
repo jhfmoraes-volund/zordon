@@ -114,7 +114,7 @@ export default function StepPage({
     <PageTitle
       title={session.title}
       subtitle={`${session.project.name} · ${TYPE_LABELS[session.type] ?? session.type}`}
-      backHref={`/projects/${session.projectId}?tab=sessions`}
+      backHref={`/projects/${session.projectId}?tab=apps&app=sessions`}
     />
     <DesignSessionProvider
       sessionId={id}
@@ -137,7 +137,7 @@ export default function StepPage({
         onPrevious={() => stepIndex > 0 && navigate(stepIndex - 1)}
         onStepClick={navigate}
         hideSidePanels={currentStepDef.key === "pre_work" || currentStepDef.key === "briefing" || currentStepDef.key === "prd_briefing"}
-        backHref={`/projects/${session.projectId}?tab=sessions`}
+        backHref={`/projects/${session.projectId}?tab=apps&app=sessions`}
         memoriaHref={`/design-sessions/${id}/memoria`}
       >
         <StepContent stepKey={currentStepDef.key} sessionId={id} projectId={session.projectId} sessionType={session.type} />

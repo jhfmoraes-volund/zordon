@@ -85,6 +85,10 @@ export type ProjectStats = {
   avgFpPerSprint: number | null;
   /** Σ done ÷ Σ capacity na mesma janela (0-100). */
   utilizationPct: number | null;
+  /** Σ done ÷ Σ planned na mesma janela (0-100) — entrega do planejado. */
+  deliveryRatePct: number | null;
+  /** Amostra da janela de ritmo (fechadas com planned > 0, máx 6) — gate de maturidade na UI. */
+  deliverySprints: number;
   /** scopePct − timePct (pontos percentuais). */
   paceGapPp: number | null;
   paceVerdict: PaceVerdict | null;
@@ -152,6 +156,8 @@ export type PMReviewDigestEntry = {
   id: string;
   referenceWeek: string;
   isCurrentWeek: boolean;
+  /** Quando a review foi publicada — null enquanto draft. */
+  publishedAt: string | null;
   reportMarkdown: string | null;
   /** Notes de trabalho (audience='detail') — alimentam health e sinais. */
   notesByKind: Record<string, PMReviewNoteLite[]>;
@@ -207,6 +213,13 @@ type CapRow = {
   planned: number | null;
   done: number | null;
   open: number | null;
+};
+/** sprint_delivery_overview — entrega por task (sem join de assignment). */
+type DeliveryRow = {
+  sprintId: string;
+  planned: number | null;
+  done: number | null;
+  tasks_sem_fp: number | null;
 };
 type SprintRow = {
   id: string;
@@ -274,6 +287,7 @@ function computeStats(args: {
   /** Todas as sprints do projeto, asc por startDate. */
   sprints: SprintRow[];
   capBySprint: Map<string, CapRow>;
+  deliveryBySprint: Map<string, DeliveryRow>;
   fpDone: number;
   fpTotal: number;
   milestoneDueAt: string | null;
@@ -286,6 +300,7 @@ function computeStats(args: {
     endDate,
     sprints,
     capBySprint,
+    deliveryBySprint,
     fpDone,
     fpTotal,
     milestoneDueAt,
@@ -300,17 +315,30 @@ function computeStats(args: {
 
   // RITMO — janela das últimas N fechadas com planned > 0 (sprint vazia não é
   // amostra de capacidade; semana sem sprint já aparece como buraco na régua).
+  // Entrega (planned/done) vem da sprint_delivery_overview — por task, sem furo
+  // de task-sem-dono nem double-count. Capacity segue na capacity_overview
+  // (alocação é por membro por natureza).
   const rhythmSample = [...closed]
     .sort((a, b) => (a.startDate < b.startDate ? 1 : -1))
-    .map((s) => capBySprint.get(s.id))
-    .filter((c): c is CapRow => !!c && Number(c.planned) > 0)
+    .map((s) => ({
+      delivery: deliveryBySprint.get(s.id),
+      capacity: Number(capBySprint.get(s.id)?.capacity) || 0,
+    }))
+    .filter((r) => Number(r.delivery?.planned) > 0)
     .slice(0, RHYTHM_WINDOW);
-  const sampleDone = rhythmSample.reduce((sum, c) => sum + (Number(c.done) || 0), 0);
-  const sampleCapacity = rhythmSample.reduce((sum, c) => sum + (Number(c.capacity) || 0), 0);
+  const sampleDone = rhythmSample.reduce((sum, r) => sum + (Number(r.delivery?.done) || 0), 0);
+  const samplePlanned = rhythmSample.reduce(
+    (sum, r) => sum + (Number(r.delivery?.planned) || 0),
+    0,
+  );
+  const sampleCapacity = rhythmSample.reduce((sum, r) => sum + r.capacity, 0);
   const avgFpPerSprint =
     rhythmSample.length > 0 ? Math.round((sampleDone / rhythmSample.length) * 10) / 10 : null;
   const utilizationPct =
     sampleCapacity > 0 ? Math.round((sampleDone / sampleCapacity) * 100) : null;
+  const deliverySprints = rhythmSample.length;
+  const deliveryRatePct =
+    samplePlanned > 0 ? Math.round((sampleDone / samplePlanned) * 100) : null;
 
   // Sprint por segunda-feira — sprints são seg→dom (CHECK no DB), 1 por semana.
   const sprintByMonday = new Map<string, SprintRow>();
@@ -320,9 +348,9 @@ function computeStats(args: {
   }
 
   const deliveryOf = (s: SprintRow): number | null => {
-    const cap = capBySprint.get(s.id);
-    if (!cap || !(Number(cap.planned) > 0)) return null;
-    return Math.round((Number(cap.done) / Number(cap.planned)) * 100);
+    const d = deliveryBySprint.get(s.id);
+    if (!d || !(Number(d.planned) > 0)) return null;
+    return Math.round((Number(d.done) / Number(d.planned)) * 100);
   };
 
   const isContract = engagementType === "fixed_scope" && !!startDate && !!endDate;
@@ -392,6 +420,8 @@ function computeStats(args: {
       scopePct,
       avgFpPerSprint,
       utilizationPct,
+      deliveryRatePct,
+      deliverySprints,
       paceGapPp,
       paceVerdict,
       projectedEndWeek,
@@ -434,6 +464,8 @@ function computeStats(args: {
       scopePct,
       avgFpPerSprint,
       utilizationPct,
+      deliveryRatePct,
+      deliverySprints,
       paceGapPp: null,
       paceVerdict: null,
       projectedEndWeek: null,
@@ -456,6 +488,8 @@ function computeStats(args: {
     scopePct,
     avgFpPerSprint: null,
     utilizationPct: null,
+    deliveryRatePct: null,
+    deliverySprints: 0,
     paceGapPp: null,
     paceVerdict: null,
     projectedEndWeek: null,
@@ -507,13 +541,24 @@ export async function getProjectStats(projectId: string): Promise<ProjectStats |
   const sprints = (sprintsRes.data ?? []) as SprintRow[];
   const sprintIds = sprints.map((s) => s.id);
   let capBySprint = new Map<string, CapRow>();
+  let deliveryBySprint = new Map<string, DeliveryRow>();
   if (sprintIds.length > 0) {
-    const { data: caps, error: capErr } = await supabase
-      .from("sprint_capacity_overview")
-      .select("sprintId, capacity, planned, done, open")
-      .in("sprintId", sprintIds);
-    if (capErr) throw capErr;
-    capBySprint = new Map(((caps ?? []) as CapRow[]).map((c) => [c.sprintId, c]));
+    const [capsRes, delRes] = await Promise.all([
+      supabase
+        .from("sprint_capacity_overview")
+        .select("sprintId, capacity, planned, done, open")
+        .in("sprintId", sprintIds),
+      supabase
+        .from("sprint_delivery_overview")
+        .select("sprintId, planned, done, tasks_sem_fp")
+        .in("sprintId", sprintIds),
+    ]);
+    if (capsRes.error) throw capsRes.error;
+    if (delRes.error) throw delRes.error;
+    capBySprint = new Map(((capsRes.data ?? []) as CapRow[]).map((c) => [c.sprintId, c]));
+    deliveryBySprint = new Map(
+      ((delRes.data ?? []) as DeliveryRow[]).map((d) => [d.sprintId, d]),
+    );
   }
 
   let fpDone = 0;
@@ -530,6 +575,7 @@ export async function getProjectStats(projectId: string): Promise<ProjectStats |
     endDate: project.endDate,
     sprints,
     capBySprint,
+    deliveryBySprint,
     fpDone,
     fpTotal,
     milestoneDueAt: null,
@@ -575,6 +621,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
   const [
     sprintsRes,
     capsRes,
+    deliveryRes,
     fpRes,
     overdueRes,
     blockedRes,
@@ -590,6 +637,9 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
     supabase
       .from("sprint_capacity_overview")
       .select("sprintId, capacity, planned, done, open"),
+    supabase
+      .from("sprint_delivery_overview")
+      .select("sprintId, planned, done, tasks_sem_fp"),
     // Escopo FP — backlog vivo (sem draft, sem dismissed).
     supabase
       .from("Task")
@@ -651,6 +701,11 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
   // Capacity por sprint
   const capBySprint = new Map<string, CapRow>(
     ((capsRes.data ?? []) as CapRow[]).map((c) => [c.sprintId, c]),
+  );
+
+  // Entrega por sprint (planned/done por task — régua e delivery_rate)
+  const deliveryBySprint = new Map<string, DeliveryRow>(
+    ((deliveryRes.data ?? []) as DeliveryRow[]).map((d) => [d.sprintId, d]),
   );
 
   // Sprints por projeto (asc por startDate) + sprint corrente (card da sprint)
@@ -757,6 +812,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
         id: r.id,
         referenceWeek: r.referenceWeek,
         isCurrentWeek: r.referenceWeek === currentMonday,
+        publishedAt: r.publishedAt,
         reportMarkdown: r.reportMarkdown,
         notesByKind: detail,
         digestByKind: Object.keys(exec).length > 0 ? exec : detail,
@@ -787,6 +843,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
       endDate: p.endDate,
       sprints: sprintsByProject.get(p.id) ?? [],
       capBySprint,
+      deliveryBySprint,
       fpDone: fp.done,
       fpTotal: fp.total,
       milestoneDueAt: milestone?.dueAt ?? null,

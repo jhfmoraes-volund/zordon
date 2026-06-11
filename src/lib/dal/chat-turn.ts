@@ -1,5 +1,5 @@
 // Sem "server-only": esse DAL é consumido tanto por rotas Next.js (server)
-// quanto por scripts/daemon/exec-chat-turn.ts (CLI Node). server-only é
+// quanto por exec-chat-turn.ts (CLI Node, repo zordon-daemon que espelha este arquivo). server-only é
 // proteção do Next pra impedir leak em Client Components — não se aplica
 // em CLI.
 import { db } from "@/lib/db";

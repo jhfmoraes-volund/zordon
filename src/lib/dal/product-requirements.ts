@@ -1,5 +1,5 @@
 // Sem "server-only": importado tanto pela rota Next.js (server component)
-// quanto pelo MCP server CLI (scripts/daemon/mcp-server.ts via tools/prd.ts).
+// quanto pelo MCP server CLI (repo zordon-daemon via tools/prd.ts, que espelha este arquivo).
 // server-only protege bundler Next vs Client Component — em CLI quebra.
 import { db } from "@/lib/db";
 import type { Database, Json } from "@/lib/supabase/database.types";

@@ -50,6 +50,7 @@ de UM registry de métricas em código.
 | D8 | Régua ganha trilho de fases (commercial → imersão → ops → pós-ops). Exige histórico de transição: tabela `ProjectPhaseEvent` (F5) — `phaseChangedAt` só guarda a última. |
 | D9 | **Toda resposta numérica do Alpha sobre operação passa por `compute_metric`.** Proibido aritmética de cabeça no prompt — mesma lição do `verify_sprint_distribution` (auditoria 2026-05-06: modelo fabrica totais). |
 | D10 | (2026-06-11, João) Catálogo vira **20** métricas: + `factory.committed_vs_capacity` (carga: Σ committed ÷ Σ capacity dos builders, faixas ociosidade <70 / saudável 70–100 / superlotação >100) e + `factory.commercial_buffer` (projetos em comercial = buffer da fábrica). No ribbon, "Builders alocados" sai (métrica continua no catálogo pro Alpha/snapshot); entram Carga + Em comercial. Headcount de pessoas crava em `Member.position`, nunca em elegibilidade. |
+| D11 | (2026-06-11, João) Aba **Operação** entra no regime do registry. Alertas operacionais ganham SSOT irmã — `ALERT_REGISTRY` em `src/lib/metrics/alerts.ts` (id, severity, ruleText, defense, lineage, compute) — **alerta ≠ métrica**, catálogo D2 intacto. Recortes unificados com o canônico: "Projetos ativos" → `factory.lines_active`; time = `position='product-builder'` (espelha D10, mata o filtro por elegibilidade); sobrecarga local de 85% morre → overbooking é `committed > capacity` (mesma régua do `member.committed_vs_capacity`); ocioso = `committed = 0`; "entregues na sprint" via `Task.doneAt` (nunca `updatedAt`); janela seg→dom corrente via `sprintWeekOf` (`src/lib/sprint-dates.ts` — `mondayOf` arredonda pra frente, não serve pra semana corrente). |
 
 ---
 
@@ -64,11 +65,14 @@ src/lib/metrics/
   compute.ts          computeMetric(id, scopeId?) — resolve ctx, chama def.compute
   project-metrics.ts  defs de projeto (envelopam computeStats do DAL)
   capacity-metrics.ts defs de member/squad/factory (envelopam DAL de capacity)
+  alerts.ts           ALERT_REGISTRY: AlertDef[] — alertas operacionais (D11)
 
 scripts/gen-metrics-doc.ts          regenera stats-dictionary.md do registry
+src/lib/dal/ops-alerts.ts           leitura dos alertas de task (regras moram no registry)
 src/app/api/cron/metrics-snapshot/  rota POST (bearer) — F3
 src/lib/agent/tools/alpha-metrics.ts  4 tools — F4
 src/components/overview/projetos-board.tsx  consome registry — F2/F5
+src/components/overview/operacao-view.tsx   consome registry + alertas — F2B
 ```
 
 **Regra de ouro:** `computeStats()` ([src/lib/dal/project-overview.ts](../../src/lib/dal/project-overview.ts), fn privada na linha ~267)
@@ -193,12 +197,15 @@ por sprint = v2). Honestidade > marketing.
 |---|------|--------|
 | 1 | Registry core + doc gerado | `[LOCKED]` |
 | 2 | UI consome registry (vocabulário sprint + tooltips) | `[LOCKED]` |
+| 2B | Aba Operação consome registry + ALERT_REGISTRY (D11) | `[OPEN]` — só falta gate visual |
 | 3 | MetricSnapshot + cron | `[OPEN]` |
 | 4 | Alpha analyst (4 tools + prompt D9 + eval) | `[OPEN]` |
 | 5 | Trilho de fases na régua | `[OPEN]` |
 
-Ordem: 1 → 2 → 3 → 4 → 5. F3 pode rodar antes de F2 se a sessão preferir
-backend-first; F4 depende de F1+F3 (trend); F5 depende de F2.
+Ordem: 1 → 2 → 2B → 3 → 4 → 5. F3 pode rodar antes de F2 se a sessão preferir
+backend-first; F4 depende de F1+F3 (trend); F5 depende de F2. F2B fecha o
+buraco da aba Operação ANTES de F4 — senão o Alpha nasce defendendo números
+que a UI de Operação contradiz.
 
 ---
 
@@ -283,6 +290,50 @@ builders → `factory.builders_allocated` via DAL).
       local "Em atenção" (health, não é métrica)
 
 **Commit:** `ZRD-JM-140: metrics — fase 2 — UI lê registry, vocabulário sprint + régua atômica`
+
+---
+
+### FASE 2B — ABA OPERAÇÃO CONSOME REGISTRY `[OPEN — só falta gate visual]`
+
+**Objetivo:** a aba Operação (pré-registry, ZRD-JM-130) entra no regime D11.
+Acaba o duplo vocabulário na home: "Projetos ativos" ≠ linhas ativas, time por
+elegibilidade ≠ product-builders, sobrecarga 85% ≠ overbooking 100%.
+
+**Tarefas:**
+
+- [x] `src/lib/metrics/alerts.ts` — `ALERT_REGISTRY` (5 defs): tasks_overdue
+      (critical), tasks_unassigned + tasks_stuck + builders_overbooked
+      (warning), builders_idle (info). Mesma anatomia do MetricDef; regras
+      (STUCK_DAYS, thresholds) moram AQUI, não no DAL nem na view.
+- [x] `src/lib/dal/ops-alerts.ts` — leitura (overdue/stuck com `count: "exact"`
+      + amostra de 3; unassigned via RPC). Overbooked/idle reusam
+      `getBuilderCommitments` de `dal/capacity.ts` com cache por request.
+- [x] `sprintWeekOf` em `src/lib/sprint-dates.ts` — janela seg→dom CONTENDO a
+      data (`mondayOf` arredonda pra frente; a view tinha startOfWeek local
+      duplicado, morreu).
+- [x] `operacao-view.tsx` reescrita: `factory.lines_active` via
+      `computeMetric` (com defense em tooltip), alertas via `computeAlerts`,
+      membros do capacity widget = `position='product-builder'` direto na
+      query, "Entregues nesta sprint" via `Task.doneAt` (sai o proxy de
+      `updatedAt`), vocabulário D5 (sai "semana"). Removido fan-out morto de
+      `taskAssignments` (a query buscava e ninguém lia).
+- [x] `gen-metrics-doc.ts` — seção "ALERTAS OPERACIONAIS" gerada do
+      `ALERT_REGISTRY`; doc regenerado.
+
+**Acceptance gate:**
+
+- [x] `npx tsc --noEmit` clean (2026-06-11)
+- [x] `npx eslint` nos 5 arquivos tocados clean
+- [x] Doc-gen idempotente (2 runs consecutivos, zero diff entre eles)
+- [x] Sanity com dados reais (`npx tsx --tsconfig tsconfig.eval.json`):
+      `factory.lines_active=9`; alertas computam — 35 unassigned, 5 stuck
+      (com refs reais), 0 overdue, 0 overbooked, 12 idle
+- [x] Zero régua local na view: sem `getRoleLevel`, sem `0.85`, sem
+      `startOfWeek` próprio (grep limpo)
+- [ ] Browser: `/?tab=ops` renderiza stats + pontos de atenção + capacity
+      (sessão autenticada — pendente de check humano; dev server :3333 ativo)
+
+**Commit:** `ZRD-JM-NN: metrics — fase 2B — aba Operação no regime do registry (D11)`
 
 ---
 

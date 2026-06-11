@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const DAEMON_CMD = "npx tsx scripts/forge/daemon.ts";
+// Daemon vive no repo próprio (volund-ia/zordon-daemon) desde a extração.
+const DAEMON_CMD = "cd ../zordon-daemon && npm start";
 
 type ActiveBuilders = {
   count: number;

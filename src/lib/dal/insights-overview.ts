@@ -6,14 +6,24 @@
  *     (requireMinLevel MANAGER) ANTES de renderizar.
  *   • Throw em erro; null pra "sem amostra".
  *
- * Três blocos, todos sobre dado que já existe:
+ * Quatro blocos, todos sobre dado que já existe:
  *   1. Time      — composição (builders/PMs/externos) por Member.position.
- *   2. Satisfação — médias de CsatResponse na janela recente + delta vs anterior.
- *   3. Clientes  — projetos ativos × health (ClientInsight) × CSAT por cliente.
+ *   2. PMs       — projetos ativos por Project.pmId (atribuição real, não cargo),
+ *      sem internos/eval (recorte canônico, espelha capacity.ts).
+ *   3. Satisfação — médias de CsatResponse na janela recente + delta vs anterior.
+ *   4. Clientes  — projetos ativos × health (ClientInsight) × CSAT por cliente.
  */
 import "server-only";
 import { db } from "@/lib/db";
-import { type Position } from "@/lib/roles";
+import { isPmEligible, type Position } from "@/lib/roles";
+import { PROJECT_PHASE } from "@/lib/status-chips";
+
+/** Ordem canônica das fases (commercial → immersion → ops → post_ops). */
+const PHASE_ORDER = Object.keys(PROJECT_PHASE);
+const phaseRank = (phase: string) => {
+  const i = PHASE_ORDER.indexOf(phase);
+  return i === -1 ? PHASE_ORDER.length : i;
+};
 
 /** Positions que contam como "builder" no headcount (D: por position). */
 const BUILDER_POSITIONS: Position[] = ["product-builder", "principal-engineer"];
@@ -55,6 +65,15 @@ export type SatisfactionStats = {
   toImprove: Array<{ text: string; clientName: string }>;
 };
 
+export type PmDistributionRow = {
+  /** Member.id; null agrupa projetos ativos sem PM atribuído. */
+  id: string | null;
+  name: string;
+  activeProjects: number;
+  /** Split por Project.phase, ordem canônica, só fases com ≥ 1 projeto. */
+  byPhase: Array<{ phase: string; count: number }>;
+};
+
 export type ClientHealthRow = {
   id: string;
   name: string;
@@ -68,6 +87,8 @@ export type ClientHealthRow = {
 
 export type InsightsOverview = {
   team: TeamComposition;
+  /** Projetos ativos por PM (atribuição via Project.pmId, não cargo). */
+  pms: PmDistributionRow[];
   satisfaction: SatisfactionStats;
   clients: ClientHealthRow[];
 };
@@ -99,7 +120,7 @@ export async function getInsightsOverview(): Promise<InsightsOverview> {
     { data: projects, error: pErr },
     { data: insights, error: iErr },
   ] = await Promise.all([
-    supabase.from("Member").select("position, specialty, isExternal, isGuest"),
+    supabase.from("Member").select("id, name, position, specialty, isExternal, isGuest"),
     supabase
       .from("CsatResponse")
       .select(
@@ -108,7 +129,7 @@ export async function getInsightsOverview(): Promise<InsightsOverview> {
       .gte("interviewedAt", priorCutoff)
       .order("interviewedAt", { ascending: false }),
     supabase.from("Client").select("id, name, logoStoragePath"),
-    supabase.from("Project").select("clientId, status"),
+    supabase.from("Project").select("clientId, pmId, status, phase, name, category"),
     supabase
       .from("ClientInsight")
       .select("clientId, relationalHealth, technicalHealth, generatedAt")
@@ -140,7 +161,54 @@ export async function getInsightsOverview(): Promise<InsightsOverview> {
       .sort((a, b) => b.count - a.count),
   };
 
-  // ── Bloco 2: Satisfação ────────────────────────────────
+  // ── Bloco 2: Projetos ativos por PM ────────────────────
+  // Agrega por Project.pmId (quem de fato assume o projeto), não por cargo —
+  // head-ops PM-eligible entra quando é PM de projeto, mesmo sem cargo "pm".
+  // Recorte canônico (espelha capacity.ts): internos/eval ficam fora.
+  const isCounted = (p: { name: string; category: string | null }) =>
+    (p.category ?? "billable") !== "internal" && !p.name.includes("__eval__");
+  const activeByPm = new Map<string | null, Map<string, number>>();
+  for (const p of projects ?? []) {
+    if (p.status !== "active" || !isCounted(p)) continue;
+    const phases = activeByPm.get(p.pmId) ?? new Map<string, number>();
+    phases.set(p.phase, (phases.get(p.phase) ?? 0) + 1);
+    activeByPm.set(p.pmId, phases);
+  }
+  const toByPhase = (phases: Map<string, number> | undefined) =>
+    [...(phases?.entries() ?? [])]
+      .map(([phase, count]) => ({ phase, count }))
+      .sort((a, b) => phaseRank(a.phase) - phaseRank(b.phase));
+  const sumPhases = (byPhase: Array<{ count: number }>) =>
+    byPhase.reduce((s, x) => s + x.count, 0);
+  const memberById = new Map(ms.map((m) => [m.id, m]));
+  // PM-eligible internos sempre aparecem (mesmo com 0 projetos); pmIds fora
+  // da elegibilidade (atribuição pontual) entram porque carregam projeto.
+  const pmIds = new Set<string>(internal.filter((m) => isPmEligible(m.position)).map((m) => m.id));
+  for (const pmId of activeByPm.keys()) {
+    if (pmId !== null) pmIds.add(pmId);
+  }
+  const pms: PmDistributionRow[] = [...pmIds]
+    .map((id) => {
+      const byPhase = toByPhase(activeByPm.get(id));
+      return {
+        id,
+        name: memberById.get(id)?.name ?? "—",
+        activeProjects: sumPhases(byPhase),
+        byPhase,
+      };
+    })
+    .sort((a, b) => b.activeProjects - a.activeProjects || a.name.localeCompare(b.name));
+  const unassignedByPhase = toByPhase(activeByPm.get(null));
+  if (unassignedByPhase.length > 0) {
+    pms.push({
+      id: null,
+      name: "Sem PM",
+      activeProjects: sumPhases(unassignedByPhase),
+      byPhase: unassignedByPhase,
+    });
+  }
+
+  // ── Bloco 3: Satisfação ────────────────────────────────
   const rows = csat ?? [];
   const recent = rows.filter((r) => r.interviewedAt >= recentCutoff);
   const prior = rows.filter((r) => r.interviewedAt < recentCutoff);
@@ -161,7 +229,7 @@ export async function getInsightsOverview(): Promise<InsightsOverview> {
       })),
   };
 
-  // ── Bloco 3: Clientes × projetos ───────────────────────
+  // ── Bloco 4: Clientes × projetos ───────────────────────
   // Projetos ativos por cliente.
   const activeByClient = new Map<string, number>();
   for (const p of projects ?? []) {
@@ -193,5 +261,5 @@ export async function getInsightsOverview(): Promise<InsightsOverview> {
     // Ordena: mais projetos ativos primeiro, depois nome.
     .sort((a, b) => b.activeProjects - a.activeProjects || a.name.localeCompare(b.name));
 
-  return { team, satisfaction, clients: clientRows };
+  return { team, pms, satisfaction, clients: clientRows };
 }

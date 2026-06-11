@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, ChartLine, Sparkles } from "lucide-react";
+import { CalendarClock, ChartLine, Handshake, Sparkles, Users } from "lucide-react";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -10,7 +10,12 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { cn } from "@/lib/utils";
 
-export type RitualType = "pm_review" | "sprint_planning" | "release_planning";
+export type RitualType =
+  | "pm_review"
+  | "sprint_planning"
+  | "release_planning"
+  | "kickoff_interno"
+  | "kickoff_externo";
 
 type Props = {
   open: boolean;
@@ -49,6 +54,21 @@ const RITUAL_OPTIONS: {
     title: "Release Planning",
     description:
       "Plano de release — transforma os PRDs do projeto em user stories e tasks.",
+    cadence: "Uma vez por projeto",
+  },
+  {
+    type: "kickoff_interno",
+    icon: Users,
+    title: "Kickoff Interno",
+    description: "Alinhamento interno do time antes de iniciar o projeto.",
+    cadence: "Uma vez por projeto",
+  },
+  {
+    type: "kickoff_externo",
+    icon: Handshake,
+    title: "Kickoff Externo",
+    description:
+      "Kickoff com o cliente — expectativas, escopo e próximos passos.",
     cadence: "Uma vez por projeto",
   },
 ];

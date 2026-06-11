@@ -1,13 +1,8 @@
 import type { TaskTag } from "@/components/story-hierarchy";
 
-export type TabKey =
-  | "stories"
-  | "sprints"
-  | "sessions"
-  | "ceremonies"
-  | "drive"
-  | "forge"
-  | "settings";
+// sessions/ceremonies/drive/forge viraram apps dentro do tab Apps —
+// deep-links antigos são remapeados na page (LEGACY_APP_TABS).
+export type TabKey = "stories" | "sprints" | "apps" | "settings";
 
 export type ProjectMeta = {
   id: string;

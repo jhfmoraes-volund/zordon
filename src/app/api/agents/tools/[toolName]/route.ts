@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/agents/tools/:toolName
  *
- * Generic tool router — invocado pelo MCP server (scripts/daemon/mcp-server.ts)
+ * Generic tool router — invocado pelo MCP server do repo zordon-daemon
  * quando Claude CLI chama uma tool via JSON-RPC. Lookup no TOOL_REGISTRY,
  * resolve contexto a partir do chatTurnId, executa, retorna resultado.
  *

@@ -214,7 +214,7 @@ export default function ProjectForgeKanbanPage({
     <div className="flex flex-col gap-4 px-6 py-4">
       <PageTitle
         title={projectName ? `${projectName} · Forge Kanban` : "Forge Kanban"}
-        backHref={`/projects/${projectId}?tab=forge`}
+        backHref={`/projects/${projectId}?tab=apps&app=forge`}
       />
 
       {/* Top status */}

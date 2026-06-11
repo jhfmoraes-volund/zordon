@@ -41,6 +41,18 @@ export async function POST(req: NextRequest) {
   let refreshed = 0;
   let composed = 0;
 
+  // Job preso em pending/running (instância morreu no meio) não pode bloquear
+  // o projeto pra sempre na elegibilidade — >2h é cadáver, vira failed.
+  await supabase
+    .from("WikiJob")
+    .update({
+      status: "failed",
+      error: "stale — instância morreu antes de concluir (timeout do cron)",
+      finishedAt: new Date().toISOString(),
+    })
+    .in("status", ["pending", "running"])
+    .lt("createdAt", new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString());
+
   // ── Projetos elegíveis ────────────────────────────────────
   const [projectsRes, sourcesRes, jobsRes] = await Promise.all([
     supabase.from("Project").select("id, name, driveFolderId"),

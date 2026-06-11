@@ -13,7 +13,9 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { METRIC_REGISTRY, getMetricDef } from "../src/lib/metrics/registry";
+import { ALERT_REGISTRY } from "../src/lib/metrics/alerts";
 import type { MetricDef } from "../src/lib/metrics/types";
+import type { AlertDef } from "../src/lib/metrics/alerts";
 
 const OUT_PATH = resolve(__dirname, "../docs/features/overview/stats-dictionary.md");
 
@@ -37,6 +39,7 @@ const SECTIONS: Section[] = [
     ids: [
       "project.avg_fp_per_sprint",
       "project.utilization",
+      "project.delivery_rate",
       "project.pace_gap",
       "project.projected_end_sprint",
     ],
@@ -93,6 +96,26 @@ function section(s: Section): string {
   ].join("\n");
 }
 
+function alertRow(def: AlertDef): string {
+  return `| **${def.name}** (\`${def.id}\`) | ${def.severity} | ${def.ruleText} | ${def.lineage.map((l) => `\`${l}\``).join(", ")} | *${def.question}* — ${def.defense} |`;
+}
+
+function alertSection(): string {
+  return [
+    "## ALERTAS OPERACIONAIS (aba Operação)",
+    "",
+    "Pontos de atenção da aba Operação — SSOT irmã do registry de métricas",
+    "(`ALERT_REGISTRY` em `src/lib/metrics/alerts.ts`, D11). Alerta ≠ métrica:",
+    "aponta ocorrências que pedem ação, não mede ritmo. Mesma disciplina:",
+    "alerta só existe se está no registry; regra nunca muda sem `defense` junto.",
+    "",
+    "| Alerta | Severidade | Regra | Fonte | Defesa |",
+    "|---|---|---|---|---|",
+    ...ALERT_REGISTRY.map(alertRow),
+    "",
+  ].join("\n");
+}
+
 // Cobertura total: registry e seções têm exatamente o mesmo conjunto de ids.
 const sectionIds = new Set(SECTIONS.flatMap((s) => s.ids));
 const registryIds = new Set(METRIC_REGISTRY.map((d) => d.id));
@@ -107,14 +130,16 @@ const doc = `<!-- GERADO por scripts/gen-metrics-doc.ts — NÃO EDITE.
      SSOT: src/lib/metrics/registry.ts. Pra mudar fórmula/defesa, mude o
      registry (e o DAL, se for o caso) e rode: npx tsx scripts/gen-metrics-doc.ts -->
 
-# STATS — dicionário de métricas do Overview de Projetos
+# STATS — dicionário de métricas & alertas do Overview
 
-Toda métrica exibida na aba Projetos do Overview (\`/\`) é **derivada** — nada é
-coluna editável. Este dicionário é a defesa de cada número: fórmula exata,
-fonte e a frase que explica pro CEO (a \`defense\` é o tooltip da UI **e** a
-resposta do Alpha — D6). SSOT: \`METRIC_REGISTRY\` em
-[\`src/lib/metrics/registry.ts\`](../../../src/lib/metrics/registry.ts); motor de
-projeto: \`computeStats()\` em
+Todo número exibido no Overview (\`/\`) é **derivado** — nada é coluna
+editável. Este dicionário é a defesa de cada número: fórmula exata, fonte e a
+frase que explica pro CEO (a \`defense\` é o tooltip da UI **e** a resposta do
+Alpha — D6). SSOT: \`METRIC_REGISTRY\` em
+[\`src/lib/metrics/registry.ts\`](../../../src/lib/metrics/registry.ts) e
+\`ALERT_REGISTRY\` em
+[\`src/lib/metrics/alerts.ts\`](../../../src/lib/metrics/alerts.ts) (D11); motor
+de projeto: \`computeStats()\` em
 [\`src/lib/dal/project-overview.ts\`](../../../src/lib/dal/project-overview.ts).
 
 Organização: todo stat responde a uma pergunta — *quanto tempo queimou? quanto
@@ -123,6 +148,7 @@ saiu? em que ritmo? quanto da capacidade vira entrega?*
 📸 = entra no snapshot semanal (\`MetricSnapshot\`, segundas 06:00 BRT — D3).
 
 ${SECTIONS.map(section).join("\n")}
+${alertSection()}
 ## Régua (a visualização)
 
 Um segmento por sprint do contrato (\`contract\`) ou por sprint (\`rolling\`):
@@ -149,4 +175,6 @@ Um segmento por sprint do contrato (\`contract\`) ou por sprint (\`rolling\`):
 `;
 
 writeFileSync(OUT_PATH, doc, "utf8");
-console.log(`✓ ${OUT_PATH} regenerado — ${METRIC_REGISTRY.length} métricas.`);
+console.log(
+  `✓ ${OUT_PATH} regenerado — ${METRIC_REGISTRY.length} métricas + ${ALERT_REGISTRY.length} alertas.`,
+);

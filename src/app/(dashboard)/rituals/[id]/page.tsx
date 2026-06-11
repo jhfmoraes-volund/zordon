@@ -252,7 +252,7 @@ export default function RitualDetailPage({
   const title = planning.sprintName
     ? `Planning · ${planning.sprintName}`
     : "Planning";
-  const backHref = `/projects/${planning.projectId}?tab=ceremonies`;
+  const backHref = `/projects/${planning.projectId}?tab=apps&app=ceremonies`;
 
   const ribbonStats = treeStats
     ? {

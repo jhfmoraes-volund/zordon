@@ -21,6 +21,7 @@ import {
   ResponsiveSheetHeader,
   ResponsiveSheetTitle,
   ResponsiveSheetBody,
+  useResponsiveSheetExpanded,
 } from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,6 +58,7 @@ import type {
   ProjectStats,
   ProjectTeamMember,
   PMReviewNoteLite,
+  ReguaSegment,
 } from "@/lib/dal/project-overview";
 import type { MetricValue, Threshold } from "@/lib/metrics/types";
 
@@ -117,16 +119,26 @@ const DIGEST_MAX = 3;
 
 // ─── Helpers ──────────────────────────────────────────────
 
-/** Sinais do card compacto como chips ("3 riscos", "2 paradas") — sem frase. */
+/** Sinais como chips ("3 riscos", "2 paradas") — drawer e painel de atenção. */
 function signalChips(p: ProjectOverview): Array<{ label: string; tone: ChipTone }> {
   const chips: Array<{ label: string; tone: ChipTone }> = [];
   const { overdue, blocked, unassigned } = p.signals;
-  const risks = p.pmReview?.notesByKind.risk?.length ?? 0;
+  // Risco pesa pelo stance, não pela existência — mesma regra do health (DAL).
+  const risks = (p.pmReview?.notesByKind.risk ?? []).filter((n) => n.stance !== "managed").length;
   if (overdue > 0) chips.push({ label: `${overdue} vencida${overdue > 1 ? "s" : ""}`, tone: "red" });
   if (risks > 0) chips.push({ label: `${risks} risco${risks > 1 ? "s" : ""}`, tone: "red" });
   if (blocked > 0) chips.push({ label: `${blocked} parada${blocked > 1 ? "s" : ""}`, tone: "amber" });
   if (unassigned > 0) chips.push({ label: `${unassigned} sem dono`, tone: "amber" });
   return chips;
+}
+
+/**
+ * Motivo único do card — por que o dot não está verde. O card responde só
+ * "preciso olhar?" e "onde estamos no contrato?"; contagens extras vivem no
+ * drawer. "Sem dono" é higiene de backlog, não sinal de board.
+ */
+function cardMotivo(p: ProjectOverview): { label: string; tone: ChipTone } | null {
+  return signalChips(p).find((c) => !c.label.endsWith("sem dono")) ?? null;
 }
 
 /** Dias até uma data YYYY-MM-DD (negativo = venceu), no fuso local. */
@@ -135,11 +147,12 @@ function daysUntil(dueAt: string): number {
   return Math.ceil((due.getTime() - Date.now()) / 86400000);
 }
 
-/** Chip do próximo marco — tom por proximidade (passou=red, ≤14d=amber). */
+/** Chip do próximo marco — só quando perto (vencido=red, ≤14d=amber); longe é ruído de board. */
 function milestoneChip(p: ProjectOverview): { label: string; tone: ChipTone } | null {
   if (!p.milestone) return null;
   const days = daysUntil(p.milestone.dueAt);
-  const tone: ChipTone = days < 0 ? "red" : days <= 14 ? "amber" : "slate";
+  if (days > 14) return null;
+  const tone: ChipTone = days < 0 ? "red" : "amber";
   return { label: `${p.milestone.label} · ${fmtDate(new Date(`${p.milestone.dueAt}T00:00:00`))}`, tone };
 }
 
@@ -211,14 +224,16 @@ function segmentTitle(g: ProjectStats["segments"][number]): string {
     : `${sprint} — entregue ${g.deliveryPct}% do planejado`;
 }
 
-/** Estado visual da célula — semana é unidade atômica: produziu / desligada / corrente / futura. */
+/**
+ * Estado visual da célula — semana é unidade atômica: produziu / desligada /
+ * corrente / futura. Corrente é SEMPRE o bloco primary (vermelho) — marcador
+ * "estamos aqui" uniforme em todas as linhas; ter ou não sprint ativa fica no
+ * tooltip (segmentTitle), não na cor.
+ */
 function cellClass(g: ProjectStats["segments"][number]): string {
   if (g.kind === "closed") return segmentColor(g.deliveryPct);
   if (g.kind === "hole") return "border border-dashed border-muted-foreground/30 bg-transparent";
-  if (g.kind === "current")
-    return g.sprintId
-      ? "bg-primary/30 ring-1 ring-inset ring-primary/70"
-      : "bg-transparent ring-1 ring-inset ring-yellow-500/70";
+  if (g.kind === "current") return "bg-primary/30 ring-1 ring-inset ring-primary/70";
   return "bg-muted/50"; // future
 }
 
@@ -300,22 +315,132 @@ function reguaSummaryParts(stats: ProjectStats) {
   ].filter((p) => p.n > 0);
 }
 
-function ReguaSummaryTip({ stats }: { stats: ProjectStats }) {
+/** Linha do breakdown ("3 entregues · 1 parcial · …") — tooltip e legenda da timeline. */
+function ReguaSummaryLine({ stats }: { stats: ProjectStats }) {
   const parts = reguaSummaryParts(stats);
+  if (parts.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center tabular-nums">
+      {parts.map((p, i) => (
+        <span key={p.one}>
+          {i > 0 && <span className="mx-1.5 opacity-40">·</span>}
+          <span className={cn("font-medium", p.tone)}>{p.n}</span> {p.n === 1 ? p.one : p.many}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ReguaSummaryTip({ stats }: { stats: ProjectStats }) {
   return (
     <div className="space-y-1.5">
       <div className="text-muted-foreground">1 bloco = 1 sprint do contrato · cor = entrega real</div>
-      {parts.length > 0 && (
-        <div className="flex flex-wrap items-center tabular-nums">
-          {parts.map((p, i) => (
-            <span key={p.one}>
-              {i > 0 && <span className="mx-1.5 opacity-40">·</span>}
-              <span className={cn("font-medium", p.tone)}>{p.n}</span> {p.n === 1 ? p.one : p.many}
-            </span>
-          ))}
-        </div>
-      )}
+      <ReguaSummaryLine stats={stats} />
     </div>
+  );
+}
+
+/** Texto da célula na timeline expandida — entrega em %, estados em palavra. */
+function segmentValueLabel(g: ReguaSegment): string {
+  if (g.kind === "closed") return g.deliveryPct === null ? "sem FP" : `${g.deliveryPct}%`;
+  if (g.kind === "hole") return "desligada";
+  if (g.kind === "current") return g.sprintId ? "corrente" : "sem sprint";
+  return ""; // futura — a data abaixo já diz tudo
+}
+
+/** Tom do texto da célula — ecoa segmentColor (mesmos cortes 85/50). */
+function segmentValueTone(g: ReguaSegment): string {
+  if (g.kind === "closed") {
+    if (g.deliveryPct === null) return "text-muted-foreground";
+    if (g.deliveryPct >= 85) return "text-emerald-500";
+    if (g.deliveryPct >= 50) return "text-yellow-500";
+    return "text-red-400";
+  }
+  if (g.kind === "hole") return "text-yellow-500/80";
+  if (g.kind === "current") return g.sprintId ? "text-primary" : "text-yellow-500";
+  return "text-muted-foreground";
+}
+
+/**
+ * Timeline expandida da régua (sheet em tela cheia): mesma semântica e cores
+ * da Regua, com uma coluna por sprint — barra + entrega + segunda da semana.
+ * O breakdown que no modo compacto vive em tooltip vira legenda inline; o
+ * tooltip por célula (segmentTitle) continua valendo.
+ */
+function SprintTimeline({ stats }: { stats: ProjectStats }) {
+  if (stats.segments.length === 0) return null;
+  return (
+    <div>
+      <div
+        className={cn(
+          "grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-x-2 gap-y-5",
+          stats.milestoneIndex !== null && "mt-3",
+        )}
+      >
+        {stats.segments.map((g, i) => (
+          <div key={g.monday} title={segmentTitle(g)} className="relative min-w-0 cursor-help">
+            {stats.milestoneIndex === i && (
+              <span
+                title="Marco (PM Review)"
+                className="absolute -top-3.5 left-0 text-[9px] leading-none text-muted-foreground"
+              >
+                ⚑
+              </span>
+            )}
+            <div className={cn("h-2.5 rounded-[3px]", cellClass(g))} />
+            <div
+              className={cn(
+                "mt-1.5 h-[11px] truncate text-[11px] font-medium leading-none tabular-nums",
+                segmentValueTone(g),
+              )}
+            >
+              {segmentValueLabel(g)}
+            </div>
+            <div className="mt-1 text-[10px] leading-none tabular-nums text-muted-foreground/70">
+              {g.monday.slice(8, 10)}/{g.monday.slice(5, 7)}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 text-[11px] text-muted-foreground">
+        <ReguaSummaryLine stats={stats} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Gate de maturidade do pace: 3 sprints fechadas + done registrado. Antes
+ * disso scopePct é dado faltante, não veredito — o gap marcharia pro
+ * "crítico" sozinho conforme o calendário queima, sem o time ter culpa.
+ */
+function paceIsMature(stats: ProjectStats): boolean {
+  return stats.sprintsClosed >= DELIVERY_MIN_SAMPLE && stats.fpDone > 0;
+}
+
+/** Amostra mínima pra ritmo virar veredito (delivery_rate e pace). */
+const DELIVERY_MIN_SAMPLE = 3;
+
+/** Entrega do planejado (project.delivery_rate) — só com amostra madura. */
+function DeliveryRate({
+  stats,
+  bands,
+  hint,
+}: {
+  stats: ProjectStats;
+  bands: Threshold[];
+  hint?: string;
+}) {
+  if (stats.deliveryRatePct === null || stats.deliverySprints < DELIVERY_MIN_SAMPLE) return null;
+  const band = bandOf(stats.deliveryRatePct, bands);
+  return (
+    <span title={hint} className={cn("whitespace-nowrap", hint && "cursor-help")}>
+      entregou{" "}
+      <span className={cn("font-medium tabular-nums", band && TONE_CLS[band.tone])}>
+        {stats.deliveryRatePct}%
+      </span>{" "}
+      do planejado
+    </span>
   );
 }
 
@@ -329,7 +454,7 @@ function PaceBadge({
   bands: Threshold[];
   hint?: string;
 }) {
-  if (stats.paceGapPp === null) return null;
+  if (stats.paceGapPp === null || !paceIsMature(stats)) return null;
   const band = bandOf(stats.paceGapPp, bands);
   if (!band) return null;
   const arrow = stats.paceGapPp > 0 ? "▲" : stats.paceGapPp < 0 ? "▼" : "●";
@@ -349,59 +474,59 @@ function PaceBadge({
   );
 }
 
-/** Linha de stats compacta sob a régua (posição · pace · ritmo). */
+/**
+ * Linha de stats do card: posição no contrato + entrega do planejado. Só fatos
+ * de calendário e a métrica autocalibrada — pace/FP-sp/buracos vivem no drawer
+ * (buraco a régua já mostra como célula tracejada).
+ */
 function RowStatsLine({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   const s = p.stats;
-  if (s.mode === "contract") {
-    return (
-      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
-        <span
-          className="cursor-help font-medium text-foreground"
-          title={ui.defenses["project.sprints_elapsed"]}
-        >
-          {s.weeksElapsed}/{s.weeksTotal}
+  if (s.mode === "none") return null;
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
+      {s.mode === "contract" ? (
+        <span className="cursor-help" title={ui.defenses["project.sprints_elapsed"]}>
+          <StatusChip
+            size="sm"
+            // Contrato 100% queimado (4/4) — pill verde sinaliza concluído.
+            tone={s.weeksElapsed === s.weeksTotal ? "green" : "muted"}
+            label={
+              <>
+                Sprint{" "}
+                <span
+                  className={cn(
+                    "font-semibold tabular-nums",
+                    s.weeksElapsed !== s.weeksTotal && "text-foreground",
+                  )}
+                >
+                  {s.weeksElapsed}/{s.weeksTotal}
+                </span>{" "}
+                do contrato
+              </>
+            }
+          />
         </span>
-        <PaceBadge stats={s} bands={ui.bands["project.pace_gap"] ?? []} hint={ui.defenses["project.pace_gap"]} />
-        {s.avgFpPerSprint !== null && (
-          <span
-            className="hidden cursor-help md:inline"
-            title={ui.defenses["project.avg_fp_per_sprint"]}
-          >
-            {fmtAvg(s.avgFpPerSprint)}
-          </span>
-        )}
-        {s.holes > 0 && (
-          <span className="cursor-help text-yellow-500" title={ui.defenses["project.holes"]}>
-            {s.holes} sem sprint
-          </span>
-        )}
-      </div>
-    );
-  }
-  if (s.mode === "rolling") {
-    return (
-      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
-        <span>
-          última{s.segments.length === 1 ? "" : "s"} {s.segments.length} sprint
-          {s.segments.length === 1 ? "" : "s"}
-        </span>
-        {s.avgFpPerSprint !== null && (
-          <span
-            className="cursor-help font-medium text-foreground"
-            title={ui.defenses["project.avg_fp_per_sprint"]}
-          >
-            {fmtAvg(s.avgFpPerSprint)}
-          </span>
-        )}
-        {s.utilizationPct !== null && (
-          <span className="hidden cursor-help md:inline" title={ui.defenses["project.utilization"]}>
-            aprov. {s.utilizationPct}%
-          </span>
-        )}
-      </div>
-    );
-  }
-  return null;
+      ) : (
+        <StatusChip
+          size="sm"
+          label={
+            <>
+              última{s.segments.length === 1 ? "" : "s"}{" "}
+              <span className="font-semibold tabular-nums text-foreground">
+                {s.segments.length}
+              </span>{" "}
+              sprint{s.segments.length === 1 ? "" : "s"}
+            </>
+          }
+        />
+      )}
+      <DeliveryRate
+        stats={s}
+        bands={ui.bands["project.delivery_rate"] ?? []}
+        hint={ui.defenses["project.delivery_rate"]}
+      />
+    </div>
+  );
 }
 
 // ─── Ribbon do topo ───────────────────────────────────────
@@ -745,7 +870,7 @@ function ProjectRow({
   onOpen: () => void;
 }) {
   const milestone = milestoneChip(p);
-  const chips = signalChips(p);
+  const motivo = cardMotivo(p);
   const producing = PRODUCING_PHASES.includes(p.phase);
 
   return (
@@ -775,9 +900,9 @@ function ProjectRow({
               className="max-w-[220px]"
             />
           )}
-          {chips.slice(0, 2).map((c) => (
-            <StatusChip key={c.label} label={c.label} tone={c.tone} variant="subtle" size="sm" />
-          ))}
+          {motivo && (
+            <StatusChip label={motivo.label} tone={motivo.tone} variant="subtle" size="sm" />
+          )}
         </span>
       </div>
 
@@ -953,6 +1078,8 @@ function DigestCard({
 
 /** Seção PM Review do drawer: chips de semana + 4 slots fixos. */
 function PMReviewSection({ p }: { p: ProjectOverview }) {
+  // Tela cheia: Riscos e Próximos passos dividem a linha (a largura permite).
+  const expanded = useResponsiveSheetExpanded();
   // Chips navegam entre as semanas da janela. null = default (semana corrente
   // ou última). Troca de projeto se auto-corrige: id que não existe na janela
   // nova cai no default via `?? p.pmReview`.
@@ -978,6 +1105,11 @@ function PMReviewSection({ p }: { p: ProjectOverview }) {
                 : shownReview.id === p.pmReview?.id
                   ? " (última)"
                   : ""}
+              {shownReview.publishedAt && (
+                <span className="text-muted-foreground/50">
+                  {" "}· feita {fmtDate(new Date(shownReview.publishedAt))}
+                </span>
+              )}
             </span>
           )}
         </h4>
@@ -1012,6 +1144,11 @@ function PMReviewSection({ p }: { p: ProjectOverview }) {
             <button
               key={w.week}
               type="button"
+              title={
+                review.publishedAt
+                  ? `Feita em ${fmtDate(new Date(review.publishedAt))}`
+                  : undefined
+              }
               onClick={() => setWeekId(review.id)}
               className={cn(
                 "rounded-full border px-2 py-0.5 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -1030,15 +1167,18 @@ function PMReviewSection({ p }: { p: ProjectOverview }) {
         <p className="text-sm text-muted-foreground">Sem PM Review registrado.</p>
       ) : (
         // 1 card por linha (mesmo no desktop): largura inteira por frase —
-        // o clamp de 2 linhas segura a ideia completa, fonte maior.
+        // o clamp de 2 linhas segura a ideia completa, fonte maior. Exceção:
+        // sheet expandida emparelha Riscos + Próximos na coluna de leitura.
         <div className="space-y-2">
           <PanoramaCard notes={digest} />
-          <DigestCard title="Riscos" items={digest.risk ?? []} emptyText="Sem riscos esta semana." />
-          <DigestCard
-            title="Próximos passos"
-            items={digest.next_step ?? []}
-            emptyText="Sem próximos passos."
-          />
+          <div className={cn(expanded ? "grid gap-2 lg:grid-cols-2" : "space-y-2")}>
+            <DigestCard title="Riscos" items={digest.risk ?? []} emptyText="Sem riscos esta semana." />
+            <DigestCard
+              title="Próximos passos"
+              items={digest.next_step ?? []}
+              emptyText="Sem próximos passos."
+            />
+          </div>
           <DigestCard
             title="Decisões / Precisa"
             items={decisions}
@@ -1170,6 +1310,17 @@ function MilestoneStatCol({ p }: { p: ProjectOverview }) {
   );
 }
 
+/** Sub da coluna Ritmo no drawer — entrega do planejado (madura) + aproveitamento. */
+function ritmoSub(s: ProjectStats): string {
+  const parts = [
+    s.deliveryRatePct !== null && s.deliverySprints >= DELIVERY_MIN_SAMPLE
+      ? `entrega ${s.deliveryRatePct}% do planejado`
+      : null,
+    s.utilizationPct !== null ? `aproveitamento ${s.utilizationPct}%` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "ritmo das últimas 6 sprints fechadas";
+}
+
 /**
  * Dossiê de STATS: régua grande + PRAZO / MARCO / RITMO + projeção.
  * Fórmulas: docs/features/overview/stats-dictionary.md (gerado do registry).
@@ -1177,6 +1328,8 @@ function MilestoneStatCol({ p }: { p: ProjectOverview }) {
 function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   const s = p.stats;
   const producing = PRODUCING_PHASES.includes(p.phase);
+  // Tela cheia (sheet expandida): a régua vira timeline com data + entrega.
+  const expanded = useResponsiveSheetExpanded();
 
   if (s.mode === "none") {
     return (
@@ -1214,9 +1367,13 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
           )}
         </div>
 
-        <StatTip hint={<ReguaSummaryTip stats={s} />} block>
-          <Regua stats={s} size="lg" legend={false} />
-        </StatTip>
+        {expanded ? (
+          <SprintTimeline stats={s} />
+        ) : (
+          <StatTip hint={<ReguaSummaryTip stats={s} />} block>
+            <Regua stats={s} size="lg" legend={false} />
+          </StatTip>
+        )}
 
         <div className="mt-3 grid grid-cols-3 gap-3">
           {s.mode === "contract" ? (
@@ -1231,11 +1388,7 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
               <StatCol
                 label="Ritmo"
                 value={fmtAvg(s.avgFpPerSprint)}
-                sub={
-                  s.utilizationPct !== null
-                    ? `aproveitamento ${s.utilizationPct}%`
-                    : "ritmo das últimas 6 sprints fechadas"
-                }
+                sub={ritmoSub(s)}
                 hint={ui.defenses["project.avg_fp_per_sprint"]}
               />
             </>
@@ -1250,16 +1403,32 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
               <StatCol
                 label="Ritmo"
                 value={fmtAvg(s.avgFpPerSprint)}
-                sub={
-                  s.utilizationPct !== null
-                    ? `aproveitamento ${s.utilizationPct}%`
-                    : "ritmo das últimas 6 sprints fechadas"
-                }
+                sub={ritmoSub(s)}
                 hint={ui.defenses["project.avg_fp_per_sprint"]}
               />
             </>
           )}
         </div>
+
+        {s.mode === "contract" && (
+          <p className="mt-3 text-[11px] tabular-nums text-muted-foreground">
+            {paceIsMature(s) && s.paceGapPp !== null ? (
+              <>
+                Pace:{" "}
+                <PaceBadge
+                  stats={s}
+                  bands={ui.bands["project.pace_gap"] ?? []}
+                  hint={ui.defenses["project.pace_gap"]}
+                />
+              </>
+            ) : (
+              <span className="cursor-help" title={ui.defenses["project.pace_gap"]}>
+                Pace em calibração — aparece com {DELIVERY_MIN_SAMPLE} sprints fechadas e FP
+                done registrado.
+              </span>
+            )}
+          </p>
+        )}
       </section>
     </TooltipProvider>
   );
@@ -1288,8 +1457,9 @@ function ProjectDrawer({
   return (
     <>
       <ResponsiveSheetHeader>
-        {/* Linha utilitária: navegação seriada à esquerda, ações à direita */}
-        <div className="mr-8 flex items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
+        {/* Linha utilitária: navegação seriada à esquerda, ações à direita
+            (mr limpa o X + o toggle de tela cheia do sheet) */}
+        <div className="mr-14 flex items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
           <button
             type="button"
             onClick={onPrev}
@@ -1676,7 +1846,7 @@ export function ProjetosBoard({
           Some enquanto o editor está aberto (nunca 2 overlays; volta ao
           salvar/cancelar porque ?project= continua na URL). */}
       <ResponsiveSheet open={drawerOpen} onOpenChange={(o) => !o && navigate(null, "replace")}>
-        <ResponsiveSheetContent size="3xl">
+        <ResponsiveSheetContent size="3xl" expandable>
           {selected && (
             <ProjectDrawer
               p={selected}

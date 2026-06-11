@@ -6,11 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   BookOpen,
-  CalendarClock,
   FileText,
-  Flame,
-  FolderOpen,
-  Lightbulb,
+  LayoutGrid,
   Pencil,
   Settings as SettingsIcon,
   Shield,
@@ -25,10 +22,7 @@ import {
 import { PageTitle } from "@/components/app-shell";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { ProjectEditSheet } from "@/components/projects/project-edit-sheet";
-import { ProjectCeremoniesTab } from "@/components/project-ceremonies-tab";
-import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { ProjectWikiSheet } from "@/components/project-wiki";
-import { ProjectDriveTab } from "@/components/project-drive/drive-tab";
 import { SprintDialog } from "@/components/sprint-dialog";
 import { SprintContextSheet } from "@/components/sprint/sprint-context-sheet";
 import { SuggestSprintsSheet } from "@/components/sprint/suggest-sprints-sheet";
@@ -76,17 +70,19 @@ import { useStoryActions } from "./_hooks/use-story-actions";
 import { useTaskActions } from "./_hooks/use-task-actions";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
-import { ForgeTab } from "./_tabs/forge-tab";
+import { AppsTab } from "./_tabs/apps-tab";
 
-const TABS: { key: TabKey; label: string; icon: typeof BookOpen; minAccessLevel?: "manager" | "builder" }[] = [
+const TABS: { key: TabKey; label: string; icon: typeof BookOpen }[] = [
   { key: "stories", label: "Stories", icon: BookOpen },
   { key: "sprints", label: "Sprints", icon: Zap },
-  { key: "ceremonies", label: "Rituais", icon: CalendarClock },
-  { key: "drive", label: "Drive", icon: FolderOpen },
-  { key: "sessions", label: "Sessions", icon: Lightbulb },
-  { key: "forge", label: "Forge", icon: Flame, minAccessLevel: "manager" },
+  { key: "apps", label: "Apps", icon: LayoutGrid },
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
+
+// Ex-tabs que viraram apps no tab Apps (ZRD-JM: Zordon Apps). Deep-links
+// antigos `?tab=<key>` caem em `?tab=apps&app=<key>` — as keys coincidem
+// com as do APP_REGISTRY.
+const LEGACY_APP_TABS = new Set(["sessions", "ceremonies", "drive", "forge"]);
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -100,15 +96,11 @@ export default function ProjectDetailPage({
   const { effectiveAccessLevel } = useAuth();
   const canManageSprint = hasMinAccessLevel(effectiveAccessLevel, "manager");
   const isGuest = !hasMinAccessLevel(effectiveAccessLevel, "builder");
-  // Settings é gerencial. Guest não vê.
-  // Forge também é gerencial (manager+).
-  const visibleTabs = TABS.filter((tab) => {
-    if (isGuest && tab.key === "settings") return false;
-    if (tab.minAccessLevel && !hasMinAccessLevel(effectiveAccessLevel, tab.minAccessLevel)) {
-      return false;
-    }
-    return true;
-  });
+  // Settings é gerencial. Guest não vê. (Forge é gated dentro do tab Apps,
+  // via minAccessLevel do APP_REGISTRY.)
+  const visibleTabs = TABS.filter(
+    (tab) => !(isGuest && tab.key === "settings"),
+  );
 
   const router = useRouter();
   const pathname = usePathname();
@@ -116,12 +108,17 @@ export default function ProjectDetailPage({
   const rawTabParam = searchParams.get("tab");
   // Legacy: `?tab=tasks` agora aponta pra Sprints → Todas. Mantém deep-links antigos vivos.
   // `?tab=wiki` virou sheet no hero — cai na tab default com o sheet aberto.
+  // Ex-tabs (sessions/ceremonies/drive/forge) caem no tab Apps com o app aberto.
+  const legacyAppKey =
+    rawTabParam && LEGACY_APP_TABS.has(rawTabParam) ? rawTabParam : null;
   const tabParam: TabKey | null =
     rawTabParam === "tasks"
       ? "sprints"
       : rawTabParam === "wiki"
         ? "stories"
-        : (rawTabParam as TabKey | null);
+        : legacyAppKey
+          ? "apps"
+          : (rawTabParam as TabKey | null);
   const sprintParam = searchParams.get("sprint");
   const viewParam = searchParams.get("view");
   const taskParam = searchParams.get("task");
@@ -137,6 +134,11 @@ export default function ProjectDetailPage({
         ? viewParam
         : sprintParam ?? null;
   const [sprintView, setSprintView] = useState<NavValue | null>(initialSprintView);
+  // App aberto dentro do tab Apps (?app=<key>). Init: ?app= explícito; senão
+  // o deep-link legacy de ex-tab (?tab=sessions → app sessions, etc).
+  const [openAppKey, setOpenAppKey] = useState<string | null>(
+    searchParams.get("app") ?? legacyAppKey,
+  );
 
   // ─── Data hooks ────────────────────────────────────────────────────────────
   const { project, reload: loadProject } = useProjectMeta(id);
@@ -197,12 +199,15 @@ export default function ProjectDetailPage({
         params.set("sprint", sprintView);
       }
     }
+    if (activeTab === "apps" && openAppKey) {
+      params.set("app", openAppKey);
+    }
     const qs = params.toString();
     const next = qs ? `${pathname}?${qs}` : pathname;
     if (next !== window.location.pathname + window.location.search) {
       router.replace(next, { scroll: false });
     }
-  }, [activeTab, sprintView, pathname, router]);
+  }, [activeTab, sprintView, openAppKey, pathname, router]);
 
   // ─── Adapt ─────────────────────────────────────────────────────────────────
 
@@ -634,26 +639,16 @@ export default function ProjectDetailPage({
           handleBulkAddTag={taskActions.handleBulkAddTag}
           handleBulkRemoveTag={taskActions.handleBulkRemoveTag}
         />
-      ) : activeTab === "sessions" ? (
-        <ProjectSessionsTab
+      ) : activeTab === "apps" ? (
+        <AppsTab
           projectId={id}
           projectName={project.name}
           canManage={canManageSprint}
-        />
-      ) : activeTab === "ceremonies" ? (
-        <ProjectCeremoniesTab
-          projectId={id}
-          projectName={project.name}
-          canManage={canManageSprint}
-        />
-      ) : activeTab === "drive" ? (
-        <ProjectDriveTab
-          projectId={id}
           driveFolderId={project.driveFolderId}
           onConfigureFolder={() => setEditOpen(true)}
+          openAppKey={openAppKey}
+          onOpenAppKeyChange={setOpenAppKey}
         />
-      ) : activeTab === "forge" ? (
-        <ForgeTab projectId={id} />
       ) : activeTab === "settings" ? (
         <SettingsTab
           project={project}

@@ -327,7 +327,7 @@ export default function PlanningSessionPage({
     | "aborted"
     | "error";
   const isApproved = status_ === "approved";
-  const backHref = `/projects/${projectId}?tab=ceremonies`;
+  const backHref = `/projects/${projectId}?tab=apps&app=ceremonies`;
 
   const chatPanel = (
     <ConversationPanel

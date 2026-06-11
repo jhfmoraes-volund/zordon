@@ -69,6 +69,35 @@ const CreateContextSourceSchema = z.discriminatedUnion("kind", [
   GDriveFileCreateSchema,
 ]);
 
+/**
+ * GET /api/context-sources?projectId=<uuid>
+ * Lista resumida do pool de contexto do projeto (sem fullText).
+ * Consumidor: tab Apps (widget "Pool de contexto").
+ */
+export async function GET(req: NextRequest) {
+  const memberId = await getActorMemberId();
+  if (!memberId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const projectId = req.nextUrl.searchParams.get("projectId");
+  if (!projectId || !z.string().uuid().safeParse(projectId).success) {
+    return NextResponse.json({ error: "projectId inválido" }, { status: 400 });
+  }
+
+  const supabase = db();
+  const { data, error } = await supabase
+    .from("ContextSource")
+    .select("id, kind, title, createdAt")
+    .eq("projectId", projectId)
+    .order("createdAt", { ascending: false });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ sources: data ?? [] });
+}
+
 export async function POST(req: NextRequest) {
   const memberId = await getActorMemberId();
   if (!memberId) {

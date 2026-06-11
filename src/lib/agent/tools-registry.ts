@@ -1,5 +1,5 @@
 // Sem "server-only": é importado tanto pela rota Next.js do tool router
-// quanto pelo MCP server CLI (scripts/daemon/mcp-server.ts). server-only é
+// quanto pelo MCP server CLI (repo zordon-daemon, que espelha este arquivo). server-only é
 // proteção do bundler do Next contra Client Components — em CLI quebra.
 import type { Tool } from "ai";
 import {

@@ -231,10 +231,13 @@ export function ProjectCeremoniesTab({
     (type: RitualType) => {
       if (type === "pm_review") setPMReviewSheetOpen(true);
       else if (type === "sprint_planning") setPlanningSheetOpen(true);
-      else {
+      else if (type === "release_planning") {
         // Release Planning: criação explícita via sheet (não auto-create).
         setEditingRelease(null);
         setReleaseSheetOpen(true);
+      } else {
+        // Kickoff Interno/Externo: só no picker por enquanto — fluxo ainda em definição.
+        toast.info("Em breve — o fluxo deste ritual ainda está em definição.");
       }
     },
     [],
