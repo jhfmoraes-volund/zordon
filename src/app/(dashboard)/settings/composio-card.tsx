@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { GitBranch, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import {
+  GitBranch,
+  FolderOpen,
+  CheckCircle2,
+  Loader2,
+  AlertCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,25 +19,39 @@ type Status = {
   connectedAccountId: string | null;
 };
 
+type ToolkitConfig = {
+  toolkit: "github" | "googledrive";
+  title: string;
+  icon: LucideIcon;
+  description: string;
+  connectLabel: string;
+};
+
 /**
- * Card de integração GitHub via Composio.
+ * Card de integração via Composio (OAuth gerenciado), parametrizado por toolkit.
  *
  * Fluxo:
  *  1. fetchStatus() ao montar
- *  2. "Conectar GitHub" → POST /connect → redirectUrl → window.location
+ *  2. "Conectar" → POST /connect → redirectUrl → window.location
  *  3. Pós-redirect, montagem refaz fetchStatus (que agora deve ter status='active')
  *  4. "Desconectar" → POST /disconnect → refresh
  */
-export function GitHubIntegrationCard() {
+function ComposioIntegrationCard({
+  toolkit,
+  title,
+  icon: Icon,
+  description,
+  connectLabel,
+}: ToolkitConfig) {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
-      const r = await fetch("/api/integrations/composio/status?toolkit=github");
+      const r = await fetch(`/api/integrations/composio/status?toolkit=${toolkit}`);
       if (!r.ok) {
-        setStatus({ toolkit: "github", status: "not_connected", connectedAccountId: null });
+        setStatus({ toolkit, status: "not_connected", connectedAccountId: null });
         return;
       }
       const data = (await r.json()) as Status;
@@ -38,7 +59,7 @@ export function GitHubIntegrationCard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toolkit]);
 
   useEffect(() => {
     void fetchStatus();
@@ -50,7 +71,7 @@ export function GitHubIntegrationCard() {
       const r = await fetch("/api/integrations/composio/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toolkit: "github", returnTo: "/settings" }),
+        body: JSON.stringify({ toolkit, returnTo: "/settings/integrations" }),
       });
       const data = (await r.json()) as { redirectUrl?: string; error?: string };
       if (!r.ok || !data.redirectUrl) {
@@ -71,14 +92,14 @@ export function GitHubIntegrationCard() {
       const r = await fetch("/api/integrations/composio/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toolkit: "github" }),
+        body: JSON.stringify({ toolkit }),
       });
       const data = (await r.json()) as { ok?: boolean; error?: string };
       if (!r.ok || !data.ok) {
         toast.error(data.error ?? "Falha ao desconectar");
         return;
       }
-      toast.success("GitHub desconectado");
+      toast.success(`${title} desconectado`);
       await fetchStatus();
     } catch (err) {
       toast.error((err as Error).message);
@@ -93,15 +114,12 @@ export function GitHubIntegrationCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <GitBranch className="h-4 w-4" />
-          GitHub
+          <Icon className="h-4 w-4" />
+          {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Conecte sua conta GitHub pra Vitória ler arquivos do repo (AGENTS.md, código)
-          como contexto de planning. Conexão via Composio (OAuth gerenciado).
-        </p>
+        <p className="text-sm text-muted-foreground">{description}</p>
 
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -139,13 +157,37 @@ export function GitHubIntegrationCard() {
               {busy ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <GitBranch className="h-3.5 w-3.5" />
+                <Icon className="h-3.5 w-3.5" />
               )}
-              Conectar GitHub
+              {connectLabel}
             </Button>
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function GitHubIntegrationCard() {
+  return (
+    <ComposioIntegrationCard
+      toolkit="github"
+      title="GitHub"
+      icon={GitBranch}
+      description="Conecte sua conta GitHub pra Vitória ler arquivos do repo (AGENTS.md, código) como contexto de planning. Conexão via Composio (OAuth gerenciado)."
+      connectLabel="Conectar GitHub"
+    />
+  );
+}
+
+export function GoogleDriveIntegrationCard() {
+  return (
+    <ComposioIntegrationCard
+      toolkit="googledrive"
+      title="Google Drive"
+      icon={FolderOpen}
+      description="Conecte seu Google Drive pra sincronizar a pasta de documentos dos projetos (aba Drive). Quem salva a pasta no projeto vira o dono do sync. Conexão via Composio (OAuth gerenciado)."
+      connectLabel="Conectar Google Drive"
+    />
   );
 }

@@ -70,7 +70,7 @@ export async function POST(
     process.env.NEXT_PUBLIC_APP_URL ??
     process.env.NEXT_PUBLIC_SITE_URL ??
     "http://localhost:3000";
-  const connectUrl = `${appUrl.replace(/\/$/, "")}/settings`;
+  const connectUrl = `${appUrl.replace(/\/$/, "")}/settings/integrations`;
 
   if (!process.env.COMPOSIO_GDRIVE_AUTH_CONFIG_ID || !linkedBy) {
     return NextResponse.json(
