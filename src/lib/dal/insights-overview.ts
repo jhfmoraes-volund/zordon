@@ -13,7 +13,7 @@
  */
 import "server-only";
 import { db } from "@/lib/db";
-import { isPmEligible, type Position } from "@/lib/roles";
+import { type Position } from "@/lib/roles";
 
 /** Positions que contam como "builder" no headcount (D: por position). */
 const BUILDER_POSITIONS: Position[] = ["product-builder", "principal-engineer"];
@@ -29,7 +29,11 @@ export type TeamComposition = {
   internalTotal: number;
   /** position ∈ {product-builder, principal-engineer}. */
   builders: number;
-  /** position ∈ {pm, head-ops} (isPmEligible). */
+  /**
+   * position === "pm", cravado. head-ops é PM-eligible (pode assumir projeto
+   * às vezes — dropdown usa isPmEligible), mas não é PM de cargo: headcount
+   * conta cargo, não elegibilidade.
+   */
   pms: number;
   /** isExternal || isGuest. */
   externals: number;
@@ -129,7 +133,7 @@ export async function getInsightsOverview(): Promise<InsightsOverview> {
   const team: TeamComposition = {
     internalTotal: internal.length,
     builders: internal.filter((m) => BUILDER_POSITIONS.includes(m.position as Position)).length,
-    pms: internal.filter((m) => isPmEligible(m.position)).length,
+    pms: internal.filter((m) => m.position === "pm").length,
     externals: ms.filter(isExternal).length,
     bySpecialty: [...specialtyCount.entries()]
       .map(([specialty, count]) => ({ specialty, count }))
