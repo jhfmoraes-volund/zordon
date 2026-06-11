@@ -9,14 +9,38 @@ export function SectionWrapper({
   sectionKey,
   children,
   onAdd,
+  hideHeader,
 }: {
   title: string;
   sectionKey: string;
   children: React.ReactNode;
   onAdd?: () => void;
+  hideHeader?: boolean;
 }) {
   const Icon = sectionIcons[sectionKey] || Box;
   const displayTitle = SECTION_TITLES[sectionKey] || title;
+
+  if (hideHeader) {
+    return (
+      <div className="space-y-3">
+        {onAdd && (
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={onAdd}
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              Adicionar
+            </Button>
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="surface p-4 space-y-3">
       <div className="flex items-center justify-between">

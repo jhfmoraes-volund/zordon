@@ -17,7 +17,13 @@ import { SectionWrapper } from "./section-wrapper";
 import { linkCategories } from "./constants";
 import type { LinkItem, SectionProps } from "./types";
 
-export function LinksSection({ section, onUpdate }: SectionProps) {
+export function LinksSection({
+  section,
+  onUpdate,
+  mode = "edit",
+  hideHeader,
+}: SectionProps) {
+  const readOnly = mode === "read";
   const { items, add, remove, replaceItem, adding, setAdding } =
     useWikiItems<LinkItem>(section, onUpdate as (data: LinkItem[]) => Promise<void>);
   const [form, setForm] = useState({ label: "", url: "", category: "geral" });
@@ -46,7 +52,8 @@ export function LinksSection({ section, onUpdate }: SectionProps) {
     <SectionWrapper
       title={section.title}
       sectionKey="links"
-      onAdd={() => setAdding(!adding)}
+      onAdd={readOnly ? undefined : () => setAdding(!adding)}
+      hideHeader={hideHeader}
     >
       <div className="flex flex-wrap gap-2">
         {items.map((link, i) =>
@@ -110,26 +117,30 @@ export function LinksSection({ section, onUpdate }: SectionProps) {
                   {link.category}
                 </Badge>
               )}
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  startEdit(i);
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  remove(i);
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500" />
-              </button>
+              {!readOnly && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      startEdit(i);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      remove(i);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500" />
+                  </button>
+                </>
+              )}
             </a>
           )
         )}

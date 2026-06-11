@@ -29,7 +29,11 @@ export type AccessItem = {
   notes: string;
 };
 
+export type SectionMode = "read" | "edit";
+
 export type SectionProps = {
   section: WikiSection;
   onUpdate: (data: unknown) => Promise<void>;
+  mode?: SectionMode;
+  hideHeader?: boolean;
 };

@@ -6,7 +6,12 @@ import { TiptapEditor } from "@/components/tiptap-editor";
 import { SectionWrapper } from "./section-wrapper";
 import type { SectionProps } from "./types";
 
-export function DescriptionSection({ section, onUpdate }: SectionProps) {
+export function DescriptionSection({
+  section,
+  onUpdate,
+  mode = "edit",
+  hideHeader,
+}: SectionProps) {
   const data = section.data as { html?: string } | null;
   const initialHtml = data?.html || "";
 
@@ -23,12 +28,27 @@ export function DescriptionSection({ section, onUpdate }: SectionProps) {
   );
 
   return (
-    <SectionWrapper title={section.title} sectionKey="description">
-      <TiptapEditor
-        content={initialHtml}
-        onUpdate={handleUpdate}
-        placeholder="Descreva o projeto — visão geral, contexto, motivação..."
-      />
+    <SectionWrapper
+      title={section.title}
+      sectionKey="description"
+      hideHeader={hideHeader}
+    >
+      {mode === "read" ? (
+        initialHtml ? (
+          <div
+            className="prose prose-invert prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: initialHtml }}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">Sem descrição.</p>
+        )
+      ) : (
+        <TiptapEditor
+          content={initialHtml}
+          onUpdate={handleUpdate}
+          placeholder="Descreva o projeto — visão geral, contexto, motivação..."
+        />
+      )}
     </SectionWrapper>
   );
 }

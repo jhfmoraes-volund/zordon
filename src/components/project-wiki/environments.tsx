@@ -18,7 +18,13 @@ import { SectionWrapper } from "./section-wrapper";
 import { envTypes } from "./constants";
 import type { EnvironmentItem, SectionProps } from "./types";
 
-export function EnvironmentsSection({ section, onUpdate }: SectionProps) {
+export function EnvironmentsSection({
+  section,
+  onUpdate,
+  mode = "edit",
+  hideHeader,
+}: SectionProps) {
+  const readOnly = mode === "read";
   const { items, add, remove, replaceItem, adding, setAdding } =
     useWikiItems<EnvironmentItem>(section, onUpdate as (data: EnvironmentItem[]) => Promise<void>);
   const [form, setForm] = useState({
@@ -57,7 +63,8 @@ export function EnvironmentsSection({ section, onUpdate }: SectionProps) {
     <SectionWrapper
       title={section.title}
       sectionKey="environments"
-      onAdd={() => setAdding(!adding)}
+      onAdd={readOnly ? undefined : () => setAdding(!adding)}
+      hideHeader={hideHeader}
     >
       <div className="space-y-2">
         {items.map((env, i) =>
@@ -145,18 +152,22 @@ export function EnvironmentsSection({ section, onUpdate }: SectionProps) {
                   {env.notes}
                 </span>
               )}
-              <button
-                onClick={() => startEdit(i)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-              </button>
-              <button
-                onClick={() => remove(i)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
-              </button>
+              {!readOnly && (
+                <>
+                  <button
+                    onClick={() => startEdit(i)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                  </button>
+                  <button
+                    onClick={() => remove(i)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+                  </button>
+                </>
+              )}
             </div>
           )
         )}
