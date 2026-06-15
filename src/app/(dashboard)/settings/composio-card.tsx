@@ -5,6 +5,7 @@ import {
   GitBranch,
   FolderOpen,
   BookText,
+  FileSpreadsheet,
   CheckCircle2,
   Loader2,
   AlertCircle,
@@ -21,7 +22,7 @@ type Status = {
 };
 
 type ToolkitConfig = {
-  toolkit: "github" | "googledrive" | "notion";
+  toolkit: "github" | "googledrive" | "googlesheets" | "notion";
   title: string;
   icon: LucideIcon;
   description: string;
@@ -74,7 +75,17 @@ function ComposioIntegrationCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ toolkit, returnTo: "/settings/integrations" }),
       });
-      const data = (await r.json()) as { redirectUrl?: string; error?: string };
+      const data = (await r.json()) as {
+        redirectUrl?: string;
+        alreadyConnected?: boolean;
+        error?: string;
+      };
+      if (data.alreadyConnected) {
+        toast.success(`${title} já está conectado`);
+        await fetchStatus();
+        setBusy(false);
+        return;
+      }
       if (!r.ok || !data.redirectUrl) {
         toast.error(data.error ?? "Falha ao iniciar conexão");
         setBusy(false);
@@ -189,6 +200,18 @@ export function GoogleDriveIntegrationCard() {
       icon={FolderOpen}
       description="Conecte seu Google Drive pra sincronizar a pasta de documentos dos projetos (aba Drive). Quem salva a pasta no projeto vira o dono do sync. Conexão via Composio (OAuth gerenciado)."
       connectLabel="Conectar Google Drive"
+    />
+  );
+}
+
+export function GoogleSheetsIntegrationCard() {
+  return (
+    <ComposioIntegrationCard
+      toolkit="googlesheets"
+      title="Google Sheets"
+      icon={FileSpreadsheet}
+      description="Conecte seu Google Sheets pra importar planilhas como contexto dos projetos (insumos lidos pelos agentes). Conexão via Composio (OAuth gerenciado)."
+      connectLabel="Conectar Google Sheets"
     />
   );
 }

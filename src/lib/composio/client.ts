@@ -98,7 +98,11 @@ export async function initiateConnection(
   userId: string,
   toolkit: ComposioToolkit,
   callbackUrl?: string,
-): Promise<{ redirectUrl: string; connectionId: string } | { error: string }> {
+): Promise<
+  | { redirectUrl: string; connectionId: string }
+  | { alreadyConnected: true; connectedAccountId: string | null }
+  | { error: string }
+> {
   const client = await getClient();
   if (!client) return { error: "Composio não configurado (COMPOSIO_API_KEY ausente)" };
 
@@ -115,6 +119,15 @@ export async function initiateConnection(
       error:
         `${varName} ausente. Crie um Auth Config no painel Composio (toolkit=${toolkit}, Composio-managed OAuth) e copie o ac_xxx pro .env.`,
     };
+  }
+
+  // Curto-circuito: se já há conexão ativa, não inicia outra. Sem isso o
+  // Composio recusa com "Multiple connected accounts found … use allowMultiple"
+  // quando o user já conectou antes (ou deixou uma conta initiated/expired
+  // pendurada no mesmo auth config). 1 conexão ativa por (user, toolkit) basta.
+  const existing = await getConnectionStatus(userId, toolkit);
+  if (existing.status === "active") {
+    return { alreadyConnected: true, connectedAccountId: existing.connectedAccountId };
   }
 
   try {

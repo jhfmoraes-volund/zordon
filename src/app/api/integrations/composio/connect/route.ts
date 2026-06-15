@@ -59,6 +59,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
+  if ("alreadyConnected" in result) {
+    return NextResponse.json({
+      alreadyConnected: true,
+      connectedAccountId: result.connectedAccountId,
+    });
+  }
+
   return NextResponse.json({
     redirectUrl: result.redirectUrl,
     connectionId: result.connectionId,
