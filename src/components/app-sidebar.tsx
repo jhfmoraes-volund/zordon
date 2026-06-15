@@ -16,6 +16,7 @@ import {
   Settings,
   SlidersHorizontal,
   FlaskConical,
+  Sparkles,
 } from "lucide-react";
 import {
   Sidebar,
@@ -148,6 +149,21 @@ export function AppSidebar() {
                   >
                     <Settings className="h-4 w-4" />
                     <span>Configuracoes</span>
+                    <NavItemPending />
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={
+                      pathname === "/open-source" ||
+                      pathname.startsWith("/open-source/")
+                    }
+                    render={<Link href="/open-source" />}
+                    tooltip="Open Source"
+                    onClick={closeOnMobile}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span>Open Source</span>
                     <NavItemPending />
                   </SidebarMenuButton>
                 </SidebarMenuItem>
