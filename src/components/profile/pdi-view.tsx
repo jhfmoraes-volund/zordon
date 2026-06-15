@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
   Plus,
   Pencil,
   Trash2,
@@ -133,24 +131,9 @@ export function PdiView({ initial }: { initial: PdiViewPayload }) {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <Link
-          href="/profile"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Meu perfil
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Target className="h-5 w-5 text-primary" />
-            Meu PDI
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Plano de desenvolvimento individual — privado, só você vê.
-          </p>
-        </div>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Plano de desenvolvimento individual — privado, só você vê.
+      </p>
 
       <CycleHeader cycle={data.cycle} actions={data.actions} />
 

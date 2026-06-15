@@ -146,6 +146,7 @@ export function streamViaClaudeDaemon(args: {
           chatTurnId,
           agentSlug: args.agentSlug,
           ownerId: args.ownerId,
+          threadId: args.threadId,
         });
 
         const TIMEOUT_MS = 5 * 60_000;

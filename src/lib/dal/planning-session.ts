@@ -202,6 +202,7 @@ export async function updatePrdAssignment(
     sprintCount?: number;
     order?: number;
     ownerOverride?: string | null;
+    agentJustification?: string | null;
   },
 ): Promise<PlanningSessionPRDRow> {
   const { data, error } = await db()
@@ -238,7 +239,12 @@ export async function listPrds(
 export async function addLinkedPrd(
   planningSessionId: string,
   productRequirementId: string,
-  opts: { sprintStart: number; sprintCount?: number; order?: number },
+  opts: {
+    sprintStart: number;
+    sprintCount?: number;
+    order?: number;
+    justification?: string;
+  },
 ): Promise<PlanningSessionPRDRow> {
   let order = opts.order;
   if (order === undefined) {
@@ -260,6 +266,7 @@ export async function addLinkedPrd(
     sprintStart: opts.sprintStart,
     sprintCount: opts.sprintCount ?? 1,
     order,
+    agentJustification: opts.justification ?? null,
   };
   const { data, error } = await db()
     .from("PlanningSessionPRD")
@@ -293,7 +300,7 @@ export type PlanningSessionContextLinkInsert = Tables["EntityLink"]["Insert"];
 export async function linkContextSource(
   planningSessionId: string,
   contextSourceId: string,
-  linkedBy: string,
+  linkedBy: string | null,
 ): Promise<PlanningSessionContextLinkRow> {
   const { data, error } = await db()
     .from("EntityLink")

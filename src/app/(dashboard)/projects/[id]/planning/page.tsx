@@ -129,7 +129,13 @@ export default function PlanningSessionPage({
     [sessionId],
   );
 
-  const { messages, status, sendMessage, stop, setMessages } = useChat({ transport });
+  // `id` é obrigatório aqui: useChat congela o transport do 1º render (quando
+  // sessionId ainda é null) e só recria o Chat quando `id` muda.
+  const { messages, status, sendMessage, stop, setMessages } = useChat({
+    id: sessionId ?? "release-planning-pending",
+    transport,
+    onError: (err) => showErrorToast(err, { label: "Vitoria falhou" }),
+  });
 
   // Hidrata histórico do thread + recarrega o board quando o turno termina
   // (Vitoria pode ter mexido nos PRDs via tools).
@@ -177,6 +183,17 @@ export default function PlanningSessionPage({
     sendMessage({ text });
     setInput("");
   }, [input, status, sendMessage]);
+
+  // Kickoff do ritual: board vazio → pede proposta completa pra Vitoria.
+  const handleKickoff = useCallback(() => {
+    if (status === "streaming" || status === "submitted") return;
+    sendMessage({
+      text:
+        "Monta uma proposta de release planning: lê os PRDs disponíveis e os insumos " +
+        "(linkados e do pool do projeto) e distribui nas sprints, com justificativa por alocação.",
+    });
+    if (isMobile) setMobileOpen(true);
+  }, [status, sendMessage, isMobile]);
 
   // ─── Actions ────────────────────────────────────────────────────────────
 
@@ -378,8 +395,19 @@ export default function PlanningSessionPage({
         <div className="surface overflow-y-auto min-h-0 p-4">
           {session.prds.length === 0 ? (
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Board vazio. Vincule PRDs, peça pra Vitoria montar, ou clique em
-              &ldquo;Gerar plano&rdquo; pra cascata automática.
+              <p className="mb-4">
+                Board vazio. Vincule PRDs, peça pra Vitoria montar, ou clique em
+                &ldquo;Gerar plano&rdquo; pra cascata automática.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleKickoff}
+                disabled={isApproved || status === "streaming" || status === "submitted"}
+              >
+                <Sparkles className="size-4" />
+                Pedir proposta pra Vitoria
+              </Button>
             </div>
           ) : (
             <PlanningBoard

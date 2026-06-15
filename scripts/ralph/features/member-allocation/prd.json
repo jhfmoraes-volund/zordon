@@ -1,0 +1,181 @@
+{
+  "feature": "member-allocation",
+  "title": "Alocação % por projeto — self-service no widget do membro, tabela dedicada + relatório org",
+  "prd_path": "docs/prd/backlog/prd-member-allocation.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "ALLOC-001",
+      "title": "Migration — tabela MemberProjectAllocation com RLS",
+      "description": "Criar supabase/migrations/20260611_member_project_allocation.sql com o DDL do §7 (tabela uuid PK, memberId/projectId FKs CASCADE, percent CHECK 0–100, UNIQUE(memberId,projectId), índice projectId, GRANT, RLS com 4 policies: select own-or-manager via is_manager(), insert/update/delete own via Member.userId = auth.uid()) e aplicar via psql \"$DIRECT_URL\".",
+      "acceptanceCriteria": [
+        "Tabela MemberProjectAllocation existe com CHECK percent 0–100 e UNIQUE (memberId, projectId)",
+        "RLS habilitada com 4 policies (select own-or-manager, insert/update/delete own)"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM pg_policies WHERE tablename = 'MemberProjectAllocation'",
+          "expected": "4"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/20260611_member_project_allocation.sql"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "ALLOC-002",
+      "title": "Migration — Member.weeklyHours default 8",
+      "description": "Criar supabase/migrations/20260611b_member_weekly_hours.sql (ALTER Member ADD weeklyHours integer NOT NULL DEFAULT 8 CHECK BETWEEN 1 AND 60 + COMMENT diferenciando de fpCapacity) e aplicar via psql.",
+      "acceptanceCriteria": [
+        "Coluna Member.weeklyHours existe, NOT NULL, default 8, CHECK 1–60"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT column_default FROM information_schema.columns WHERE table_name='Member' AND column_name='weeklyHours'",
+          "expected": "8"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 10,
+      "touches": ["supabase/migrations/20260611b_member_weekly_hours.sql"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "ALLOC-003",
+      "title": "Atualizar database.types.ts com tabela e coluna novas",
+      "description": "Refletir MemberProjectAllocation (Row/Insert/Update/Relationships) e Member.weeklyHours em src/lib/supabase/database.types.ts, seguindo o shape das tabelas vizinhas (ProjectMember).",
+      "acceptanceCriteria": [
+        "Types de MemberProjectAllocation e Member.weeklyHours presentes e usáveis sem cast"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["ALLOC-001", "ALLOC-002"],
+      "estimateMinutes": 15,
+      "touches": ["src/lib/supabase/database.types.ts"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "ALLOC-004",
+      "title": "GET /api/me/allocations — projetos do squad + % atual",
+      "description": "Route handler que resolve o member via getCurrentMember(), lista projetos via ProjectMember (join Project.name), left-join em MemberProjectAllocation e retorna { weeklyHours, totalPercent, projects: [{ projectId, projectName, percent|null, hoursPerWeek|null, updatedAt|null }] }.",
+      "acceptanceCriteria": [
+        "200 com shape do §8 pra member autenticado; percent null quando sem row",
+        "401 sem sessão"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/me/allocations",
+          "expected": "401"
+        }
+      ],
+      "dependsOn": ["ALLOC-003"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/me/allocations/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "ALLOC-005",
+      "title": "PUT /api/me/allocations — bulk upsert com Zod",
+      "description": "No mesmo route.ts, PUT com Zod { allocations: [{ projectId uuid, percent int 0–100 }] }. Valida cada projectId ∈ ProjectMember do member (senão 403), upserta por (memberId, projectId) setando updatedAt/updatedBy, retorna { ok, totalPercent }.",
+      "acceptanceCriteria": [
+        "Upsert idempotente por (memberId, projectId); updatedAt/updatedBy setados",
+        "403 pra projectId fora do squad; 400 pra percent fora de 0–100 (Zod)",
+        "401 sem sessão"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' -X PUT http://localhost:3000/api/me/allocations -H 'Content-Type: application/json' -d '{\"allocations\":[]}'",
+          "expected": "401"
+        }
+      ],
+      "dependsOn": ["ALLOC-004"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/me/allocations/route.ts"],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "ALLOC-006",
+      "title": "AllocationWidget em /profile (self-service)",
+      "description": "Criar src/components/allocation-widget.tsx (FormBody/Field, Input number nativo, Σ live com badge ✓/âmbar/vermelho, horas derivadas percent/100×weeklyHours, empty state pra member sem squad, salvar via mutate + erros Sonner) e montar em /profile junto do CapacityCard, com copy curta diferenciando % de tempo vs FP.",
+      "acceptanceCriteria": [
+        "Widget lista projetos do GET, edita %, mostra Σ e h/sem derivadas em tempo real",
+        "Soma ≠ 100 mostra warning mas salva normalmente; erros via Sonner toast",
+        "Empty state pra member sem squad"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Logar como PB com 2 projetos, setar 60/40, salvar, recarregar — valores persistem",
+          "expected": "Valores persistem; badge ✓ em Σ=100"
+        }
+      ],
+      "dependsOn": ["ALLOC-004", "ALLOC-005"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/components/allocation-widget.tsx",
+        "src/app/(dashboard)/profile/page.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "ALLOC-007",
+      "title": "View member_allocation_report + GET /api/members/allocations (manager)",
+      "description": "Criar supabase/migrations/20260611c_member_allocation_report_view.sql (view member × project × percent × hours_per_week × updated_at, GRANT SELECT) e endpoint manager-only retornando as rows da view (requireMinLevelApi MANAGER).",
+      "acceptanceCriteria": [
+        "View retorna member × project × percent × hours_per_week × updated_at",
+        "Endpoint 200 pra manager, 403 pra builder, 401 sem sessão"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.views WHERE table_name='member_allocation_report'",
+          "expected": "1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["ALLOC-003"],
+      "estimateMinutes": 25,
+      "touches": [
+        "supabase/migrations/20260611c_member_allocation_report_view.sql",
+        "src/app/api/members/allocations/route.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    }
+  ]
+}

@@ -10,13 +10,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  User, Zap, FolderKanban, ListTodo, ArrowRight, Sparkles, ArrowUpRight, Star, ChevronDown, ChevronUp,
+  Zap, FolderKanban, ListTodo, ArrowRight, Sparkles, ArrowUpRight, Star, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { fmtDate, fmtDateNumeric, isOverdue } from "@/lib/date-utils";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SPRINT_STATUS, TASK_STATUS, TASK_TYPE, lookupChip } from "@/lib/status-chips";
-import { roleLabel } from "@/lib/roles";
 import {
   TOWERS,
   derivePrimaryTowers,
@@ -26,7 +25,6 @@ import {
   type MemberSkillRow,
 } from "@/lib/memberSkills";
 import { PixelBar, PixelDot, pixelBarLabel, PixelHud, pixelTone } from "@/components/ui/pixel-bar";
-import { PageContainer } from "@/components/app-shell";
 import { MemberBattery } from "@/components/member-battery";
 import { PdiWidget } from "@/components/pdi-widget";
 import { TodosWidget } from "@/components/todos-widget";
@@ -323,19 +321,15 @@ export default function ProfilePage() {
 
   if (!member) {
     return (
-      <PageContainer>
-        <div className="py-12 text-center text-muted-foreground">
-          Sua conta ainda não está vinculada a um membro. Peça ao admin.
-        </div>
-      </PageContainer>
+      <div className="py-12 text-center text-muted-foreground">
+        Sua conta ainda não está vinculada a um membro. Peça ao admin.
+      </div>
     );
   }
 
   if (loading || !data) {
     return (
-      <PageContainer>
-        <div className="py-12 text-center text-muted-foreground">Carregando...</div>
-      </PageContainer>
+      <div className="py-12 text-center text-muted-foreground">Carregando...</div>
     );
   }
 
@@ -348,21 +342,7 @@ export default function ProfilePage() {
   );
 
   return (
-    <PageContainer>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center h-12 w-12 rounded-full bg-primary/10 text-primary">
-            <User className="h-6 w-6" />
-          </div>
-        <div>
-          <h1 className="text-2xl font-bold">{data.member.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {roleLabel(data.member.position)}
-          </p>
-        </div>
-      </div>
-
+    <div className="space-y-6">
       {/* Capacity widget — bateria + esta semana */}
       <CapacityCard summary={capacity} />
 
@@ -546,8 +526,7 @@ export default function ProfilePage() {
         onClose={() => setOpenTaskId(null)}
         onAfterChange={reload}
       />
-      </div>
-    </PageContainer>
+    </div>
   );
 }
 

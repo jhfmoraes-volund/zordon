@@ -71,6 +71,9 @@ export async function enqueueChatJob(args: {
   chatTurnId: string;
   agentSlug: string;
   ownerId: string;
+  /** Thread do chat — o daemon serializa turns do MESMO thread (pool concorrente
+   *  entre threads distintos, serial dentro do thread). Aditivo: meta.threadId. */
+  threadId?: string;
 }): Promise<string> {
   const job = await createJob({
     ownerId: args.ownerId,
@@ -80,7 +83,7 @@ export async function enqueueChatJob(args: {
     status: "queued",
     assignToAnyone: true,
     kind: "chat",
-    meta: { chatTurnId: args.chatTurnId },
+    meta: { chatTurnId: args.chatTurnId, ...(args.threadId ? { threadId: args.threadId } : {}) },
   });
   return job.id;
 }

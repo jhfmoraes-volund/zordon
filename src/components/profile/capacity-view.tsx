@@ -1,11 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MemberBattery, type BatterySegment } from "@/components/member-battery";
 import { WeeklyAllocation } from "@/components/weekly-allocation";
-import { roleLabel } from "@/lib/roles";
 
 type Member = { id: string; name: string; role: string; position: string | null; fpCapacity: number };
 type Commitment = { capacity: number; committed: number; remaining: number; projectCount: number };
@@ -41,20 +38,6 @@ export function CapacityView({ data }: { data: CapacityPayload }) {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <Link
-          href="/profile"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Meu perfil
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold">Minha capacity</h1>
-          <p className="text-sm text-muted-foreground">{roleLabel(member.position)}</p>
-        </div>
-      </div>
-
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm text-muted-foreground">

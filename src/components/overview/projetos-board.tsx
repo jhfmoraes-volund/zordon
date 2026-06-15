@@ -6,15 +6,23 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowUpRight,
+  Briefcase,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Compass,
+  Flag,
   FolderKanban,
+  Hammer,
   Info,
+  KanbanSquare,
+  List,
   Pencil,
   SlidersHorizontal,
 } from "lucide-react";
+import { BoardColumn } from "@/components/design-session/board/board-column";
+import type { Accent } from "@/components/design-session/board/tokens";
 import {
   ResponsiveSheet,
   ResponsiveSheetContent,
@@ -89,6 +97,39 @@ const HEALTH_DOT: Record<ProjectHealth, string> = {
   amber: "bg-yellow-500",
   green: "bg-green-500",
 };
+
+/** Accent das colunas do kanban — ecoa o tone do chip de fase (PROJECT_PHASE). */
+const PHASE_ACCENT: Record<ProjectPhase, Accent> = {
+  commercial: "violet",
+  immersion: "sky",
+  ops: "indigo",
+  post_ops: "emerald",
+};
+
+const PHASE_ICON: Record<ProjectPhase, typeof Briefcase> = {
+  commercial: Briefcase,
+  immersion: Compass,
+  ops: Hammer,
+  post_ops: Flag,
+};
+
+/** Layout do board: seções por fase (lista) ou colunas por fase (kanban). */
+type BoardView = "rows" | "kanban";
+
+const VIEW_STORAGE_KEY = "overview:projetos:view";
+
+function readStoredView(): BoardView {
+  if (typeof window === "undefined") return "rows";
+  try {
+    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (stored === "kanban" || stored === "rows") return stored;
+  } catch {
+    // localStorage bloqueado — cai no default por viewport.
+  }
+  // Sem preferência salva: desktop nasce no kanban; mobile na lista (colunas
+  // empilhadas rendem menos que as seções). Breakpoint espelha useIsMobile.
+  return window.matchMedia("(min-width: 768px)").matches ? "kanban" : "rows";
+}
 
 const HEALTH_RANK: Record<ProjectHealth, number> = { red: 0, amber: 1, green: 2 };
 
@@ -932,6 +973,145 @@ function ProjectRow({
   );
 }
 
+// ─── Kanban (view alternativa: fases como colunas) ────────
+
+/**
+ * Card do kanban — mesma leitura da ProjectRow (health, régua, motivo, marco)
+ * em formato vertical. Clique abre o drawer; o wrapper draggable vive no
+ * ProjetosKanban (drop muda a fase).
+ */
+function ProjectKanbanCard({ p, onOpen }: { p: ProjectOverview; onOpen: () => void }) {
+  const milestone = milestoneChip(p);
+  const motivo = cardMotivo(p);
+  const producing = PRODUCING_PHASES.includes(p.phase);
+  return (
+    <button
+      type="button"
+      data-overview-row
+      onClick={onOpen}
+      className="surface block w-full p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="flex items-center gap-2">
+        <span className={cn("h-2 w-2 shrink-0 rounded-full", HEALTH_DOT[p.health])} />
+        <span className="truncate text-sm font-semibold">{p.name}</span>
+        {p.status === "paused" && (
+          <StatusChip label="pausado" tone="muted" variant="subtle" size="sm" />
+        )}
+      </div>
+      <p className="mt-0.5 truncate pl-4 text-xs text-muted-foreground">
+        {p.clientName ?? "—"}
+        {p.pmName ? ` · ${p.pmName}` : ""}
+      </p>
+      <div className="mt-2 pl-4">
+        {p.stats.mode !== "none" ? (
+          <Regua stats={p.stats} />
+        ) : p.phase === "commercial" ? (
+          <p className="text-[11px] text-muted-foreground">
+            Em comercial há {p.daysInPhase}d · {horizonLabel(p)}
+          </p>
+        ) : producing ? (
+          <p className="flex items-center gap-1.5 text-[11px] text-yellow-500">
+            <AlertTriangle className="h-3 w-3" /> produção sem sprint
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">{horizonLabel(p)}</p>
+        )}
+      </div>
+      {(milestone || motivo) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1 pl-4">
+          {milestone && (
+            <StatusChip
+              label={milestone.label}
+              tone={milestone.tone}
+              variant="subtle"
+              size="sm"
+              className="max-w-full"
+            />
+          )}
+          {motivo && (
+            <StatusChip label={motivo.label} tone={motivo.tone} variant="subtle" size="sm" />
+          )}
+        </div>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Kanban do funil — uma coluna por fase (PHASE_ORDER), sempre as 4 visíveis
+ * pra servirem de drop target. Drag nativo HTML5 (idiom do PlanningBoard);
+ * soltar num coluna chama onPhaseChange, que persiste e re-agrupa.
+ */
+function ProjetosKanban({
+  projects,
+  onOpen,
+  onPhaseChange,
+}: {
+  projects: ProjectOverview[];
+  onOpen: (id: string) => void;
+  onPhaseChange: (id: string, phase: ProjectPhase) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {PHASE_ORDER.map((phase) => {
+        const items = projects.filter((p) => p.phase === phase);
+        const attention = items.filter((p) => p.health !== "green").length;
+        const Icon = PHASE_ICON[phase];
+        return (
+          <BoardColumn
+            key={phase}
+            accent={PHASE_ACCENT[phase]}
+            icon={<Icon className="size-4" />}
+            title={lookupChip(PROJECT_PHASE, phase).label}
+            subtitle={attention > 0 ? `${attention} em atenção` : undefined}
+            count={items.length}
+            countLabel="projeto"
+            className="min-h-[280px]"
+          >
+            {/* Empty state mora DENTRO da drop-zone — o emptyTitle do
+                BoardColumn substituiria os children e mataria o onDrop. */}
+            <div
+              className="h-full min-h-[140px] space-y-2.5"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const id = e.dataTransfer.getData("project-id");
+                if (id) onPhaseChange(id, phase);
+              }}
+            >
+              {items.length === 0 && (
+                <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 py-6 text-center">
+                  <FolderKanban className="size-5 text-muted-foreground/50" />
+                  <p className="text-xs text-muted-foreground">Nenhum projeto</p>
+                  <p className="text-[11px] text-muted-foreground/70">
+                    Arraste um card pra cá.
+                  </p>
+                </div>
+              )}
+              {items.map((p) => (
+                <div
+                  key={p.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("project-id", p.id);
+                  }}
+                  className="cursor-move"
+                >
+                  <ProjectKanbanCard p={p} onOpen={() => onOpen(p.id)} />
+                </div>
+              ))}
+            </div>
+          </BoardColumn>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Ribbon Pai (grupo por fase, sticky) ──────────────────
 
 function PhaseHeader({
@@ -1559,6 +1739,57 @@ export function ProjetosBoard({
   const [editOpen, setEditOpen] = useState(false);
   /** Eixo do ribbon expandido — null = painel fechado. */
   const [ribbonAxis, setRibbonAxis] = useState<RibbonAxis | null>(null);
+  // Lista ou kanban — preferência persiste em localStorage (idiom de
+  // use-chat-plan-mode: lazy init com guard de window).
+  const [view, setView] = useState<BoardView>(() => readStoredView());
+  // Drag no kanban muda a fase otimisticamente por cima dos props (o board é
+  // server-fed); router.refresh() re-busca e o override vira redundante
+  // quando o prop alcança. Erro remove o override → card volta sozinho.
+  const [phaseOverrides, setPhaseOverrides] = useState<Record<string, ProjectPhase>>({});
+
+  const effective = useMemo(
+    () =>
+      projects.map((p) => {
+        const o = phaseOverrides[p.id];
+        return o && o !== p.phase ? { ...p, phase: o } : p;
+      }),
+    [projects, phaseOverrides],
+  );
+
+  function switchView(v: BoardView) {
+    setView(v);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, v);
+    } catch {
+      // localStorage bloqueado — preferência vive só em memória.
+    }
+  }
+
+  async function changePhase(id: string, phase: ProjectPhase) {
+    const current = effective.find((p) => p.id === id);
+    if (!current || current.phase === phase) return;
+    setPhaseOverrides((o) => ({ ...o, [id]: phase }));
+    const supabase = createClient();
+    // .select() força o RLS a aparecer como 0 rows (update bloqueado não erra).
+    const { data, error } = await supabase
+      .from("Project")
+      .update({ phase, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+      .select("id");
+    if (error || !data?.length) {
+      setPhaseOverrides((o) => {
+        const next = { ...o };
+        delete next[id];
+        return next;
+      });
+      showErrorToast(
+        new Error(error?.message ?? "Sem permissão pra mover este projeto"),
+        { label: "Falha ao mover projeto" },
+      );
+      return;
+    }
+    router.refresh();
+  }
 
   // Drawer endereçável: a seleção vive na URL (?project=) — F5 mantém, Back
   // fecha, link compartilha. push abre (entra no histórico); replace fecha e
@@ -1623,7 +1854,7 @@ export function ProjetosBoard({
   // ativa = projeto ativo em fase produtiva, sem internos/eval. "Em atenção"
   // é sinal local de health, não métrica do registry.
   const ribbon = useMemo<RibbonItem[]>(() => {
-    const universe = projects.filter((p) => p.category !== "internal" && !p.isEval);
+    const universe = effective.filter((p) => p.category !== "internal" && !p.isEval);
     const lines = universe.filter(
       (p) => p.status === "active" && PRODUCING_PHASES.includes(p.phase),
     );
@@ -1680,10 +1911,10 @@ export function ProjetosBoard({
               : undefined,
       },
     ];
-  }, [projects, factoryLoad, ui]);
+  }, [effective, factoryLoad, ui]);
 
   const grouped = useMemo(() => {
-    const visible = projects.filter((p) => {
+    const visible = effective.filter((p) => {
       if (p.isEval && !showEval) return false;
       if (p.category === "internal" && !showInternal) return false;
       return true;
@@ -1692,7 +1923,7 @@ export function ProjetosBoard({
       phase,
       items: visible.filter((p) => p.phase === phase),
     })).filter((g) => g.items.length > 0);
-  }, [projects, showInternal, showEval]);
+  }, [effective, showInternal, showEval]);
 
   // Ordem de navegação ‹ › = ordem visível do board (ignora colapso de grupo).
   const visibleFlat = useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
@@ -1764,7 +1995,7 @@ export function ProjetosBoard({
         />
         <RibbonPanel
           axis={ribbonAxis}
-          projects={projects}
+          projects={effective}
           factoryLoad={factoryLoad}
           builderLoads={builderLoads}
           ui={ui}
@@ -1772,31 +2003,74 @@ export function ProjetosBoard({
         />
       </div>
 
-      {/* Linhas de produção agrupadas por fase (funil), Pai sticky */}
+      {/* Projetos por fase (funil) — lista em seções ou kanban em colunas */}
       {grouped.length > 0 && (
-        <div ref={rowsRef} onKeyDown={onRowsKeyDown} className="space-y-4">
-          {grouped.map((g) => (
-            <section key={g.phase}>
-              <PhaseHeader
-                phase={g.phase}
-                items={g.items}
-                collapsed={collapsed.has(g.phase)}
-                onToggle={() => togglePhase(g.phase)}
-              />
-              {!collapsed.has(g.phase) && (
-                <div className="mt-2 space-y-1.5">
-                  {g.items.map((p) => (
-                    <ProjectRow
-                      key={p.id}
-                      p={p}
-                      ui={ui}
-                      onOpen={() => navigate(p.id, "push")}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          ))}
+        <div ref={rowsRef} onKeyDown={onRowsKeyDown} className="space-y-3">
+          <div className="flex justify-end">
+            <div className="flex overflow-hidden rounded-md border">
+              <button
+                type="button"
+                onClick={() => switchView("rows")}
+                title="Lista por fase"
+                className={cn(
+                  "flex h-8 items-center gap-1 px-2 text-[11px]",
+                  view === "rows"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                <List className="size-3.5" />
+                Lista
+              </button>
+              <button
+                type="button"
+                onClick={() => switchView("kanban")}
+                title="Kanban por fase"
+                className={cn(
+                  "flex h-8 items-center gap-1 border-l px-2 text-[11px]",
+                  view === "kanban"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                <KanbanSquare className="size-3.5" />
+                Kanban
+              </button>
+            </div>
+          </div>
+
+          {view === "kanban" ? (
+            <ProjetosKanban
+              projects={visibleFlat}
+              onOpen={(id) => navigate(id, "push")}
+              onPhaseChange={changePhase}
+            />
+          ) : (
+            <div className="space-y-4">
+              {grouped.map((g) => (
+                <section key={g.phase}>
+                  <PhaseHeader
+                    phase={g.phase}
+                    items={g.items}
+                    collapsed={collapsed.has(g.phase)}
+                    onToggle={() => togglePhase(g.phase)}
+                  />
+                  {!collapsed.has(g.phase) && (
+                    <div className="mt-2 space-y-1.5">
+                      {g.items.map((p) => (
+                        <ProjectRow
+                          key={p.id}
+                          p={p}
+                          ui={ui}
+                          onOpen={() => navigate(p.id, "push")}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

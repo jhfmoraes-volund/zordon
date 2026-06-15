@@ -94,7 +94,10 @@ export const APP_REGISTRY: AppDef[] = [
     window: "3xl",
     produces: { context: [], artifacts: ["git_push"] },
     minAccessLevel: "manager",
-    status: "installed",
+    // "available" = visível no catálogo com selo "em breve", sem abrir superfície.
+    // Foco atual é chat (agentes por texto); a forja volta como "installed" quando
+    // a execução autônoma estiver madura.
+    status: "available",
   },
   {
     key: "notion",

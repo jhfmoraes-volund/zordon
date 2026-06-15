@@ -11,6 +11,7 @@ import {
   mapPositionToAccessLevel,
   type AccessLevel,
   ACCESS_LEVELS,
+  SPECIALTIES,
 } from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -19,10 +20,13 @@ type MemberUpdate = Database["public"]["Tables"]["Member"]["Update"];
 
 /**
  * Campos que o próprio membro pode editar do seu Member sem precisar de admin.
- * São os controles da bateria/capacity. Cargo, access level, isExternal etc.
- * continuam sendo admin-only.
+ * Identidade (nome, especialidade, GitHub) + controles da bateria/capacity.
+ * Cargo, access level, isExternal etc. continuam sendo admin-only.
  */
 const SELF_EDITABLE_FIELDS = new Set([
+  "name",
+  "specialty",
+  "githubUsername",
   "fpCapacity",
   "seniority",
   "dedicationPercent",
@@ -78,13 +82,33 @@ export async function PUT(
     if (disallowed.length > 0) {
       return NextResponse.json(
         {
-          error: `Você só pode editar seus próprios campos de capacity (${Array.from(
+          error: `Você só pode editar seus próprios campos de perfil (${Array.from(
             SELF_EDITABLE_FIELDS,
           ).join(", ")}). Campos negados: ${disallowed.join(", ")}.`,
         },
         { status: 403 },
       );
     }
+  }
+
+  if (
+    "name" in body &&
+    (typeof body.name !== "string" || body.name.trim().length === 0)
+  ) {
+    return NextResponse.json(
+      { error: "name deve ser uma string não-vazia" },
+      { status: 400 },
+    );
+  }
+  if (
+    "specialty" in body &&
+    body.specialty !== null &&
+    !SPECIALTIES.includes(body.specialty)
+  ) {
+    return NextResponse.json(
+      { error: `specialty deve ser uma de: ${SPECIALTIES.join(", ")}` },
+      { status: 400 },
+    );
   }
 
   // Pull authz/cargo fields out separately; the rest goes straight to Member.
