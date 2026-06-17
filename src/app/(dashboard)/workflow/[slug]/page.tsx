@@ -4,12 +4,14 @@ import { DeckStage } from "@/components/deck/deck-stage";
 import { getDeck } from "@/content/decks/registry";
 import { OperacaoVolundSlides } from "@/content/decks/operacao-volund";
 import { RituaisCombinadoSlides } from "@/content/decks/rituais-o-combinado";
+import { ComoFuncionamOsAgentesSlides } from "@/content/decks/como-funcionam-os-agentes";
 import { getAccessLevel } from "@/lib/dal";
 import { hasMinAccessLevel } from "@/lib/roles";
 
 const DECK_SLIDES: Record<string, () => React.ReactNode[]> = {
   "operacao-volund": OperacaoVolundSlides,
   "rituais-o-combinado": RituaisCombinadoSlides,
+  "como-funcionam-os-agentes": ComoFuncionamOsAgentesSlides,
 };
 
 export default async function DeckPage({

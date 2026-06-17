@@ -65,6 +65,18 @@ export const decks: DeckMeta[] = [
     tags: ["Rituais", "PM", "Combinado"],
     minAccessLevel: "manager",
   },
+  {
+    slug: "como-funcionam-os-agentes",
+    title: "Como funcionam os agentes",
+    eyebrow: "GUIA · AGENTES · PM & ADMIN",
+    description:
+      "Vitor, Vitoria e Alpha não são chat solto — são o motor dos apps (Design Session, Rituais, Ops). O que cada um faz, as ferramentas de cada um, como roda por baixo (daemon + MCP) e o roadmap.",
+    kind: "guide",
+    slideCount: 11,
+    updatedAt: "2026-06-17",
+    tags: ["Agentes", "MCP", "Daemon"],
+    minAccessLevel: "manager",
+  },
 ];
 
 export function getDeck(slug: string): DeckMeta | undefined {
