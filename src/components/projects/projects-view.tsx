@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/page-header";
@@ -9,15 +9,14 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Pencil, Trash2, Users, ChevronDown, ChevronRight, MoreVertical, ListChecks } from "lucide-react";
-import { hasMinAccessLevel, roleLabel } from "@/lib/roles";
+import { Pencil, Trash2, Users, MoreVertical, ListChecks } from "lucide-react";
+import { hasMinAccessLevel } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
 import { useOptimisticCollection } from "@/hooks/use-optimistic-collection";
@@ -149,7 +148,6 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
   const projectMutate = projectsCollection.mutate;
   const [open, setOpen] = useState(false);
   const [editProject, setEditProject] = useState<ProjectEditInitial | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [scope, setScope] = useState<"mine" | "all">("mine");
 
@@ -295,10 +293,6 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
     });
   };
 
-  const toggleExpand = (id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
-  };
-
   return (
     <PageContainer>
       <div className="space-y-6">
@@ -371,7 +365,6 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[40px]" />
               <TableHead>Nome</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Status</TableHead>
@@ -382,75 +375,44 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visibleProjects.map((p) => {
-              const isExpanded = expandedId === p.id;
-              return (
-                <React.Fragment key={p.id}>
-                  <TableRow className="cursor-pointer" onClick={() => toggleExpand(p.id)}>
-                    <TableCell>
-                      {p.projectMembers.length > 0 && (
-                        isExpanded
-                          ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          : <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <Link href={`/projects/${p.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
-                        {p.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{p.client.name}</TableCell>
-                    <TableCell>
-                      <StatusChip {...lookupChip(PROJECT_STATUS, p.status)} dot />
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {p.startDate ? fmtDate(p.startDate) : "–"}
-                      {" → "}
-                      {p.endDate ? fmtDate(p.endDate) : "–"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                        {p.projectMembers.length}
-                      </div>
-                    </TableCell>
-                    <TableCell>{p.taskCount}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => remove(p.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  {isExpanded && p.projectMembers.length > 0 && (
-                    <TableRow key={`${p.id}-detail`}>
-                      <TableCell />
-                      <TableCell colSpan={7}>
-                        <div className="py-2">
-                          <div className="flex flex-wrap gap-1.5">
-                            {p.projectMembers.map((pm) => (
-                              <Badge key={pm.id} variant="outline" className="text-xs">
-                                {pm.member.name}
-                                <span className="ml-1 text-muted-foreground">
-                                  {roleLabel(pm.member.position)}
-                                </span>
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </React.Fragment>
-              );
-            })}
+            {visibleProjects.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell className="font-medium">
+                  <Link href={`/projects/${p.id}`} className="hover:underline">
+                    {p.name}
+                  </Link>
+                </TableCell>
+                <TableCell>{p.client.name}</TableCell>
+                <TableCell>
+                  <StatusChip {...lookupChip(PROJECT_STATUS, p.status)} dot />
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {p.startDate ? fmtDate(p.startDate) : "–"}
+                  {" → "}
+                  {p.endDate ? fmtDate(p.endDate) : "–"}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                    {p.projectMembers.length}
+                  </div>
+                </TableCell>
+                <TableCell>{p.taskCount}</TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => remove(p.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
             {visibleProjects.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                   {scope === "mine"
                     ? "Você não está alocado em nenhum projeto."
                     : "Nenhum projeto cadastrado."}

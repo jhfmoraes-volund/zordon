@@ -1548,40 +1548,113 @@ function StatTip({
   );
 }
 
-function StatCol({
-  label,
-  value,
-  sub,
-  subTone,
-  hint,
-}: {
+/** Descritor de um campo de STATS — alimenta o card compacto e o drawer de detalhe. */
+type StatColData = {
+  key: string;
   label: string;
   value: string;
   sub?: string | null;
   subTone?: "amber" | "red";
-  /** Defense do registry (D6) — a frase que explica o número, como tooltip. */
+  /** Defense do registry (D6) — a frase que explica o número. Vai no drawer (D6 era tooltip). */
   hint?: string;
+};
+
+/**
+ * Campo de STATS (accordion). Mostra só label + valor; o `value` herda o tom
+ * (âmbar/vermelho) pra preservar o sinal de urgência do marco sem o texto longo.
+ * Quando há detalhe (`sub`/`hint`) vira botão que abre o `StatColDetail` abaixo.
+ */
+function StatCol({
+  data,
+  active,
+  onToggle,
+}: {
+  data: StatColData;
+  active: boolean;
+  onToggle: () => void;
 }) {
-  return (
-    <div className="min-w-0">
+  const { label, value, subTone } = data;
+  const hasDetail = Boolean(data.sub || data.hint);
+  const body = (
+    <>
       <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
-        {hint && (
-          <StatTip hint={hint}>
-            <Info className="h-3 w-3 shrink-0 opacity-50 transition-opacity hover:opacity-100" />
-          </StatTip>
+        {hasDetail && (
+          <ChevronDown
+            className={cn(
+              "h-3 w-3 shrink-0 opacity-50 transition-transform",
+              !active && "-rotate-90",
+            )}
+          />
         )}
       </div>
-      <div className="mt-0.5 truncate text-lg font-semibold tabular-nums">{value}</div>
-      {sub && (
-        <div
-          className={cn(
-            "text-[11px] leading-snug tabular-nums text-muted-foreground",
-            subTone === "amber" && "text-yellow-500",
-            subTone === "red" && "text-red-400",
+      <div
+        className={cn(
+          "mt-0.5 truncate text-lg font-semibold tabular-nums",
+          subTone === "amber" && "text-yellow-500",
+          subTone === "red" && "text-red-400",
+        )}
+      >
+        {value}
+      </div>
+    </>
+  );
+  if (!hasDetail) return <div className="min-w-0">{body}</div>;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={active}
+      aria-controls="stats-col-detail"
+      className={cn(
+        "-mx-1.5 min-w-0 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted/50",
+        active && "bg-muted/60",
+      )}
+    >
+      {body}
+    </button>
+  );
+}
+
+/**
+ * Drawer full-width do campo ativo: o texto completo (sub) + a explicação (hint,
+ * que antes vivia só no tooltip ⓘ — inalcançável no touch). Mesmo padrão de
+ * animação do "Ver mais"; `col` carrega o último mostrado pra animar o fechamento.
+ */
+function StatColDetail({ col, open }: { col: StatColData | null; open: boolean }) {
+  return (
+    <div
+      id="stats-col-detail"
+      role="region"
+      aria-label={col ? `Detalhe · ${col.label}` : undefined}
+      aria-hidden={!open}
+      className={cn(
+        "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
+        open ? "max-h-[320px] opacity-100" : "max-h-0 opacity-0",
+      )}
+    >
+      {col && (
+        <div className="mt-2 space-y-1.5 rounded-md bg-muted/30 px-3 py-2.5 text-[11px]">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {col.label}
+          </div>
+          {col.sub && (
+            <p
+              className={cn(
+                "leading-snug text-foreground/90",
+                col.subTone === "amber" && "text-yellow-500",
+                col.subTone === "red" && "text-red-400",
+              )}
+            >
+              {col.sub}
+            </p>
           )}
-        >
-          {sub}
+          {col.hint && (
+            <p className="flex items-start gap-1.5 text-muted-foreground">
+              <Info className="mt-0.5 h-3 w-3 shrink-0 opacity-60" />
+              <span className="leading-snug">{col.hint}</span>
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -1589,14 +1662,15 @@ function StatCol({
 }
 
 /**
- * Coluna "Marco" — próxima grande data do projeto (go-live, demo, entrega de
- * fase), declarada pela Vitoria no PM Review (note kind='milestone' + dueAt).
+ * Descritor do campo "Marco" — próxima grande data do projeto (go-live, demo,
+ * entrega de fase), declarada pela Vitoria no PM Review (note kind='milestone'
+ * + dueAt). Sem marco, fica "—" com a explicação no drawer.
  */
-function MilestoneStatCol({ p }: { p: ProjectOverview }) {
+function milestoneCol(p: ProjectOverview): StatColData {
   const hint =
     "Próxima grande data do projeto (go-live, demo, entrega de fase). A Vitoria declara no PM Review semanal — sem review com marco, a coluna fica vazia.";
   if (!p.milestone) {
-    return <StatCol label="Marco" value="—" sub="sem marco declarado" hint={hint} />;
+    return { key: "marco", label: "Marco", value: "—", sub: "sem marco declarado", hint };
   }
   const due = new Date(`${p.milestone.dueAt}T00:00:00`);
   const days = daysUntil(p.milestone.dueAt);
@@ -1606,15 +1680,14 @@ function MilestoneStatCol({ p }: { p: ProjectOverview }) {
       : days === 0
         ? `${p.milestone.label} · é hoje`
         : `${p.milestone.label} · em ${days}d`;
-  return (
-    <StatCol
-      label="Marco"
-      value={fmtDate(due)}
-      sub={sub}
-      subTone={days < 0 ? "red" : days <= 14 ? "amber" : undefined}
-      hint={hint}
-    />
-  );
+  return {
+    key: "marco",
+    label: "Marco",
+    value: fmtDate(due),
+    sub,
+    subTone: days < 0 ? "red" : days <= 14 ? "amber" : undefined,
+    hint,
+  };
 }
 
 /** Sub da coluna Ritmo no drawer — entrega do planejado (madura) + aproveitamento. */
@@ -1637,9 +1710,17 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   const producing = PRODUCING_PHASES.includes(p.phase);
   // Tela cheia (sheet expandida): a régua vira timeline com data + entrega.
   const expanded = useResponsiveSheetExpanded();
-  // "Ver mais": drawer inline com o detalhe que, compacto, só vive no tooltip
-  // da régua (inalcançável no touch). Na tela cheia a timeline já está acima.
+  // "Ver mais": drawer da timeline sprint-a-sprint, logo abaixo da régua. Na
+  // tela cheia a timeline já está acima, então some.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Accordion dos 3 campos: um aberto por vez. `lastColKey` retém o último campo
+  // pra animar o fechamento (o conteúdo só some depois da transição).
+  const [activeCol, setActiveCol] = useState<string | null>(null);
+  const [lastColKey, setLastColKey] = useState<string | null>(null);
+  const toggleCol = (key: string) => {
+    setLastColKey(key);
+    setActiveCol((cur) => (cur === key ? null : key));
+  };
 
   if (s.mode === "none") {
     return (
@@ -1663,6 +1744,45 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
     );
   }
 
+  const cols: StatColData[] =
+    s.mode === "contract"
+      ? [
+          {
+            key: "contrato",
+            label: "Contrato",
+            value: `sprint ${s.weeksElapsed}/${s.weeksTotal}`,
+            sub: `${s.timePct}% do contrato consumido`,
+            hint: ui.defenses["project.time_pct"],
+          },
+          milestoneCol(p),
+          {
+            key: "ritmo",
+            label: "Ritmo",
+            value: fmtAvg(s.avgFpPerSprint),
+            sub: ritmoSub(s),
+            hint: ui.defenses["project.avg_fp_per_sprint"],
+          },
+        ]
+      : [
+          {
+            key: "janela",
+            label: "Janela",
+            value: `${s.segments.length} sprint${s.segments.length === 1 ? "" : "s"}`,
+            sub: "contínuo — sem prazo",
+          },
+          milestoneCol(p),
+          {
+            key: "ritmo",
+            label: "Ritmo",
+            value: fmtAvg(s.avgFpPerSprint),
+            sub: ritmoSub(s),
+            hint: ui.defenses["project.avg_fp_per_sprint"],
+          },
+        ];
+  const activeData = cols.find((c) => c.key === activeCol) ?? null;
+  // Conteúdo do drawer: o ativo, ou o último mostrado enquanto fecha.
+  const displayData = activeData ?? cols.find((c) => c.key === lastColKey) ?? null;
+
   return (
     <TooltipProvider>
       <section>
@@ -1677,48 +1797,61 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
           )}
         </div>
 
+        {/* Visão semana-a-semana — régua + "Ver mais" (timeline detalhada)
+            agrupados no topo. Na tela cheia a timeline já vive aqui, sem toggle. */}
         {expanded ? (
           <SprintTimeline stats={s} />
         ) : (
-          <StatTip hint={<ReguaSummaryTip stats={s} />} block>
-            <Regua stats={s} size="lg" legend={false} />
-          </StatTip>
+          <>
+            <StatTip hint={<ReguaSummaryTip stats={s} />} block>
+              <Regua stats={s} size="lg" legend={false} />
+            </StatTip>
+            {s.segments.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen((v) => !v)}
+                  aria-expanded={detailsOpen}
+                  aria-controls="stats-details-drawer"
+                  className="mt-1.5 inline-flex items-center gap-1 rounded-md px-1 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                >
+                  <ChevronDown
+                    className={cn("h-3.5 w-3.5 transition-transform", !detailsOpen && "-rotate-90")}
+                  />
+                  {detailsOpen ? "Ver menos" : "Ver mais"}
+                </button>
+                <div
+                  id="stats-details-drawer"
+                  role="region"
+                  aria-label="Detalhe das sprints"
+                  aria-hidden={!detailsOpen}
+                  className={cn(
+                    "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
+                    detailsOpen ? "max-h-[720px] opacity-100" : "max-h-0 opacity-0",
+                  )}
+                >
+                  <div className="pt-3 text-[11px] text-muted-foreground">
+                    <SprintTimeline stats={s} />
+                  </div>
+                </div>
+              </>
+            )}
+          </>
         )}
 
+        {/* Campos (accordion): label + valor sempre; o texto + explicação abrem
+            no drawer abaixo da linha, um campo por vez. */}
         <div className="mt-3 grid grid-cols-3 gap-3">
-          {s.mode === "contract" ? (
-            <>
-              <StatCol
-                label="Contrato"
-                value={`sprint ${s.weeksElapsed}/${s.weeksTotal}`}
-                sub={`${s.timePct}% do contrato consumido`}
-                hint={ui.defenses["project.time_pct"]}
-              />
-              <MilestoneStatCol p={p} />
-              <StatCol
-                label="Ritmo"
-                value={fmtAvg(s.avgFpPerSprint)}
-                sub={ritmoSub(s)}
-                hint={ui.defenses["project.avg_fp_per_sprint"]}
-              />
-            </>
-          ) : (
-            <>
-              <StatCol
-                label="Janela"
-                value={`${s.segments.length} sprint${s.segments.length === 1 ? "" : "s"}`}
-                sub="contínuo — sem prazo"
-              />
-              <MilestoneStatCol p={p} />
-              <StatCol
-                label="Ritmo"
-                value={fmtAvg(s.avgFpPerSprint)}
-                sub={ritmoSub(s)}
-                hint={ui.defenses["project.avg_fp_per_sprint"]}
-              />
-            </>
-          )}
+          {cols.map((c) => (
+            <StatCol
+              key={c.key}
+              data={c}
+              active={activeCol === c.key}
+              onToggle={() => toggleCol(c.key)}
+            />
+          ))}
         </div>
+        <StatColDetail col={displayData} open={activeData !== null} />
 
         {s.mode === "contract" && (
           <p className="mt-3 text-[11px] tabular-nums text-muted-foreground">
@@ -1738,40 +1871,6 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
               </span>
             )}
           </p>
-        )}
-
-        {/* Ver mais — drawer inline com breakdown + timeline sprint-a-sprint.
-            Some na tela cheia, onde a timeline já vive no topo da seção. */}
-        {!expanded && s.segments.length > 0 && (
-          <>
-            <button
-              type="button"
-              onClick={() => setDetailsOpen((v) => !v)}
-              aria-expanded={detailsOpen}
-              aria-controls="stats-details-drawer"
-              className="mt-2 inline-flex items-center gap-1 rounded-md px-1 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            >
-              <ChevronDown
-                className={cn("h-3.5 w-3.5 transition-transform", !detailsOpen && "-rotate-90")}
-              />
-              {detailsOpen ? "Ver menos" : "Ver mais"}
-            </button>
-            <div
-              id="stats-details-drawer"
-              role="region"
-              aria-label="Detalhe das sprints"
-              aria-hidden={!detailsOpen}
-              className={cn(
-                "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
-                detailsOpen ? "max-h-[720px] opacity-100" : "max-h-0 opacity-0",
-              )}
-            >
-              <div className="space-y-3 pt-3 text-[11px] text-muted-foreground">
-                <ReguaSummaryLine stats={s} />
-                <SprintTimeline stats={s} />
-              </div>
-            </div>
-          </>
         )}
       </section>
     </TooltipProvider>

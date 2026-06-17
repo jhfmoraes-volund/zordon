@@ -54,6 +54,17 @@ import {
   createGrepWorkspaceTool,
 } from "./tools/workspace";
 import { assembleAlphaTools } from "./agents/alpha/tools";
+import {
+  listModulesForOpsTool,
+  listPersonasForOpsTool,
+  listStoriesForOpsTool,
+  getStoryForOpsTool,
+} from "./tools/alpha-hierarchy";
+import {
+  getProjectCapacityForOpsTool,
+  listUnplannedTasksForOpsTool,
+  verifySprintDistributionForOpsTool,
+} from "./tools/alpha-planner";
 
 /**
  * Context passed pelo router pra cada factory. Campos opcionais — cada tool
@@ -72,11 +83,27 @@ export type ToolContext = {
    *  Null se projeto ainda não tem 1º Forge run. Workspace tools (read/glob/grep)
    *  validam todo path contra este prefix. */
   workspacePath?: string | null;
+  /** Alpha (Fase 2): projeto/sprint resolvidos do ChatTurn.routePath (a página
+   *  onde o PM está). Undefined quando a rota é global/sem foco. As tools
+   *  route-scoped do Alpha (list_modules, get_project_capacity, …) usam isto. */
+  routeProjectId?: string;
+  routeSprintId?: string;
 };
 
 function requireSessionId(ctx: ToolContext): string {
   if (!ctx.sessionId) throw new Error("sessionId required for this tool");
   return ctx.sessionId;
+}
+
+function requireRouteProjectId(ctx: ToolContext): string {
+  if (!ctx.routeProjectId) {
+    throw new Error(
+      "Esta tool é route-scoped: exige que o PM esteja numa página de projeto " +
+        "(/projects/<id>). Peça pra abrir o projeto, ou use as tools globais " +
+        "(get_backlog/list_sprints com projectName).",
+    );
+  }
+  return ctx.routeProjectId;
 }
 
 function requirePMReviewId(ctx: ToolContext): string {
@@ -239,6 +266,36 @@ for (const name of ALPHA_READ_TOOL_NAMES) {
   TOOL_REGISTRY[name] = alphaReadTool(name);
 }
 
+// ── Alpha route-scoped reads (Fase 2) — exigem um projeto resolvido da rota
+// (ChatTurn.routePath → ctx.routeProjectId). Sem rota de projeto,
+// requireRouteProjectId devolve uma mensagem amigável pro modelo. Estas
+// factories são alpha-only (só entram no set ALPHA_TOOLS) — não colidem com as
+// factories session-bound do Vitor/Vitoria.
+const ALPHA_ROUTE_TOOL_NAMES = [
+  "list_modules",
+  "list_personas",
+  "list_stories",
+  "get_story",
+  "get_project_capacity",
+  "list_unplanned_tasks",
+  "verify_sprint_distribution",
+] as const;
+
+const ALPHA_ROUTE_FACTORIES: Record<string, (projectId: string) => Tool> = {
+  list_modules: listModulesForOpsTool,
+  list_personas: listPersonasForOpsTool,
+  list_stories: listStoriesForOpsTool,
+  get_story: getStoryForOpsTool,
+  get_project_capacity: getProjectCapacityForOpsTool,
+  list_unplanned_tasks: listUnplannedTasksForOpsTool,
+  verify_sprint_distribution: verifySprintDistributionForOpsTool,
+};
+
+for (const name of ALPHA_ROUTE_TOOL_NAMES) {
+  TOOL_REGISTRY[name] = (ctx) =>
+    ALPHA_ROUTE_FACTORIES[name](requireRouteProjectId(ctx));
+}
+
 // ── Vitoria — tools reusadas de buildVitoriaTools (mesmas do path OpenRouter).
 // Cada factory rebuilda o bundle (barato — só zod schemas) e devolve a tool
 // nomeada. Split por dependência de ctx pra a Vitoria ser UMA só com
@@ -331,7 +388,10 @@ const VITORIA_PLANNING_TOOLS = new Set<string>([
   "read_context_source",
 ]);
 
-const ALPHA_TOOLS = new Set<string>(ALPHA_READ_TOOL_NAMES);
+const ALPHA_TOOLS = new Set<string>([
+  ...ALPHA_READ_TOOL_NAMES,
+  ...ALPHA_ROUTE_TOOL_NAMES,
+]);
 
 /**
  * Quais tools cada agente expõe via MCP. Filtra o registry global por slug +

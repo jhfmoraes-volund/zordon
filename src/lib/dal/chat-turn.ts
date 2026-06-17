@@ -43,6 +43,10 @@ export async function createChatTurn(args: {
   threadId: string;
   userMessageId: string;
   agentSlug: string;
+  /** Página onde o PM está (currentPath). Persistida per-turn pro tool router
+   *  resolver routeProjectId/routeSprintId das tools route-scoped do Alpha
+   *  (Fase 2). Null = global. */
+  routePath?: string | null;
 }): Promise<string> {
   const supabase = db();
   const { data: turn, error: turnErr } = await supabase
@@ -54,6 +58,7 @@ export async function createChatTurn(args: {
       mode: "claude-daemon",
       systemPrompt: "", // hydrated by daemon via prepare-turn
       status: "queued",
+      routePath: args.routePath ?? null,
     })
     .select("id")
     .single();

@@ -1041,6 +1041,7 @@ export type Database = {
           id: string
           mode: string
           responseMessageId: string | null
+          routePath: string | null
           startedAt: string | null
           status: string
           systemPrompt: string
@@ -1059,6 +1060,7 @@ export type Database = {
           id?: string
           mode: string
           responseMessageId?: string | null
+          routePath?: string | null
           startedAt?: string | null
           status?: string
           systemPrompt: string
@@ -1077,6 +1079,7 @@ export type Database = {
           id?: string
           mode?: string
           responseMessageId?: string | null
+          routePath?: string | null
           startedAt?: string | null
           status?: string
           systemPrompt?: string
@@ -6346,6 +6349,72 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "ProjectDriveFile_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ProjectGranolaFolder: {
+        Row: {
+          createdAt: string
+          folderId: string
+          folderName: string | null
+          id: string
+          memberId: string | null
+          projectId: string
+          updatedAt: string
+        }
+        Insert: {
+          createdAt?: string
+          folderId: string
+          folderName?: string | null
+          id?: string
+          memberId?: string | null
+          projectId: string
+          updatedAt?: string
+        }
+        Update: {
+          createdAt?: string
+          folderId?: string
+          folderName?: string | null
+          id?: string
+          memberId?: string | null
+          projectId?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectGranolaFolder_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectGranolaFolder_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectGranolaFolder_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectGranolaFolder_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectGranolaFolder_projectId_fkey"
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"

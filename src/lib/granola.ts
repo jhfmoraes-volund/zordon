@@ -33,15 +33,34 @@ export interface GranolaTranscriptLine {
   speaker?: { source?: "microphone" | "speaker"; name?: string };
 }
 
+/**
+ * A folder a note belongs to. Granola's v1.1.0 `folder_membership` returns the
+ * direct container plus ancestor folders, so a note can list several entries.
+ */
+export interface GranolaFolderMembership {
+  folder_id: string;
+}
+
 export interface GranolaNoteDetail extends GranolaNoteListItem {
   web_url?: string;
   calendar_event?: GranolaCalendarEvent;
   /** Resolved meeting attendees with names — preferred over calendar_event.invitees. */
   attendees?: GranolaParticipant[];
-  folder_membership?: unknown[];
+  folder_membership?: GranolaFolderMembership[];
   transcript?: GranolaTranscriptLine[];
   summary_text?: string;
   summary_markdown?: string;
+}
+
+/**
+ * A folder in the Granola workspace. Hierarchy is expressed via
+ * `parent_folder_id` (null for top-level folders). Available since API v1.1.0.
+ */
+export interface GranolaFolder {
+  id: string;
+  object?: "folder";
+  name: string | null;
+  parent_folder_id?: string | null;
 }
 
 // ─── Client ───────────────────────────────────────────────
@@ -56,7 +75,9 @@ export interface GranolaNoteDetail extends GranolaNoteListItem {
  *
  * Endpoints used:
  *   GET /notes                                — list notes (paginated)
+ *   GET /notes?folder_id={id}                 — list notes within a folder (v1.1.0)
  *   GET /notes/{id}?include=transcript        — full note detail
+ *   GET /folders                              — list folders (v1.1.0)
  */
 export class GranolaClient {
   private baseUrl = "https://public-api.granola.ai/v1";
@@ -93,11 +114,13 @@ export class GranolaClient {
     cursor?: string;
     limit?: number;
     createdAfter?: string; // ISO 8601
+    folderId?: string; // restrict to a single folder (v1.1.0)
   }): Promise<{ notes: GranolaNoteListItem[]; hasMore: boolean; cursor: string | null }> {
     const params = new URLSearchParams();
     if (opts?.cursor) params.set("cursor", opts.cursor);
     if (opts?.limit) params.set("limit", String(opts.limit));
     if (opts?.createdAfter) params.set("created_after", opts.createdAfter);
+    if (opts?.folderId) params.set("folder_id", opts.folderId);
     const qs = params.toString();
     return this.request(`/notes${qs ? `?${qs}` : ""}`);
   }
@@ -149,6 +172,35 @@ export class GranolaClient {
     if (opts?.includeTranscript) params.set("include", "transcript");
     const qs = params.toString();
     return this.request(`/notes/${encodeURIComponent(noteId)}${qs ? `?${qs}` : ""}`);
+  }
+
+  /**
+   * List folders in the workspace (paginated, sorted alphabetically by Granola).
+   * Hierarchy is conveyed via `parent_folder_id`. Available since API v1.1.0 —
+   * older workspaces / tokens 404 here.
+   */
+  async listFolders(opts?: {
+    cursor?: string;
+    limit?: number;
+  }): Promise<{ folders: GranolaFolder[]; hasMore: boolean; cursor: string | null }> {
+    const params = new URLSearchParams();
+    if (opts?.cursor) params.set("cursor", opts.cursor);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    return this.request(`/folders${qs ? `?${qs}` : ""}`);
+  }
+
+  /** Fetch every folder, following pagination. Convenience over listFolders(). */
+  async listAllFolders(): Promise<GranolaFolder[]> {
+    const out: GranolaFolder[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 20; page++) {
+      const res = await this.listFolders({ limit: 100, cursor });
+      out.push(...res.folders);
+      if (!res.hasMore || !res.cursor) break;
+      cursor = res.cursor;
+    }
+    return out;
   }
 }
 

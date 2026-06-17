@@ -9,6 +9,24 @@ import "server-only";
 
 const RESEND_FROM = process.env.RESEND_FROM ?? "Zordon <onboarding@resend.dev>";
 
+/**
+ * Domínios autorizados a receber email transacional do Zordon. Regra de
+ * negócio: só mandamos email pra gente da casa (Volund / Beyond). Qualquer
+ * outro destinatário é silenciosamente recusado antes de chamar o Resend.
+ */
+export const ALLOWED_EMAIL_DOMAINS = [
+  "volund.com.br",
+  "beyondcompany.com.br",
+] as const;
+
+/** True se o email pertence a um domínio autorizado a receber email. */
+export function isEmailAllowed(email: string): boolean {
+  const at = email.lastIndexOf("@");
+  if (at === -1) return false;
+  const domain = email.slice(at + 1).trim().toLowerCase();
+  return (ALLOWED_EMAIL_DOMAINS as readonly string[]).includes(domain);
+}
+
 type SendArgs = {
   to: string;
   subject: string;
@@ -75,6 +93,31 @@ Se você não esperava este convite, ignore este email.
     <a href="${magicLink}" style="display: inline-block; padding: 10px 18px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">Acessar projeto</a>
   </p>
   <p style="margin: 0; color: #666; font-size: 12px;">Se você não esperava este convite, ignore este email.</p>
+</body></html>`;
+  return { subject, html, text };
+}
+
+export function passwordResetEmail(opts: {
+  resetLink: string;
+}): { subject: string; html: string; text: string } {
+  const { resetLink } = opts;
+  const subject = "Seu acesso ao Zordon";
+  const text = `Você pediu pra definir sua senha de acesso ao Zordon.
+
+Abra o link abaixo (válido por 1 hora) pra criar sua senha e entrar:
+${resetLink}
+
+Se você não pediu isto, pode ignorar este email com segurança.
+`;
+  const html = `<!doctype html>
+<html><body style="font-family: -apple-system, system-ui, sans-serif; color: #1a1a1a; max-width: 560px; margin: 0 auto; padding: 32px 24px;">
+  <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 16px;">Acesso ao Zordon</h2>
+  <p style="margin: 0 0 12px;">Você pediu pra definir sua senha de acesso ao Zordon.</p>
+  <p style="margin: 0 0 24px;">Clique no botão abaixo pra criar sua senha e entrar. O link é válido por 1 hora.</p>
+  <p style="margin: 0 0 24px;">
+    <a href="${resetLink}" style="display: inline-block; padding: 10px 18px; background: #111; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">Definir senha e entrar</a>
+  </p>
+  <p style="margin: 0; color: #666; font-size: 12px;">Se você não pediu isto, pode ignorar este email com segurança.</p>
 </body></html>`;
   return { subject, html, text };
 }

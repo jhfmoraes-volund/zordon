@@ -205,6 +205,9 @@ export async function POST(req: NextRequest) {
         userMessageId: userMsg.id,
         agentSlug: "alpha",
         ownerId: member.id,
+        // Persiste a página atual no ChatTurn → tool router resolve
+        // routeProjectId/routeSprintId das tools route-scoped (Fase 2).
+        routePath: currentPath ?? null,
       });
     }
     fallbackReason = "daemon_offline";

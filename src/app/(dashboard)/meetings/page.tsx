@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Eye, Link2, Lock } from "lucide-react";
+import { Eye, Link2, Lock, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -344,26 +344,28 @@ export default function MeetingsPage() {
                   href={`/meetings/${m.id}`}
                   className="min-w-0 flex-1 focus-visible:outline-none"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                     <p
                       className={cn(
-                        "truncate text-sm font-medium",
+                        "line-clamp-3 min-w-0 text-sm font-medium sm:line-clamp-1",
                         !m.title && "text-muted-foreground",
                       )}
                     >
                       {m.title || "Sem título"}
                     </p>
-                    <span className="shrink-0 rounded-sm border bg-muted/40 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
-                      {KIND_LABELS[m.kind] ?? m.kind}
-                    </span>
-                    {pending > 0 && (
-                      <span className="shrink-0 text-[10px] font-medium text-amber-700 dark:text-amber-500">
-                        ⚠ {pending} pendente{pending > 1 ? "s" : ""}
+                    <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">
+                      <span className="shrink-0 rounded-sm border bg-muted/40 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                        {KIND_LABELS[m.kind] ?? m.kind}
                       </span>
-                    )}
-                    <span className="ml-auto hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:inline">
-                      {fmtDate(m.date)}
-                    </span>
+                      {pending > 0 && (
+                        <span className="shrink-0 text-[10px] font-medium text-amber-700 dark:text-amber-500">
+                          ⚠ {pending} pendente{pending > 1 ? "s" : ""}
+                        </span>
+                      )}
+                      <span className="ml-auto hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:inline">
+                        {fmtDate(m.date)}
+                      </span>
+                    </div>
                   </div>
 
                   {m.projectLinks.length > 0 && (
@@ -384,22 +386,26 @@ export default function MeetingsPage() {
                 </Link>
 
                 {canEditRow(m) && (
-                  <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                  <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
+                      size="icon"
+                      className="size-7 text-muted-foreground"
+                      aria-label="Editar reunião"
+                      title="Editar"
                       onClick={() => openEdit(m)}
                     >
-                      Editar
+                      <Pencil className="size-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                      size="icon"
+                      className="size-7 text-destructive hover:text-destructive"
+                      aria-label="Remover reunião"
+                      title="Remover"
                       onClick={() => remove(m)}
                     >
-                      Remover
+                      <Trash2 className="size-3.5" />
                     </Button>
                   </div>
                 )}

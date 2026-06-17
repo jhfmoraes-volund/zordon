@@ -39,6 +39,9 @@ export type UpsertTranscriptRefInput = {
   byline?: string | null;
   capturedAt?: string | null;
   importedById?: string | null;
+  /** Projeto ao qual a transcrição pertence (roteamento por folder do Granola).
+   *  SSOT que o PM Review lê (ContextSource.projectId). Null = não roteada. */
+  projectId?: string | null;
 };
 
 export async function upsertTranscriptRef(
@@ -48,7 +51,7 @@ export async function upsertTranscriptRef(
   if (input.sourceId) {
     const { data: existing, error: lookupErr } = await client
       .from("ContextSource")
-      .select('id, "fullText", title, byline, "capturedAt", "meetingId"')
+      .select('id, "fullText", title, byline, "capturedAt", "meetingId", "projectId"')
       .eq("source", input.source)
       .eq("sourceId", input.sourceId)
       .maybeSingle();
@@ -62,6 +65,7 @@ export async function upsertTranscriptRef(
       if (input.fullText && !existing.fullText) patch.fullText = input.fullText;
       if (input.byline && !existing.byline) patch.byline = input.byline;
       if (input.capturedAt && !existing.capturedAt) patch.capturedAt = input.capturedAt;
+      if (input.projectId && !existing.projectId) patch.projectId = input.projectId;
       if (Object.keys(patch).length > 0) {
         const { error: updErr } = await client
           .from("ContextSource")
@@ -86,6 +90,7 @@ export async function upsertTranscriptRef(
       byline: input.byline ?? null,
       capturedAt: input.capturedAt ?? null,
       createdBy: input.importedById ?? null,
+      projectId: input.projectId ?? null,
     })
     .select("id")
     .single();

@@ -26,12 +26,16 @@ export function streamViaClaudeDaemon(args: {
   userMessageId: string;
   agentSlug: string;
   ownerId: string;
+  /** currentPath do cliente — persistido no ChatTurn pra route-scoping do Alpha
+   *  (Fase 2). Opcional; surfaces que resolvem projeto pela entidade não passam. */
+  routePath?: string | null;
 }): Promise<Response> {
   return (async () => {
     const chatTurnId = await createChatTurn({
       threadId: args.threadId,
       userMessageId: args.userMessageId,
       agentSlug: args.agentSlug,
+      routePath: args.routePath ?? null,
     });
 
     const stream = createUIMessageStream({

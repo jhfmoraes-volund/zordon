@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
         // Recovery → set-password. Magiclink / signup → next ou raiz.
         const nextUrl = ${JSON.stringify(next)};
         const dest = type === "recovery"
-          ? "/auth/set-password?next=" + encodeURIComponent(nextUrl)
+          ? "/auth/set-password?next=" + encodeURIComponent(nextUrl) + "&recovery=1"
           : nextUrl;
         window.location.replace(dest);
       }

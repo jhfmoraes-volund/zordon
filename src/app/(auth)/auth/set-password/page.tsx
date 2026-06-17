@@ -10,13 +10,16 @@ import { SetPasswordForm } from "./set-password-form";
  * pra cá. Aqui o user define email+senha pra logins futuros.
  *
  * `?next=` controla pra onde redirecionar depois (default /projects).
+ * `?recovery=1` sinaliza fluxo "esqueci a senha": permite redefinir mesmo se
+ * o user já tinha senha (sem isso, a checagem `password_set` o expulsaria).
  */
 export default async function SetPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; recovery?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, recovery } = await searchParams;
+  const isRecovery = recovery === "1";
   const supabase = await createClient();
   const {
     data: { user },
@@ -27,9 +30,10 @@ export default async function SetPasswordPage({
     redirect("/login?error=invalid_link");
   }
 
-  // Se já definiu senha, pula direto pro destino (idempotente).
+  // Se já definiu senha, pula direto pro destino (idempotente) — exceto no
+  // fluxo de recovery, onde o objetivo É redefinir a senha.
   const meta = user.user_metadata as { password_set?: boolean } | null;
-  if (meta?.password_set) {
+  if (meta?.password_set && !isRecovery) {
     redirect(next ?? "/projects");
   }
 

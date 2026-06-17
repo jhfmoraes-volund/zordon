@@ -1,0 +1,359 @@
+{
+  "feature": "commit-sync",
+  "title": "Commit Sync — GitHub App: o repo vira SSOT do board, Vitoria reconcilia+cria tasks, PM aprova",
+  "prd_path": "docs/prd/backlog/prd-commit-sync.md",
+  "runtime": "volund-web-app",
+  "userStories": [
+    {
+      "id": "COMMIT-001",
+      "title": "Migration de enums (repo_sync_status, commit_link_source, repo_sync_run_status)",
+      "description": "Criar supabase/migrations/20260618_commit_sync_enums.sql com os 3 enums do §7.1 e aplicar via psql \"$DIRECT_URL\".",
+      "acceptanceCriteria": [
+        "Os 3 tipos enum existem no schema public"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM pg_type WHERE typname IN ('repo_sync_status','commit_link_source','repo_sync_run_status')",
+          "expected": "3"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations/20260618_commit_sync_enums.sql"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-002",
+      "title": "Migration tabela RepoCommit (DDL + RLS + UNIQUE projectId,sha)",
+      "description": "Criar supabase/migrations/20260618a_repo_commit.sql com o DDL do §7.2 (índices project+committedAt e task parcial, RLS habilitada, policy select via can_view_project e write via is_manager) e aplicar via psql.",
+      "acceptanceCriteria": [
+        "Tabela RepoCommit existe com UNIQUE(projectId,sha) e RLS habilitado"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT relrowsecurity FROM pg_class WHERE relname='RepoCommit'",
+          "expected": "t"
+        }
+      ],
+      "dependsOn": ["COMMIT-001"],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/20260618a_repo_commit.sql"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-003",
+      "title": "Migration tabela ProjectRepoSync (1:1 projectId + status + RLS)",
+      "description": "Criar supabase/migrations/20260618b_project_repo_sync.sql com o DDL do §7.3 (UNIQUE projectId, status default 'connected', connectedById FK Member, policies select can_view_project / write is_manager) e aplicar via psql.",
+      "acceptanceCriteria": [
+        "Tabela ProjectRepoSync existe com UNIQUE(projectId)"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM pg_constraint WHERE conrelid='public.\"ProjectRepoSync\"'::regclass AND contype='u'",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": ["COMMIT-001"],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations/20260618b_project_repo_sync.sql"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-004",
+      "title": "Migration tabela RepoSyncRun + host repoSyncRunId em MeetingTaskAction",
+      "description": "Criar supabase/migrations/20260618c_repo_sync_run.sql (§7.4) e supabase/migrations/20260618d_meeting_task_action_repo_host.sql (§7.5: ADD repoSyncRunId + relaxar o CHECK de host p/ exatamente 1 de {meetingId,planningCeremonyId,repoSyncRunId} — confirmar nome do constraint existente). Aplicar ambas via psql.",
+      "acceptanceCriteria": [
+        "RepoSyncRun existe; MeetingTaskAction tem coluna repoSyncRunId",
+        "CHECK de host aceita exatamente 1 dos 3 hosts"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM information_schema.columns WHERE table_name='MeetingTaskAction' AND column_name='repoSyncRunId'",
+          "expected": "1"
+        }
+      ],
+      "dependsOn": ["COMMIT-003"],
+      "estimateMinutes": 30,
+      "touches": [
+        "supabase/migrations/20260618c_repo_sync_run.sql",
+        "supabase/migrations/20260618d_meeting_task_action_repo_host.sql"
+      ],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-005",
+      "title": "Regenerar database.types.ts com as tabelas novas",
+      "description": "Refletir RepoCommit, ProjectRepoSync, RepoSyncRun (Row/Insert/Update/Relationships) e MeetingTaskAction.repoSyncRunId em src/lib/supabase/database.types.ts, seguindo o shape das tabelas vizinhas.",
+      "acceptanceCriteria": [
+        "Types das 3 tabelas presentes e usáveis sem cast"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'RepoCommit\\|ProjectRepoSync\\|RepoSyncRun' src/lib/supabase/database.types.ts",
+          "expected": ">=3"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["COMMIT-002", "COMMIT-003", "COMMIT-004"],
+      "estimateMinutes": 15,
+      "touches": ["src/lib/supabase/database.types.ts"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-006",
+      "title": "Parser de trailer Task -> ref (lib pura + teste)",
+      "description": "Criar src/lib/repo-sync/trailer.ts com parseTaskTrailer(message): extrai 'Task: <ref>' (case-insensitive, multi-line, último vence) e retorna o ref normalizado ou null. Teste em trailer.test.ts.",
+      "acceptanceCriteria": [
+        "parseTaskTrailer de mensagem com 'Task: PROJ-012' retorna 'PROJ-012'",
+        "parseTaskTrailer sem trailer retorna null"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx vitest run src/lib/repo-sync/trailer.test.ts",
+          "expected": "tests pass"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/repo-sync/trailer.ts", "src/lib/repo-sync/trailer.test.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-007",
+      "title": "Lib de ingestão de commits (Composio, incremental, linking por trailer)",
+      "description": "Criar src/lib/repo-sync/ingest.ts: ingestCommits(projectId) busca commits via Composio executando como ProjectRepoSync.connectedById desde lastSyncedSha (backfill na 1ª vez), upsert em RepoCommit (idempotente via UNIQUE projectId,sha), aplica parseTaskTrailer p/ setar taskId (resolvido por Task.reference no projeto) + linkSource='trailer', atualiza ProjectRepoSync.status/lastSyncedSha/lastSyncedAt. Confirmar slug do tool Composio de commits (D5) — fallback documentar em progress se ausente.",
+      "acceptanceCriteria": [
+        "Re-rodar ingest não duplica commits (idempotente via UNIQUE)",
+        "Commit com trailer fica com linkSource='trailer' e taskId resolvido pelo reference",
+        "ProjectRepoSync.lastSyncedSha/lastSyncedAt atualizados ao fim"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["COMMIT-005", "COMMIT-006"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/repo-sync/ingest.ts"],
+      "agentProfile": "lib",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-008",
+      "title": "API routes connect/sync/status/commits (gated is_manager)",
+      "description": "Criar POST /api/projects/[id]/repo-sync/connect (body {repoOwner,repoName,branch} -> cria ProjectRepoSync, dispara backfill async, 202 {syncRunId}), POST .../sync (202), GET /api/projects/[id]/repo-sync (status), GET /api/projects/[id]/repo-commits (paginado). Validação Zod só nos routes. Gate is_manager().",
+      "acceptanceCriteria": [
+        "GET /api/projects/[id]/repo-sync retorna status quando conectado",
+        "POST connect/sync retornam 202 e disparam ingest async",
+        "Não-manager recebe 403; sem sessão 401"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/projects/00000000-0000-0000-0000-000000000000/repo-sync",
+          "expected": "401"
+        }
+      ],
+      "dependsOn": ["COMMIT-007"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/app/api/projects/[id]/repo-sync/connect/route.ts",
+        "src/app/api/projects/[id]/repo-sync/sync/route.ts",
+        "src/app/api/projects/[id]/repo-sync/route.ts",
+        "src/app/api/projects/[id]/repo-commits/route.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-009",
+      "title": "Registrar app \"github\" no registry (minAccessLevel manager)",
+      "description": "Adicionar entry github no APP_REGISTRY (src/lib/apps/registry.ts: icon GitBranch lucide, tagline/description, window 2xl, status installed, minAccessLevel manager) + case 'github' no switch de surface dispatch do apps-tab.tsx renderizando GitHubAppView.",
+      "acceptanceCriteria": [
+        "App 'github' aparece no dock só p/ manager+ (filtrado por minAccessLevel)"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'key: \"github\"' src/lib/apps/registry.ts",
+          "expected": "1"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/lib/apps/registry.ts",
+        "src/app/(dashboard)/projects/[id]/_tabs/apps-tab.tsx"
+      ],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-010",
+      "title": "Surface UI do app (connect picker + status badge + lista de commits)",
+      "description": "Criar src/components/apps/github-app-view.tsx: sem repo -> picker usando GET /api/integrations/composio/github/repos; conectado -> badge de ProjectRepoSync.status + lastSyncedAt, botão 'Sincronizar agora', lista de RepoCommit (GET repo-commits) com task linkada e ícone de linkSource (trailer/inferido). Usa padrões UI (Field, Badge, Button).",
+      "acceptanceCriteria": [
+        "Sem repo conectado: mostra picker; conectado: mostra badge + lista de commits",
+        "Botão 'Sincronizar agora' chama POST sync"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "pnpm lint src/components/apps/github-app-view.tsx",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Logar como manager, conectar acme/web, sincronizar, ver badge 'synced' + lista de commits",
+          "expected": "Badge synced + commits listados com linkSource"
+        }
+      ],
+      "dependsOn": ["COMMIT-008", "COMMIT-009"],
+      "estimateMinutes": 30,
+      "touches": ["src/components/apps/github-app-view.tsx"],
+      "agentProfile": "ui",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-011",
+      "title": "pg_cron de sync incremental",
+      "description": "Criar supabase/migrations/20260618e_commit_sync_cron.sql: function que itera ProjectRepoSync com status ativo e enfileira ingest por projeto, agendada via cron.schedule (precedente 20260615_sprint_outcome_digest.sql). Aplicar via psql.",
+      "acceptanceCriteria": [
+        "Existe job cron 'commit_sync_incremental' em cron.job"
+      ],
+      "verifiable": [
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM cron.job WHERE jobname='commit_sync_incremental'",
+          "expected": "1"
+        }
+      ],
+      "dependsOn": ["COMMIT-007"],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations/20260618e_commit_sync_cron.sql"],
+      "agentProfile": "db",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-012",
+      "title": "Surface commit_sync da Vitoria (context loader + prompt + toolset)",
+      "description": "Criar src/lib/agent/agents/vitoria/commit-sync.ts (loadCommitSyncContext: commits novos/unlinked + tasks abertas + trailer hints; buildCommitSyncPrompt: instrui reconcile+auto-create [D1]; buildCommitSyncTools: SHARED_READ + read_repo_commits + propose_task_action sobre repoSyncRunId) e adicionar branch surface 'commit_sync' em vitoria/index.ts (loadContext/buildPrompt/buildTools).",
+      "acceptanceCriteria": [
+        "vitoria/index.ts trata surface 'commit_sync' nas 3 funções",
+        "buildCommitSyncTools expõe read_repo_commits + propose_task_action"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["COMMIT-007"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitoria/index.ts",
+        "src/lib/agent/agents/vitoria/commit-sync.ts"
+      ],
+      "agentProfile": "agent",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-013",
+      "title": "Dispatch de surface no prepare-turn + mirror de tool no daemon",
+      "description": "prepare-turn (src/app/api/agents/[slug]/prepare-turn/route.ts) resolve thread.channel='commit_sync' -> params {surface:'commit_sync', repoSyncRunId}; registrar tool names do surface no zordon-daemon tools-registry.ts e espelhar schema de read_repo_commits (sem execute).",
+      "acceptanceCriteria": [
+        "thread.channel='commit_sync' resolve surface commit_sync no prepare-turn"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'commit_sync' 'src/app/api/agents/[slug]/prepare-turn/route.ts'",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        }
+      ],
+      "dependsOn": ["COMMIT-012"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/agents/[slug]/prepare-turn/route.ts"],
+      "agentProfile": "agent",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-014",
+      "title": "applyPendingActionsForSyncRun + endpoint de aprovação",
+      "description": "Em src/lib/meetings/task-action-executor.ts, espelhar applyPendingActionsForPlanning p/ host repoSyncRunId reusando applyActions(); criar POST /api/repo-sync-runs/[id]/approve (gate is_manager) que aprova proposals pending, aplica e grava AgentProposalOutcome.",
+      "acceptanceCriteria": [
+        "Aprovar run com proposals pending aplica create/update e marca execution='applied'",
+        "Endpoint 200 manager, 403 builder, 401 sem sessão"
+      ],
+      "verifiable": [
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "exit 0"
+        },
+        {
+          "kind": "http",
+          "command_or_query": "curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/api/repo-sync-runs/00000000-0000-0000-0000-000000000000/approve",
+          "expected": "401"
+        }
+      ],
+      "dependsOn": ["COMMIT-004", "COMMIT-012"],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/meetings/task-action-executor.ts",
+        "src/app/api/repo-sync-runs/[id]/approve/route.ts"
+      ],
+      "agentProfile": "api",
+      "passes": false
+    },
+    {
+      "id": "COMMIT-015",
+      "title": "Documentar convenção de trailer Task + runbook",
+      "description": "Criar docs/runbooks/commit-sync-runbook.md (fluxo connect->ingest->interpret->approve, convenção 'Task: <ref>', operação) e adicionar nota curta sobre o trailer em AGENTS.md (seção de Git).",
+      "acceptanceCriteria": [
+        "Runbook existe e AGENTS.md menciona o trailer 'Task:'"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "test -f docs/runbooks/commit-sync-runbook.md && grep -c 'Task:' docs/runbooks/commit-sync-runbook.md",
+          "expected": ">=1"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["docs/runbooks/commit-sync-runbook.md", "AGENTS.md"],
+      "agentProfile": "docs",
+      "passes": false
+    }
+  ]
+}

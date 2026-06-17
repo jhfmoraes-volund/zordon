@@ -60,7 +60,7 @@ export async function POST(
 
   const { data: turn } = await supabase
     .from("ChatTurn")
-    .select("id, threadId, agentSlug")
+    .select("id, threadId, agentSlug, routePath")
     .eq("id", body.chatTurnId)
     .maybeSingle();
   if (!turn) {
@@ -87,9 +87,10 @@ export async function POST(
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-  // Monta params por slug + surface
+  // Monta params por slug + surface (Alpha usa o routePath do turn pra
+  // enriquecer route-aware — mesma fonte do tool router).
   const { params: agentParams, sessionId, projectId } =
-    await resolveAgentParams(slug, thread);
+    await resolveAgentParams(slug, thread, turn.routePath);
 
   const capabilities: Capabilities = {
     ...DEFAULT_CAPABILITIES,
@@ -142,6 +143,7 @@ type ThreadRow = {
 async function resolveAgentParams(
   slug: string,
   thread: ThreadRow,
+  routePath?: string | null,
 ): Promise<{
   params: Record<string, unknown>;
   sessionId: string | null;
@@ -222,14 +224,14 @@ async function resolveAgentParams(
     };
   }
 
-  // ── Alpha: ops global. thread.channel='web', agentName='alpha'. Sem projeto
-  // amarrado no daemon v1 — route global (parseRoute(undefined) → {kind:other}).
-  // buildOpsContext renderiza o bloco global (sprint ativo + backlog + bateria);
-  // o estado vivo o agente puxa via reads em runtime. O route-scoping por página
-  // (currentPath) é Fase 2 (threading via ChatTurn.routePath).
+  // ── Alpha: ops. thread.channel='web', agentName='alpha'. Fase 2: a rota vem
+  // do ChatTurn.routePath (a página onde o PM está). parseRoute → buildOpsContext
+  // renderiza o bloco de foco do projeto/sprint quando há rota, senão o bloco
+  // global (sprint ativo + backlog + bateria). Mesma fonte do tool router, então
+  // prompt e tools enxergam o mesmo escopo. Estado vivo o agente puxa via reads.
   if (slug === "alpha") {
     return {
-      params: { route: parseRoute(undefined) },
+      params: { route: parseRoute(routePath ?? undefined) },
       sessionId: null,
       projectId: null,
     };

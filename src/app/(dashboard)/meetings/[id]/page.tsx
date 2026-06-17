@@ -11,7 +11,7 @@ import { PageContainer, PageTitle } from "@/components/app-shell";
 import {
   ArrowLeft, Plus,
   ChevronDown, ChevronRight, ChevronsUpDown, ExternalLink, Download,
-  Sparkles, Loader2, MoreHorizontal, Check, X, Trash2,
+  Sparkles, Loader2, MoreHorizontal, Check, X, Trash2, Pencil,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -23,6 +23,10 @@ import {
 import { useAlphaChat } from "@/components/alpha-chat";
 import { ImportMeetingModal } from "@/components/meetings/import-meeting-modal";
 import { PersonalNoteCard } from "@/components/meetings/personal-note-card";
+import {
+  MeetingSheet,
+  type MeetingEditInitial,
+} from "@/components/meetings/meeting-sheet";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
@@ -106,6 +110,7 @@ type Meeting = {
   date: string;
   notes: string | null;
   type: "pm_review" | "general" | "daily" | "super_planning" | "private";
+  visibility: "private" | "public";
   title: string | null;
   sprintId: string | null;
   createdById: string | null;
@@ -141,6 +146,7 @@ export default function MeetingDetailPage({
   const [collapsedPms, setCollapsedPms] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [importOpen, setImportOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   const load = async () => {
@@ -434,6 +440,26 @@ export default function MeetingDetailPage({
             : "Reunião geral";
   const headerTitle = meeting.title || derivedHeaderTitle;
 
+  // Shape do meeting atual para o MeetingSheet (mesmo contrato da lista).
+  const editInitial: MeetingEditInitial = {
+    id: meeting.id,
+    visibility: meeting.visibility,
+    kind: meeting.type,
+    date: meeting.date,
+    title: meeting.title,
+    notes: meeting.notes,
+    attendees: meeting.attendees.map((a) => ({
+      memberId: a.member?.id ?? null,
+      externalName: a.externalName,
+      externalEmail: a.externalEmail,
+      externalRole: a.externalRole,
+      role: a.role,
+    })),
+    projectLinks: meeting.projectLinks.map((l) => ({
+      project: { id: l.projectId },
+    })),
+  };
+
   // "Conteúdo" = qualquer dado que o Alpha possa sobrescrever ao ingerir.
   // Notes/reviews preenchidos e To-dos contam; sprintHealth default ("healthy"
   // sem outros campos) NÃO conta — é o estado zerado de pm_review.
@@ -504,33 +530,46 @@ export default function MeetingDetailPage({
       <div className="space-y-6">
       <PageTitle title={headerTitle} subtitle={fmtDate(meeting.date)} />
       {/* Header */}
-      <div className="flex items-center gap-3 min-w-0">
-        <Link href="/meetings">
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-2xl font-bold truncate">{headerTitle}</h1>
-            <StatusChip
-              tone={lookupChip(MEETING_TYPE, meeting.type).tone}
-              label={MEETING_TYPE_LONG_LABELS[meeting.type] ?? meeting.type}
-            />
-            <StatusChip
-              {...lookupChip(MEETING_STATUS, meetingStatusFromDate(meeting.date))}
-              dot
-            />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center min-w-0">
+        <div className="flex items-start gap-3 min-w-0 sm:flex-1 sm:items-center">
+          <Link href="/meetings">
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold min-w-0 line-clamp-2 sm:line-clamp-1">{headerTitle}</h1>
+              <StatusChip
+                tone={lookupChip(MEETING_TYPE, meeting.type).tone}
+                label={MEETING_TYPE_LONG_LABELS[meeting.type] ?? meeting.type}
+              />
+              <StatusChip
+                {...lookupChip(MEETING_STATUS, meetingStatusFromDate(meeting.date))}
+                dot
+              />
+            </div>
+            {(meeting.type === "general" || meeting.type === "private") && (
+              <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
+            )}
           </div>
-          {(meeting.type === "general" || meeting.type === "private") && (
-            <div className="text-sm text-muted-foreground mt-1">{fmtDate(meeting.date)}</div>
-          )}
         </div>
         {canEdit && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 sm:shrink-0">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8 shrink-0"
+              onClick={() => setEditOpen(true)}
+              aria-label="Editar reunião"
+              title="Editar reunião"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
             <Button
               variant="outline"
               size="sm"
+              className="flex-1 sm:flex-none"
               onClick={handleImportClick}
               title={
                 meeting.type === "private"
@@ -544,6 +583,7 @@ export default function MeetingDetailPage({
             <Button
               variant="outline"
               size="sm"
+              className="flex-1 sm:flex-none"
               onClick={handleSuggest}
               disabled={suggesting || !canSuggest}
               title={
@@ -874,6 +914,14 @@ export default function MeetingDetailPage({
         mode="existing"
         meetingId={meeting.id}
         visibility={meeting.type === "private" ? "private" : "public"}
+      />
+
+      <MeetingSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        mode="edit"
+        meeting={editInitial}
+        onSaved={() => load()}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />

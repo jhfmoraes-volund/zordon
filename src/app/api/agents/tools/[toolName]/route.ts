@@ -4,6 +4,11 @@ import type { ZodTypeAny } from "zod";
 import { db } from "@/lib/db";
 import { TOOL_REGISTRY } from "@/lib/agent/tools-registry";
 import { resolveWorkspacePath } from "@/lib/forge/paths";
+import {
+  parseRoute,
+  routeProjectId as routeProjectIdOf,
+  routeSprintId as routeSprintIdOf,
+} from "@/lib/agent/agents/alpha/route-context";
 
 export const dynamic = "force-dynamic";
 // build-bump: 2026-06-02 read_prd
@@ -63,7 +68,7 @@ export async function POST(
   const supabase = db();
   const { data: turn } = await supabase
     .from("ChatTurn")
-    .select("threadId")
+    .select("threadId, routePath")
     .eq("id", body.chatTurnId)
     .maybeSingle();
   if (!turn) {
@@ -163,6 +168,14 @@ export async function POST(
     }
   }
 
+  // Alpha route-scoping (Fase 2): o currentPath foi persistido em
+  // ChatTurn.routePath; parseRoute → routeProjectId/routeSprintId pras tools
+  // route-scoped (list_modules, get_project_capacity, …). Global → undefined,
+  // e o requireRouteProjectId dessas tools devolve mensagem amigável.
+  const route = parseRoute(turn.routePath ?? undefined);
+  const routeProjectId = routeProjectIdOf(route);
+  const routeSprintId = routeSprintIdOf(route);
+
   const ctx = {
     sessionId,
     projectId: projectId ?? "",
@@ -170,6 +183,8 @@ export async function POST(
     planningId,
     memberId,
     workspacePath,
+    routeProjectId,
+    routeSprintId,
   };
 
   try {

@@ -64,7 +64,7 @@ export default function LoginPage() {
       window.history.replaceState(null, "", "/login");
       const dest =
         type === "recovery"
-          ? "/auth/set-password?next=/projects"
+          ? "/auth/set-password?next=/projects&recovery=1"
           : "/projects";
       window.location.replace(dest);
     })();
@@ -142,9 +142,7 @@ export default function LoginPage() {
                 <span className={styles.toggle}>{remember ? "[x]" : "[ ]"}</span>
                 manter sessão
               </label>
-              <a href="#" onClick={(e) => e.preventDefault()}>
-                esqueci a chave
-              </a>
+              <a href="/auth/forgot-password">esqueci a chave</a>
             </div>
 
             {state?.error && <p className={styles.error}>{state.error}</p>}

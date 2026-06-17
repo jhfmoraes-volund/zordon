@@ -7,6 +7,7 @@ import {
   GranolaClient,
   buildGranolaClient,
   type GranolaNoteListItem,
+  type GranolaNoteDetail,
 } from "@/lib/granola";
 import { getMemberIntegrationToken } from "@/lib/member-integrations";
 import { ensureAgentThread, persistResponseMessage } from "@/lib/agent/context";
@@ -158,6 +159,10 @@ export async function runGranolaImportJob(
     const granola = buildGranolaClient(token);
     if (!granola) throw new Error("no_granola_token");
 
+    // 1b. Bindings folder→projeto deste member (1 query por job). Map vazio =
+    //     nada roteia: todo import vira Meeting private órfão (legado).
+    const folderToProject = await loadMemberFolderBindings(admin, job.memberId);
+
     // 2. List candidate notes since the cursor. cursorFrom is the inclusive
     //    lower bound; Granola's created_after is exclusive on its side, but
     //    we re-dedup by sourceId anyway so any off-by-one is harmless.
@@ -181,7 +186,13 @@ export async function runGranolaImportJob(
     for (const note of newNotes) {
       if (!newestSeen || note.created_at > newestSeen) newestSeen = note.created_at;
       try {
-        const created = await importGranolaNote(admin, granola, job.memberId, note);
+        const created = await importGranolaNote(
+          admin,
+          granola,
+          job.memberId,
+          note,
+          folderToProject,
+        );
         result.meetingsCreated += 1;
         createdMeetings.push(created);
       } catch (err) {
@@ -307,6 +318,43 @@ async function filterUnimportedNotes(
 }
 
 /**
+ * Bindings folder→projeto deste member (runbook pm-review-granola-folder).
+ * Map<folderId, projectId>. Vazio quando o member não vinculou nenhuma folder —
+ * nesse caso o import preserva o comportamento legado (tudo private órfão).
+ */
+async function loadMemberFolderBindings(
+  admin: Client,
+  memberId: string,
+): Promise<Map<string, string>> {
+  const { data } = await admin
+    .from("ProjectGranolaFolder")
+    .select('"folderId", "projectId"')
+    .eq("memberId", memberId);
+  const map = new Map<string, string>();
+  for (const row of data ?? []) {
+    map.set(row.folderId as string, row.projectId as string);
+  }
+  return map;
+}
+
+/**
+ * Resolve o projeto de uma nota pelo `folder_membership` (Granola devolve a
+ * folder direta + ancestrais). Primeira folder que casa com um binding vence.
+ * Null quando a nota não está em nenhuma folder vinculada.
+ */
+function resolveProjectForNote(
+  detail: GranolaNoteDetail | null,
+  folderToProject: Map<string, string>,
+): string | null {
+  if (!detail?.folder_membership || folderToProject.size === 0) return null;
+  for (const fm of detail.folder_membership) {
+    const projectId = folderToProject.get(fm.folder_id);
+    if (projectId) return projectId;
+  }
+  return null;
+}
+
+/**
  * Create a PRIVATE Meeting linked to the Granola note and run Alpha headlessly
  * to ingest the transcript. The Alpha tools (update_meeting, create_todo,
  * propose_task_action) write directly to the DB — we don't post-process here.
@@ -316,10 +364,15 @@ async function importGranolaNote(
   granola: GranolaClient,
   memberId: string,
   note: GranolaNoteListItem,
+  folderToProject: Map<string, string>,
 ): Promise<{ id: string; title: string }> {
   // Hydrate enough metadata to set a sensible date/title without pulling the
   // full transcript (Alpha will do that itself via get_meeting_transcript).
   const detail = await granola.getNote(note.id, { includeTranscript: false }).catch(() => null);
+
+  // Roteamento: se a nota está numa folder vinculada, descobrimos o projeto.
+  // `detail.folder_membership` já vem desta mesma chamada — custo zero.
+  const projectId = resolveProjectForNote(detail, folderToProject);
 
   const meetingDate = detail?.calendar_event?.scheduled_start_time ?? note.created_at;
   const title =
@@ -327,6 +380,10 @@ async function importGranolaNote(
     detail?.calendar_event?.event_title?.trim() ||
     "Reunião privada (Granola)";
 
+  // Roteada → linka ao projeto via MeetingProjectLink. Mantemos type='private'
+  // por ora (dono = PM que importou; visibilidade ampla pro projeto é uma
+  // decisão à parte). O SSOT que o PM Review consome é ContextSource.projectId,
+  // setado abaixo.
   const { data: meetingId, error: rpcError } = await admin.rpc(
     "create_meeting_with_reviews",
     {
@@ -336,7 +393,7 @@ async function importGranolaNote(
       p_type: "private",
       p_title: title,
       p_attendees: [{ memberId, role: "owner" }],
-      p_project_ids: [],
+      p_project_ids: projectId ? [projectId] : [],
       p_notes: undefined,
       p_sprint_id: undefined,
     },
@@ -364,6 +421,7 @@ async function importGranolaNote(
     title: title,
     capturedAt: meetingDate ?? null,
     importedById: memberId,
+    projectId: projectId ?? null,
   });
 
   // Hand off to Alpha. The seed prompt for private + granola tells the agent
