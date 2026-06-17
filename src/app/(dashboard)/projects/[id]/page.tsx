@@ -445,13 +445,8 @@ export default function ProjectDetailPage({
 
   return (
     <div className="space-y-6">
-      <PageTitle
-        title={project.name}
-        subtitle={`${project.client?.name ?? "—"} · ${project.status}`}
-      />
-
       {/* Hero */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="relative flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <Link href="/projects">
             <Button
@@ -504,6 +499,15 @@ export default function ProjectDetailPage({
             <span className="hidden sm:inline">Access</span>
           </Button>
         </div>
+
+        {/* O sentinel (renderizado por PageTitle) ancora no rodapé do hero: o
+            título no header sticky só aparece quando o hero (nome + cliente)
+            rola pra fora de vista. Sem duplicação do nome no topo. */}
+        <PageTitle
+          title={project.name}
+          subtitle={`${project.client?.name ?? "—"} · ${project.status}`}
+          revealOnScroll
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

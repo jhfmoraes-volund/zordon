@@ -12,7 +12,7 @@ import {
 } from "@/lib/dal/story-hierarchy";
 
 const patchSchema = z.object({
-  text: z.string().min(1).max(500).optional(),
+  text: z.string().max(500).optional(),
   order: z.number().int().min(0).optional(),
   checked: z.boolean().optional(),
 });

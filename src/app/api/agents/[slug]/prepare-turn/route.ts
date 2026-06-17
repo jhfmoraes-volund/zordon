@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { vitorAgent } from "@/lib/agent/agents/vitor";
 import { vitoriaAgent } from "@/lib/agent/agents/vitoria";
+import { alphaAgent } from "@/lib/agent/agents/alpha";
+import { parseRoute } from "@/lib/agent/agents/alpha/route-context";
 import type { AgentDefinition, Capabilities } from "@/lib/agent/types";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +18,7 @@ const DEFAULT_CAPABILITIES: Capabilities = {
 const AGENTS: Record<string, AgentDefinition> = {
   vitor: vitorAgent,
   vitoria: vitoriaAgent,
+  alpha: alphaAgent,
 };
 
 /**
@@ -29,6 +32,8 @@ const AGENTS: Record<string, AgentDefinition> = {
  * Dispatch:
  *   - vitor    → vitorAgent (DS, params: {sessionId, currentStepKey})
  *   - vitoria  → vitoriaAgent (PM Review/Planning, surface por thread.channel)
+ *   - alpha    → alphaAgent (ops global, params: {route} — global no daemon v1;
+ *                route-scoping via currentPath é Fase 2 do alpha-daemon-plan)
  *
  * Body: { chatTurnId }
  * Returns: { systemPrompt, history, sessionId, projectId, currentStepKey }
@@ -212,6 +217,19 @@ async function resolveAgentParams(
     // Fallback: surface padrão (sem contexto resolvível)
     return {
       params: { surface: "planning" },
+      sessionId: null,
+      projectId: null,
+    };
+  }
+
+  // ── Alpha: ops global. thread.channel='web', agentName='alpha'. Sem projeto
+  // amarrado no daemon v1 — route global (parseRoute(undefined) → {kind:other}).
+  // buildOpsContext renderiza o bloco global (sprint ativo + backlog + bateria);
+  // o estado vivo o agente puxa via reads em runtime. O route-scoping por página
+  // (currentPath) é Fase 2 (threading via ChatTurn.routePath).
+  if (slug === "alpha") {
+    return {
+      params: { route: parseRoute(undefined) },
       sessionId: null,
       projectId: null,
     };

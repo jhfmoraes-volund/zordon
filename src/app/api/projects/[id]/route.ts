@@ -401,7 +401,9 @@ export async function PUT(
   }
 
   // phaseChangedAt marca a entrada na fase atual — alimenta "idade na fase"
-  // no Overview. Só estampa quando o patch de fato muda a phase.
+  // no Overview. Só estampa quando o patch de fato muda a phase. A transição
+  // também vira uma linha append-only em ProjectPhaseEvent (lead time / funil /
+  // auditoria); phaseChangedAt fica como cache da última entrada.
   if (data.phase !== undefined) {
     const { data: current } = await supabase
       .from("Project")
@@ -410,6 +412,13 @@ export async function PUT(
       .single();
     if (current && current.phase !== data.phase) {
       data.phaseChangedAt = new Date().toISOString();
+      const member = await getCurrentMember();
+      await supabase.from("ProjectPhaseEvent").insert({
+        projectId: id,
+        fromPhase: current.phase,
+        toPhase: data.phase,
+        changedBy: member?.id ?? null,
+      });
     }
   }
 

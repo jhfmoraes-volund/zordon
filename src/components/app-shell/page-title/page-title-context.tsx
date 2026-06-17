@@ -17,7 +17,13 @@ type PageTitleState = {
 };
 
 type Ctx = PageTitleState & {
+  /**
+   * When true, the shell header suppresses the title/subtitle (the page's hero
+   * is showing it). Driven by <PageTitle revealOnScroll> via an IntersectionObserver.
+   */
+  hidden: boolean;
   set: (state: PageTitleState) => void;
+  setHidden: (hidden: boolean) => void;
   clear: () => void;
 };
 
@@ -29,16 +35,18 @@ export function PageTitleProvider({ children }: { children: ReactNode }) {
     subtitle: null,
     backHref: null,
   });
+  const [hidden, setHiddenState] = useState(false);
 
   const set = useCallback((next: PageTitleState) => setState(next), []);
+  const setHidden = useCallback((next: boolean) => setHiddenState(next), []);
   const clear = useCallback(
     () => setState({ title: null, subtitle: null, backHref: null }),
     [],
   );
 
   const value = useMemo<Ctx>(
-    () => ({ ...state, set, clear }),
-    [state, set, clear],
+    () => ({ ...state, hidden, set, setHidden, clear }),
+    [state, hidden, set, setHidden, clear],
   );
 
   return (

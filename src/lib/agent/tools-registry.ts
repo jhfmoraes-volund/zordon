@@ -214,6 +214,13 @@ const ALPHA_READ_TOOL_NAMES = [
   "get_allocated_project_members",
   "load_heuristic",
   "get_pending_actions",
+  // Reuniões — get_recent_meetings lista Meetings internos (service_role, OK no
+  // daemon); get_meeting_transcript/ask_meeting tocam Roam/Granola (token
+  // per-user) → sem token degradam in-band (retornam {error}, não throw). O
+  // Composio (GitHub/Calendar) continua FORA do daemon (daemon v2).
+  "get_recent_meetings",
+  "get_meeting_transcript",
+  "ask_meeting",
 ] as const;
 
 function alphaReadTool(name: string): ToolFactory {

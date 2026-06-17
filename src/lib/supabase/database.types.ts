@@ -6573,6 +6573,69 @@ export type Database = {
           },
         ]
       }
+      ProjectPhaseEvent: {
+        Row: {
+          changedAt: string
+          changedBy: string | null
+          fromPhase: string | null
+          id: string
+          projectId: string
+          toPhase: string
+        }
+        Insert: {
+          changedAt?: string
+          changedBy?: string | null
+          fromPhase?: string | null
+          id?: string
+          projectId: string
+          toPhase: string
+        }
+        Update: {
+          changedAt?: string
+          changedBy?: string | null
+          fromPhase?: string | null
+          id?: string
+          projectId?: string
+          toPhase?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectPhaseEvent_changedBy_fkey"
+            columns: ["changedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectPhaseEvent_changedBy_fkey"
+            columns: ["changedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectPhaseEvent_changedBy_fkey"
+            columns: ["changedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectPhaseEvent_changedBy_fkey"
+            columns: ["changedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectPhaseEvent_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ProjectResource: {
         Row: {
           createdAt: string

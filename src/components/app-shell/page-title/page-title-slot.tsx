@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { usePageTitle } from "./page-title-context";
 
 const STATIC_FALLBACKS: Record<string, string> = {
@@ -52,7 +53,7 @@ function deriveFallback(pathname: string): string {
  */
 export function PageTitleSlot() {
   const pathname = usePathname();
-  const { title, subtitle, backHref } = usePageTitle();
+  const { title, subtitle, backHref, hidden } = usePageTitle();
   const displayTitle = title ?? deriveFallback(pathname);
 
   if (!displayTitle && !subtitle && !backHref) return null;
@@ -68,7 +69,15 @@ export function PageTitleSlot() {
           <ArrowLeft className="size-4" />
         </Link>
       )}
-      <div className="min-w-0">
+      <div
+        className={cn(
+          "min-w-0 transition-opacity duration-200",
+          // revealOnScroll: enquanto o hero da página está visível, some o título
+          // do header (evita o nome duplicado no topo). Reaparece ao rolar.
+          hidden && "pointer-events-none opacity-0",
+        )}
+        aria-hidden={hidden || undefined}
+      >
         {displayTitle && (
           <span className="block truncate text-sm font-semibold">
             {displayTitle}

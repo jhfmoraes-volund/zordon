@@ -7,6 +7,7 @@ import {
   TranscriptModal,
   GitHubSourceModal,
   NotionSourceModal,
+  SourcePoolModal,
 } from "@/components/agent/context-import";
 import {
   ConfirmDialog,
@@ -45,9 +46,10 @@ type ContextLinkRow = {
 
 function kindToPill(
   kind: string,
-): "transcript" | "spreadsheet" | "github" | "document" | "notion" {
+): "transcript" | "spreadsheet" | "github" | "document" | "notion" | "gdrive_file" {
   if (kind === "document") return "document";
   if (kind === "notion") return "notion";
+  if (kind === "gdrive_file") return "gdrive_file";
   if (kind.startsWith("spreadsheet")) return "spreadsheet";
   if (kind.startsWith("github")) return "github";
   return "transcript";
@@ -81,8 +83,11 @@ export function DesignSessionContextSheet({
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
   const [githubModalOpen, setGithubModalOpen] = useState(false);
   const [notionModalOpen, setNotionModalOpen] = useState(false);
+  const [poolModalOpen, setPoolModalOpen] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+
+  const linkedSourceIds = useMemo(() => links.map((l) => l.sourceId), [links]);
 
   const applyRows = useCallback((rows: ContextLinkRow[]) => {
     setLinks(rows);
@@ -149,6 +154,25 @@ export function DesignSessionContextSheet({
     [sessionId, refetch, onChanged],
   );
 
+  // Linka um ContextSource já no pool do projeto (picker universal — Drive,
+  // Notion, planilha, documento, GitHub). Lança em falha pro modal mostrar erro.
+  const handleLinkFromPool = useCallback(
+    async (contextSourceId: string) => {
+      const r = await fetch(`/api/design-sessions/${sessionId}/context/link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contextSourceId }),
+      });
+      if (!r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? "Falha ao linkar fonte");
+      }
+      await refetch();
+      onChanged?.();
+    },
+    [sessionId, refetch, onChanged],
+  );
+
   const handleUnlink = useCallback(
     (linkId: string, title: string) => {
       setConfirmState({
@@ -198,6 +222,7 @@ export function DesignSessionContextSheet({
         ritualLabel={ritualLabel}
         linkedItems={linkedItems}
         capabilities={{
+          pool: true,
           transcript: true,
           file: true,
           github: true,
@@ -210,7 +235,16 @@ export function DesignSessionContextSheet({
           onImportGitHub: () => setGithubModalOpen(true),
           onImportNotion: () => setNotionModalOpen(true),
           onUploadFiles: handleUploadFiles,
+          onLinkFromPool: () => setPoolModalOpen(true),
         }}
+      />
+
+      <SourcePoolModal
+        open={poolModalOpen}
+        onOpenChange={setPoolModalOpen}
+        projectId={projectId}
+        linkedSourceIds={linkedSourceIds}
+        onLink={handleLinkFromPool}
       />
 
       <TranscriptModal

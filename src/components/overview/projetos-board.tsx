@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
   ArrowUpRight,
   Briefcase,
   CheckCircle2,
@@ -31,7 +34,7 @@ import {
   ResponsiveSheetBody,
   useResponsiveSheetExpanded,
 } from "@/components/ui/responsive-sheet";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -164,12 +167,14 @@ const DIGEST_MAX = 3;
 /** Sinais como chips ("3 riscos", "2 paradas") — drawer e painel de atenção. */
 function signalChips(p: ProjectOverview): Array<{ label: string; tone: ChipTone }> {
   const chips: Array<{ label: string; tone: ChipTone }> = [];
-  const { overdue, blocked, unassigned } = p.signals;
-  // Risco pesa pelo stance, não pela existência — mesma regra do health (DAL).
-  const risks = (p.pmReview?.notesByKind.risk ?? []).filter((n) => n.stance !== "managed").length;
+  const { overdue, unassigned } = p.signals;
   if (overdue > 0) chips.push({ label: `${overdue} vencida${overdue > 1 ? "s" : ""}`, tone: "red" });
-  if (risks > 0) chips.push({ label: `${risks} risco${risks > 1 ? "s" : ""}`, tone: "red" });
-  if (blocked > 0) chips.push({ label: `${blocked} parada${blocked > 1 ? "s" : ""}`, tone: "amber" });
+  // Chip de risco desativado temporariamente (a pedido). Restaurar reativando:
+  // const risks = (p.pmReview?.notesByKind.risk ?? []).filter((n) => n.stance !== "managed").length;
+  // if (risks > 0) chips.push({ label: `${risks} risco${risks > 1 ? "s" : ""}`, tone: "red" });
+  // Chip de "paradas" desativado temporariamente (a pedido — não gera valor no
+  // momento). Health ainda considera blocked (DAL). Restaurar reativando:
+  // if (blocked > 0) chips.push({ label: `${blocked} parada${blocked > 1 ? "s" : ""}`, tone: "amber" });
   if (unassigned > 0) chips.push({ label: `${unassigned} sem dono`, tone: "amber" });
   return chips;
 }
@@ -195,7 +200,7 @@ function milestoneChip(p: ProjectOverview): { label: string; tone: ChipTone } | 
   const days = daysUntil(p.milestone.dueAt);
   if (days > 14) return null;
   const tone: ChipTone = days < 0 ? "red" : "amber";
-  return { label: `${p.milestone.label} · ${fmtDate(new Date(`${p.milestone.dueAt}T00:00:00`))}`, tone };
+  return { label: fmtDate(new Date(`${p.milestone.dueAt}T00:00:00`)), tone };
 }
 
 /** "Contínuo" ou "Fim ~ DD/MM" — leitura de horizonte do projeto. */
@@ -206,8 +211,9 @@ function horizonLabel(p: ProjectOverview): string {
 
 // ─── Freshness de ritual ("contexto vivo") ────────────────
 
-/** Janela em que a última movimentação de ritual ainda conta como fresca. */
-const RITUAL_FRESH_DAYS = 7;
+/** Cortes de freshness — a DIREÇÃO da seta classifica, não a cor. */
+const RITUAL_FRESH_DAYS = 7; // ≤7d → ↑ recente
+const RITUAL_AGING_DAYS = 14; // 8–14d → → envelhecendo; acima/ausente → ↓ parado
 
 const RITUAL_LABEL: Record<RitualKind, string> = {
   review: "Review",
@@ -227,41 +233,67 @@ function shortAge(days: number): string {
   return `${days}d`;
 }
 
+/** Nível de freshness → seta. Ausência de ritual cai em "parado" (↓). */
+type FreshnessLevel = "fresh" | "aging" | "stale";
+
+function freshnessLevel(days: number | null): FreshnessLevel {
+  if (days === null || days > RITUAL_AGING_DAYS) return "stale";
+  if (days <= RITUAL_FRESH_DAYS) return "fresh";
+  return "aging";
+}
+
+const FRESHNESS_ARROW: Record<FreshnessLevel, typeof ArrowUp> = {
+  fresh: ArrowUp,
+  aging: ArrowRight,
+  stale: ArrowDown,
+};
+
 /**
- * Chip de "contexto vivo" — última movimentação em qualquer ritual (review /
- * planning / release). O dot já carrega a health; este diz se ainda há status
- * sendo mantido. Verde ≤7d, âmbar quando vencido ou ausente. Só renderiza em
- * fase produtiva — comercial/post_ops não rodam ritual semanal, então fica em
- * silêncio (sem falso alarme de staleness).
+ * Peso do pill por nível — sinal de VITALIDADE, não de health. Só o estado vivo
+ * (fresh) ganha cor: verde-esmeralda sutil = "ritual em dia, projeto vivo".
+ * Aging fica neutro; "stale"/sem ritual fica tracejado e apagado (empty-state
+ * que CONVIDA a preencher, nunca vermelho — staleness não compete com o dot de
+ * health). Emerald de propósito, p/ não copiar o green-500 do HEALTH_DOT.
+ */
+const FRESHNESS_PILL: Record<FreshnessLevel, string> = {
+  fresh: "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  aging: "border-border/60 text-muted-foreground",
+  stale: "border-dashed border-border/70 text-muted-foreground/70",
+};
+
+/**
+ * Indicador de VITALIDADE — última movimentação em qualquer ritual
+ * (review / planning / release). "Ter ritual = projeto vivo": o estado fresh
+ * ganha um verde sutil (recompensa por aspiração, puxa o PM a manter), enquanto
+ * parado/sem ritual fica tracejado e quieto, convidando a preencher. A direção
+ * da seta classifica (↑ ≤7d · → ≤14d · ↓ >14d/ausente); a cor reforça só o vivo.
+ * Health (vermelho) mora no dot do card — aqui staleness nunca vira alarme.
+ * Só em fase produtiva; comercial/post_ops não rodam ritual, então fica quieto.
  */
 function RitualFreshnessChip({ p }: { p: ProjectOverview }) {
   if (!PRODUCING_PHASES.includes(p.phase)) return null;
 
-  if (!p.lastRitualAt) {
-    return (
-      <span title="Nenhum ritual registrado — sem contexto de status vivo">
-        <StatusChip tone="amber" variant="subtle" size="sm" label="sem ritual" />
-      </span>
-    );
-  }
+  const days = p.lastRitualAt ? daysSince(p.lastRitualAt) : null;
+  const level = freshnessLevel(days);
+  const Arrow = FRESHNESS_ARROW[level];
+  const kind = p.lastRitualKind ? RITUAL_LABEL[p.lastRitualKind] : "ritual";
+  const tooltip =
+    days === null
+      ? "Nenhum ritual registrado — sem contexto de status vivo"
+      : `Última movimentação de ritual: ${kind} · ${fmtDate(new Date(p.lastRitualAt!))} (há ${days}d)`;
 
-  const days = daysSince(p.lastRitualAt);
-  const kind = p.lastRitualKind ? RITUAL_LABEL[p.lastRitualKind] : "Ritual";
-  const stale = days > RITUAL_FRESH_DAYS;
   return (
     <span
-      title={`Última movimentação de ritual: ${kind} · ${fmtDate(new Date(p.lastRitualAt))} (há ${days}d)`}
+      title={tooltip}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] leading-none",
+        FRESHNESS_PILL[level],
+      )}
     >
-      <StatusChip
-        tone={stale ? "amber" : "green"}
-        variant="subtle"
-        size="sm"
-        label={
-          <span className="tabular-nums">
-            {kind} <span className="opacity-40">·</span> {shortAge(days)}
-          </span>
-        }
-      />
+      <Arrow className="h-3 w-3 shrink-0" aria-hidden />
+      <span className="tabular-nums">
+        {days === null ? "sem ritual" : `${kind} · ${shortAge(days)}`}
+      </span>
     </span>
   );
 }
@@ -642,6 +674,9 @@ type RibbonItem = {
   key: RibbonAxis;
   label: string;
   value: string;
+  /** Sufixo curto da faixa (ex: "ociosidade") — renderizado ao lado do valor
+   *  como caption colorido, fora do valor-herói, pra não estourar a célula. */
+  badge?: string;
   tone?: "amber" | "red";
 };
 
@@ -660,19 +695,24 @@ function OverviewRibbon({
   onToggle: (axis: RibbonAxis) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-stretch gap-y-3 border-y border-border py-3">
-      {items.map((item, i) => (
-        <div key={item.key} className={cn("pr-5", i > 0 && "border-l border-border pl-5")}>
-          <button
-            type="button"
-            onClick={() => onToggle(item.key)}
-            aria-expanded={active === item.key}
-            aria-controls="overview-ribbon-panel"
-            className={cn(
-              "-mx-1.5 -my-1 flex min-w-0 flex-col gap-0.5 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              active === item.key && "bg-muted/40",
-            )}
-          >
+    // Grade fluida: 3 colunas (2 linhas) no mobile → 6 colunas (1 linha) no
+    // desktop. Divisores via `gap-px` + `bg-border`: as hairlines aparecem nos
+    // dois eixos e sempre alinham, em qualquer contagem de colunas — sem o
+    // problema de border-l órfão do flex-wrap antigo.
+    <div className="grid grid-cols-3 gap-px border-y border-border bg-border lg:grid-cols-6">
+      {items.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          onClick={() => onToggle(item.key)}
+          aria-expanded={active === item.key}
+          aria-controls="overview-ribbon-panel"
+          className={cn(
+            "flex min-w-0 flex-col gap-1 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+            active === item.key ? "bg-muted/50" : "bg-background hover:bg-muted/50",
+          )}
+        >
+          <span className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
             <span
               className={cn(
                 "text-xl font-semibold leading-none tabular-nums",
@@ -682,17 +722,31 @@ function OverviewRibbon({
             >
               {item.value}
             </span>
-            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-              {item.label}
-              <ChevronDown
+            {item.badge && (
+              <span
                 className={cn(
-                  "h-3 w-3 opacity-50 transition-transform",
-                  active === item.key && "rotate-180",
+                  "text-[10px] font-medium leading-none",
+                  item.tone === "amber"
+                    ? "text-yellow-500"
+                    : item.tone === "red"
+                      ? "text-red-400"
+                      : "text-muted-foreground",
                 )}
-              />
-            </span>
-          </button>
-        </div>
+              >
+                {item.badge}
+              </span>
+            )}
+          </span>
+          <span className="flex items-start gap-1 text-[10px] uppercase leading-tight tracking-wider text-muted-foreground">
+            <span className="min-w-0">{item.label}</span>
+            <ChevronDown
+              className={cn(
+                "mt-px h-3 w-3 shrink-0 opacity-50 transition-transform",
+                active === item.key && "rotate-180",
+              )}
+            />
+          </span>
+        </button>
       ))}
     </div>
   );
@@ -1522,7 +1576,7 @@ function StatCol({
       {sub && (
         <div
           className={cn(
-            "truncate text-[11px] tabular-nums text-muted-foreground",
+            "text-[11px] leading-snug tabular-nums text-muted-foreground",
             subTone === "amber" && "text-yellow-500",
             subTone === "red" && "text-red-400",
           )}
@@ -1583,6 +1637,9 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   const producing = PRODUCING_PHASES.includes(p.phase);
   // Tela cheia (sheet expandida): a régua vira timeline com data + entrega.
   const expanded = useResponsiveSheetExpanded();
+  // "Ver mais": drawer inline com o detalhe que, compacto, só vive no tooltip
+  // da régua (inalcançável no touch). Na tela cheia a timeline já está acima.
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   if (s.mode === "none") {
     return (
@@ -1682,6 +1739,40 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
             )}
           </p>
         )}
+
+        {/* Ver mais — drawer inline com breakdown + timeline sprint-a-sprint.
+            Some na tela cheia, onde a timeline já vive no topo da seção. */}
+        {!expanded && s.segments.length > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setDetailsOpen((v) => !v)}
+              aria-expanded={detailsOpen}
+              aria-controls="stats-details-drawer"
+              className="mt-2 inline-flex items-center gap-1 rounded-md px-1 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+            >
+              <ChevronDown
+                className={cn("h-3.5 w-3.5 transition-transform", !detailsOpen && "-rotate-90")}
+              />
+              {detailsOpen ? "Ver menos" : "Ver mais"}
+            </button>
+            <div
+              id="stats-details-drawer"
+              role="region"
+              aria-label="Detalhe das sprints"
+              aria-hidden={!detailsOpen}
+              className={cn(
+                "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
+                detailsOpen ? "max-h-[720px] opacity-100" : "max-h-0 opacity-0",
+              )}
+            >
+              <div className="space-y-3 pt-3 text-[11px] text-muted-foreground">
+                <ReguaSummaryLine stats={s} />
+                <SprintTimeline stats={s} />
+              </div>
+            </div>
+          </>
+        )}
       </section>
     </TooltipProvider>
   );
@@ -1736,18 +1827,21 @@ function ProjectDrawer({
           </span>
           <span className="ml-auto flex items-center gap-1.5">
             <Button
-              variant="ghost"
-              size="sm"
+              variant="outline"
+              size="icon-sm"
               onClick={onEdit}
-              className="gap-1.5 text-muted-foreground"
+              aria-label="Editar"
+              title="Editar"
             >
-              <Pencil className="h-3.5 w-3.5" /> Editar
+              <Pencil className="h-3.5 w-3.5" />
             </Button>
             <Link
               href={`/projects/${p.id}`}
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              aria-label="Ver projeto"
+              title="Ver projeto"
+              className={cn(buttonVariants({ variant: "outline", size: "icon-sm" }))}
             >
-              Ver projeto <ArrowUpRight className="h-3 w-3" />
+              <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </span>
         </div>
@@ -1976,11 +2070,13 @@ export function ProjetosBoard({
       {
         key: "load",
         label: ui.names["factory.committed_vs_capacity"] ?? "Carga da fábrica",
-        // Faixa verde fica só na cor (sem sufixo); alerta ganha o nome da faixa.
-        value:
-          factoryLoad.value === null
-            ? "—"
-            : `${factoryLoad.value}%${loadBand && loadBand.tone !== "green" ? ` ${loadBand.label}` : ""}`,
+        // Faixa verde fica só na cor (sem sufixo); alerta ganha o nome da faixa
+        // num caption ao lado do número (badge), não dentro do valor-herói.
+        value: factoryLoad.value === null ? "—" : `${factoryLoad.value}%`,
+        badge:
+          factoryLoad.value !== null && loadBand && loadBand.tone !== "green"
+            ? loadBand.label
+            : undefined,
         tone:
           loadBand?.tone === "red" || loadBand?.tone === "critical"
             ? "red"

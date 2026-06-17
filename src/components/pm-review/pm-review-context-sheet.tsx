@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import ContextSheet from "@/components/agent/context-import/context-sheet";
-import { TranscriptModal, GitHubSourceModal } from "@/components/agent/context-import";
+import {
+  TranscriptModal,
+  GitHubSourceModal,
+  SourcePoolModal,
+} from "@/components/agent/context-import";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { createDocumentSource } from "@/lib/context-sources/upload-document";
@@ -41,8 +45,12 @@ type Props = {
   onChanged: () => void;
 };
 
-function kindToPill(kind: string): "transcript" | "spreadsheet" | "github" | "document" {
+function kindToPill(
+  kind: string,
+): "transcript" | "spreadsheet" | "github" | "document" | "notion" | "gdrive_file" {
   if (kind === "document") return "document";
+  if (kind === "notion") return "notion";
+  if (kind === "gdrive_file") return "gdrive_file";
   if (kind.startsWith("github")) return "github";
   if (kind.startsWith("spreadsheet")) return "spreadsheet";
   return "transcript";
@@ -51,11 +59,13 @@ function kindToPill(kind: string): "transcript" | "spreadsheet" | "github" | "do
 export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange, linkedTranscripts, onChanged }: Props) {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [githubModalOpen, setGithubModalOpen] = useState(false);
+  const [poolModalOpen, setPoolModalOpen] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
-  // Documentos / GitHub linkados via /context (transcripts vêm por prop, então
-  // filtramos os kinds não-transcript aqui pra não duplicar).
+  // Fontes linkadas via /context (qualquer kind: documento, github, gdrive_file,
+  // notion, planilha). O endpoint só devolve links com contextSourceId, então
+  // transcripts (que vêm por prop) nunca duplicam aqui.
   const [contextLinks, setContextLinks] = useState<ContextLinkRow[]>([]);
 
   const refetchContext = useCallback(async () => {
@@ -63,11 +73,7 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
       const r = await fetch(`/api/pm-reviews/${pmReviewId}/context`);
       if (!r.ok) return;
       const json = (await r.json()) as { contextLinks?: ContextLinkRow[] };
-      setContextLinks(
-        (json.contextLinks ?? []).filter(
-          (l) => l.source?.kind === "document" || l.source?.kind?.startsWith("github"),
-        ),
-      );
+      setContextLinks(json.contextLinks ?? []);
     } catch {
       /* silencioso */
     }
@@ -79,11 +85,7 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
       .then((r) => (r.ok ? r.json() : null))
       .then((json: { contextLinks?: ContextLinkRow[] } | null) => {
         if (cancelled || !json) return;
-        setContextLinks(
-          (json.contextLinks ?? []).filter(
-            (l) => l.source?.kind === "document" || l.source?.kind?.startsWith("github"),
-          ),
-        );
+        setContextLinks(json.contextLinks ?? []);
       })
       .catch(() => {});
     return () => {
@@ -93,6 +95,10 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
 
   const contextLinkIds = useMemo(
     () => new Set(contextLinks.map((l) => l.linkId)),
+    [contextLinks],
+  );
+  const linkedSourceIds = useMemo(
+    () => contextLinks.map((l) => l.sourceId),
     [contextLinks],
   );
 
@@ -129,6 +135,26 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
         const j = (await r.json().catch(() => ({}))) as { error?: string };
         toast.error(j.error ?? "Falha ao linkar fonte");
         return;
+      }
+      await refetchContext();
+      onChanged();
+    },
+    [pmReviewId, refetchContext, onChanged],
+  );
+
+  // Linka um ContextSource já existente no pool do projeto (picker universal —
+  // Drive, Notion, planilha, documento, GitHub). Lança em falha pro modal
+  // mostrar o erro em vez de marcar "Linkado".
+  const handleLinkFromPool = useCallback(
+    async (contextSourceId: string) => {
+      const r = await fetch(`/api/pm-reviews/${pmReviewId}/context/link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contextSourceId }),
+      });
+      if (!r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? "Falha ao linkar fonte");
       }
       await refetchContext();
       onChanged();
@@ -185,6 +211,7 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
         ritualLabel="PM Review"
         linkedItems={linkedItems}
         capabilities={{
+          pool: true,
           transcript: true,
           file: true,
           github: true,
@@ -195,7 +222,16 @@ export function PMReviewContextSheet({ pmReviewId, projectId, open, onOpenChange
           onImportTranscript: () => setImportModalOpen(true),
           onImportGitHub: () => setGithubModalOpen(true),
           onUploadFiles: handleUploadFiles,
+          onLinkFromPool: () => setPoolModalOpen(true),
         }}
+      />
+
+      <SourcePoolModal
+        open={poolModalOpen}
+        onOpenChange={setPoolModalOpen}
+        projectId={projectId}
+        linkedSourceIds={linkedSourceIds}
+        onLink={handleLinkFromPool}
       />
 
       <TranscriptModal

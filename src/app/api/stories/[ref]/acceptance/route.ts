@@ -11,7 +11,9 @@ import {
 } from "@/lib/dal/story-hierarchy";
 
 const createSchema = z.object({
-  text: z.string().min(1).max(500),
+  // Empty is allowed: the UI creates a blank AC stub on "Adicionar critério"
+  // and persists the text inline on blur (mirrors the task acceptance route).
+  text: z.string().max(500),
   order: z.number().int().min(0).optional(),
 });
 
