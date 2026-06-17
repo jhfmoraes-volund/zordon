@@ -13,7 +13,6 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createPMReview,
-  mondayOf,
   linkMeetingToPMReview,
   linkTranscriptToPMReview,
 } from "@/lib/dal/pm-review";
@@ -28,11 +27,25 @@ const SYNTH_PROMPT =
   "com a tool update_pm_review_report. Se já existir report, incorpore apenas o " +
   "que há de novo desde a última geração, sem reescrever o que segue válido.";
 
-/** Soma `days` a uma data YYYY-MM-DD (UTC), retornando YYYY-MM-DD. */
+/** Soma `days` a uma data YYYY-MM-DD, retornando YYYY-MM-DD. */
 function addDays(isoDate: string, days: number): string {
   const d = new Date(`${isoDate}T00:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Segunda-feira da semana corrente em BRT (Brasil sem DST desde 2019 → UTC-3),
+ * como YYYY-MM-DD. referenceWeek + a janela do PM Review ficam ancorados em BRT
+ * pra não jogar reunião de domingo-à-noite na semana errada (o TZ da sessão do
+ * Postgres é UTC, então comparar com data crua daria a janela errada na borda).
+ */
+function brtMonday(now: Date): string {
+  const brt = new Date(now.getTime() - 3 * 60 * 60 * 1000); // wall-clock BRT em campos UTC
+  const dow = brt.getUTCDay(); // 0=Dom..6=Sáb
+  const sinceMonday = (dow + 6) % 7; // dias desde segunda
+  brt.setUTCDate(brt.getUTCDate() - sinceMonday);
+  return brt.toISOString().slice(0, 10);
 }
 
 export async function POST(req: Request) {
@@ -63,8 +76,11 @@ export async function POST(req: Request) {
     }
   }
 
-  const referenceWeek = mondayOf(new Date()); // segunda da semana (YYYY-MM-DD)
+  const referenceWeek = brtMonday(new Date()); // segunda da semana em BRT (YYYY-MM-DD)
   const weekEnd = addDays(referenceWeek, 7);
+  // Janela ancorada em meia-noite BRT (-03:00), não no TZ da sessão (UTC).
+  const weekStartTs = `${referenceWeek}T00:00:00-03:00`;
+  const weekEndTs = `${weekEnd}T00:00:00-03:00`;
 
   const summary = {
     referenceWeek,
@@ -84,8 +100,8 @@ export async function POST(req: Request) {
         .select('id, "meetingId", "createdAt"')
         .eq("source", "granola")
         .eq("projectId", projectId)
-        .gte("capturedAt", referenceWeek)
-        .lt("capturedAt", weekEnd);
+        .gte("capturedAt", weekStartTs)
+        .lt("capturedAt", weekEndTs);
       const sources = weekSources ?? [];
       if (sources.length === 0) {
         summary.noop++;
@@ -120,11 +136,31 @@ export async function POST(req: Request) {
         continue;
       }
 
-      // 5. Há conteúdo fresco → garante o PMReview da semana.
+      // 5. Há conteúdo fresco → garante o PMReview da semana. Conflict-safe:
+      //    duas invocações concorrentes pro mesmo (projeto, semana) não derrubam
+      //    uma via UNIQUE — a perdedora re-busca a linha (em vez de virar erro).
       let pmReviewId = existing?.id as string | undefined;
       if (!pmReviewId) {
-        const created = await createPMReview({ projectId, referenceWeek });
-        pmReviewId = created.id;
+        try {
+          const created = await createPMReview({ projectId, referenceWeek });
+          pmReviewId = created.id;
+        } catch (e) {
+          const m = (e as Error).message ?? "";
+          if (m.includes("PMReview_project_week_key") || m.includes("23505")) {
+            const { data: row } = await admin
+              .from("PMReview")
+              .select("id")
+              .eq("projectId", projectId)
+              .eq("referenceWeek", referenceWeek)
+              .single();
+            pmReviewId = (row?.id as string | undefined) ?? undefined;
+          } else {
+            throw e;
+          }
+        }
+      }
+      if (!pmReviewId) {
+        throw new Error("PMReview id ausente após create/refetch");
       }
 
       // 6. EntityLink (idempotente) das transcrições + reuniões da semana.

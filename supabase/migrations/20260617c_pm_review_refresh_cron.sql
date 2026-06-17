@@ -3,6 +3,8 @@
 -- no Vault (mesma convenção da wiki/granola): sem secret → RETURN, e a rota
 -- /api/cron/pm-review-refresh pode ser chamada manualmente com o Bearer token.
 
+BEGIN;
+
 CREATE OR REPLACE FUNCTION public.kick_pm_review_refresh()
 RETURNS void
 LANGUAGE plpgsql
@@ -36,6 +38,11 @@ EXCEPTION WHEN OTHERS THEN
   RAISE WARNING 'kick_pm_review_refresh failed: %', SQLERRM;
 END $$;
 
+-- Lockdown: SECURITY DEFINER que lê Vault + dispara HTTP não pode ser chamada
+-- por anon/authenticated. Só service_role (= o pg_cron). Espelha wiki/granola.
+REVOKE EXECUTE ON FUNCTION public.kick_pm_review_refresh() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.kick_pm_review_refresh() TO service_role;
+
 -- Agenda idempotente: re-roda a migration sem duplicar o job.
 DO $$
 BEGIN
@@ -48,3 +55,5 @@ BEGIN
     $cmd$ SELECT public.kick_pm_review_refresh(); $cmd$
   );
 END $$;
+
+COMMIT;

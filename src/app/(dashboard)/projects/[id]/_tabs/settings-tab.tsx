@@ -12,7 +12,6 @@ import {
 } from "@/components/story-hierarchy/adapters";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast } from "@/lib/optimistic/toast";
-import { GranolaFolderCard } from "./granola-folder-card";
 import type { ProjectMeta } from "../_types";
 
 type Props = {
@@ -202,12 +201,6 @@ export function SettingsTab({
           </div>
         </CardContent>
       </Card>
-
-      <GranolaFolderCard
-        projectId={project.id}
-        projectName={project.name}
-        referenceKey={project.referenceKey}
-      />
 
       <SettingsPanel
         modules={modules}

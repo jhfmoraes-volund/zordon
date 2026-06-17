@@ -234,7 +234,13 @@ ON CONFLICT ("projectId","referenceWeek") DO NOTHING
 RETURNING id;
 ```
 
-**Síntese headless:** reusar o caminho que o botão "Sintetizar report" já dispara (Vitoria no daemon — [[project_vitoria_daemon_surfaces]]). ⚠️ **Passo a confirmar na implementação:** localizar como `/api/pm-review/[id]/chat` invoca o daemon e expor uma variante server-triggered (sem stream) que recebe `pmReviewId` e grava `reportMarkdown`. Não reimplementar a síntese — só dar um gatilho não-interativo ao mesmo núcleo.
+**Síntese headless:** reusa o caminho do botão "Sintetizar report" (Vitoria no daemon — [[project_vitoria_daemon_surfaces]]): `ensurePMReviewThread` → insert `ChatMessage` (role=user, prompt de síntese) → `createChatTurn` → `enqueueChatJob` (sem stream). O daemon roda `update_pm_review_report`. ✅ Implementado; review confirmou que `loadPMReviewContext` não quebra com transcript sem meeting linkado.
+
+**Hardening (review adversarial Fase 2, 4 fixes aplicados):**
+- Create do PMReview é **conflict-safe** (catch 23505 → re-fetch) — duas invocações concorrentes na mesma semana não derrubam uma via UNIQUE.
+- Janela da semana ancorada em **BRT** (`…-03:00`), não no TZ da sessão (UTC) — evita reunião de domingo-à-noite cair na semana errada. `referenceWeek` = segunda em BRT.
+- `kick_pm_review_refresh()` com `REVOKE EXECUTE FROM PUBLIC, anon, authenticated` + `GRANT … service_role` (SECURITY DEFINER que lê Vault não fica exposta).
+- Migration em `BEGIN; … COMMIT;`.
 
 ### 2.2 Cron (espelha granola-import) — ✅ INSTALADO
 

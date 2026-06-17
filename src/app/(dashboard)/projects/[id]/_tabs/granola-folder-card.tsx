@@ -181,6 +181,12 @@ export function GranolaFolderCard({
           </p>
         ) : (
           <>
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              As reuniões das folders vinculadas entram no projeto e alimentam o
+              PM Review desta semana automaticamente — atualização em dias úteis,
+              por volta das 08h (BRT).
+            </div>
+
             {error ? (
               <p className="text-xs text-destructive">{error}</p>
             ) : null}

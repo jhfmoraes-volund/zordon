@@ -3,9 +3,13 @@ import { notFound } from "next/navigation";
 import { DeckStage } from "@/components/deck/deck-stage";
 import { getDeck } from "@/content/decks/registry";
 import { OperacaoVolundSlides } from "@/content/decks/operacao-volund";
+import { RituaisCombinadoSlides } from "@/content/decks/rituais-o-combinado";
+import { getAccessLevel } from "@/lib/dal";
+import { hasMinAccessLevel } from "@/lib/roles";
 
 const DECK_SLIDES: Record<string, () => React.ReactNode[]> = {
   "operacao-volund": OperacaoVolundSlides,
+  "rituais-o-combinado": RituaisCombinadoSlides,
 };
 
 export default async function DeckPage({
@@ -19,6 +23,15 @@ export default async function DeckPage({
 
   if (!meta || !slidesFactory) {
     notFound();
+  }
+
+  // Gated decks (e.g. PM & Admin playbooks) are invisible to lower levels —
+  // mirror the library filter so deep-linking can't bypass it.
+  if (meta.minAccessLevel) {
+    const accessLevel = await getAccessLevel();
+    if (!hasMinAccessLevel(accessLevel, meta.minAccessLevel)) {
+      notFound();
+    }
   }
 
   const slides = slidesFactory();

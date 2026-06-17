@@ -28,6 +28,7 @@ import {
   RitualPickerModal,
   type RitualType,
 } from "@/components/ceremonies/ritual-picker-modal";
+import { RitualsSettingsSheet } from "@/components/ceremonies/rituals-settings-sheet";
 
 // ─── Tab Rituais (user-facing) ──────────────────────────────────────────
 // Conceito user-facing: "Ritual" — engloba Planning + PM Review. No banco
@@ -261,7 +262,6 @@ export function ProjectCeremoniesTab({
   }, [projectId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional initial load on mount
     void load();
   }, [load]);
 
@@ -430,6 +430,11 @@ export function ProjectCeremoniesTab({
           })}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <RitualsSettingsSheet
+            projectId={projectId}
+            projectName={projectName}
+            canConfigure={canManage || canCreatePMReview}
+          />
           {(canManage || canCreatePMReview) && (
             <Button
               size="sm"

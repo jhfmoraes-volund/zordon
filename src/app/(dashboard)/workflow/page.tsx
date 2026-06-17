@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { ChevronRight, Presentation, BookOpen } from "lucide-react";
+import { ChevronRight, Presentation, BookOpen, Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { decks } from "@/content/decks/registry";
+import { getAccessLevel } from "@/lib/dal";
+import { hasMinAccessLevel } from "@/lib/roles";
 
 const KIND_ICON = {
   deck: Presentation,
@@ -20,10 +22,13 @@ const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   year: "numeric",
 });
 
-export default function WorkflowLibraryPage() {
-  const sorted = [...decks].sort((a, b) =>
-    b.updatedAt.localeCompare(a.updatedAt),
-  );
+export default async function WorkflowLibraryPage() {
+  const accessLevel = await getAccessLevel();
+  const sorted = [...decks]
+    .filter(
+      (d) => !d.minAccessLevel || hasMinAccessLevel(accessLevel, d.minAccessLevel),
+    )
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   return (
     <div className="space-y-6">
@@ -59,7 +64,14 @@ export default function WorkflowLibraryPage() {
                         {deck.title}
                       </h3>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                    {deck.minAccessLevel ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.18em] text-primary shrink-0">
+                        <Lock className="h-3 w-3" />
+                        PM &amp; Admin
+                      </span>
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                    )}
                   </div>
 
                   <p className="text-sm text-muted-foreground line-clamp-3 flex-1">

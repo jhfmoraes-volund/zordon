@@ -24,6 +24,7 @@ import {
   RitualPickerModal,
   type RitualType,
 } from "@/components/ceremonies/ritual-picker-modal";
+import { RitualsSettingsSheet } from "@/components/ceremonies/rituals-settings-sheet";
 import { fetchOrThrow, showErrorToast, HttpError } from "@/lib/optimistic/toast";
 import { fmtDate } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
@@ -388,11 +389,18 @@ export function RituaisFileView({
             </button>
           ))}
         </div>
-        {(canManage || canCreatePMReview) && (
-          <Button size="sm" onClick={() => setPickerOpen(true)}>
-            <Plus className="size-3.5" /> Novo ritual
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <RitualsSettingsSheet
+            projectId={projectId}
+            projectName={projectName}
+            canConfigure={canManage || canCreatePMReview}
+          />
+          {(canManage || canCreatePMReview) && (
+            <Button size="sm" onClick={() => setPickerOpen(true)}>
+              <Plus className="size-3.5" /> Novo ritual
+            </Button>
+          )}
+        </div>
       </div>
 
       {loading ? (

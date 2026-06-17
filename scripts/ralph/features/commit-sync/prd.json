@@ -137,7 +137,7 @@
     {
       "id": "COMMIT-007",
       "title": "Lib de ingestão de commits (Composio, incremental, linking por trailer)",
-      "description": "Criar src/lib/repo-sync/ingest.ts: ingestCommits(projectId) busca commits via Composio executando como ProjectRepoSync.connectedById desde lastSyncedSha (backfill na 1ª vez), upsert em RepoCommit (idempotente via UNIQUE projectId,sha), aplica parseTaskTrailer p/ setar taskId (resolvido por Task.reference no projeto) + linkSource='trailer', atualiza ProjectRepoSync.status/lastSyncedSha/lastSyncedAt. Confirmar slug do tool Composio de commits (D5) — fallback documentar em progress se ausente.",
+      "description": "Criar src/lib/repo-sync/ingest.ts: ingestCommits(projectId) resolve o slug via findToolSlug(connectedById,'github',['list','commits']) [client.ts:250] (não hardcodar), busca commits via executeTool como ProjectRepoSync.connectedById desde lastSyncedSha (backfill na 1ª vez), upsert em RepoCommit (idempotente via UNIQUE projectId,sha), aplica parseTaskTrailer p/ setar taskId (resolvido por Task.reference no projeto) + linkSource='trailer', atualiza ProjectRepoSync.status/lastSyncedSha/lastSyncedAt. Se findToolSlug retornar null, status='error' + log (fallback Octokit é decisão separada).",
       "acceptanceCriteria": [
         "Re-rodar ingest não duplica commits (idempotente via UNIQUE)",
         "Commit com trailer fica com linkSource='trailer' e taskId resolvido pelo reference",
