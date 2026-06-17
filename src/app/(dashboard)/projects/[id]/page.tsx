@@ -26,7 +26,9 @@ import { ProjectWikiSheet } from "@/components/project-wiki";
 import { SprintDialog } from "@/components/sprint-dialog";
 import { SprintContextSheet } from "@/components/sprint/sprint-context-sheet";
 import { SuggestSprintsSheet } from "@/components/sprint/suggest-sprints-sheet";
+import { MemberChip } from "@/components/ui/member-chip";
 import { StatusChip } from "@/components/ui/status-chip";
+import { MEMBER_PHOTO_BUCKET, publicPhotoUrl } from "@/lib/storage/photo";
 import { createClient } from "@/lib/supabase/client";
 import {
   ModuleDialog,
@@ -285,6 +287,12 @@ export default function ProjectDetailPage({
     ];
   }, [rawMembers, project?.pm]);
 
+  // Chips do squad no header (exclui o PM, que já tem chip próprio).
+  const headerSquad = useMemo(
+    () => rawMembers.filter((m) => m.id !== project?.pm?.id),
+    [rawMembers, project?.pm?.id],
+  );
+
   const sprints: SprintView[] = useMemo(
     () =>
       rawSprints.map((s) => ({
@@ -512,22 +520,32 @@ export default function ProjectDetailPage({
           </Badge>
         )}
         {project.pm ? (
-          <span className="text-xs text-muted-foreground">
-            PM:{" "}
-            <span className="font-medium text-foreground">
-              {project.pm.name}
-            </span>
-          </span>
+          <MemberChip
+            name={project.pm.name}
+            role="PM"
+            avatarUrl={publicPhotoUrl(
+              MEMBER_PHOTO_BUCKET,
+              project.pm.photoStoragePath,
+              project.pm.photoUpdatedAt,
+            )}
+          />
         ) : (
           <span className="text-xs text-muted-foreground">PM: —</span>
         )}
-        {rawMembers.length > 0 ? (
-          <span className="text-xs text-muted-foreground">
-            ·{" "}
-            <span className="font-mono tabular-nums text-foreground">
-              {rawMembers.length}
-            </span>{" "}
-            membro{rawMembers.length === 1 ? "" : "s"}
+        {headerSquad.slice(0, 6).map((m) => (
+          <MemberChip
+            key={m.id}
+            name={m.name}
+            avatarUrl={publicPhotoUrl(
+              MEMBER_PHOTO_BUCKET,
+              m.photoStoragePath,
+              m.photoUpdatedAt,
+            )}
+          />
+        ))}
+        {headerSquad.length > 6 ? (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            +{headerSquad.length - 6}
           </span>
         ) : null}
       </div>

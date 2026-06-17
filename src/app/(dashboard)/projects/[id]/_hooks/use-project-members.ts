@@ -28,7 +28,7 @@ export function useProjectMembers(projectId: string, sprintIds: string[]) {
     const { data: pms, error } = await supabase
       .from("ProjectMember")
       .select(
-        "memberId, fpAllocation, member:Member!ProjectMember_memberId_fkey(id, name, role, fpCapacity)",
+        "memberId, fpAllocation, member:Member!ProjectMember_memberId_fkey(id, name, role, fpCapacity, photoStoragePath, photoUpdatedAt)",
       )
       .eq("projectId", projectId);
     if (error) {

@@ -19,6 +19,8 @@ export type ProjectMeta = {
     name: string;
     role: string | null;
     fpCapacity: number | null;
+    photoStoragePath: string | null;
+    photoUpdatedAt: string | null;
   } | null;
   repoUrl: string | null;
   startDate: string | null;
@@ -72,6 +74,8 @@ export type RawMember = {
   name: string;
   role: string | null;
   fpCapacity: number | null;
+  photoStoragePath: string | null;
+  photoUpdatedAt: string | null;
 };
 
 export type RawSprintMember = {

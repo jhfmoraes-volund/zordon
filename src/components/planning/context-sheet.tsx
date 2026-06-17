@@ -9,7 +9,11 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import ContextSheetPrimitive from "@/components/agent/context-import/context-sheet";
-import { TranscriptModal } from "@/components/agent/context-import";
+import {
+  TranscriptModal,
+  NotionSourceModal,
+  SourcePoolModal,
+} from "@/components/agent/context-import";
 import { GitHubRepoModal } from "@/components/planning/github-repo-modal";
 import { createDocumentSource } from "@/lib/context-sources/upload-document";
 import { showErrorToast } from "@/lib/optimistic/toast";
@@ -26,7 +30,7 @@ interface LinkedTranscript {
   weight: string;
 }
 
-interface DocumentLinkRow {
+interface SourceLinkRow {
   linkId: string;
   sourceId: string;
   weight: string | null;
@@ -56,6 +60,18 @@ interface PlanningContextSheetProps {
   onImported: () => void;
 }
 
+/** ContextSource.kind → pill kind do ContextSheet (ícone/agrupamento). */
+function toPillKind(
+  kind: string,
+): "transcript" | "spreadsheet" | "github" | "document" | "notion" | "gdrive_file" {
+  if (kind === "notion") return "notion";
+  if (kind === "gdrive_file") return "gdrive_file";
+  if (kind === "spreadsheet_csv" || kind === "spreadsheet_gsheets") return "spreadsheet";
+  if (kind === "github_repo" || kind === "github_pr" || kind === "github_issue") return "github";
+  if (kind === "transcript" || kind === "meeting") return "transcript";
+  return "document";
+}
+
 export function ContextSheet({
   planningId,
   projectId,
@@ -68,23 +84,22 @@ export function ContextSheet({
 }: PlanningContextSheetProps) {
   const [transcriptModalOpen, setTranscriptModalOpen] = useState(false);
   const [githubModalOpen, setGithubModalOpen] = useState(false);
+  const [notionModalOpen, setNotionModalOpen] = useState(false);
+  const [poolModalOpen, setPoolModalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
 
-  // Documentos (ContextSource kind='document') vêm de /api/planning/[id]/context,
-  // paralelo aos transcripts que chegam por prop.
-  const [documentLinks, setDocumentLinks] = useState<DocumentLinkRow[]>([]);
+  // Insumos linkados via EntityLink.contextSourceId (qualquer kind: documento,
+  // notion, gdrive_file, planilha, github). Disjuntos dos transcripts, que vêm
+  // por EntityLink.transcriptRefId no prop linkedTranscripts.
+  const [sourceLinks, setSourceLinks] = useState<SourceLinkRow[]>([]);
 
-  const refetchDocuments = useCallback(async () => {
+  const refetchSources = useCallback(async () => {
     try {
       const r = await fetch(`/api/planning/${planningId}/context`);
       if (!r.ok) return;
-      const json = (await r.json()) as { contextLinks?: DocumentLinkRow[] };
-      setDocumentLinks(
-        (json.contextLinks ?? []).filter(
-          (l) => l.source?.kind === "document",
-        ),
-      );
+      const json = (await r.json()) as { contextLinks?: SourceLinkRow[] };
+      setSourceLinks(json.contextLinks ?? []);
     } catch {
       /* silencioso */
     }
@@ -94,11 +109,9 @@ export function ContextSheet({
     let cancelled = false;
     fetch(`/api/planning/${planningId}/context`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((json: { contextLinks?: DocumentLinkRow[] } | null) => {
+      .then((json: { contextLinks?: SourceLinkRow[] } | null) => {
         if (cancelled || !json) return;
-        setDocumentLinks(
-          (json.contextLinks ?? []).filter((l) => l.source?.kind === "document"),
-        );
+        setSourceLinks(json.contextLinks ?? []);
       })
       .catch(() => {});
     return () => {
@@ -106,9 +119,13 @@ export function ContextSheet({
     };
   }, [planningId]);
 
-  const documentIds = useMemo(
-    () => new Set(documentLinks.map((l) => l.linkId)),
-    [documentLinks],
+  const sourceLinkIds = useMemo(
+    () => new Set(sourceLinks.map((l) => l.linkId)),
+    [sourceLinks],
+  );
+  const linkedSourceIds = useMemo(
+    () => sourceLinks.map((l) => l.sourceId),
+    [sourceLinks],
   );
 
   const handleUploadFiles = useCallback(
@@ -127,34 +144,52 @@ export function ContextSheet({
             toast.error(j.error ?? "Falha ao linkar documento");
           }
         }
-        await refetchDocuments();
+        await refetchSources();
       } catch (e) {
         showErrorToast(e, { label: "Falha ao enviar documento" });
       } finally {
         setUploadingFile(false);
       }
     },
-    [projectId, planningId, refetchDocuments],
+    [projectId, planningId, refetchSources],
   );
 
-  // Unlink: documento via /context; transcript pelo handler do parent.
+  // Linka um ContextSource já existente no pool do projeto (picker universal).
+  const handleLinkFromPool = useCallback(
+    async (contextSourceId: string) => {
+      const r = await fetch(`/api/planning/${planningId}/context/link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contextSourceId }),
+      });
+      if (!r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? "Falha ao linkar fonte");
+      }
+      await refetchSources();
+      onImported();
+    },
+    [planningId, refetchSources, onImported],
+  );
+
+  // Unlink: ContextSource via /context/[linkId]; transcript pelo handler do parent.
   const handleUnlink = useCallback(
     async (itemId: string, title: string) => {
-      if (documentIds.has(itemId)) {
+      if (sourceLinkIds.has(itemId)) {
         const r = await fetch(
           `/api/planning/${planningId}/context/${itemId}`,
           { method: "DELETE" },
         );
         if (!r.ok) {
-          toast.error("Falha ao remover documento");
+          toast.error("Falha ao remover fonte");
           return;
         }
-        await refetchDocuments();
+        await refetchSources();
         return;
       }
       onUnlink(itemId, title);
     },
-    [documentIds, planningId, refetchDocuments, onUnlink],
+    [sourceLinkIds, planningId, refetchSources, onUnlink],
   );
 
   const repoConfigured = Boolean(
@@ -207,29 +242,35 @@ export function ContextSheet({
     }
   };
 
-  // Transcripts (via prop) + documentos (via /context) no mesmo formato do ContextSheet.
+  // Transcripts (via prop) + fontes do pool (via /context) no mesmo formato.
   const linkedItems = useMemo(
     () => [
       ...linkedTranscripts.map((l) => ({
         id: l.transcriptRefId,
         kind: (l.transcript?.source === "spreadsheet"
           ? "spreadsheet"
-          : "transcript") as "transcript" | "spreadsheet" | "github" | "document",
+          : "transcript") as
+          | "transcript"
+          | "spreadsheet"
+          | "github"
+          | "document"
+          | "notion"
+          | "gdrive_file",
         title: l.transcript?.title ?? null,
         source: l.transcript?.source ?? undefined,
         capturedAt: l.transcript?.capturedAt,
         weight: l.weight,
       })),
-      ...documentLinks.map((l) => ({
+      ...sourceLinks.map((l) => ({
         id: l.linkId,
-        kind: "document" as const,
+        kind: toPillKind(l.source?.kind ?? "document"),
         title: l.source?.title ?? null,
         source: undefined,
         capturedAt: l.source?.capturedAt,
         weight: l.weight ?? undefined,
       })),
     ],
-    [linkedTranscripts, documentLinks],
+    [linkedTranscripts, sourceLinks],
   );
 
   // Custom GitHub panel with refresh + unlink controls
@@ -294,8 +335,10 @@ export function ContextSheet({
         ritualLabel="Planning"
         linkedItems={linkedItems}
         capabilities={{
+          pool: true,
           transcript: true,
           file: true,
+          notion: true,
           github: true,
         }}
         uploadingFile={uploadingFile}
@@ -303,9 +346,19 @@ export function ContextSheet({
           onUnlink: handleUnlink,
           onImportTranscript: () => setTranscriptModalOpen(true),
           onImportGitHub: () => setGithubModalOpen(true),
+          onImportNotion: () => setNotionModalOpen(true),
           onUploadFiles: handleUploadFiles,
+          onLinkFromPool: () => setPoolModalOpen(true),
         }}
         customGitHubPanel={customGitHubPanel}
+      />
+
+      <SourcePoolModal
+        open={poolModalOpen}
+        onOpenChange={setPoolModalOpen}
+        projectId={projectId}
+        linkedSourceIds={linkedSourceIds}
+        onLink={handleLinkFromPool}
       />
 
       <TranscriptModal
@@ -316,6 +369,20 @@ export function ContextSheet({
         onImported={() => {
           setTranscriptModalOpen(false);
           onImported();
+        }}
+      />
+
+      <NotionSourceModal
+        apiUrl="/api/context-sources"
+        projectId={projectId}
+        open={notionModalOpen}
+        onOpenChange={setNotionModalOpen}
+        onImported={async (contextSourceId) => {
+          try {
+            await handleLinkFromPool(contextSourceId);
+          } catch (e) {
+            showErrorToast(e, { label: "Falha ao linkar página do Notion" });
+          }
         }}
       />
 

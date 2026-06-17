@@ -7,6 +7,7 @@ import type {
   ProfileTask,
   ProfileBlocker,
 } from "./profile";
+import type { SprintOutcome } from "@/lib/dal/sprint-outcomes";
 
 type PendingAction = {
   id: string;
@@ -256,6 +257,8 @@ E pra **gravar** o que você aprende na planning como memória durável do proje
 - Prefira propor ações "create" para tarefas novas identificadas nas transcrições.
 - Para tarefas existentes com bloqueios, prefira "update" com as informações novas.
 - Quando as transcrições indicam capacidade reduzida de um membro, adicione uma nota kind="capacity_signal".
+- **Use a "Memória de sprints"** (seção do contexto): compare o total de FP que você propõe pra esta sprint com a velocity média histórica — se ficar muito acima, sinalize risco de sobrecarga em vez de só propor. Continuidade é o ponto: você lembra do que aconteceu.
+- **Carryover e temas de retro são sinal, não ruído.** Se uma sprint fechou com carryover alto ou um tema de retro recorrente (bloqueio repetido, escopo estourando), levante isso na planning e proponha ação concreta — não repita o mesmo erro silenciosamente.
 - Nunca invente dados. Se não encontrou informação, diga explicitamente.
 - **Nunca infira intent que o PM não expressou.** Se ele perguntou "X?",
   NÃO responda com "entendi, você quer que eu tente Y mesmo assim" —
@@ -411,6 +414,28 @@ Quando pedir mais contexto ao PM, limite a 1-2 perguntas por vez.`;
       ).join("\n")
     : "nenhuma design session ativa";
 
+  // Memória de sprints (D11) — digest determinístico das últimas concluídas.
+  const sprintOutcomes = (agentContext.sprintOutcomes as SprintOutcome[] | undefined) ?? [];
+  const outcomesBlock = sprintOutcomes.length > 0
+    ? sprintOutcomes
+        .map((o) => {
+          const pct = o.totalCount > 0 ? Math.round((o.doneCount / o.totalCount) * 100) : 0;
+          const head = `- **${o.name ?? "(sprint)"}** (até ${o.endDate ?? "?"}) — ${o.doneCount}/${o.totalCount} tasks (${pct}%), velocity ${o.velocityFp}/${o.plannedFp} FP, carryover ${o.carryoverCount}${o.goal ? ` · objetivo: ${truncate(o.goal, 80)}` : ""}`;
+          const retro: string[] = [];
+          if (o.retro?.good) retro.push(`    ✓ ${truncate(o.retro.good, 160)}`);
+          if (o.retro?.bad) retro.push(`    ✗ ${truncate(o.retro.bad, 160)}`);
+          if (o.retro?.ideas) retro.push(`    💡 ${truncate(o.retro.ideas, 160)}`);
+          return [head, ...retro].join("\n");
+        })
+        .join("\n")
+    : "nenhuma sprint concluída ainda (primeira planning do projeto)";
+  const avgVelocity = sprintOutcomes.length > 0
+    ? Math.round((sprintOutcomes.reduce((s, o) => s + o.velocityFp, 0) / sprintOutcomes.length) * 10) / 10
+    : null;
+  const outcomesSection = `## Memória de sprints (últimas concluídas — continuidade)
+
+${avgVelocity != null ? `**Velocity média**: ~${avgVelocity} FP/sprint — calibre a capacidade desta planning contra esse número.\n\n` : ""}${outcomesBlock}`;
+
   const statusLabel = status === "closed" ? "Concluída" : "Em planejamento";
 
   const projectName = (agentContext.projectName as string | null) ?? null;
@@ -460,6 +485,8 @@ ${blockersBlock}
 
 ### Repositório do projeto
 ${repoBlock}${repoManifestBlock}
+
+${outcomesSection}
 
 ## Sessão
 

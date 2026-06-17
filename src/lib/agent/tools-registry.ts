@@ -38,6 +38,7 @@ import {
   createUpdateSessionMemoryTool,
 } from "./tools/memory";
 import { buildPMReviewTools } from "./agents/vitoria/pm-review";
+import { buildVitoriaTools } from "./agents/vitoria/tools";
 import {
   createProposePrdTool,
   createReadPrdTool,
@@ -64,6 +65,9 @@ export type ToolContext = {
   projectId: string;
   memberId?: string | null;
   pmReviewId?: string | null;
+  /** Vitoria Planning Ceremony surface — id da PlanningCeremony do thread
+   *  (channel='planning'). Resolvido pelo tool router a partir do chatTurnId. */
+  planningId?: string | null;
   /** Path absoluto do workspace clonado na Forja (<FORGE_HOME>/workspaces/<key>/).
    *  Null se projeto ainda não tem 1º Forge run. Workspace tools (read/glob/grep)
    *  validam todo path contra este prefix. */
@@ -78,6 +82,11 @@ function requireSessionId(ctx: ToolContext): string {
 function requirePMReviewId(ctx: ToolContext): string {
   if (!ctx.pmReviewId) throw new Error("pmReviewId required for this tool");
   return ctx.pmReviewId;
+}
+
+function requirePlanningId(ctx: ToolContext): string {
+  if (!ctx.planningId) throw new Error("planningId required for this tool");
+  return ctx.planningId;
 }
 
 type ToolFactory = (ctx: ToolContext) => Tool;
@@ -153,6 +162,7 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
     createReadContextSourceTool({
       sessionId: ctx.sessionId,
       pmReviewId: ctx.pmReviewId ?? null,
+      planningId: ctx.planningId ?? null,
     }),
 
   // ── Workspace sandboxed (lê apenas dentro do workspace do projeto) ───
@@ -222,6 +232,63 @@ for (const name of ALPHA_READ_TOOL_NAMES) {
   TOOL_REGISTRY[name] = alphaReadTool(name);
 }
 
+// ── Vitoria — tools reusadas de buildVitoriaTools (mesmas do path OpenRouter).
+// Cada factory rebuilda o bundle (barato — só zod schemas) e devolve a tool
+// nomeada. Split por dependência de ctx pra a Vitoria ser UMA só com
+// awareness compartilhado entre PM Review e Planning:
+//
+//   SHARED_READ        — só projectId; situational awareness (sprint/tasks/
+//                        capacidade/deps/DS). Servem PM Review E Planning.
+//   PLANNING_PROJECT   — só projectId, mas exclusivas da Planning (escrita).
+//   PLANNING_CEREMONY  — exigem planningId (staging/estado da ceremony).
+//
+// read_context_source NÃO entra aqui — reusa a entrada genérica acima (lê por
+// id e recebe planningId no scope).
+const VITORIA_SHARED_READ_NAMES = [
+  "list_project_sprints",
+  "list_project_tasks",
+  "list_project_members",
+  "get_sprint_capacity",
+  "get_task_detail",
+  "get_dependency_graph",
+  "list_active_design_sessions",
+  "read_design_session_memory",
+  "read_design_session_step",
+] as const;
+
+const VITORIA_PLANNING_PROJECT_NAMES = [
+  "propose_story",
+  "append_project_memory",
+] as const;
+
+const VITORIA_PLANNING_CEREMONY_NAMES = [
+  "add_context_note",
+  "propose_task_action",
+  "update_proposed_action",
+  "delete_proposed_action",
+  "get_planning_state",
+] as const;
+
+// projectId-only → planningId opcional (passa "" quando ausente; essas tools
+// não o usam). PM Review (sem planningId) consegue chamar os reads.
+for (const name of [
+  ...VITORIA_SHARED_READ_NAMES,
+  ...VITORIA_PLANNING_PROJECT_NAMES,
+]) {
+  TOOL_REGISTRY[name] = (ctx) =>
+    buildVitoriaTools(ctx.planningId ?? "", ctx.projectId)[
+      name as keyof ReturnType<typeof buildVitoriaTools>
+    ] as Tool;
+}
+
+// planningId obrigatório (staging/estado da PlanningCeremony).
+for (const name of VITORIA_PLANNING_CEREMONY_NAMES) {
+  TOOL_REGISTRY[name] = (ctx) =>
+    buildVitoriaTools(requirePlanningId(ctx), ctx.projectId)[
+      name as keyof ReturnType<typeof buildVitoriaTools>
+    ] as Tool;
+}
+
 const VITOR_TOOLS = new Set([
   "read_product_vision", "read_scope", "read_persona", "read_brainstorm",
   "read_priority", "read_risk", "read_gap", "read_tech_specs", "read_hypothesis",
@@ -236,22 +303,44 @@ const VITOR_TOOLS = new Set([
   "read_workspace_file", "glob_workspace", "grep_workspace",
 ]);
 
-const VITORIA_TOOLS = new Set([
+// Vitoria tem DUAS superfícies no daemon, com toolsets distintos:
+//   pm_review → notas/report/indicadores (precisa pmReviewId)
+//   planning  → staging de tasks/stories (precisa planningId)
+const VITORIA_PMREVIEW_TOOLS = new Set<string>([
   "read_transcript_content",
   "read_context_source",
   "add_pm_review_note",
   "update_pm_review_report",
   "get_project_indicators",
+  // Núcleo compartilhado: PM Review enxerga sprint/tasks/capacidade/deps/DS —
+  // não fica cego do estado de sprint. Writes ficam só na Planning.
+  ...VITORIA_SHARED_READ_NAMES,
+]);
+
+const VITORIA_PLANNING_TOOLS = new Set<string>([
+  ...VITORIA_SHARED_READ_NAMES,
+  ...VITORIA_PLANNING_PROJECT_NAMES,
+  ...VITORIA_PLANNING_CEREMONY_NAMES,
+  "read_context_source",
 ]);
 
 const ALPHA_TOOLS = new Set<string>(ALPHA_READ_TOOL_NAMES);
 
 /**
- * Quais tools cada agente expõe via MCP. Filtra o registry global por slug.
+ * Quais tools cada agente expõe via MCP. Filtra o registry global por slug +
+ * superfície. Vitoria dispatcha por `surface` (vem do thread.channel):
+ * 'planning' → toolset de staging; qualquer outro (pm_review/default) → PM Review.
  */
-export function getToolNamesForAgent(agentSlug: string): string[] {
+export function getToolNamesForAgent(
+  agentSlug: string,
+  surface?: string | null,
+): string[] {
   if (agentSlug === "vitor") return [...VITOR_TOOLS];
-  if (agentSlug === "vitoria") return [...VITORIA_TOOLS];
+  if (agentSlug === "vitoria") {
+    return surface === "planning"
+      ? [...VITORIA_PLANNING_TOOLS]
+      : [...VITORIA_PMREVIEW_TOOLS];
+  }
   if (agentSlug === "alpha") return [...ALPHA_TOOLS];
   return [];
 }

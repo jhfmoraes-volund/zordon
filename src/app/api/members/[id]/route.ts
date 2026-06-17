@@ -30,6 +30,8 @@ const SELF_EDITABLE_FIELDS = new Set([
   "fpCapacity",
   "seniority",
   "dedicationPercent",
+  "photoStoragePath",
+  "photoUpdatedAt",
 ]);
 
 /**

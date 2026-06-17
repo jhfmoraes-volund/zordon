@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { publicPhotoUrl } from "@/lib/storage/photo";
 import { cn } from "@/lib/utils";
 
 export const OPEN_SOURCE_BUCKET = "open-source-photos";
@@ -26,17 +25,11 @@ export function OpenSourcePhoto({
   photoUpdatedAt,
   className,
 }: OpenSourcePhotoProps) {
-  const publicUrl = useMemo(() => {
-    if (!photoStoragePath) return null;
-    const supabase = createClient();
-    const { data } = supabase.storage
-      .from(OPEN_SOURCE_BUCKET)
-      .getPublicUrl(photoStoragePath);
-    const base = data.publicUrl;
-    return photoUpdatedAt
-      ? `${base}?v=${encodeURIComponent(photoUpdatedAt)}`
-      : base;
-  }, [photoStoragePath, photoUpdatedAt]);
+  const publicUrl = publicPhotoUrl(
+    OPEN_SOURCE_BUCKET,
+    photoStoragePath,
+    photoUpdatedAt,
+  );
 
   const base = cn(
     "shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]",

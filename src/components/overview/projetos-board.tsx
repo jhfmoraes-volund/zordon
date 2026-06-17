@@ -67,6 +67,7 @@ import type {
   ProjectTeamMember,
   PMReviewNoteLite,
   ReguaSegment,
+  RitualKind,
 } from "@/lib/dal/project-overview";
 import type { MetricValue, Threshold } from "@/lib/metrics/types";
 
@@ -201,6 +202,68 @@ function milestoneChip(p: ProjectOverview): { label: string; tone: ChipTone } | 
 function horizonLabel(p: ProjectOverview): string {
   if (p.engagementType === "continuous") return "Contínuo";
   return p.endDate ? `Fim ~ ${fmtDate(new Date(p.endDate))}` : "Sem prazo definido";
+}
+
+// ─── Freshness de ritual ("contexto vivo") ────────────────
+
+/** Janela em que a última movimentação de ritual ainda conta como fresca. */
+const RITUAL_FRESH_DAYS = 7;
+
+const RITUAL_LABEL: Record<RitualKind, string> = {
+  review: "Review",
+  planning: "Planning",
+  release: "Release",
+};
+
+/** Dias corridos desde uma data ISO (no fuso local). */
+function daysSince(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+}
+
+/** "hoje" · "ontem" · "Nd" — idade curta. */
+function shortAge(days: number): string {
+  if (days <= 0) return "hoje";
+  if (days === 1) return "ontem";
+  return `${days}d`;
+}
+
+/**
+ * Chip de "contexto vivo" — última movimentação em qualquer ritual (review /
+ * planning / release). O dot já carrega a health; este diz se ainda há status
+ * sendo mantido. Verde ≤7d, âmbar quando vencido ou ausente. Só renderiza em
+ * fase produtiva — comercial/post_ops não rodam ritual semanal, então fica em
+ * silêncio (sem falso alarme de staleness).
+ */
+function RitualFreshnessChip({ p }: { p: ProjectOverview }) {
+  if (!PRODUCING_PHASES.includes(p.phase)) return null;
+
+  if (!p.lastRitualAt) {
+    return (
+      <span title="Nenhum ritual registrado — sem contexto de status vivo">
+        <StatusChip tone="amber" variant="subtle" size="sm" label="sem ritual" />
+      </span>
+    );
+  }
+
+  const days = daysSince(p.lastRitualAt);
+  const kind = p.lastRitualKind ? RITUAL_LABEL[p.lastRitualKind] : "Ritual";
+  const stale = days > RITUAL_FRESH_DAYS;
+  return (
+    <span
+      title={`Última movimentação de ritual: ${kind} · ${fmtDate(new Date(p.lastRitualAt))} (há ${days}d)`}
+    >
+      <StatusChip
+        tone={stale ? "amber" : "green"}
+        variant="subtle"
+        size="sm"
+        label={
+          <span className="tabular-nums">
+            {kind} <span className="opacity-40">·</span> {shortAge(days)}
+          </span>
+        }
+      />
+    </span>
+  );
 }
 
 function initials(name: string): string {
@@ -932,13 +995,18 @@ function ProjectRow({
           <StatusChip label="pausado" tone="muted" variant="subtle" size="sm" />
         )}
         <span className="ml-auto flex shrink-0 items-center gap-1">
+          <RitualFreshnessChip p={p} />
           {milestone && (
             <StatusChip
-              label={milestone.label}
+              label={
+                <span className="min-w-0 truncate" title={milestone.label}>
+                  {milestone.label}
+                </span>
+              }
               tone={milestone.tone}
               variant="subtle"
               size="sm"
-              className="max-w-[220px]"
+              className="max-w-[220px] overflow-hidden"
             />
           )}
           {motivo && (
@@ -1017,15 +1085,20 @@ function ProjectKanbanCard({ p, onOpen }: { p: ProjectOverview; onOpen: () => vo
           <p className="text-[11px] text-muted-foreground">{horizonLabel(p)}</p>
         )}
       </div>
-      {(milestone || motivo) && (
+      {(milestone || motivo || producing) && (
         <div className="mt-2 flex flex-wrap items-center gap-1 pl-4">
+          <RitualFreshnessChip p={p} />
           {milestone && (
             <StatusChip
-              label={milestone.label}
+              label={
+                <span className="min-w-0 truncate" title={milestone.label}>
+                  {milestone.label}
+                </span>
+              }
               tone={milestone.tone}
               variant="subtle"
               size="sm"
-              className="max-w-full"
+              className="max-w-full overflow-hidden"
             />
           )}
           {motivo && (
@@ -1739,9 +1812,14 @@ export function ProjetosBoard({
   const [editOpen, setEditOpen] = useState(false);
   /** Eixo do ribbon expandido — null = painel fechado. */
   const [ribbonAxis, setRibbonAxis] = useState<RibbonAxis | null>(null);
-  // Lista ou kanban — preferência persiste em localStorage (idiom de
-  // use-chat-plan-mode: lazy init com guard de window).
-  const [view, setView] = useState<BoardView>(() => readStoredView());
+  // Lista ou kanban. Nasce com o default determinístico do server ("rows"):
+  // a preferência real (localStorage + viewport) só existe no client e seria
+  // diferente do HTML do server — ler no init quebra a hidratação. Aplicamos
+  // após mount, num effect, pra primeira renderização casar com o server.
+  const [view, setView] = useState<BoardView>("rows");
+  useEffect(() => {
+    setView(readStoredView());
+  }, []);
   // Drag no kanban muda a fase otimisticamente por cima dos props (o board é
   // server-fed); router.refresh() re-busca e o override vira redundante
   // quando o prop alcança. Erro remove o override → card volta sozinho.

@@ -157,7 +157,8 @@ export function NotionSourceModal({ open, onOpenChange, onImported, apiUrl, proj
                 <span className="font-medium">ID do Notion detectado na URL</span>
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                O conteúdo (blocos de primeiro nível) será importado como contexto.
+                O conteúdo será importado como contexto (página inteira, incluindo
+                subpáginas, toggles e bases renderizadas como tabela).
               </p>
             </div>
           )}

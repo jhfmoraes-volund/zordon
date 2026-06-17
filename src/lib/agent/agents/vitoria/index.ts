@@ -13,6 +13,7 @@ import {
   buildReleasePlanningTools,
 } from "./release-planning";
 import { getConnectionStatus, getUserTools } from "@/lib/composio/client";
+import { getSprintOutcomes } from "@/lib/dal/sprint-outcomes";
 
 /**
  * Slugs Composio v3 (confirmados via REST 2026-05-29). Cap em 4 tools:
@@ -106,7 +107,7 @@ export const vitoriaAgent: AgentDefinition = {
     // o mesmo Project.memoryMd / ProjectBusinessContext / DesignDecision /
     // DesignOpenQuestion / Active DesignSessions pra ter contexto cross-agent
     // sem precisar conversar com o Vitor.
-    const [profile, projectMem, businessCtx, activeDecisions, openQuestions, activeSessions] =
+    const [profile, projectMem, businessCtx, activeDecisions, openQuestions, activeSessions, sprintOutcomes] =
       await Promise.all([
         buildProjectProfile(planning.projectId, { currentSprintId: planning.sprintId }),
         db()
@@ -137,6 +138,10 @@ export const vitoriaAgent: AgentDefinition = {
           .eq("projectId", planning.projectId)
           .in("status", ["active", "in_progress"])
           .order("updatedAt", { ascending: false }),
+        // Sprint Outcome digest (D11): memória das últimas 3 sprints concluídas
+        // — velocity, carryover e temas de retro pra dar continuidade semanal.
+        // Degrada pra [] se a view falhar — enriquecimento, não pode derrubar o chat.
+        getSprintOutcomes(planning.projectId, 3).catch(() => []),
       ]);
 
     const status: "open" | "closed" =
@@ -200,6 +205,7 @@ export const vitoriaAgent: AgentDefinition = {
       activeDecisions: activeDecisions.data ?? [],
       openQuestions: openQuestions.data ?? [],
       activeDesignSessions: activeSessions.data ?? [],
+      sprintOutcomes,
       githubConnected,
     };
   },

@@ -7,6 +7,8 @@ import {
   FileSpreadsheet,
   FileText,
   GitBranch,
+  HardDrive,
+  Library,
   Loader2,
   Unlink,
 } from "lucide-react";
@@ -21,7 +23,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type PillKind = "transcript" | "spreadsheet" | "github" | "document" | "notion";
+type PillKind =
+  | "transcript"
+  | "spreadsheet"
+  | "github"
+  | "document"
+  | "notion"
+  | "gdrive_file";
 
 /** Formatos aceitos no upload de documentos — espelha o backend de extração. */
 const FILE_ACCEPT = ".pdf,.docx,.txt,.md,.html,.htm,.csv,.xlsx,.xls";
@@ -111,6 +119,8 @@ interface ContextSheetCapabilities {
   github?: boolean;
   file?: boolean;
   notion?: boolean;
+  /** Picker universal — linkar qualquer ContextSource já no pool do projeto. */
+  pool?: boolean;
 }
 
 interface ContextSheetHandlers {
@@ -120,6 +130,8 @@ interface ContextSheetHandlers {
   onImportGitHub?: () => void;
   onImportNotion?: () => void;
   onUploadFiles?: (files: FileList) => void;
+  /** Abre o picker do pool do projeto. */
+  onLinkFromPool?: () => void;
 }
 
 interface ContextSheetProps {
@@ -192,6 +204,9 @@ export default function ContextSheet({
     if (kind === "notion") {
       return <BookText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
     }
+    if (kind === "gdrive_file") {
+      return <HardDrive className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+    }
     return <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
   }
 
@@ -209,6 +224,17 @@ export default function ContextSheet({
           {/* Pills row — fontes de contexto */}
           <section className="space-y-3">
             <div className="flex flex-wrap gap-2">
+              {capabilities.pool && (
+                <ContextPill
+                  icon={<Library className="h-3.5 w-3.5" />}
+                  label="Linkar do pool"
+                  active={false}
+                  onClick={() => {
+                    onOpenChange(false);
+                    setTimeout(() => handlers.onLinkFromPool?.(), 50);
+                  }}
+                />
+              )}
               {capabilities.transcript && (
                 <ContextPill
                   icon={<FileText className="h-3.5 w-3.5" />}

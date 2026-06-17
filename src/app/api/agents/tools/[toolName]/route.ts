@@ -88,6 +88,7 @@ export async function POST(
   let sessionId: string | null = null;
   let projectId: string | null = null;
   let pmReviewId: string | null = null;
+  let planningId: string | null = null;
 
   // Alpha (ops) roda GLOBAL: thread channel='web', agentName='alpha', sem
   // sessionId nem projeto. Suas tools de leitura filtram via supabase direto
@@ -112,6 +113,15 @@ export async function POST(
       .eq("id", pmReviewId)
       .maybeSingle();
     projectId = pm?.projectId ?? null;
+  } else if (thread.channel === "planning" && thread.agentName) {
+    // Planning Ceremony thread — agentName carrega o planningId.
+    planningId = thread.agentName;
+    const { data: planning } = await supabase
+      .from("PlanningCeremony")
+      .select("projectId")
+      .eq("id", planningId)
+      .maybeSingle();
+    projectId = planning?.projectId ?? null;
   }
 
   if (!projectId && !isAlpha) {
@@ -157,6 +167,7 @@ export async function POST(
     sessionId,
     projectId: projectId ?? "",
     pmReviewId,
+    planningId,
     memberId,
     workspacePath,
   };

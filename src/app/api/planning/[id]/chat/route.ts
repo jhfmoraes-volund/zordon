@@ -11,9 +11,14 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireProjectViewApi } from "@/lib/dal";
+import { requireProjectViewApi, getCurrentMember } from "@/lib/dal";
 import { getPlanningById } from "@/lib/dal/planning";
 import { planningChatConnector } from "@/lib/agent/connectors/planning-chat";
+import { ensurePlanningThread } from "@/lib/agent/context";
+import {
+  streamViaClaudeDaemon,
+  isDaemonOnline,
+} from "@/lib/agent/sse-chat-proxy";
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 200;
@@ -98,5 +103,88 @@ export async function POST(
     );
   }
 
+  const member = await getCurrentMember();
+  if (!member) return new NextResponse("Unauthorized", { status: 401 });
+
+  // Branch por AgentMode('vitoria'). Default = claude-daemon (regra 2026-06:
+  // daemon é o caminho padrão de todo chat; OpenRouter só fallback). Linha
+  // ausente → daemon (consistente com /api/agent-mode GET e a UI). Se o daemon
+  // estiver offline, cai pro connector OpenRouter e marca X-Mode-Fallback.
+  const { data: modeRow } = await db()
+    .from("AgentMode")
+    .select("mode")
+    .eq("userId", member.id)
+    .eq("agentSlug", "vitoria")
+    .maybeSingle();
+  const mode = modeRow?.mode ?? "claude-daemon";
+
+  if (mode === "claude-daemon") {
+    if (!(await isDaemonOnline())) {
+      const res = await planningChatConnector.handle(req, id);
+      res.headers.set("X-Mode-Fallback", "true");
+      res.headers.set("X-Mode-Fallback-Reason", "daemon_offline");
+      return res;
+    }
+    return handleClaudeDaemonChat(req, id, member.id);
+  }
+
   return planningChatConnector.handle(req, id);
+}
+
+/**
+ * Path claude-daemon: persiste a msg do PM, garante o thread da planning e
+ * delega ao SSE proxy (enfileira ChatTurn + ForgeJob(kind=chat) pro daemon).
+ * Espelha o handleClaudeDaemonChat do PM Review — mesma Response shape pro
+ * useChat ler transparente.
+ */
+async function handleClaudeDaemonChat(
+  req: NextRequest,
+  planningId: string,
+  memberId: string,
+): Promise<Response> {
+  const body = await req.json();
+  const { messages } = body as {
+    messages?: Array<{
+      role: string;
+      content?: string;
+      parts?: Array<{ type: string; text?: string }>;
+    }>;
+  };
+
+  const lastUserMsg = [...(messages || [])]
+    .reverse()
+    .find((m) => m.role === "user");
+  const message =
+    lastUserMsg?.content ??
+    lastUserMsg?.parts
+      ?.filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("\n") ??
+    "";
+
+  if (!message?.trim()) {
+    return new NextResponse("Missing message", { status: 400 });
+  }
+
+  const threadId = await ensurePlanningThread(planningId, memberId);
+
+  const supabase = db();
+  const { data: userMessage, error: msgErr } = await supabase
+    .from("ChatMessage")
+    .insert({ threadId, role: "user", content: message })
+    .select("id")
+    .single();
+  if (msgErr || !userMessage) {
+    return NextResponse.json(
+      { error: msgErr?.message ?? "Failed to persist user message" },
+      { status: 500 },
+    );
+  }
+
+  return streamViaClaudeDaemon({
+    threadId,
+    userMessageId: userMessage.id,
+    agentSlug: "vitoria",
+    ownerId: memberId,
+  });
 }

@@ -14,8 +14,13 @@ import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
 import { showErrorToast } from "@/lib/optimistic/toast";
+import {
+  PHOTO_ACCEPTED_MIME,
+  PhotoValidationError,
+  removePhoto,
+  uploadResizedPhoto,
+} from "@/lib/storage/photo";
 import { toast } from "sonner";
 import type {
   OpenSourceCardRow,
@@ -24,10 +29,6 @@ import type {
 import { OpenSourcePhoto, OPEN_SOURCE_BUCKET } from "./open-source-photo";
 import { StringListInput } from "./string-list-input";
 import { PairListInput } from "./pair-list-input";
-
-const ACCEPTED_MIME = ["image/png", "image/jpeg", "image/webp"];
-const MAX_BYTES = 3 * 1024 * 1024;
-const MAX_DIMENSION = 768;
 
 type Draft = {
   name: string;
@@ -94,45 +95,6 @@ function draftFromCard(card: OpenSourceCardRow): Draft {
   };
 }
 
-function extensionFor(file: File): string {
-  if (file.type === "image/png") return "png";
-  if (file.type === "image/webp") return "webp";
-  return "jpg";
-}
-
-async function resizeRaster(file: File): Promise<Blob> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = reject;
-      el.src = url;
-    });
-    const scale = Math.min(
-      1,
-      MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight),
-    );
-    const w = Math.round(img.naturalWidth * scale);
-    const h = Math.round(img.naturalHeight * scale);
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas 2D context indisponível");
-    ctx.drawImage(img, 0, 0, w, h);
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("toBlob falhou"))),
-        file.type,
-        0.9,
-      );
-    });
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 type Props = {
   open: boolean;
   card: OpenSourceCardRow | null;
@@ -141,7 +103,6 @@ type Props = {
 };
 
 export function OpenSourceSheet({ open, card, onClose, onSubmit }: Props) {
-  const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [uploading, setUploading] = useState(false);
@@ -169,42 +130,28 @@ export function OpenSourceSheet({ open, card, onClose, onSubmit }: Props) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!ACCEPTED_MIME.includes(file.type)) {
-      toast.error("Formato não suportado. Use PNG, JPG ou WEBP.");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      toast.error("Arquivo maior que 3 MB.");
-      return;
-    }
 
     setUploading(true);
     try {
-      const ext = extensionFor(file);
-      const newPath = `${crypto.randomUUID()}.${ext}`;
-      const body = await resizeRaster(file);
-      const { error: upErr } = await supabase.storage
-        .from(OPEN_SOURCE_BUCKET)
-        .upload(newPath, body, {
-          upsert: false,
-          contentType: file.type,
-          cacheControl: "3600",
-        });
-      if (upErr) throw new Error(upErr.message);
+      const { path } = await uploadResizedPhoto({
+        bucket: OPEN_SOURCE_BUCKET,
+        file,
+      });
 
       // Remove a foto enviada anteriormente nesta sessão (evita órfãos).
       const prev = draft.photoStoragePath;
       if (prev && prev !== card?.photoStoragePath) {
-        await supabase.storage.from(OPEN_SOURCE_BUCKET).remove([prev]);
+        await removePhoto(OPEN_SOURCE_BUCKET, prev);
       }
 
       setDraft((d) => ({
         ...d,
-        photoStoragePath: newPath,
+        photoStoragePath: path,
         photoUpdatedAt: new Date().toISOString(),
       }));
     } catch (err) {
-      showErrorToast(err, { label: "Falha ao subir foto" });
+      if (err instanceof PhotoValidationError) toast.error(err.message);
+      else showErrorToast(err, { label: "Falha ao subir foto" });
     } finally {
       setUploading(false);
     }
@@ -279,7 +226,7 @@ export function OpenSourceSheet({ open, card, onClose, onSubmit }: Props) {
                   <input
                     ref={fileRef}
                     type="file"
-                    accept={ACCEPTED_MIME.join(",")}
+                    accept={PHOTO_ACCEPTED_MIME.join(",")}
                     onChange={handlePickPhoto}
                     className="hidden"
                   />

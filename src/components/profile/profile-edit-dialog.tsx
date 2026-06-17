@@ -23,6 +23,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field, FormBody } from "@/components/ui/field";
+import {
+  MemberPhotoField,
+  type MemberPhotoValue,
+} from "@/components/members/member-photo-field";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import {
   SPECIALTIES,
@@ -49,10 +53,16 @@ export function ProfileEditDialog({
   const [name, setName] = useState(member.name);
   const [specialty, setSpecialty] = useState("");
   const [githubUsername, setGithubUsername] = useState("");
+  const [photo, setPhoto] = useState<MemberPhotoValue>({
+    photoStoragePath: null,
+    photoUpdatedAt: null,
+  });
+  // Foto que veio do servidor — não é apagada no cleanup de órfãos da sessão.
+  const [initialPhotoPath, setInitialPhotoPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // specialty/githubUsername não vivem no auth context — busca ao abrir.
+  // specialty/githubUsername/foto não vivem no auth context — busca ao abrir.
   useEffect(() => {
     if (!open) return;
     setName(member.name);
@@ -61,12 +71,17 @@ export function ProfileEditDialog({
       setLoading(true);
       const { data } = await createClient()
         .from("Member")
-        .select("specialty, githubUsername")
+        .select("specialty, githubUsername, photoStoragePath, photoUpdatedAt")
         .eq("id", member.id)
         .single();
       if (cancelled) return;
       setSpecialty(data?.specialty ?? "");
       setGithubUsername(data?.githubUsername ?? "");
+      setPhoto({
+        photoStoragePath: data?.photoStoragePath ?? null,
+        photoUpdatedAt: data?.photoUpdatedAt ?? null,
+      });
+      setInitialPhotoPath(data?.photoStoragePath ?? null);
       setLoading(false);
     })();
     return () => {
@@ -86,6 +101,8 @@ export function ProfileEditDialog({
           name: trimmed,
           specialty: specialty || null,
           githubUsername: githubUsername.trim() || null,
+          photoStoragePath: photo.photoStoragePath,
+          photoUpdatedAt: photo.photoUpdatedAt,
         }),
       });
       toast.success("Perfil atualizado.");
@@ -110,6 +127,16 @@ export function ProfileEditDialog({
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
           <FormBody>
+            <Field name="photo">
+              <Field.Label>Foto</Field.Label>
+              <MemberPhotoField
+                memberId={member.id}
+                name={name}
+                value={photo}
+                initialStoragePath={initialPhotoPath}
+                onChange={setPhoto}
+              />
+            </Field>
             <Field name="name" required>
               <Field.Label>Nome</Field.Label>
               <Field.Control>

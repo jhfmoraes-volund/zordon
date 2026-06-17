@@ -24,6 +24,8 @@ export type ProjectCategory = "billable" | "non_billable" | "internal";
 export type ProjectPhase = "commercial" | "immersion" | "ops" | "post_ops";
 export type ProjectEngagement = "fixed_scope" | "continuous";
 export type ProjectHealth = "red" | "amber" | "green";
+/** Tipo do ritual cuja última movimentação dirige o chip de "contexto vivo". */
+export type RitualKind = "review" | "planning" | "release";
 
 export type ProjectTeamMember = { id: string; name: string; position: string | null };
 
@@ -150,6 +152,13 @@ export type ProjectOverview = {
    */
   weeks: Array<{ week: string; isCurrentWeek: boolean; review: PMReviewDigestEntry | null }>;
   health: ProjectHealth;
+  /**
+   * Última movimentação em QUALQUER ritual (review/planning/release) —
+   * freshness de "contexto vivo" (view project_last_ritual). null = nenhum
+   * ritual registrado. O chip do board só usa isso em fases produtivas.
+   */
+  lastRitualAt: string | null;
+  lastRitualKind: RitualKind | null;
 };
 
 export type PMReviewDigestEntry = {
@@ -627,6 +636,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
     blockedRes,
     openTasksRes,
     reviewsRes,
+    ritualsRes,
   ] = await Promise.all([
     // TODAS as sprints — a régua e o ritmo precisam das fechadas.
     supabase
@@ -673,6 +683,12 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
       .select("id, projectId, referenceWeek, reportMarkdown, status, publishedAt")
       .in("projectId", projectIds)
       .order("referenceWeek", { ascending: false }),
+    // Última movimentação em qualquer ritual (review/planning/release) — chip
+    // de "contexto vivo". 1 linha por projeto (DISTINCT ON na view).
+    supabase
+      .from("project_last_ritual")
+      .select("projectId, lastRitualKind, lastRitualAt")
+      .in("projectId", projectIds),
   ]);
 
   // Sinais por projeto
@@ -732,6 +748,19 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
   // PM Reviews por projeto: as da janela (chips) + a mais recente de todas
   // (default de health/abertura — pode estar fora da janela). rows já vêm
   // em referenceWeek desc.
+  // Última movimentação de ritual por projeto (1 linha/projeto na view).
+  const lastRitualByProject = new Map<string, { kind: RitualKind; at: string }>();
+  for (const r of (ritualsRes.data ?? []) as {
+    projectId: string;
+    lastRitualKind: string;
+    lastRitualAt: string;
+  }[]) {
+    lastRitualByProject.set(r.projectId, {
+      kind: r.lastRitualKind as RitualKind,
+      at: r.lastRitualAt,
+    });
+  }
+
   const windowReviewByProjectWeek = new Map<string, ReviewRow>(); // `${projectId}:${week}`
   const latestReviewByProject = new Map<string, ReviewRow>();
   for (const r of (reviewsRes.data ?? []) as ReviewRow[]) {
@@ -904,6 +933,8 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
       pmReview,
       weeks,
       health,
+      lastRitualAt: lastRitualByProject.get(p.id)?.at ?? null,
+      lastRitualKind: lastRitualByProject.get(p.id)?.kind ?? null,
     };
   });
 }

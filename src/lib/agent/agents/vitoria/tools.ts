@@ -5,6 +5,7 @@ import { addContextNote } from "@/lib/dal/planning";
 import { getStepData } from "@/lib/agent/context";
 import { applyMarkdownMutation } from "@/lib/agent/tools/_markdown";
 import { createReadContextSourceTool } from "@/lib/agent/tools/read-context-source";
+import { getSprintOutcomes } from "@/lib/dal/sprint-outcomes";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 type MeetingTaskActionUpdate = Database["public"]["Tables"]["MeetingTaskAction"]["Update"];
@@ -784,6 +785,71 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           sprintId,
           tasks: tasks ?? [],
           edges: edges ?? [],
+        };
+      },
+    }),
+
+    get_planning_state: tool({
+      description:
+        "Snapshot do estado VIVO desta planning AGORA: propostas pendentes (com IDs pra editar/descartar), " +
+        "notas de contexto ativas (com IDs pra usar em sourceNoteIds), fase, sprint e memória das últimas sprints. " +
+        "No daemon o system prompt é congelado no 1º turn — então SEMPRE chame esta tool no início de um turn que vá " +
+        "editar/descartar proposta ou citar nota: os IDs de turns anteriores podem estar desatualizados. NUNCA invente ID.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const supabase = db();
+        const [{ data: planning }, { data: pendingRows }, { data: noteRows }] =
+          await Promise.all([
+            supabase
+              .from("PlanningCeremony")
+              .select("phase, sprintId, sprint:Sprint(name)")
+              .eq("id", planningId)
+              .maybeSingle(),
+            supabase
+              .from("MeetingTaskAction")
+              .select(
+                "id, type, taskId, targetSprintId, payload, aiReasoning, aiConfidence",
+              )
+              .eq("planningCeremonyId", planningId)
+              .eq("decision", "pending")
+              .eq("execution", "pending")
+              .order("createdAt", { ascending: true }),
+            supabase
+              .from("PlanningContextNote")
+              .select("id, kind, content, priority")
+              .eq("planningCeremonyId", planningId)
+              .is("dismissedAt", null)
+              .order("priority", { ascending: false }),
+          ]);
+
+        const sprintOutcomes = await getSprintOutcomes(projectId, 3).catch(() => []);
+
+        return {
+          ok: true,
+          phase: planning?.phase ?? null,
+          sprintName: (planning?.sprint as { name: string } | null)?.name ?? null,
+          pendingProposals: (pendingRows ?? []).map((r) => ({
+            id: r.id,
+            type: r.type,
+            taskId: r.taskId,
+            targetSprintId: r.targetSprintId,
+            title: (r.payload as { title?: string } | null)?.title ?? null,
+            aiConfidence: r.aiConfidence,
+            aiReasoning: r.aiReasoning,
+          })),
+          activeNotes: (noteRows ?? []).map((n) => ({
+            id: n.id,
+            kind: n.kind,
+            content: n.content,
+            priority: n.priority,
+          })),
+          sprintMemory: sprintOutcomes.map((o) => ({
+            name: o.name,
+            doneCount: o.doneCount,
+            totalCount: o.totalCount,
+            velocityFp: o.velocityFp,
+            carryoverCount: o.carryoverCount,
+          })),
         };
       },
     }),

@@ -12,6 +12,7 @@ export function createReadContextSourceTool(
   scope?: {
     sessionId?: string | null;
     pmReviewId?: string | null;
+    planningId?: string | null;
   },
 ): Tool {
   return tool({
@@ -80,8 +81,10 @@ export function createReadContextSourceTool(
 async function listAvailableInScope(scope?: {
   sessionId?: string | null;
   pmReviewId?: string | null;
+  planningId?: string | null;
 }): Promise<Array<{ id: string; kind: string; title: string }>> {
-  if (!scope || (!scope.sessionId && !scope.pmReviewId)) return [];
+  if (!scope || (!scope.sessionId && !scope.pmReviewId && !scope.planningId))
+    return [];
   const supabase = db();
   const query = supabase
     .from("EntityLink")
@@ -92,6 +95,7 @@ async function listAvailableInScope(scope?: {
     .limit(20);
   if (scope.sessionId) query.eq("designSessionId", scope.sessionId);
   if (scope.pmReviewId) query.eq("pmReviewId", scope.pmReviewId);
+  if (scope.planningId) query.eq("planningCeremonyId", scope.planningId);
   const { data, error } = await query;
   if (error) return [];
   return (data ?? [])

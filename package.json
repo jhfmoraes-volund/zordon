@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "npx tsx supabase/seed/seed.ts",
-    "db:types": "npx supabase gen types typescript --project-id ugvqlmapqlobigkjboae > src/lib/supabase/database.types.ts",
+    "db:types": "bash scripts/update-db-types.sh",
     "gen:phase-sql": "npx tsx scripts/gen-phase-sql.ts",
     "eval:vitor": "npx tsx --tsconfig tsconfig.eval.json src/eval/vitor/runner.ts",
     "eval:vitoria": "npx tsx --tsconfig tsconfig.eval.json src/eval/vitoria/runner.ts"

@@ -180,19 +180,36 @@ async function resolveAgentParams(
         projectId: pm?.projectId ?? null,
       };
     }
-    if (thread.channel === "planning" && thread.sessionId) {
+    if (thread.channel === "planning" && thread.agentName) {
+      // Planning Ceremony — agentName carrega o planningId. loadContext da
+      // Vitoria (surface=planning) exige params.planningId, senão dá throw.
+      const planningId = thread.agentName;
+      const { data: planning } = await supabase
+        .from("PlanningCeremony")
+        .select("projectId")
+        .eq("id", planningId)
+        .maybeSingle();
+      return {
+        params: { surface: "planning", planningId },
+        sessionId: null,
+        projectId: planning?.projectId ?? null,
+      };
+    }
+    if (thread.channel === "release_planning" && thread.agentName) {
+      // Release Planning — agentName carrega o sessionId (PlanningSession).
+      const sessionId = thread.agentName;
       const { data: ps } = await supabase
         .from("PlanningSession")
         .select("projectId")
-        .eq("id", thread.sessionId)
+        .eq("id", sessionId)
         .maybeSingle();
       return {
-        params: { surface: "release_planning", sessionId: thread.sessionId },
-        sessionId: thread.sessionId,
+        params: { surface: "release_planning", sessionId },
+        sessionId,
         projectId: ps?.projectId ?? null,
       };
     }
-    // Fallback: surface padrão
+    // Fallback: surface padrão (sem contexto resolvível)
     return {
       params: { surface: "planning" },
       sessionId: null,

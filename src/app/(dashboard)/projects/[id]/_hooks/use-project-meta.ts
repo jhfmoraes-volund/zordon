@@ -12,7 +12,7 @@ export function useProjectMeta(projectId: string) {
     const { data } = await supabase
       .from("Project")
       .select(
-        "id, name, status, category, phase, engagementType, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, driveFolderId, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role, fpCapacity)",
+        "id, name, status, category, phase, engagementType, clientId, pmId, repoUrl, startDate, endDate, githubRepoOwner, githubRepoName, githubDefaultBranch, referenceKey, definitionOfDone, driveFolderId, client:Client(name), pm:Member!Project_pmId_fkey(id, name, role, fpCapacity, photoStoragePath, photoUpdatedAt)",
       )
       .eq("id", projectId)
       .single();
@@ -33,6 +33,8 @@ export function useProjectMeta(projectId: string) {
           name: string;
           role: string | null;
           fpCapacity: number | null;
+          photoStoragePath: string | null;
+          photoUpdatedAt: string | null;
         } | null) ?? null,
       repoUrl: data.repoUrl ?? null,
       startDate: data.startDate ?? null,

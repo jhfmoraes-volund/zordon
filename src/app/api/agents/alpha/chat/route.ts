@@ -190,9 +190,12 @@ export async function POST(req: NextRequest) {
     .eq("userId", member.id)
     .eq("agentSlug", "alpha")
     .maybeSingle();
+  // Default = claude-daemon (regra 2026-06): linha ausente → daemon, igual à
+  // UI (/api/agent-mode GET) e às demais surfaces. OpenRouter é fallback.
+  const mode = modeRow?.mode ?? "claude-daemon";
 
   let fallbackReason: string | null = null;
-  if (modeRow?.mode === "claude-daemon") {
+  if (mode === "claude-daemon") {
     if (await isDaemonOnline()) {
       if (!userMsg) {
         return new Response("Failed to persist user message", { status: 500 });

@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       AcceptanceCriterion: {
@@ -3778,6 +3803,13 @@ export type Database = {
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "Meeting_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
+          },
         ]
       }
       MeetingAttendee: {
@@ -4161,6 +4193,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "MeetingTaskAction_targetSprintId_fkey"
+            columns: ["targetSprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
+          },
+          {
             foreignKeyName: "MeetingTaskAction_taskId_fkey"
             columns: ["taskId"]
             isOneToOne: false
@@ -4186,6 +4225,8 @@ export type Database = {
           isGuest: boolean
           name: string
           onboardedAt: string | null
+          photoStoragePath: string | null
+          photoUpdatedAt: string | null
           position: string | null
           role: string
           seniority: string | null
@@ -4216,6 +4257,8 @@ export type Database = {
           isGuest?: boolean
           name: string
           onboardedAt?: string | null
+          photoStoragePath?: string | null
+          photoUpdatedAt?: string | null
           position?: string | null
           role?: string
           seniority?: string | null
@@ -4246,6 +4289,8 @@ export type Database = {
           isGuest?: boolean
           name?: string
           onboardedAt?: string | null
+          photoStoragePath?: string | null
+          photoUpdatedAt?: string | null
           position?: string | null
           role?: string
           seniority?: string | null
@@ -4735,6 +4780,107 @@ export type Database = {
           },
         ]
       }
+      OpenSourceCard: {
+        Row: {
+          archiveNumber: number
+          builderFacts: Json
+          callMeFor: string[]
+          category: string
+          chat: Json
+          createdAt: string
+          createdBy: string | null
+          displayOrder: number | null
+          humanFacts: Json
+          id: string
+          isPublished: boolean
+          name: string
+          photoStoragePath: string | null
+          photoUpdatedAt: string | null
+          quote: string | null
+          quoteAttribution: string | null
+          soundtrack: Json
+          tags: string[]
+          title: string | null
+          truthsAndLie: string[]
+          updatedAt: string
+        }
+        Insert: {
+          archiveNumber: number
+          builderFacts?: Json
+          callMeFor?: string[]
+          category?: string
+          chat?: Json
+          createdAt?: string
+          createdBy?: string | null
+          displayOrder?: number | null
+          humanFacts?: Json
+          id?: string
+          isPublished?: boolean
+          name: string
+          photoStoragePath?: string | null
+          photoUpdatedAt?: string | null
+          quote?: string | null
+          quoteAttribution?: string | null
+          soundtrack?: Json
+          tags?: string[]
+          title?: string | null
+          truthsAndLie?: string[]
+          updatedAt?: string
+        }
+        Update: {
+          archiveNumber?: number
+          builderFacts?: Json
+          callMeFor?: string[]
+          category?: string
+          chat?: Json
+          createdAt?: string
+          createdBy?: string | null
+          displayOrder?: number | null
+          humanFacts?: Json
+          id?: string
+          isPublished?: boolean
+          name?: string
+          photoStoragePath?: string | null
+          photoUpdatedAt?: string | null
+          quote?: string | null
+          quoteAttribution?: string | null
+          soundtrack?: Json
+          tags?: string[]
+          title?: string | null
+          truthsAndLie?: string[]
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "OpenSourceCard_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "OpenSourceCard_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "OpenSourceCard_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "OpenSourceCard_createdBy_fkey"
+            columns: ["createdBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       Opportunity: {
         Row: {
           clientId: string
@@ -5008,6 +5154,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningCeremony_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
           },
         ]
       }
@@ -5739,6 +5892,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ProductRequirement_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
+          },
+          {
             foreignKeyName: "ProductRequirement_userStoryId_fkey"
             columns: ["userStoryId"]
             isOneToOne: false
@@ -6275,6 +6435,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ProjectInsight_inputSprintId_fkey"
+            columns: ["inputSprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
+          },
+          {
             foreignKeyName: "ProjectInsight_projectId_fkey"
             columns: ["projectId"]
             isOneToOne: true
@@ -6672,6 +6839,13 @@ export type Database = {
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "SprintDeploy_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
+          },
         ]
       }
       SprintMember: {
@@ -6731,6 +6905,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintMember_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
           },
         ]
       }
@@ -6803,6 +6984,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "SprintRetrospective_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
           },
         ]
       }
@@ -7050,6 +7238,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Task_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
           },
           {
             foreignKeyName: "Task_userStoryId_fkey"
@@ -7987,6 +8182,14 @@ export type Database = {
         }
         Relationships: []
       }
+      project_last_ritual: {
+        Row: {
+          lastRitualAt: string | null
+          lastRitualKind: string | null
+          projectId: string | null
+        }
+        Relationships: []
+      }
       sprint_capacity_overview: {
         Row: {
           capacity: number | null
@@ -8012,6 +8215,13 @@ export type Database = {
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "Task_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
+          },
         ]
       }
       sprint_member_capacity: {
@@ -8028,6 +8238,35 @@ export type Database = {
         }
         Relationships: []
       }
+      sprint_outcome_digest: {
+        Row: {
+          carryover_count: number | null
+          done_count: number | null
+          endDate: string | null
+          goal: string | null
+          name: string | null
+          planned_fp: number | null
+          projectId: string | null
+          retro_bad: string | null
+          retro_completed_at: string | null
+          retro_good: string | null
+          retro_ideas: string | null
+          sprintId: string | null
+          startDate: string | null
+          status: string | null
+          total_count: number | null
+          velocity_fp: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "Sprint_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sprint_prd_capacity: {
         Row: {
           fp_allocated: number | null
@@ -8043,6 +8282,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Sprint"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProductRequirement_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
           },
         ]
       }
@@ -8499,6 +8745,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       context_source_kind: [

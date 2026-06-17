@@ -23,12 +23,22 @@ export class ComposioConnectionMissing extends Error {
   }
 }
 
+/** Teto de blocos buscados na página inteira (proteção de custo/loop). */
+const MAX_BLOCKS = 2000;
+/** Profundidade máxima de recursão: página → container → conteúdo. */
+const MAX_DEPTH = 4;
+/** page_size do Notion (máximo permitido pela API). */
+const PAGE_SIZE = 100;
+
 /**
  * Notion adapter via Composio — requer conexão OAuth do member.
  * externalUrl = URL da página/base do Notion (ou o ID cru).
- * Busca os blocos de primeiro nível (NOTION_FETCH_BLOCK_CONTENTS) e renderiza
- * como markdown. Conteúdo aninhado (toggles/colunas) pode ficar truncado — v1.
- * Sem COMPOSIO_NOTION_AUTH_CONFIG_ID OU member sem conexão → ComposioConnectionMissing.
+ *
+ * Deep-read (runbook Fase 1): busca TODOS os blocos da página com paginação
+ * (has_more/next_cursor), RECORRE em containers (toggle, coluna, callout,
+ * subpágina, itens de lista aninhados) até MAX_DEPTH, e renderiza child_database
+ * como tabela markdown (linhas = páginas da base). Conteúdo é limitado por
+ * MAX_BLOCKS pra não estourar custo. Sem conexão → ComposioConnectionMissing.
  */
 export async function resolveContent(
   supabase: SupabaseClient<Database>,
@@ -59,21 +69,14 @@ export async function resolveContent(
     throw new ComposioConnectionMissing("notion", connectUrl);
   }
 
-  const result = await executeTool(source.createdBy, "NOTION_FETCH_BLOCK_CONTENTS", {
-    block_id: pageId,
-    page_size: 100,
-  });
+  const memberId = source.createdBy;
+  const budget: Budget = { remaining: MAX_BLOCKS };
 
-  if (!result.ok) {
-    throw new Error(
-      `Falha ao buscar página do Notion via Composio: ${result.error} (source ${source.id})`
-    );
-  }
-
-  const blocks = extractBlocks(result.data);
+  // Top-level: falha aqui é erro real (página inexistente / sem acesso).
+  const topBlocks = await fetchAllChildren(memberId, pageId, budget, /* topLevel */ true);
   const body =
-    blocks.length > 0
-      ? blocks.map(renderBlock).filter(Boolean).join("\n")
+    topBlocks.length > 0
+      ? await renderBlockList(memberId, topBlocks, 0, budget)
       : "(página sem conteúdo de blocos ou conteúdo não acessível à integração)";
 
   const snapshotAt = new Date().toISOString();
@@ -111,6 +114,222 @@ function extractNotionId(urlOrId: string): string | null {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+/** Orçamento de blocos compartilhado em toda a travessia (mutável). */
+type Budget = { remaining: number };
+
+/**
+ * Tipos de bloco que contêm filhos a serem recorridos. child_page é tratado à
+ * parte (vira heading + recursão no corpo da subpágina).
+ */
+const CONTAINER_TYPES = new Set<string>([
+  "toggle",
+  "callout",
+  "quote",
+  "column_list",
+  "column",
+  "bulleted_list_item",
+  "numbered_list_item",
+  "to_do",
+  "synced_block",
+  "table",
+]);
+
+/**
+ * Slugs candidatos do Composio pra consultar linhas de uma base do Notion.
+ * O repo só usa NOTION_FETCH_BLOCK_CONTENTS hoje; tentamos os nomes prováveis
+ * em ordem e degradamos pro badge de título se nenhum existir no catálogo.
+ */
+const DB_QUERY_SLUGS = ["NOTION_QUERY_DATABASE", "NOTION_FETCH_DATABASE"];
+
+/**
+ * Busca todos os filhos de um bloco/página, paginando até has_more=false ou
+ * até o orçamento acabar. topLevel=true propaga falha (erro real); aninhado
+ * engole a falha (ramo inacessível não derruba a página inteira).
+ */
+async function fetchAllChildren(
+  memberId: string,
+  blockId: string,
+  budget: Budget,
+  topLevel = false
+): Promise<any[]> {
+  const all: any[] = [];
+  let cursor: string | undefined;
+  do {
+    const args: Record<string, unknown> = { block_id: blockId, page_size: PAGE_SIZE };
+    if (cursor) args.start_cursor = cursor;
+    const result = await executeTool(memberId, "NOTION_FETCH_BLOCK_CONTENTS", args);
+    if (!result.ok) {
+      if (topLevel) {
+        throw new Error(`Falha ao buscar página do Notion via Composio: ${result.error}`);
+      }
+      break;
+    }
+    const blocks = extractBlocks(result.data);
+    all.push(...blocks);
+    budget.remaining -= blocks.length;
+    cursor = extractNextCursor(result.data);
+  } while (cursor && budget.remaining > 0);
+  return all;
+}
+
+/** Renderiza uma lista de blocos (com recursão nos filhos) em markdown. */
+async function renderBlockList(
+  memberId: string,
+  blocks: any[],
+  depth: number,
+  budget: Budget
+): Promise<string> {
+  const indent = "  ".repeat(depth);
+  const lines: string[] = [];
+
+  for (const block of blocks) {
+    if (budget.remaining <= 0) {
+      lines.push(`${indent}… (conteúdo truncado — limite de ${MAX_BLOCKS} blocos)`);
+      break;
+    }
+    const type: string = block?.type;
+    if (!type) continue;
+
+    if (type === "child_database") {
+      const table = await renderDatabase(memberId, block, budget);
+      if (table) lines.push(indentBlock(table, indent));
+      continue;
+    }
+
+    const md = renderBlock(block);
+    if (md) lines.push(indentBlock(md, indent));
+
+    // Recursão: subpágina sempre; demais containers só se has_children.
+    const recurse =
+      depth < MAX_DEPTH &&
+      (type === "child_page" || (block?.has_children && CONTAINER_TYPES.has(type)));
+    if (recurse && block?.id) {
+      const children = await fetchAllChildren(memberId, block.id, budget);
+      if (children.length > 0) {
+        const nested = await renderBlockList(memberId, children, depth + 1, budget);
+        if (nested) lines.push(nested);
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/** Prefixa cada linha de um bloco markdown com a indentação do nível. */
+function indentBlock(md: string, indent: string): string {
+  if (!indent) return md;
+  return md
+    .split("\n")
+    .map((l) => indent + l)
+    .join("\n");
+}
+
+/** Consulta as linhas de uma child_database e renderiza como tabela markdown. */
+async function renderDatabase(
+  memberId: string,
+  block: any,
+  budget: Budget
+): Promise<string> {
+  const dbId: string | undefined = block?.id;
+  const title =
+    block?.child_database?.title || richText(block?.child_database?.rich_text) || "Base de dados";
+  if (!dbId) return `🗃️ **${title}**`;
+
+  let rows: any[] = [];
+  for (const slug of DB_QUERY_SLUGS) {
+    const result = await executeTool(memberId, slug, {
+      database_id: dbId,
+      page_size: PAGE_SIZE,
+    });
+    if (result.ok) {
+      rows = extractBlocks(result.data);
+      break;
+    }
+  }
+  budget.remaining -= rows.length;
+
+  const table = renderDatabaseRows(rows);
+  return table
+    ? `**🗃️ ${title}**\n\n${table}`
+    : `🗃️ **${title}** (sem linhas acessíveis à integração)`;
+}
+
+/** Renderiza um array de páginas (linhas de base) como tabela markdown. */
+function renderDatabaseRows(rows: any[]): string {
+  if (!rows.length) return "";
+  // Ordem de colunas pela 1ª linha; união cobre props que faltem em algumas.
+  const cols = new Set<string>();
+  for (const r of rows) {
+    for (const k of Object.keys(r?.properties ?? {})) cols.add(k);
+  }
+  const colList = [...cols];
+  if (!colList.length) return "";
+
+  const header = `| ${colList.join(" | ")} |`;
+  const sep = `| ${colList.map(() => "---").join(" | ")} |`;
+  const body = rows
+    .map(
+      (r) => `| ${colList.map((c) => renderProp(r?.properties?.[c])).join(" | ")} |`
+    )
+    .join("\n");
+  return [header, sep, body].join("\n");
+}
+
+/** Achata um valor de propriedade do Notion pra célula de tabela. */
+function renderProp(prop: any): string {
+  if (!prop) return "";
+  const type: string = prop.type;
+  const v = prop[type];
+  let out = "";
+  switch (type) {
+    case "title":
+    case "rich_text":
+      out = richText(v);
+      break;
+    case "number":
+      out = v == null ? "" : String(v);
+      break;
+    case "select":
+    case "status":
+      out = v?.name ?? "";
+      break;
+    case "multi_select":
+      out = Array.isArray(v) ? v.map((s: any) => s?.name).filter(Boolean).join(", ") : "";
+      break;
+    case "date":
+      out = v?.start ? (v.end ? `${v.start} → ${v.end}` : v.start) : "";
+      break;
+    case "checkbox":
+      out = v ? "✓" : "✗";
+      break;
+    case "people":
+      out = Array.isArray(v) ? v.map((p: any) => p?.name).filter(Boolean).join(", ") : "";
+      break;
+    case "url":
+    case "email":
+    case "phone_number":
+      out = v ?? "";
+      break;
+    case "created_time":
+    case "last_edited_time":
+      out = v ?? "";
+      break;
+    case "formula":
+      out = v ? (v.string ?? v.number ?? (v.boolean != null ? String(v.boolean) : v.date?.start) ?? "") : "";
+      break;
+    case "relation":
+      out = Array.isArray(v) ? `${v.length} rel.` : "";
+      break;
+    case "rollup":
+      out = v?.array ? `${v.array.length} itens` : (v?.number != null ? String(v.number) : "");
+      break;
+    default:
+      out = richText(v?.rich_text) || "";
+  }
+  // Célula segura: sem pipe nem quebra de linha.
+  return String(out).replace(/\|/g, "\\|").replace(/\n+/g, " ").trim();
+}
+
 /** Composio normaliza o payload de formas diferentes — varre os shapes comuns. */
 function extractBlocks(data: unknown): any[] {
   const d = data as any;
@@ -123,6 +342,15 @@ function extractBlocks(data: unknown): any[] {
     d.blocks ??
     []
   );
+}
+
+/** Cursor de paginação do Notion, se há mais blocos. */
+function extractNextCursor(data: unknown): string | undefined {
+  const d = data as any;
+  if (!d) return undefined;
+  const hasMore = d.has_more ?? d.response_data?.has_more ?? d.data?.has_more ?? false;
+  const cursor = d.next_cursor ?? d.response_data?.next_cursor ?? d.data?.next_cursor ?? null;
+  return hasMore && cursor ? String(cursor) : undefined;
 }
 
 /** Junta um array de rich_text do Notion no texto plano. */
@@ -164,7 +392,7 @@ function renderBlock(block: any): string {
     case "divider":
       return "---";
     case "child_page":
-      return `📄 **${content.title ?? "Subpágina"}**`;
+      return `### 📄 ${content.title ?? "Subpágina"}`;
     case "child_database":
       return `🗃️ **${content.title ?? "Base de dados"}**`;
     default:

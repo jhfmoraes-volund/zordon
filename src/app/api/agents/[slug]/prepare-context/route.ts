@@ -349,6 +349,14 @@ async function buildVitoriaContext(thread: ThreadRow) {
     };
   }
 
+  // Planning Ceremony — o prompt rico vem do prepare-turn (single source of
+  // truth via vitoriaAgent.buildPrompt). Aqui só sinalizamos a surface pro
+  // daemon escolher endpoint de prompt + toolset; o estado vivo (propostas,
+  // sprint, notas) o agente puxa via tools (get_planning_state + list_*).
+  if (thread.channel === "planning") {
+    return { agent: { slug: "vitoria", name: "Vitoria" }, surface: "planning" };
+  }
+
   return {
     agent: { slug: "vitoria", name: "Vitoria" },
     surface: thread.channel,

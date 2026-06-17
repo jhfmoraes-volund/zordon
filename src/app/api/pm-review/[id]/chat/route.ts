@@ -111,15 +111,17 @@ export async function POST(
   const denied = await requireProjectViewApi(pm.projectId);
   if (denied) return denied;
 
-  // Lookup AgentMode('vitoria')
+  // Lookup AgentMode('vitoria'). Default = claude-daemon (regra 2026-06):
+  // linha ausente → daemon, igual à UI (/api/agent-mode GET) e à planning.
   const { data: modeRow } = await supabase
     .from("AgentMode")
     .select("mode")
     .eq("userId", member.id)
     .eq("agentSlug", "vitoria")
     .maybeSingle();
+  const mode = modeRow?.mode ?? "claude-daemon";
 
-  if (modeRow?.mode === "claude-daemon") {
+  if (mode === "claude-daemon") {
     if (!(await isDaemonOnline())) {
       const res = await pmReviewChatConnector.handle(req, pmReviewId);
       res.headers.set("X-Mode-Fallback", "true");
