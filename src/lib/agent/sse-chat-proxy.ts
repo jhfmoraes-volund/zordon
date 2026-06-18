@@ -6,6 +6,7 @@ import {
 } from "ai";
 import { db } from "@/lib/db";
 import { createChatTurn, enqueueChatJob } from "@/lib/dal/chat-turn";
+import type { Json } from "@/lib/supabase/database.types";
 
 /**
  * SSE proxy compartilhado pelos endpoints de chat (Vitor DS, Vitoria PM Review,
@@ -29,6 +30,9 @@ export function streamViaClaudeDaemon(args: {
   /** currentPath do cliente — persistido no ChatTurn pra route-scoping do Alpha
    *  (Fase 2). Opcional; surfaces que resolvem projeto pela entidade não passam. */
   routePath?: string | null;
+  /** Params do Ritual Playbook (audienceFloor + emphasisSections) — o caller
+   *  (ex: PM Review chat) resolve via getEffectivePlaybook + derivePromptParams. */
+  turnParams?: Json | null;
 }): Promise<Response> {
   return (async () => {
     const chatTurnId = await createChatTurn({
@@ -36,6 +40,7 @@ export function streamViaClaudeDaemon(args: {
       userMessageId: args.userMessageId,
       agentSlug: args.agentSlug,
       routePath: args.routePath ?? null,
+      turnParams: args.turnParams ?? null,
     });
 
     const stream = createUIMessageStream({

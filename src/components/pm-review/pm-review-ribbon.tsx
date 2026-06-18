@@ -5,6 +5,7 @@ import { ArrowLeft, ChartLine, Edit3, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { InsumosButton } from "@/components/agent/context-import";
+import { fmtWeek } from "@/lib/date-utils";
 
 type PMReviewStatus = "draft" | "published" | "archived";
 
@@ -34,30 +35,6 @@ const STATUS_TONE: Record<PMReviewStatus, "blue" | "green" | "muted"> = {
   published: "green",
   archived: "muted",
 };
-
-function fmtWeek(yyyyMmDd: string): string {
-  try {
-    const d = new Date(yyyyMmDd + "T00:00:00Z");
-    const day = String(d.getUTCDate()).padStart(2, "0");
-    const months = [
-      "jan",
-      "fev",
-      "mar",
-      "abr",
-      "mai",
-      "jun",
-      "jul",
-      "ago",
-      "set",
-      "out",
-      "nov",
-      "dez",
-    ];
-    return `Semana de ${day}/${months[d.getUTCMonth()]}`;
-  } catch {
-    return yyyyMmDd;
-  }
-}
 
 export function PMReviewRibbon({
   status,

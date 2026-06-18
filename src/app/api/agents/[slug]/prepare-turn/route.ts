@@ -60,7 +60,7 @@ export async function POST(
 
   const { data: turn } = await supabase
     .from("ChatTurn")
-    .select("id, threadId, agentSlug, routePath")
+    .select("id, threadId, agentSlug, routePath, turnParams")
     .eq("id", body.chatTurnId)
     .maybeSingle();
   if (!turn) {
@@ -90,7 +90,7 @@ export async function POST(
   // Monta params por slug + surface (Alpha usa o routePath do turn pra
   // enriquecer route-aware — mesma fonte do tool router).
   const { params: agentParams, sessionId, projectId } =
-    await resolveAgentParams(slug, thread, turn.routePath);
+    await resolveAgentParams(slug, thread, turn.routePath, turn.turnParams);
 
   const capabilities: Capabilities = {
     ...DEFAULT_CAPABILITIES,
@@ -144,6 +144,7 @@ async function resolveAgentParams(
   slug: string,
   thread: ThreadRow,
   routePath?: string | null,
+  turnParams?: unknown,
 ): Promise<{
   params: Record<string, unknown>;
   sessionId: string | null;
@@ -181,8 +182,19 @@ async function resolveAgentParams(
         .select("projectId")
         .eq("id", pmReviewId)
         .maybeSingle();
+      // Params do playbook (audiência + ênfase) — vêm do ChatTurn.turnParams,
+      // que o cron/manual populam via derivePromptParams.
+      const tp = (turnParams ?? {}) as {
+        audienceFloor?: "detail" | "executive";
+        emphasisSections?: string[];
+      };
       return {
-        params: { surface: "pm_review", pmReviewId },
+        params: {
+          surface: "pm_review",
+          pmReviewId,
+          audienceFloor: tp.audienceFloor ?? "detail",
+          emphasisSections: tp.emphasisSections ?? [],
+        },
         sessionId: null,
         projectId: pm?.projectId ?? null,
       };

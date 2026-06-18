@@ -348,7 +348,10 @@ function resolveProjectForNote(
 ): string | null {
   if (!detail?.folder_membership || folderToProject.size === 0) return null;
   for (const fm of detail.folder_membership) {
-    const projectId = folderToProject.get(fm.folder_id);
+    // v1.1.0 payload usa `id` (objeto-folder); `folder_id` é fallback tolerante.
+    const fid = fm.id ?? fm.folder_id;
+    if (!fid) continue;
+    const projectId = folderToProject.get(fid);
     if (projectId) return projectId;
   }
   return null;

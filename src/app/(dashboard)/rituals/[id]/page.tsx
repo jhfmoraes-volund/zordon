@@ -249,9 +249,9 @@ export default function RitualDetailPage({
     return <div className="p-6 text-muted-foreground text-sm">Carregando…</div>;
   }
 
-  const title = planning.sprintName
-    ? `Planning · ${planning.sprintName}`
-    : "Planning";
+  const headerSubtitle = planning.sprintName
+    ? `Sprint Planning · ${planning.sprintName}`
+    : "Sprint Planning";
   const backHref = `/projects/${planning.projectId}?tab=apps&app=ceremonies`;
 
   const ribbonStats = treeStats
@@ -282,6 +282,7 @@ export default function RitualDetailPage({
       onStop={stop}
       isOpen={mobileOpen}
       onOpenChange={setMobileOpen}
+      onClose={isMobile ? () => setMobileOpen(false) : undefined}
       planMode={planMode}
       onPlanModeChange={setPlanMode}
       composerSubmitDisabled={isClosed}
@@ -294,7 +295,10 @@ export default function RitualDetailPage({
 
   return (
     <div className="-mx-3 -my-4 flex h-[calc(100svh-3rem)] flex-col overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
-      <PageTitle title={title} />
+      <PageTitle
+        title={planning.projectName ?? "Sprint Planning"}
+        subtitle={headerSubtitle}
+      />
 
       <PlanningRibbon
         planning={planning}

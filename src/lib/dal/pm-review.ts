@@ -95,6 +95,7 @@ export type PMReviewSummary = {
 };
 
 export type PMReviewDetail = PMReviewSummary & {
+  projectName: string | null;
   reportMarkdown: string | null;
   createdAt: string;
   updatedAt: string;
@@ -241,7 +242,7 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
   const { data: row, error } = await supabase
     .from("PMReview")
     .select(
-      "*, facilitator:Member!PMReview_facilitatorId_fkey(name)",
+      "*, facilitator:Member!PMReview_facilitatorId_fkey(name), project:Project!PMReview_projectId_fkey(name)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -289,6 +290,7 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
   if (notesRes.error) throw notesRes.error;
 
   const fac = row.facilitator as { name: string | null } | null;
+  const proj = row.project as { name: string | null } | null;
   const allNotes = (notesRes.data ?? []) as PMReviewNoteRow[];
   const notes = allNotes.filter((n) => n.audience !== "executive");
   const executiveNotes = allNotes.filter((n) => n.audience === "executive");
@@ -316,6 +318,7 @@ export async function getPMReview(id: string): Promise<PMReviewDetail | null> {
     linkedTranscriptCount: transcriptsRes.data?.length ?? 0,
     noteCountByKind,
     noteTotal,
+    projectName: proj?.name ?? null,
     reportMarkdown: row.reportMarkdown,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

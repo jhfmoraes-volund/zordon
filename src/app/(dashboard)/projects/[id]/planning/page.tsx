@@ -31,6 +31,7 @@ import type {
 } from "@/lib/dal/planning-session";
 
 type SessionWithPrds = PlanningSessionRow & {
+  projectName: string | null;
   prds: PlanningSessionPRDWithSource[];
 };
 
@@ -358,6 +359,7 @@ export default function PlanningSessionPage({
       onStop={stop}
       isOpen={mobileOpen}
       onOpenChange={setMobileOpen}
+      onClose={isMobile ? () => setMobileOpen(false) : undefined}
       planMode={planMode}
       onPlanModeChange={setPlanMode}
       composerSubmitDisabled={isApproved}
@@ -370,7 +372,12 @@ export default function PlanningSessionPage({
 
   return (
     <div className="-mx-3 -my-4 flex h-[calc(100svh-3rem)] flex-col overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
-      <PageTitle title={session.title} />
+      <PageTitle
+        title={session.projectName ?? session.title}
+        subtitle={`${session.title} · ${session.sprintCount} sprint${
+          session.sprintCount === 1 ? "" : "s"
+        }`}
+      />
 
       <ReleasePlanningRibbon
         title={session.title}

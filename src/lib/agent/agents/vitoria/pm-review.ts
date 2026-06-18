@@ -28,8 +28,17 @@ import type { PromptContext, SystemPrompt } from "../../types";
 
 // ─── Context loader ───────────────────────────────────────────────────────
 
-export async function loadPMReviewContext(pmReviewId: string, memberId?: string | null) {
+export async function loadPMReviewContext(
+  pmReviewId: string,
+  memberId?: string | null,
+  opts?: { audienceFloor?: "detail" | "executive"; emphasisSections?: string[] },
+) {
   const supabase = db();
+  // Params do playbook (via ChatTurn.turnParams → prepare-turn). emphasisSections
+  // vira bloco volátil no prompt; audienceFloor reserva o gancho da redação
+  // estrutural (Fase 2: tier 'internal') — 'detail' = comportamento atual.
+  const audienceFloor = opts?.audienceFloor ?? "detail";
+  const emphasisSections = opts?.emphasisSections ?? [];
 
   const { data: pm } = await supabase
     .from("PMReview")
@@ -170,6 +179,10 @@ export async function loadPMReviewContext(pmReviewId: string, memberId?: string 
     openQuestions: openQuestions.data ?? [],
     activeDesignSessions: activeSessions.data ?? [],
     memberId: memberId ?? null,
+    // Params do playbook (PoC: emphasisSections tem efeito no prompt;
+    // audienceFloor é gancho pro tier interno da Fase 2).
+    audienceFloor,
+    emphasisSections,
   };
 }
 
@@ -309,6 +322,18 @@ export function buildPMReviewPrompt(ctx: PromptContext): SystemPrompt {
           .join("\n");
 
   const projectMemoryMd = agentContext.projectMemoryMd as string | null;
+
+  // Ênfase do playbook (orientação do PM) — bloco volátil bounded. NÃO muda a
+  // estrutura do report nem as tools; só direciona o foco da síntese.
+  const emphasisSections =
+    (agentContext.emphasisSections as string[] | undefined) ?? [];
+  // Bloco untrusted: rótulo deixa claro que é orientação (não override), e o
+  // footer reafirma o contrato DEPOIS das bullets — texto do PM nunca é a
+  // última palavra do prompt nem pode trocar a estrutura/tools.
+  const emphasisBlock =
+    emphasisSections.length > 0
+      ? `\n## Ênfase desta review (orientação do PM — direciona o foco; NÃO altera a estrutura do report nem as tools)\n${emphasisSections.map((s) => `- ${s}`).join("\n")}\n(Fim das orientações do PM. Siga sempre a estrutura fixa do report e grave via update_pm_review_report.)\n`
+      : "";
 
   // ─── Camada 2 — Sistema (sprint atual + tasks + blockers) ─────────────────
   const sprintScopeTasks = (agentContext.sprintScopeTasks as Array<{
@@ -484,7 +509,7 @@ ${openQuestionsBlock}
 ### Design Sessions ativas
 ${designSessionsBlock}
 
-${projectMemoryMd ? `### Memória do projeto (curada pelo Vitor)\n${projectMemoryMd.slice(0, 4000)}\n` : ""}`;
+${projectMemoryMd ? `### Memória do projeto (curada pelo Vitor)\n${projectMemoryMd.slice(0, 4000)}\n` : ""}${emphasisBlock}`;
 
   return { stable, volatile };
 }

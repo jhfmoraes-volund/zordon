@@ -1048,6 +1048,7 @@ export type Database = {
           threadId: string
           tokensIn: number | null
           tokensOut: number | null
+          turnParams: Json | null
           userMessageId: string
         }
         Insert: {
@@ -1067,6 +1068,7 @@ export type Database = {
           threadId: string
           tokensIn?: number | null
           tokensOut?: number | null
+          turnParams?: Json | null
           userMessageId: string
         }
         Update: {
@@ -1086,6 +1088,7 @@ export type Database = {
           threadId?: string
           tokensIn?: number | null
           tokensOut?: number | null
+          turnParams?: Json | null
           userMessageId?: string
         }
         Relationships: [
@@ -6873,6 +6876,75 @@ export type Database = {
           },
         ]
       }
+      RitualPlaybook: {
+        Row: {
+          authoredById: string | null
+          capabilities: Json
+          createdAt: string
+          enabled: boolean
+          id: string
+          projectId: string
+          ritualType: string
+          updatedAt: string
+        }
+        Insert: {
+          authoredById?: string | null
+          capabilities?: Json
+          createdAt?: string
+          enabled?: boolean
+          id?: string
+          projectId: string
+          ritualType: string
+          updatedAt?: string
+        }
+        Update: {
+          authoredById?: string | null
+          capabilities?: Json
+          createdAt?: string
+          enabled?: boolean
+          id?: string
+          projectId?: string
+          ritualType?: string
+          updatedAt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "RitualPlaybook_authoredById_fkey"
+            columns: ["authoredById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "RitualPlaybook_authoredById_fkey"
+            columns: ["authoredById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "RitualPlaybook_authoredById_fkey"
+            columns: ["authoredById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "RitualPlaybook_authoredById_fkey"
+            columns: ["authoredById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "RitualPlaybook_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       Sprint: {
         Row: {
           createdAt: string
@@ -8605,6 +8677,7 @@ export type Database = {
       is_guest: { Args: never; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
       kick_granola_import_drain: { Args: never; Returns: undefined }
+      kick_pm_review_refresh: { Args: never; Returns: undefined }
       kick_project_insight_drain: { Args: never; Returns: undefined }
       kick_wiki_daily: { Args: never; Returns: undefined }
       next_task_reference: { Args: { p_project_id: string }; Returns: string }
@@ -8745,6 +8818,7 @@ export type Database = {
         | "document"
         | "notion"
         | "gdrive_file"
+        | "design_system"
       OpportunityStatus:
         | "discovery"
         | "evaluating"
@@ -8893,6 +8967,7 @@ export const Constants = {
         "document",
         "notion",
         "gdrive_file",
+        "design_system",
       ],
       OpportunityStatus: [
         "discovery",

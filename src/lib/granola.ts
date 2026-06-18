@@ -36,9 +36,17 @@ export interface GranolaTranscriptLine {
 /**
  * A folder a note belongs to. Granola's v1.1.0 `folder_membership` returns the
  * direct container plus ancestor folders, so a note can list several entries.
+ * The live payload is the full folder object (`{ object, id, name,
+ * parent_folder_id }`) — the folder id is `id`, NOT `folder_id`. `folder_id` is
+ * kept optional for tolerance against older/variant payloads. Read via `id ??
+ * folder_id` (see resolveProjectForNote in granola-auto-import).
  */
 export interface GranolaFolderMembership {
-  folder_id: string;
+  id?: string;
+  folder_id?: string;
+  object?: string;
+  name?: string | null;
+  parent_folder_id?: string | null;
 }
 
 export interface GranolaNoteDetail extends GranolaNoteListItem {

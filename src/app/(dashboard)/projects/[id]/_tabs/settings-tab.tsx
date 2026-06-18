@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SettingsPanel } from "@/components/story-hierarchy";
+import { DesignSystemUpload } from "@/components/projects/design-system-upload";
 import {
   adaptModule,
   adaptPersona,
@@ -201,6 +202,9 @@ export function SettingsTab({
           </div>
         </CardContent>
       </Card>
+
+      {/* Design System do projeto */}
+      <DesignSystemUpload projectId={project.id} />
 
       <SettingsPanel
         modules={modules}

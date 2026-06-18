@@ -15,6 +15,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { toast } from "sonner";
+import { fmtWeek } from "@/lib/date-utils";
 import type { PMReviewDetail } from "@/lib/dal/pm-review";
 import { PMReviewReport } from "@/components/pm-review/pm-review-report";
 import { PMReviewRibbon } from "@/components/pm-review/pm-review-ribbon";
@@ -253,6 +254,7 @@ export default function PMReviewPage({
       onStop={stop}
       isOpen={mobileOpen}
       onOpenChange={setMobileOpen}
+      onClose={isMobile ? () => setMobileOpen(false) : undefined}
       planMode={planMode}
       onPlanModeChange={setPlanMode}
       fallbackActive={isFallback}
@@ -262,7 +264,10 @@ export default function PMReviewPage({
 
   return (
     <div className="-mx-3 -my-4 flex h-[calc(100svh-3rem)] flex-col overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
-      <PageTitle title={`PM Review · ${pmReview.referenceWeek}`} />
+      <PageTitle
+        title={pmReview.projectName ?? "PM Review"}
+        subtitle={`PM Review · ${fmtWeek(pmReview.referenceWeek)}`}
+      />
 
       <PMReviewRibbon
         status={pmReview.status}

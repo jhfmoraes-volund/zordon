@@ -55,14 +55,23 @@ export async function createSession(
  */
 export async function getSession(
   sessionId: string,
-): Promise<(PlanningSessionRow & { prds: PlanningSessionPRDWithSource[] }) | null> {
+): Promise<
+  | (PlanningSessionRow & {
+      projectName: string | null;
+      prds: PlanningSessionPRDWithSource[];
+    })
+  | null
+> {
   const { data: session, error: sessionError } = await db()
     .from("PlanningSession")
-    .select("*")
+    .select("*, project:Project!PlanningSession_projectId_fkey(name)")
     .eq("id", sessionId)
     .maybeSingle();
   if (sessionError) throw sessionError;
   if (!session) return null;
+  const { project, ...sessionRow } = session as PlanningSessionRow & {
+    project: { name: string | null } | null;
+  };
 
   const { data: prds, error: prdsError } = await db()
     .from("PlanningSessionPRD")
@@ -97,7 +106,8 @@ export async function getSession(
   });
 
   return {
-    ...session,
+    ...sessionRow,
+    projectName: project?.name ?? null,
     prds: hydrated,
   };
 }

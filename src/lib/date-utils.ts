@@ -52,6 +52,36 @@ export function fmtDateNumeric(d: DateInput): string {
   return date.toLocaleDateString(LOCALE, { day: "2-digit", month: "2-digit" });
 }
 
+const MONTHS_SHORT = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez",
+];
+
+/**
+ * "Semana de 16/jun" — rótulo da semana a partir de um YYYY-MM-DD (segunda).
+ * UTC-safe de propósito: referenceWeek é date-only; parsear no fuso local
+ * deslocaria pra o domingo anterior em fusos a oeste de UTC.
+ */
+export function fmtWeek(yyyyMmDd: string): string {
+  try {
+    const d = new Date(yyyyMmDd + "T00:00:00Z");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `Semana de ${day}/${MONTHS_SHORT[d.getUTCMonth()]}`;
+  } catch {
+    return yyyyMmDd;
+  }
+}
+
 /** "qua, 27 mai 2026" — weekday curto + data média. Lista de reuniões. */
 export function fmtWeekdayShort(d: DateInput): string {
   const date = toDate(d);

@@ -6,9 +6,8 @@
  * Cada arquivo = um ritual (Sprint Planning / PM Review / Release Planning) —
  * lista única, sem colunas: publicado/rascunho é só tag na row. Criação e
  * edição reusam integralmente os sheets existentes (PlanningSheet,
- * PMReviewSheet, ReleasePlanningSheet) com o mesmo wiring da
- * ProjectCeremoniesTab. A view mobile continua sendo a ProjectCeremoniesTab
- * dentro do sheet.
+ * PMReviewSheet, ReleasePlanningSheet). Superfície única: desktop (janela no
+ * canvas) e mobile (dentro do ResponsiveSheet) renderizam esta mesma view.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -224,9 +223,12 @@ export function RituaisFileView({
   const handlePickRitual = useCallback((type: RitualType) => {
     if (type === "pm_review") setPMReviewSheetOpen(true);
     else if (type === "sprint_planning") setPlanningSheetOpen(true);
-    else {
+    else if (type === "release_planning") {
       setEditingRelease(null);
       setReleaseSheetOpen(true);
+    } else {
+      // Kickoff Interno/Externo: fluxo ainda em definição — só no picker.
+      toast.info("Em breve — o fluxo deste ritual ainda está em definição.");
     }
   }, []);
 
@@ -392,7 +394,6 @@ export function RituaisFileView({
         <div className="flex items-center gap-2">
           <RitualsSettingsSheet
             projectId={projectId}
-            projectName={projectName}
             canConfigure={canManage || canCreatePMReview}
           />
           {(canManage || canCreatePMReview) && (

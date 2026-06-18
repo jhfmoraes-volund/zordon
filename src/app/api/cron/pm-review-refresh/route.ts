@@ -16,6 +16,11 @@ import {
   linkMeetingToPMReview,
   linkTranscriptToPMReview,
 } from "@/lib/dal/pm-review";
+import {
+  getEffectivePlaybook,
+  resolveLoadContextSources,
+  derivePromptParams,
+} from "@/lib/dal/ritual-playbook";
 import { ensurePMReviewThread } from "@/lib/agent/context";
 import { createChatTurn, enqueueChatJob } from "@/lib/dal/chat-turn";
 
@@ -94,15 +99,14 @@ export async function POST(req: Request) {
 
   for (const [projectId, ownerId] of projectOwner) {
     try {
-      // 1. ContextSources roteadas da semana (Fase 1.3 setou projectId).
-      const { data: weekSources } = await admin
-        .from("ContextSource")
-        .select('id, "meetingId", "createdAt"')
-        .eq("source", "granola")
-        .eq("projectId", projectId)
-        .gte("capturedAt", weekStartTs)
-        .lt("capturedAt", weekEndTs);
-      const sources = weekSources ?? [];
+      // 1. Playbook efetivo → fontes a linkar (capabilities load_context).
+      //    Sem playbook autorado, o default sintetizado = janela da semana do
+      //    Granola, idêntico ao comportamento pré-playbook (zero-breaking).
+      const caps = await getEffectivePlaybook(admin, projectId, "pm_review");
+      const sources = await resolveLoadContextSources(admin, projectId, caps, {
+        startTs: weekStartTs,
+        endTs: weekEndTs,
+      });
       if (sources.length === 0) {
         summary.noop++;
         continue;
@@ -129,7 +133,7 @@ export async function POST(req: Request) {
         ? new Date(existing.reportGeneratedAt as string).getTime()
         : 0;
       const fresh = sources.filter(
-        (s) => new Date(s.createdAt as string).getTime() > sinceMs,
+        (s) => new Date(s.createdAt).getTime() > sinceMs,
       );
       if (fresh.length === 0) {
         summary.noop++;
@@ -165,15 +169,9 @@ export async function POST(req: Request) {
 
       // 6. EntityLink (idempotente) das transcrições + reuniões da semana.
       for (const s of sources) {
-        await linkTranscriptToPMReview({
-          pmReviewId,
-          transcriptRefId: s.id as string,
-        });
+        await linkTranscriptToPMReview({ pmReviewId, transcriptRefId: s.id });
         if (s.meetingId) {
-          await linkMeetingToPMReview({
-            pmReviewId,
-            meetingId: s.meetingId as string,
-          });
+          await linkMeetingToPMReview({ pmReviewId, meetingId: s.meetingId });
         }
       }
 
@@ -201,10 +199,13 @@ export async function POST(req: Request) {
       if (msgErr || !msg) {
         throw new Error(`ChatMessage insert failed: ${msgErr?.message}`);
       }
+      // Params do playbook (audiência + ênfase) → daemon via ChatTurn.turnParams,
+      // gravados já no create (mesmo caminho do manual "Sintetizar").
       const chatTurnId = await createChatTurn({
         threadId,
         userMessageId: msg.id as string,
         agentSlug: "vitoria",
+        turnParams: derivePromptParams(caps),
       });
       await enqueueChatJob({
         chatTurnId,

@@ -9,6 +9,7 @@ import * as githubAdapter from "@/lib/context-sources/adapters/github";
 import * as documentAdapter from "@/lib/context-sources/adapters/document";
 import * as notionAdapter from "@/lib/context-sources/adapters/notion";
 import * as driveAdapter from "@/lib/context-sources/adapters/drive";
+import * as designSystemAdapter from "@/lib/context-sources/adapters/design-system";
 
 /**
  * Factory de tool read_context_source — compartilhada entre Vitoria e Vitor.
@@ -18,7 +19,7 @@ import * as driveAdapter from "@/lib/context-sources/adapters/drive";
 export function createReadContextSourceTool() {
   return tool({
     description:
-      "Lê o conteúdo de uma fonte de contexto linkada (transcript, meeting, documento/anexo, planilha, GitHub, Notion). Use para extrair insights detalhados antes de criar notas ou propostas — inclusive para ler documentos anexados (PDF/DOCX/HTML/TXT/MD/CSV) ou páginas do Notion pelo seu contextSourceId.",
+      "Lê o conteúdo de uma fonte de contexto linkada (transcript, meeting, documento/anexo, planilha, GitHub, Notion, design system do projeto). Use para extrair insights detalhados antes de criar notas ou propostas — inclusive para ler documentos anexados (PDF/DOCX/HTML/TXT/MD/CSV), o design system do projeto (HTML cru com tokens/componentes) ou páginas do Notion pelo seu contextSourceId.",
     inputSchema: z.object({
       sourceId: z.string().uuid().describe("ID do ContextSource"),
     }),
@@ -86,6 +87,12 @@ export function createReadContextSourceTool() {
             break;
           case "gdrive_file":
             resolvedContent = await driveAdapter.resolveContent(
+              supabase,
+              source
+            );
+            break;
+          case "design_system":
+            resolvedContent = await designSystemAdapter.resolveContent(
               supabase,
               source
             );

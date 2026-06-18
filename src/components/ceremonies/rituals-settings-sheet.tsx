@@ -11,11 +11,10 @@ import {
   ResponsiveSheetDescription,
   ResponsiveSheetBody,
 } from "@/components/ui/responsive-sheet";
-import { GranolaFolderCard } from "@/app/(dashboard)/projects/[id]/_tabs/granola-folder-card";
+import { AutomationRitualCard } from "@/components/ceremonies/automation-ritual-card";
 
 type Props = {
   projectId: string;
-  projectName: string;
   canConfigure: boolean;
 };
 
@@ -26,7 +25,6 @@ type Props = {
  */
 export function RitualsSettingsSheet({
   projectId,
-  projectName,
   canConfigure,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -51,11 +49,10 @@ export function RitualsSettingsSheet({
           </ResponsiveSheetDescription>
         </ResponsiveSheetHeader>
         <ResponsiveSheetBody className="space-y-4">
-          {/* Mais cards de configuração de rituais podem ser adicionados aqui. */}
-          <GranolaFolderCard
+          {/* Um card por tipo de ritual. PoC: PM Review. */}
+          <AutomationRitualCard
+            ritualType="pm_review"
             projectId={projectId}
-            projectName={projectName}
-            referenceKey={null}
           />
         </ResponsiveSheetBody>
       </ResponsiveSheetContent>

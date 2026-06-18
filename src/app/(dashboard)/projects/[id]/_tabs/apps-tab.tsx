@@ -30,7 +30,6 @@ import {
   ResponsiveSheetHeader,
   ResponsiveSheetTitle,
 } from "@/components/ui/responsive-sheet";
-import { ProjectCeremoniesTab } from "@/components/project-ceremonies-tab";
 import { ProjectDriveTab } from "@/components/project-drive/drive-tab";
 import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { CreateAppDialog } from "@/components/apps/create-app-dialog";
@@ -141,20 +140,16 @@ export function AppsTab({
     }
   }
 
-  /** Superfície mobile (dentro do ResponsiveSheet) — componentes originais. */
+  /**
+   * Superfície mobile (dentro do ResponsiveSheet). Rituais agora usa a mesma
+   * file view do desktop (RituaisFileView, via renderDesktopSurface) — superfície
+   * única, sem o componente antigo de duas colunas. Sessions ainda re-hospeda a
+   * superfície original; file view dele é o próximo incremento.
+   */
   function renderMobileSurface(app: AppDef) {
     if (app.key === "sessions") {
       return (
         <ProjectSessionsTab
-          projectId={projectId}
-          projectName={projectName}
-          canManage={canManage}
-        />
-      );
-    }
-    if (app.key === "ceremonies") {
-      return (
-        <ProjectCeremoniesTab
           projectId={projectId}
           projectName={projectName}
           canManage={canManage}

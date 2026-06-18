@@ -65,6 +65,7 @@ export type PlanningSummary = {
 
 /** Shape de retorno do detalhe — usa no command center. */
 export type PlanningDetail = PlanningSummary & {
+  projectName: string | null;
   briefingGeneratedAt: string | null;
   archivedAt: string | null;
   projectRepo: {
@@ -219,7 +220,7 @@ export async function getPlanningById(
       *,
       sprint:Sprint(name),
       facilitator:Member!PlanningCeremony_facilitatorId_fkey(name),
-      project:Project(githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifestUpdatedAt),
+      project:Project(name, githubRepoOwner, githubRepoName, githubDefaultBranch, repoManifestUpdatedAt),
       links:EntityLink!EntityLink_planningCeremonyId_fkey(
         meetingId, contextSourceId, linkedAt, linkedById, weight, note,
         meeting:Meeting!EntityLink_meetingId_fkey(id, title, date, visibility, kind),
@@ -257,6 +258,7 @@ export async function getPlanningById(
     sprint: { name: string } | null;
     facilitator: { name: string } | null;
     project: {
+      name: string | null;
       githubRepoOwner: string | null;
       githubRepoName: string | null;
       githubDefaultBranch: string | null;
@@ -293,6 +295,7 @@ export async function getPlanningById(
   return {
     id: r.id,
     projectId: r.projectId,
+    projectName: r.project?.name ?? null,
     sprintId: r.sprintId,
     sprintName: r.sprint?.name ?? null,
     phase: r.phase as PlanningPhase,

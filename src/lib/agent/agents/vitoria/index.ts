@@ -43,7 +43,10 @@ export const vitoriaAgent: AgentDefinition = {
     const surface = (req.params.surface as string | undefined) ?? "planning";
     if (surface === "pm_review") {
       const pmReviewId = req.params.pmReviewId as string;
-      return loadPMReviewContext(pmReviewId, req.memberId ?? null);
+      return loadPMReviewContext(pmReviewId, req.memberId ?? null, {
+        audienceFloor: req.params.audienceFloor as "detail" | "executive" | undefined,
+        emphasisSections: req.params.emphasisSections as string[] | undefined,
+      });
     }
     if (surface === "release_planning") {
       const sessionId = req.params.sessionId as string;

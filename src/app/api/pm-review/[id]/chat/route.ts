@@ -19,6 +19,10 @@ import {
   streamViaClaudeDaemon,
   isDaemonOnline,
 } from "@/lib/agent/sse-chat-proxy";
+import {
+  getEffectivePlaybook,
+  derivePromptParams,
+} from "@/lib/dal/ritual-playbook";
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 200;
@@ -178,10 +182,22 @@ async function handleClaudeDaemonChat(
     );
   }
 
+  // Aplica o Ritual Playbook também no caminho manual (mesma derivação do cron),
+  // pra o "Sintetizar report" seguir a ênfase autorada pelo PM.
+  const { data: pmRow } = await supabase
+    .from("PMReview")
+    .select("projectId")
+    .eq("id", pmReviewId)
+    .maybeSingle();
+  const caps = pmRow?.projectId
+    ? await getEffectivePlaybook(supabase, pmRow.projectId, "pm_review")
+    : [];
+
   return streamViaClaudeDaemon({
     threadId,
     userMessageId: userMessage.id,
     agentSlug: "vitoria",
     ownerId: memberId,
+    turnParams: derivePromptParams(caps),
   });
 }

@@ -4,7 +4,7 @@
 // em CLI.
 import { db } from "@/lib/db";
 import { createJob } from "@/lib/forge/dal/job";
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
 
 type ChatTurnRow = Database["public"]["Tables"]["ChatTurn"]["Row"];
 
@@ -47,6 +47,9 @@ export async function createChatTurn(args: {
    *  resolver routeProjectId/routeSprintId das tools route-scoped do Alpha
    *  (Fase 2). Null = global. */
   routePath?: string | null;
+  /** Params resolvidos do Ritual Playbook (audienceFloor + emphasisSections),
+   *  lidos pelo prepare-turn. Null = sem playbook (comportamento padrão). */
+  turnParams?: Json | null;
 }): Promise<string> {
   const supabase = db();
   const { data: turn, error: turnErr } = await supabase
@@ -59,6 +62,7 @@ export async function createChatTurn(args: {
       systemPrompt: "", // hydrated by daemon via prepare-turn
       status: "queued",
       routePath: args.routePath ?? null,
+      turnParams: args.turnParams ?? null,
     })
     .select("id")
     .single();
