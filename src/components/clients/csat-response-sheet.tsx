@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field, FormBody } from "@/components/ui/field";
+import { DatePicker } from "@/components/ui/date-picker";
 import type { CsatResponse } from "@/lib/supabase/types";
 
 export type CsatMember = { id: string; name: string };
@@ -139,11 +140,11 @@ export function CsatResponseSheet({
               <Field name="interviewedAt" required>
                 <Field.Label>Data</Field.Label>
                 <Field.Control>
-                  <Input
-                    type="date"
+                  <DatePicker
+                    data-slot="button"
                     value={form.interviewedAt}
-                    onChange={(e) =>
-                      setForm({ ...form, interviewedAt: e.target.value })
+                    onChange={(iso) =>
+                      setForm({ ...form, interviewedAt: iso })
                     }
                   />
                 </Field.Control>

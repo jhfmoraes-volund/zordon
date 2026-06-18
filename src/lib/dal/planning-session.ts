@@ -229,7 +229,10 @@ export async function ensureReleasePlanningCeremony(
       .select("id, phase")
       .eq("id", existingId)
       .maybeSingle();
-    if (cer && cer.phase !== "archived") return cer.id;
+    // Reusa só enquanto a companion está VIVA. Após um /complete (phase=closed)
+    // ou arquivamento, cada novo lote de staging ganha uma companion fresca —
+    // o /complete é append-only e irreversível, não dá pra reabrir o mesmo.
+    if (cer && cer.phase !== "archived" && cer.phase !== "closed") return cer.id;
   }
 
   const now = new Date().toISOString();

@@ -12,6 +12,7 @@ import {
   ResponsiveSheetFooter,
 } from "@/components/ui/responsive-sheet";
 import { Field, FormBody } from "@/components/ui/field";
+import { DatePicker } from "@/components/ui/date-picker";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -240,12 +241,11 @@ export function PlanningSheet({
                 <Field name="scheduledFor">
                   <Field.Label>Data agendada</Field.Label>
                   <Field.Control>
-                    <input
-                      type="date"
-                      id="scheduledFor"
+                    <DatePicker
+                      data-slot="button"
+                      clearable
                       value={scheduledFor}
-                      onChange={(e) => setScheduledFor(e.target.value)}
-                      className="flex h-[var(--field-h)] w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      onChange={setScheduledFor}
                     />
                   </Field.Control>
                 </Field>

@@ -228,12 +228,19 @@ async function applyCreate(
   // Protege contra Alpha propondo create sem sprint+status (resultado seria
   // task "todo" órfã, que não aparece no kanban da sprint nem no backlog).
   const defaultStatus = sprintId ? "todo" : "backlog";
+  const status = (p.status as string) ?? defaultStatus;
+  // Backfill: task criada já 'done' carrega quando foi entregue (payload.doneAt
+  // explícito > dueDate > agora) pra timeline/métricas não ficarem furadas.
+  const doneAt =
+    status === "done"
+      ? ((p.doneAt as string) ?? (p.dueDate as string) ?? new Date().toISOString())
+      : null;
   const { error: insErr } = await supabase.from("Task").insert({
     id: taskId,
     reference: reference as string,
     title: (p.title as string) ?? "Nova task",
     description: (p.description as string) ?? null,
-    status: (p.status as string) ?? defaultStatus,
+    status,
     type: (p.type as string) ?? "feature",
     scope: (p.scope as string) ?? "small",
     complexity: (p.complexity as string) ?? "medium",
@@ -242,6 +249,7 @@ async function applyCreate(
     functionPoints: (p.functionPoints as number | null) ?? null,
     notes: (p.notes as string) ?? null,
     dueDate: (p.dueDate as string) ?? null,
+    doneAt,
     projectId: action.projectId,
     sprintId,
     userStoryId,

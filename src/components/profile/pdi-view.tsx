@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -535,10 +536,10 @@ function ActionDialog({
 
             <div className="space-y-1.5">
               <Label>Prazo</Label>
-              <Input
-                type="date"
+              <DatePicker
+                clearable
                 value={form.dueAt}
-                onChange={(e) => setForm({ ...form, dueAt: e.target.value })}
+                onChange={(iso) => setForm({ ...form, dueAt: iso })}
               />
             </div>
           </div>

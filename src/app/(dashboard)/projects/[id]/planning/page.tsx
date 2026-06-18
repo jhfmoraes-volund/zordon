@@ -24,6 +24,7 @@ import { PlanningBoard } from "@/components/planning-session/board";
 import { ReleasePlanningRibbon } from "@/components/planning-session/release-planning-ribbon";
 import { ReleasePlanningSheet } from "@/components/planning-session/release-planning-sheet";
 import { ReleasePlanningContextSheet } from "@/components/planning-session/context-sheet";
+import { ReleasePlanningProposals } from "@/components/planning-session/release-planning-proposals";
 import { PrdPicker } from "@/components/planning-session/prd-picker";
 import type {
   PlanningSessionRow,
@@ -55,6 +56,9 @@ export default function PlanningSessionPage({
   const [threadId, setThreadId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [input, setInput] = useState("");
+  // Bump pra re-fetchar as propostas de task (companion ceremony) quando um turno
+  // da Vitoria termina — ela pode ter proposto/editado/descartado tasks via tool.
+  const [actionsRefresh, setActionsRefresh] = useState(0);
 
   const threadIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -146,6 +150,7 @@ export default function PlanningSessionPage({
     prevStatusRef.current = status;
     if ((prev === "streaming" || prev === "submitted") && status === "ready") {
       void loadSession();
+      setActionsRefresh((n) => n + 1);
     }
   }, [status, loadSession]);
 
@@ -399,7 +404,16 @@ export default function PlanningSessionPage({
 
       {/* Command center: board de PRDs por sprint (esquerda) + chat Vitoria (direita) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] gap-4 p-4">
-        <div className="surface overflow-y-auto min-h-0 p-4">
+        <div className="surface overflow-y-auto min-h-0 p-4 space-y-4">
+          <ReleasePlanningProposals
+            planningCeremonyId={session.planningCeremonyId}
+            refreshKey={actionsRefresh}
+            readOnly={isApproved}
+            onApplied={() => {
+              void loadSession();
+              setActionsRefresh((n) => n + 1);
+            }}
+          />
           {session.prds.length === 0 ? (
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
               <p className="mb-4">

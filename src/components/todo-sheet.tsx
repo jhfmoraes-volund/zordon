@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
@@ -399,11 +399,11 @@ function TodoSheetBody({
         )}
 
         <FieldBlock label="Prazo" icon={<Calendar className="h-3.5 w-3.5" />}>
-          <Input
-            type="date"
+          <DatePicker
             value={draft.dueDate}
-            onChange={(e) => handleDueDate(e.target.value)}
-            className="h-8 text-sm"
+            onChange={handleDueDate}
+            clearable
+            className="h-8"
           />
         </FieldBlock>
 

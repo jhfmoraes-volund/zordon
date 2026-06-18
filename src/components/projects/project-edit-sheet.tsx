@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Field, FormBody } from "@/components/ui/field";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -427,20 +428,22 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                   <Field name="project-start">
                     <Field.Label>Data Início</Field.Label>
                     <Field.Control>
-                      <Input
-                        type="date"
+                      <DatePicker
+                        data-slot="button"
+                        clearable
                         value={form.startDate}
-                        onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                        onChange={(iso) => setForm({ ...form, startDate: iso })}
                       />
                     </Field.Control>
                   </Field>
                   <Field name="project-end">
                     <Field.Label>Estimativa de fim</Field.Label>
                     <Field.Control>
-                      <Input
-                        type="date"
+                      <DatePicker
+                        data-slot="button"
+                        clearable
                         value={form.endDate}
-                        onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                        onChange={(iso) => setForm({ ...form, endDate: iso })}
                       />
                     </Field.Control>
                   </Field>

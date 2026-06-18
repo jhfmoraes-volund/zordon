@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -345,11 +346,7 @@ export function MeetingSheet({
           {/* Data */}
           <div className="grid gap-2 max-w-xs">
             <Label>Data da reunião</Label>
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+            <DatePicker value={date} onChange={setDate} />
           </div>
 
           {/* Título */}

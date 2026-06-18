@@ -12,6 +12,28 @@ import * as driveAdapter from "@/lib/context-sources/adapters/drive";
 import * as designSystemAdapter from "@/lib/context-sources/adapters/design-system";
 
 /**
+ * Teto de caracteres por leitura. O resultado da tool entra no message array
+ * e é reenviado em CADA step do loop (maxSteps até 40), então um único insumo
+ * gigante (ex: dump JSON de 3MB importado como `document`) estoura a janela de
+ * contexto do modelo (1M tokens). Os adapters não capam de forma uniforme
+ * (Drive capa em 1MB, document/transcript/csv não capam), então este é o
+ * chokepoint compartilhado que garante o teto. ~200k chars ≈ 50k tokens —
+ * generoso pra docs/transcripts reais, seguro mesmo lendo várias fontes.
+ */
+const MAX_FULLTEXT_CHARS = 200_000;
+
+function capFullText(text: string): { fullText: string; truncated: boolean } {
+  if (text.length <= MAX_FULLTEXT_CHARS) {
+    return { fullText: text, truncated: false };
+  }
+  const head = text.slice(0, MAX_FULLTEXT_CHARS);
+  return {
+    fullText: `${head}\n\n[Conteúdo truncado: ${text.length.toLocaleString("pt-BR")} caracteres no total, exibindo os primeiros ${MAX_FULLTEXT_CHARS.toLocaleString("pt-BR")}. Para detalhes além deste ponto, consulte a fonte original ou peça um recorte específico.]`,
+    truncated: true,
+  };
+}
+
+/**
  * Factory de tool read_context_source — compartilhada entre Vitoria e Vitor.
  * Lê o conteúdo de qualquer ContextSource linkado (transcript, meeting, planilha, GitHub).
  * Dispatcha por kind para o adapter correto.
@@ -104,6 +126,8 @@ export function createReadContextSourceTool() {
             };
         }
 
+        const { fullText, truncated } = capFullText(resolvedContent.fullText);
+
         return {
           ok: true,
           id: source.id,
@@ -112,7 +136,8 @@ export function createReadContextSourceTool() {
           externalUrl: source.externalUrl,
           capturedAt: source.capturedAt,
           summary: source.summary,
-          fullText: resolvedContent.fullText,
+          fullText,
+          truncated,
           snapshotAt: resolvedContent.snapshotAt,
         };
       } catch (err) {

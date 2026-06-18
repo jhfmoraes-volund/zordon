@@ -31,8 +31,11 @@ type PillKind =
   | "notion"
   | "gdrive_file";
 
-/** Formatos aceitos no upload de documentos — espelha o backend de extração. */
-const FILE_ACCEPT = ".pdf,.docx,.txt,.md,.html,.htm,.csv,.xlsx,.xls";
+/** Formatos aceitos no upload de documentos — espelha o backend de extração
+ * (src/lib/design-session/file-extraction.ts): inclui texto estruturado
+ * (.json/.yaml/.yml) usado em backfill/import de exports (ex: Notion). */
+const FILE_ACCEPT =
+  ".pdf,.docx,.txt,.md,.html,.htm,.csv,.xlsx,.xls,.json,.yaml,.yml";
 
 interface ContextItem {
   id: string;

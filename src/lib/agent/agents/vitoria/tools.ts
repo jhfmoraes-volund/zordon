@@ -21,12 +21,16 @@ function validateCreatePayload(
   payload: Record<string, unknown>,
 ): { path: (string | number)[]; message: string }[] {
   const issues: { path: (string | number)[]; message: string }[] = [];
+  // Backfill: trabalho JÁ entregue (status='done') não precisa da cerimônia de
+  // planejamento pra frente (SDD ≥60 chars + 3 AC observáveis) — só do registro
+  // fiel + estimativa em FP. Pra criação prospectiva, a cerimônia continua dura.
+  const isBackfill = payload.status === "done";
   const title = payload.title;
   if (typeof title !== "string" || title.trim().length < 3) {
     issues.push({ path: ["title"], message: "title obrigatório (string ≥3 chars)" });
   }
   const description = payload.description;
-  if (typeof description !== "string" || description.trim().length < 60) {
+  if (!isBackfill && (typeof description !== "string" || description.trim().length < 60)) {
     issues.push({
       path: ["description"],
       message:
@@ -41,12 +45,12 @@ function validateCreatePayload(
     });
   }
   const ac = payload.acceptanceCriteria;
-  if (!Array.isArray(ac) || ac.length < 3) {
+  if (!isBackfill && (!Array.isArray(ac) || ac.length < 3)) {
     issues.push({
       path: ["acceptanceCriteria"],
       message: "acceptanceCriteria obrigatório: array de ≥3 strings observáveis pelo PM",
     });
-  } else {
+  } else if (Array.isArray(ac)) {
     ac.forEach((item, idx) => {
       if (typeof item !== "string" || item.trim().length < 10) {
         issues.push({
@@ -132,13 +136,15 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
             .record(z.string(), z.unknown())
             .describe(
               "Dados da ação. SHAPE POR TYPE:\n" +
-                "• create: { title, description, functionPoints (1-13), acceptanceCriteria (array de strings ≥3), type?, scope?, priority?, assigneeIds?, userStoryId? }\n" +
+                "• create: { title, description, functionPoints (1-13), acceptanceCriteria (array de strings ≥3), type?, scope?, priority?, assigneeIds?, userStoryId?, status?, dueDate?, doneAt? }\n" +
                 "• update: campos a alterar (qualquer subset dos de create; assigneeIds substitui o set inteiro)\n" +
                 "• move: { } (vazio — use targetSprintId top-level)\n" +
                 "• delete: { } (vazio)\n" +
                 "assigneeIds: array de Member.id — resolva via list_project_members ANTES (1 responsável por task é o ideal). " +
                 "userStoryId: id de uma UserStory pra pendurar a task — crie a story antes via propose_story se ainda não existe. " +
-                "description deve usar template SDD: H2 ## Problema, H2 ## Solução, H2 ## Invariantes (cite path do código quando relevante).",
+                "description deve usar template SDD: H2 ## Problema, H2 ## Solução, H2 ## Invariantes (cite path do código quando relevante).\n" +
+                "BACKFILL (trabalho já entregue): passe status='done' — aí description SDD e os 3 AC deixam de ser exigidos (só title + functionPoints). " +
+                "dueDate (YYYY-MM-DD) crava o dia em que a task aconteceu; doneAt (ISO) marca a conclusão (default = dueDate). targetSprintId top-level põe na sprint que entregou.",
             ),
           aiReasoning: z
             .string()

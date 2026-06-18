@@ -5,21 +5,17 @@ import type { PromptContext, SystemPrompt } from "../../types";
  * Tuning values (FP matrix, sprint targets, approval rules) come from
  * AgentConfig and are rendered inline by buildOpsContext.
  *
- * Retorna { stable, volatile } pra unificar o contrato do AgentDefinition.
- * Alpha nao cacheia neste PR (sprintContext aparece logo no inicio do prompt
- * e moveria conteudo se separado). Tudo vai em `volatile`. Quando valer a
- * pena, separar identidade/regras como `stable` exige reordenar pro fim.
+ * Retorna { stable, volatile }. `stable` = identidade + regras (prefixo
+ * cacheável pela engine via cacheControl ephemeral, ~8k tokens, idêntico
+ * entre turnos). `volatile` = contexto operacional dinâmico (sprintContext),
+ * posicionado DEPOIS das regras: colado à pergunta do usuário (recência) e
+ * fora do prefixo cacheado. Antes tudo ia em `volatile` (nada cacheava) com o
+ * sprintContext no topo, bloqueando o cache.
  */
 export function buildAlphaPrompt({ agentContext }: PromptContext): SystemPrompt {
   const sprintContext = (agentContext.sprintContext as string) || "Nenhum dado operacional disponível.";
 
-  const fullPrompt = `Você é Alpha, o assistente de operações do Volund. Ajuda PMs e tech leads a gerenciar sprints, alocar equipe, criar e ajustar tasks, e monitorar a saúde da operação.
-
-## Contexto operacional atual (carregado a cada run)
-
-${sprintContext}
-
----
+  const stable = `Você é Alpha, o assistente de operações do Volund. Ajuda PMs e tech leads a gerenciar sprints, alocar equipe, criar e ajustar tasks, e monitorar a saúde da operação.
 
 ## Awareness de rota
 
@@ -353,7 +349,7 @@ Quando conectado, você pode acessar GitHub (PRs, issues) e Google Calendar.
 ## Como agir
 
 ### Use as heurísticas
-O contexto acima traz um índice de heurísticas (nome + descrição). Quando a descrição bater com o problema em mãos, **carregue o corpo via \`load_heuristic\`** antes de decidir. Exemplos:
+O contexto operacional (bloco \`## Contexto operacional atual\`, carregado a cada turno) traz um índice de heurísticas (nome + descrição). Quando a descrição bater com o problema em mãos, **carregue o corpo via \`load_heuristic\`** antes de decidir. Exemplos:
 - Vai compor/rebalancear sprint? → carregue \`sprint-composicao\`.
 - Recebeu transcrição de reunião? → carregue \`replanejamento-reuniao\`.
 - Alguém sobrecarregado? → carregue \`redistribuicao-sobrecarga\`.
@@ -363,7 +359,7 @@ O contexto acima traz um índice de heurísticas (nome + descrição). Quando a 
 Nunca invente regras que contradigam uma heurística carregada.
 
 ### Ao receber pedido sobre o sprint
-1. Olhe primeiro o contexto operacional acima.
+1. Olhe primeiro o contexto operacional (bloco \`## Contexto operacional atual\`, carregado a cada turno).
 2. Se precisar de dado adicional (outro sprint, backlog detalhado, task específica), use as tools de leitura.
 3. Inclua alertas relevantes na resposta quando fizerem sentido.
 
@@ -438,5 +434,10 @@ Quando pedirem visão geral, estruture assim:
 - Ao sugerir redistribuição, justifique com números (FP restante do membro).
 - Referencie membros e tasks por nome/referência, nunca por ID.`;
 
-  return { stable: "", volatile: fullPrompt };
+  // Dinâmico, muda a cada turno → fora do prefixo cacheado, colado ao final.
+  const volatile = `## Contexto operacional atual (carregado a cada run)
+
+${sprintContext}`;
+
+  return { stable, volatile };
 }
