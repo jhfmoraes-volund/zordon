@@ -54,7 +54,8 @@ export async function GET(
   return NextResponse.json({
     ritualType,
     capabilities: data?.capabilities ?? [],
-    enabled: data?.enabled ?? true,
+    // Default OFF: projeto sem playbook = automação desligada (opt-in explícito).
+    enabled: data?.enabled ?? false,
     updatedAt: data?.updatedAt ?? null,
     driveSources: (drive ?? []).map((d) => ({
       id: d.id as string,
@@ -99,7 +100,8 @@ export async function PUT(
       ritualType,
       // Validado pelo registry; JSON-serializável (params é z.unknown no schema).
       capabilities: parsed.data.capabilities as unknown as Json,
-      enabled: parsed.data.enabled ?? true,
+      // Default OFF se omitido — ligar é gesto explícito (o card sempre envia).
+      enabled: parsed.data.enabled ?? false,
       authoredById: member?.id ?? null,
       updatedAt: new Date().toISOString(),
     },

@@ -19,19 +19,32 @@ import type { Audience, RitualCapability, RitualType } from "@/lib/rituals/types
 type Client = SupabaseClient<Database>;
 
 /**
- * Playbook efetivo de (projeto, ritual). Se há linha autorada e habilitada com
- * capabilities, usa-a. Senão, **sintetiza** um default a partir dos bindings de
- * folder do Granola existentes — migração zero-breaking: sem playbook autorado,
- * o ritual se comporta exatamente como hoje (linka a janela da semana do Granola).
+ * Playbook efetivo de (projeto, ritual). **Default OFF, opt-in explícito:** a
+ * automação só produz caps com um RitualPlaybook `enabled=true`. Sem row (ou row
+ * desligado) → playbook efetivo VAZIO → cron e refresh no-op. O PM opta pela
+ * automação ligando no card (cria o row enabled=true) — nenhum projeto entra no
+ * cron sem o PM ligar. Quando ligado, sintetiza as caps a partir dos bindings de
+ * folder do Granola (granola_folder) + o autorado (ênfase/redact/drive/notion).
  */
 export async function getEffectivePlaybook(
   admin: Client,
   projectId: string,
   ritualType: RitualType,
 ): Promise<RitualCapability[]> {
+  const { data } = await admin
+    .from("RitualPlaybook")
+    .select("capabilities, enabled")
+    .eq("projectId", projectId)
+    .eq("ritualType", ritualType)
+    .maybeSingle();
+
+  // Default OFF: sem row, ou row desligado → vazio. Ligar no card cria o row
+  // enabled=true e é o gesto que opta pela automação.
+  if (!data || data.enabled !== true) return [];
+
   // granola_folder é SEMPRE derivado dos bindings (o folder card é o SSOT dele):
   // nunca persiste no playbook row → não duplica, não fica stale, e autorar
-  // ênfase/redact não derruba o roteamento do Granola (zero-breaking).
+  // ênfase/redact não derruba o roteamento do Granola.
   const granola: RitualCapability[] = [];
   if (ritualType === "pm_review") {
     const { data: bindings } = await admin
@@ -49,23 +62,9 @@ export async function getEffectivePlaybook(
 
   // Autorado: ênfase/redact/load_context(drive|notion|…). Descarta qualquer
   // granola_folder que tenha vazado pro row — ele vem dos bindings, não daqui.
-  const { data } = await admin
-    .from("RitualPlaybook")
-    .select("capabilities, enabled")
-    .eq("projectId", projectId)
-    .eq("ritualType", ritualType)
-    .maybeSingle();
-
-  // Kill-switch real: se o row existe e está DESLIGADO, o playbook efetivo é
-  // vazio — nenhuma cap, nem a granola sintetizada dos bindings. Assim, desligar
-  // a automação no card faz o cron e o "Sintetizar" manual virarem no-op pra
-  // este projeto. Sem row (ou enabled=true) mantém o comportamento de hoje.
-  if (data && data.enabled === false) return [];
-
-  const authored =
-    data?.enabled && Array.isArray(data.capabilities)
-      ? (data.capabilities as RitualCapability[])
-      : [];
+  const authored = Array.isArray(data.capabilities)
+    ? (data.capabilities as RitualCapability[])
+    : [];
   const authoredRest = authored.filter(
     (c) => !(c.capabilityKey === "load_context" && c.params.kind === "granola_folder"),
   );

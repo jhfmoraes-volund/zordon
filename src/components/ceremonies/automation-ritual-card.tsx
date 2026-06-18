@@ -87,8 +87,8 @@ function driveRefId(c: Extract<RitualCapability, { capabilityKey: "load_context"
 export function AutomationRitualCard({ projectId, ritualType }: Props) {
   const [loading, setLoading] = useState(true);
 
-  // ── Liga/desliga da automação ────────────────────────────
-  const [enabled, setEnabled] = useState(true);
+  // ── Liga/desliga da automação (default OFF: opt-in explícito) ──
+  const [enabled, setEnabled] = useState(false);
   const [togglingEnabled, setTogglingEnabled] = useState(false);
 
   // ── Granola (só exibido; picker não adiciona granola) ────
@@ -214,7 +214,29 @@ export function AutomationRitualCard({ projectId, ritualType }: Props) {
     setEnabled(next); // otimista
     try {
       await putPlaybook(driveCaps, text, next);
-      toast.success(next ? "Automação ligada." : "Automação desligada.");
+      if (next) {
+        // Bootstrap: ligar roda o PM Review desta semana 1× — acha-ou-cria o
+        // draft agora, sem esperar o cron de amanhã.
+        try {
+          const res = await fetchOrThrow(
+            `/api/projects/${projectId}/pm-review/refresh`,
+            { method: "POST" },
+          );
+          const out = (await res.json()) as { status?: string };
+          toast.success(
+            out.status === "enqueued"
+              ? "Automação ligada — gerando o PM Review desta semana…"
+              : "Automação ligada. O PM Review aparece assim que houver reunião nova na folder.",
+          );
+        } catch {
+          // Ligou, mas o disparo inicial falhou — não reverte o toggle; o cron
+          // pega no próximo ciclo.
+          toast.success("Automação ligada.");
+          toast.message("O PM Review será gerado no próximo ciclo (dias úteis, ~08h).");
+        }
+      } else {
+        toast.success("Automação desligada.");
+      }
     } catch (err) {
       setEnabled(!next); // reverte
       showErrorToast(err, { label: "Falha ao alterar a automação" });

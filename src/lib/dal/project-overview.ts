@@ -682,6 +682,10 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
       .from("PMReview")
       .select("id, projectId, referenceWeek, reportMarkdown, status, publishedAt")
       .in("projectId", projectIds)
+      // Board "vivo": só reviews publicadas. Draft/archived não entram nos chips
+      // nem viram o default de abertura (senão um rascunho da semana corrente
+      // encobre a última publicada por ter referenceWeek mais recente).
+      .eq("status", "published")
       .order("referenceWeek", { ascending: false }),
     // Última movimentação em qualquer ritual (review/planning/release) — chip
     // de "contexto vivo". 1 linha por projeto (DISTINCT ON na view).
