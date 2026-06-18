@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Info, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { ConfirmState } from "@/components/ui/confirm-dialog";
+import { cn } from "@/lib/utils";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { fmtDate } from "@/lib/date-utils";
 import { EMPHASIS_TEXT_MAX } from "@/lib/rituals/types";
@@ -389,31 +391,44 @@ export function AutomationRitualCard({ projectId, ritualType }: Props) {
           <p className="text-xs text-muted-foreground">Carregando…</p>
         ) : (
           <>
-            {/* ── Status + agenda + liga/desliga ── */}
-            <section className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium">Automação</span>
-                <Button
-                  variant={enabled ? "default" : "outline"}
-                  size="sm"
-                  role="switch"
-                  aria-checked={enabled}
-                  aria-label="Automação"
-                  disabled={togglingEnabled}
-                  onClick={toggleEnabled}
-                >
-                  {togglingEnabled ? "Salvando…" : enabled ? "Ligada" : "Desligada"}
-                </Button>
-              </div>
-              {enabled ? (
-                <p className="text-xs text-muted-foreground">
-                  Roda em dias úteis, por volta das 08h (BRT).
-                </p>
-              ) : (
-                <p className="text-xs text-amber-600">
-                  Automação desligada — o cron não gera o PM Review deste projeto.
-                </p>
+            {/* ── Status + agenda + liga/desliga (cara de conectado) ── */}
+            <section
+              className={cn(
+                "flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                enabled ? "border-primary/30 bg-primary/5" : "border-border bg-muted/30",
               )}
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span
+                  className={cn(
+                    "relative flex size-2.5 shrink-0 rounded-full",
+                    enabled ? "bg-emerald-500" : "bg-muted-foreground/40",
+                  )}
+                  aria-hidden
+                >
+                  {enabled && !togglingEnabled ? (
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500/60" />
+                  ) : null}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {enabled ? "Automação conectada" : "Automação desligada"}
+                  </p>
+                  <p className={cn("text-xs", enabled ? "text-muted-foreground" : "text-amber-600")}>
+                    {togglingEnabled
+                      ? "Salvando…"
+                      : enabled
+                        ? "Roda em dias úteis, ~08h (BRT)."
+                        : "O cron não gera o PM Review deste projeto."}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={enabled}
+                disabled={togglingEnabled}
+                onCheckedChange={() => void toggleEnabled()}
+                aria-label="Automação"
+              />
             </section>
 
             {/* ── Seção 1: Fontes de contexto ── */}

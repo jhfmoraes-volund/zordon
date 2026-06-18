@@ -43,6 +43,18 @@ export type DeckMeta = {
 
 export const decks: DeckMeta[] = [
   {
+    slug: "pm-review-passo-a-passo",
+    title: "PM Review, passo a passo",
+    eyebrow: "TUTORIAL · PM REVIEW · PM & ADMIN",
+    description:
+      "O tutorial prático do ritual mais importante do PM. Toda semana, um PM Review publicado por projeto: o que é, como criar na mão ou no automático (Granola), e por que só o publicado vira verdade.",
+    kind: "guide",
+    slideCount: 10,
+    updatedAt: "2026-06-18",
+    tags: ["PM Review", "Rituais", "Tutorial"],
+    minAccessLevel: "manager",
+  },
+  {
     slug: "operacao-volund",
     title: "Operação Volund",
     eyebrow: "PLAYBOOK · OPERAÇÃO",

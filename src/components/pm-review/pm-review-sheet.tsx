@@ -12,6 +12,7 @@ import {
   ResponsiveSheetFooter,
 } from "@/components/ui/responsive-sheet";
 import { Field, FormBody } from "@/components/ui/field";
+import { WeekPicker } from "@/components/ui/week-picker";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -49,14 +50,6 @@ function mondayOfLocal(d: Date): string {
   const yyyy = out.getFullYear();
   const mm = String(out.getMonth() + 1).padStart(2, "0");
   const dd = String(out.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function todayISO(): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -108,20 +101,11 @@ export function PMReviewSheet({
       setReferenceWeek(pmReview.referenceWeek);
       setFacilitatorId(pmReview.facilitatorId ?? "");
     } else {
-      setReferenceWeek(todayISO());
+      // Snap pra segunda da semana atual — valor já casa com o que é salvo.
+      setReferenceWeek(mondayOfLocal(new Date()));
       setFacilitatorId(currentMember?.id ?? "");
     }
   }, [open, pmReview, fetchOptions, currentMember?.id]);
-
-  function handleWeekChange(raw: string) {
-    if (!raw) {
-      setReferenceWeek("");
-      return;
-    }
-    // Snap pra segunda da semana selecionada — UX clara que o campo é semanal.
-    const d = new Date(raw + "T00:00:00");
-    setReferenceWeek(mondayOfLocal(d));
-  }
 
   const handleClose = () => {
     if (busy || saving) return;
@@ -208,16 +192,14 @@ export function PMReviewSheet({
                 <Field name="referenceWeek" required>
                   <Field.Label>Semana de referência</Field.Label>
                   <Field.Control>
-                    <input
-                      type="date"
-                      id="referenceWeek"
+                    <WeekPicker
+                      data-slot="button"
                       value={referenceWeek}
-                      onChange={(e) => handleWeekChange(e.target.value)}
-                      className="flex h-[var(--field-h)] w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      onChange={setReferenceWeek}
                     />
                   </Field.Control>
                   <Field.Hint>
-                    A data será ajustada pra segunda-feira da semana selecionada.
+                    Clique em qualquer dia — o PM Review cobre a semana inteira (seg → dom).
                   </Field.Hint>
                 </Field>
 

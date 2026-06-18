@@ -75,7 +75,6 @@ export function AppsTab({
     [canManage],
   );
   const installedApps = apps.filter((a) => a.status === "installed");
-  const availableApps = apps.filter((a) => a.status === "available");
   // Resolve contra a lista visível — URL forçada (?app=forge sem manager,
   // ?app=notion ainda available) não abre superfície.
   const openApp = openAppKey
@@ -162,7 +161,7 @@ export function AppsTab({
   return (
     <div className="flex gap-3">
       {/* ─── Dock (activity bar) ──────────────────────────────────────── */}
-      <aside className="flex w-12 shrink-0 flex-col items-center gap-0.5 self-start rounded-md border py-1.5">
+      <aside className="flex w-16 shrink-0 flex-col items-center gap-1 self-start rounded-md border p-1.5">
         {installedApps.map((app) => {
           const active = openAppKey === app.key;
           return (
@@ -173,43 +172,33 @@ export function AppsTab({
               title={`${app.name} — ${app.tagline}`}
               aria-label={app.name}
               className={cn(
-                "relative flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "relative flex w-full flex-col items-center gap-1 rounded-md px-1 py-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 active && "bg-muted text-foreground",
               )}
             >
               {active && (
                 <span
                   aria-hidden
-                  className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary"
+                  className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
                 />
               )}
-              <app.icon className="size-[18px]" />
+              <app.icon className="size-[22px]" />
+              <span className="line-clamp-2 text-center text-[10px] leading-tight">
+                {app.name}
+              </span>
             </button>
           );
         })}
-        {availableApps.length > 0 && (
-          <>
-            <div className="my-1 h-px w-7 bg-border" />
-            {availableApps.map((app) => (
-              <div
-                key={app.key}
-                title={`${app.name} — em breve`}
-                className="flex size-9 items-center justify-center text-muted-foreground/40"
-              >
-                <app.icon className="size-[18px]" />
-              </div>
-            ))}
-          </>
-        )}
-        <div className="my-1 h-px w-7 bg-border" />
+        <div className="my-0.5 h-px w-8 bg-border" />
         <button
           type="button"
           onClick={() => setCreateAppOpen(true)}
           title="Criar app com Volund OS"
           aria-label="Criar app"
-          className="flex size-9 items-center justify-center rounded-md border border-dashed text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-full flex-col items-center gap-1 rounded-md border border-dashed px-1 py-1.5 text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <Plus className="size-4" />
+          <Plus className="size-[22px]" />
+          <span className="text-center text-[10px] leading-tight">Novo</span>
         </button>
       </aside>
 

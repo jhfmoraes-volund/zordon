@@ -5264,6 +5264,7 @@ export type Database = {
           facilitatorId: string | null
           id: string
           orchestrateJobId: string | null
+          planningCeremonyId: string | null
           prdIndexSha: string | null
           projectId: string
           scheduledFor: string | null
@@ -5285,6 +5286,7 @@ export type Database = {
           facilitatorId?: string | null
           id?: string
           orchestrateJobId?: string | null
+          planningCeremonyId?: string | null
           prdIndexSha?: string | null
           projectId: string
           scheduledFor?: string | null
@@ -5306,6 +5308,7 @@ export type Database = {
           facilitatorId?: string | null
           id?: string
           orchestrateJobId?: string | null
+          planningCeremonyId?: string | null
           prdIndexSha?: string | null
           projectId?: string
           scheduledFor?: string | null
@@ -5370,6 +5373,13 @@ export type Database = {
             columns: ["facilitatorId"]
             isOneToOne: false
             referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningSession_planningCeremonyId_fkey"
+            columns: ["planningCeremonyId"]
+            isOneToOne: false
+            referencedRelation: "PlanningCeremony"
             referencedColumns: ["id"]
           },
           {

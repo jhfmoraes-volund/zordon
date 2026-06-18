@@ -238,7 +238,7 @@ export const vitoriaAgent: AgentDefinition = {
 
     if (surface === "release_planning") {
       const sessionId = agentContext.sessionId as string;
-      return buildReleasePlanningTools(sessionId, projectId, memberId);
+      return await buildReleasePlanningTools(sessionId, projectId, memberId);
     }
 
     const planningId = agentContext.planningId as string;

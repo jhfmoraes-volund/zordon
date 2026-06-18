@@ -30,9 +30,11 @@ import {
   updateStatus,
   updateSession,
   linkContextSource,
+  ensureReleasePlanningCeremony,
 } from "@/lib/dal/planning-session";
 import { getPrdsForProject, getPrdById } from "@/lib/dal/product-requirements";
 import { createReadContextSourceTool } from "@/lib/agent/tools/read-context-source";
+import { buildVitoriaTools } from "./tools";
 import { buildProjectProfile } from "./profile";
 import type { Database } from "@/lib/supabase/database.types";
 import type { PromptContext, SystemPrompt } from "../../types";
@@ -191,38 +193,49 @@ export function buildReleasePlanningPrompt(ctx: PromptContext): SystemPrompt {
 
   const projectMemoryMd = agentContext.projectMemoryMd as string | null;
 
-  const stable = `Você é Vitoria, conduzindo o **Release Planning** do projeto **${projectName ?? "(?)"}** — o momento inicial do projeto, onde o backlog de PRDs vira um roadmap de **${sprintCount} sprints** coesas e coerentes.
+  const stable = `Você é Vitoria, conduzindo o **Planning** do projeto **${projectName ?? "(?)"}** — o planejamento multi-sprint: distribuir o trabalho em **${sprintCount} sprints** coesas e coerentes.
+
+Você opera em três modos, conforme o insumo. PRD é UMA das fontes de trabalho, não a única — story e task podem nascer de qualquer insumo:
+  • **Roadmap de PRDs** — há PRDs (output do Vitor): monte o board ligando PRD↔sprint via \`link_prd_to_sprint\`.
+  • **Kickoff** — projeto novo sem PRD ainda: sintetize stories/tasks direto dos insumos (DS, docs, transcripts) com \`propose_story\` + \`propose_task_action\` e distribua nas sprints.
+  • **Backfill** — projeto que já rodou (ex: importado do Notion): registre o que foi entregue como tasks JÁ concluídas (\`payload.status='done'\`), estimadas em FP, na sprint/dia em que aconteceram.
 
 O que "coesa e coerente" significa:
-  • Dependências respeitadas — PRD que depende de outro nunca vem antes dele.
+  • Dependências respeitadas — o que depende de outro nunca vem antes dele.
   • Cada sprint tem um tema/objetivo nomeável — não uma sacola de itens soltos.
   • Fundação primeiro (auth, schema, infra) quando PRDs ou insumos indicarem.
   • Carga distribuída de forma compatível com a capacidade do squad.
 
 COMO TRABALHAR:
-  1. **Leia antes de alocar.** \`read_prd\` traz o conteúdo completo de um PRD
-     (problema, objetivo, AC, dependências, riscos). \`read_context_source\` lê
-     qualquer insumo linkado (transcript, doc, planilha, Notion, Drive, GitHub).
-  2. **Garimpe o pool do projeto.** \`list_context_sources\` mostra TODOS os
-     insumos do projeto, inclusive não-linkados. Achou um doc relevante? Use
-     \`link_context_source\` pra trazê-lo pra esta sessão (fica visível pro PM).
-  3. **Monte o board.** \`link_prd_to_sprint\` (exige justification),
-     \`move_prd\`, \`unlink_prd\`. Cada vínculo é staging — o plano só "fecha"
-     quando o PM aprova (status → approved).
-  4. **Quantidade de sprints é negociável.** Se o escopo não cabe (ou sobra),
-     proponha ajustar e use \`set_sprint_count\` — explique o porquê antes.
+  1. **Leia antes de planejar.** \`read_prd\` traz o conteúdo completo de um PRD.
+     \`read_context_source\` lê qualquer insumo linkado (transcript, doc, planilha,
+     Notion, Drive, GitHub). \`list_context_sources\` mostra TODO o pool do projeto
+     (inclusive não-linkados); \`link_context_source\` traz um pra esta sessão.
+  2. **Roadmap de PRDs:** \`link_prd_to_sprint\` (exige justification),
+     \`move_prd\`, \`unlink_prd\`.
+  3. **Criar trabalho (kickoff/backfill):** SEMPRE ancore primeiro com
+     \`add_context_note\` (um fato por nota, citando o insumo) — o id da nota vira
+     \`sourceNoteIds\` da proposta (lastro obrigatório, sem alucinação). Agrupe com
+     \`propose_story\` e crie tasks com \`propose_task_action\` (type=create,
+     \`functionPoints\` 1-13, \`targetSprintId\` da sprint destino). No BACKFILL:
+     \`payload.status='done'\` e \`payload.dueDate\` no dia em que foi entregue.
+  4. **Estado vivo:** chame \`get_planning_state\` no início de um turno que vá
+     editar/descartar proposta ou citar nota — IDs nunca se inventam.
+  5. **Quantidade de sprints é negociável.** Não coube (ou sobrou)? Proponha e
+     use \`set_sprint_count\` — explique o porquê antes.
 
 REGRAS:
-  • A FONTE de funcionalidades são os PRDs existentes (ProductRequirement). Você
-    NÃO inventa PRD novo. Se um insumo revelar funcionalidade sem PRD, aponte o
-    buraco pro PM criar com o Vitor — não aloque o que não existe.
-  • Toda alocação carrega justification curta e concreta (dependência, fundação,
-    risco, capacidade). Ela aparece no board pro PM.
+  • PRDs são UMA fonte; você PODE sintetizar story/task direto de insumos quando
+    fizer sentido (kickoff sem PRD, backfill de trabalho entregue). O que você NÃO
+    faz é inventar PRD novo — se um insumo pedir um PRD formal, aponte pro PM criar
+    com o Vitor.
+  • Toda proposta carrega lastro (\`sourceNoteIds\`) e justification/aiReasoning
+    curta e concreta (dependência, fundação, risco, capacidade).
   • Sprints vão de 1 a ${sprintCount}. Nunca aloque além disso (a menos que
     ajuste via set_sprint_count primeiro).
-  • Quando o board estiver vazio e o PM pedir uma proposta, monte o plano
-    completo: leia os PRDs e insumos primeiro, depois aloque sprint a sprint
-    narrando o racional.
+  • Tudo é staging — o plano só "fecha" quando o PM aprova. Board vazio + pedido
+    de proposta: leia PRDs/insumos primeiro, depois monte sprint a sprint narrando
+    o racional.
 
 Nunca peça projectId ou sessionId — você já tem.
 
@@ -276,10 +289,10 @@ ${contextsBlock}
   // Mode block fica no volatile: o PM alterna PLAN/ACT por turno.
   const modeBlock = ctx.capabilities.planMode
     ? `## Modo atual: PLAN
-Você está em modo planejamento. NÃO chame tools de escrita (link_prd_to_sprint, move_prd, unlink_prd, link_context_source, set_sprint_count) — leitura é livre.
+Você está em modo planejamento. NÃO chame tools de escrita (link_prd_to_sprint, move_prd, unlink_prd, link_context_source, set_sprint_count, add_context_note, propose_story, propose_task_action, update_proposed_action, delete_proposed_action) — leitura é livre.
 Apresente a proposta em texto curto: alocação por sprint com o porquê. Quando o PM disser "vai" / "executa" / "aplica" / "pode", chame as tools de escrita SEM nova proposta — o ok já foi dado. Se ele ajustar o plano, refaça a proposta e espere novo ok.`
     : `## Modo atual: ACT
-Execute com confirmação proporcional: alocações pontuais que o PM pediu, faça direto; plano completo (3+ PRDs de uma vez) ou set_sprint_count, proponha curto e peça ok antes.`;
+Execute com confirmação proporcional: alocações/tasks pontuais que o PM pediu, faça direto; plano completo (3+ PRDs ou várias tasks de uma vez) ou set_sprint_count, proponha curto e peça ok antes.`;
 
   const volatile = `${modeBlock}
 
@@ -296,12 +309,23 @@ ${projectMemoryMd ? `## Memória do projeto (curada pelo Vitor)\n${projectMemory
 
 // ─── Tools ────────────────────────────────────────────────────────────────
 
-export function buildReleasePlanningTools(
+export async function buildReleasePlanningTools(
   sessionId: string,
   projectId: string,
   memberId: string | null,
 ) {
+  // Companion ceremony (headless, sprintId NULL) hospeda o staging de
+  // tasks/stories. Reusa o motor inteiro da Sprint Planning ligado ao mesmo
+  // thread do board de PRDs — PRD vira UMA fonte, não a única.
+  const companionCeremonyId = await ensureReleasePlanningCeremony(
+    sessionId,
+    projectId,
+    memberId,
+  );
+  const taskTools = buildVitoriaTools(companionCeremonyId, projectId);
+
   return {
+    ...taskTools,
     read_context_source: createReadContextSourceTool(),
 
     read_prd: tool({

@@ -200,6 +200,61 @@ export async function deleteSession(sessionId: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Resolve-or-create the "companion" PlanningCeremony for a Release Planning
+ * session. A companion ceremony (sprintId NULL — multi-sprint via per-action
+ * targetSprintId) hosts the task/story staging (MeetingTaskAction +
+ * PlanningContextNote) so the /planning surface reuses the whole Sprint Planning
+ * machinery (propose_task_action, notes, apply, approve/complete endpoints)
+ * without teaching PlanningSession to manage tasks. Idempotent: the id lives on
+ * PlanningSession.planningCeremonyId and is reused while non-archived.
+ */
+export async function ensureReleasePlanningCeremony(
+  sessionId: string,
+  projectId: string,
+  facilitatorId: string | null,
+): Promise<string> {
+  const supabase = db();
+  const { data: session, error: sErr } = await supabase
+    .from("PlanningSession")
+    .select("planningCeremonyId")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (sErr) throw sErr;
+
+  const existingId = session?.planningCeremonyId ?? null;
+  if (existingId) {
+    const { data: cer } = await supabase
+      .from("PlanningCeremony")
+      .select("id, phase")
+      .eq("id", existingId)
+      .maybeSingle();
+    if (cer && cer.phase !== "archived") return cer.id;
+  }
+
+  const now = new Date().toISOString();
+  const { data: created, error: cErr } = await supabase
+    .from("PlanningCeremony")
+    .insert({
+      projectId,
+      sprintId: null,
+      facilitatorId,
+      phase: "idle",
+      updatedAt: now,
+    })
+    .select("id")
+    .single();
+  if (cErr) throw cErr;
+
+  const { error: linkErr } = await supabase
+    .from("PlanningSession")
+    .update({ planningCeremonyId: created.id, updatedAt: now })
+    .eq("id", sessionId);
+  if (linkErr) throw linkErr;
+
+  return created.id;
+}
+
 // ─── CRUD: PlanningSessionPRD ──────────────────────────────────────────────────
 
 /**
