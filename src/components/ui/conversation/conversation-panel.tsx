@@ -37,6 +37,8 @@ export type ConversationPanelProps = {
 
   placeholder?: string;
   emptyState?: ReactNode;
+  /** Hidratando histórico do thread — mostra spinner no corpo (ver MessageList). */
+  isLoading?: boolean;
   headerSlot?: ReactNode;
   /**
    * Resposta veio pelo fallback OpenRouter (daemon offline). Renderiza uma tag
@@ -105,6 +107,7 @@ function PanelBody({
   onExecutePlan,
   placeholder,
   emptyState,
+  isLoading,
   headerSlot,
   fallbackActive,
   composerLeftActions,
@@ -185,6 +188,7 @@ function PanelBody({
         messages={messages}
         status={status}
         emptyState={emptyState ?? defaultEmpty}
+        isLoading={isLoading}
         renderAfterMessage={renderAfterMessage}
         hasOlder={hasOlder}
         isLoadingOlder={isLoadingOlder}

@@ -20,12 +20,11 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { toast } from "sonner";
-import { PlanningBoard } from "@/components/planning-session/board";
+import type { ChipTone } from "@/lib/status-chips";
 import { ReleasePlanningRibbon } from "@/components/planning-session/release-planning-ribbon";
 import { ReleasePlanningSheet } from "@/components/planning-session/release-planning-sheet";
 import { ReleasePlanningContextSheet } from "@/components/planning-session/context-sheet";
 import { ReleasePlanningProposals } from "@/components/planning-session/release-planning-proposals";
-import { PrdPicker } from "@/components/planning-session/prd-picker";
 import type {
   PlanningSessionRow,
   PlanningSessionPRDWithSource,
@@ -45,20 +44,24 @@ export default function PlanningSessionPage({
 
   const [session, setSession] = useState<SessionWithPrds | null>(null);
   const [loading, setLoading] = useState(true);
-  const [orchestrating, setOrchestrating] = useState(false);
-  const [approving, setApproving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
-  const [prdPickerOpen, setPrdPickerOpen] = useState(false);
   const [insumoCount, setInsumoCount] = useState(0);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [input, setInput] = useState("");
+  // Hidratando o histórico do thread no mount → spinner no corpo do chat.
+  const [chatHydrating, setChatHydrating] = useState(true);
   // Bump pra re-fetchar as propostas de task (companion ceremony) quando um turno
   // da Vitoria termina — ela pode ter proposto/editado/descartado tasks via tool.
   const [actionsRefresh, setActionsRefresh] = useState(0);
+  // Counts do painel (staging + entregue) — derivam a fase do header e decidem
+  // mostrar o empty-state. PRD↔sprint board saiu (2026-06-19): a planning lê
+  // fontes (insumos + PRDs) e produz tasks/stories.
+  const [planState, setPlanState] = useState({ pendingCount: 0, doneCount: 0 });
+  const hasPlan = planState.pendingCount > 0 || planState.doneCount > 0;
 
   const threadIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -97,7 +100,6 @@ export default function PlanningSessionPage({
 
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: spinner durante o load inicial / troca de projeto
     setLoading(true);
     loadSession().finally(() => {
       if (!cancelled) setLoading(false);
@@ -130,17 +132,23 @@ export default function PlanningSessionPage({
           if (tid) setThreadId(tid);
           return res;
         },
+        // resumeStream() reconecta a um turn em vôo. O turn é resolvido
+        // server-side a partir do thread — sem id do cliente.
+        prepareReconnectToStreamRequest: () => ({
+          api: `/api/planning-sessions/${sessionId}/chat/resume`,
+        }),
       }),
     [sessionId],
   );
 
   // `id` é obrigatório aqui: useChat congela o transport do 1º render (quando
   // sessionId ainda é null) e só recria o Chat quando `id` muda.
-  const { messages, status, sendMessage, stop, setMessages } = useChat({
-    id: sessionId ?? "release-planning-pending",
-    transport,
-    onError: (err) => showErrorToast(err, { label: "Vitoria falhou" }),
-  });
+  const { messages, status, sendMessage, stop, setMessages, resumeStream } =
+    useChat({
+      id: sessionId ?? "release-planning-pending",
+      transport,
+      onError: (err) => showErrorToast(err, { label: "Vitoria falhou" }),
+    });
 
   // Hidrata histórico do thread + recarrega o board quando o turno termina
   // (Vitoria pode ter mexido nos PRDs via tools).
@@ -163,6 +171,7 @@ export default function PlanningSessionPage({
         (result: {
           threadId: string | null;
           messages: Array<{ id: string; role: string; content: string }>;
+          activeTurn?: { id: string; status: string } | null;
         }) => {
           if (cancelled) return;
           if (result.threadId) setThreadId(result.threadId);
@@ -174,9 +183,17 @@ export default function PlanningSessionPage({
               parts: [{ type: "text", text: m.content }],
             }));
           if (restored.length > 0) setMessages(restored);
+          // Geração em andamento no background → reconecta ao stream pra a UI
+          // voltar a "pensar" de onde parou (replay + tail do ChatTurnEvent).
+          if (result.activeTurn) {
+            void resumeStream();
+          }
         },
       )
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setChatHydrating(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -190,13 +207,16 @@ export default function PlanningSessionPage({
     setInput("");
   }, [input, status, sendMessage]);
 
-  // Kickoff do ritual: board vazio → pede proposta completa pra Vitoria.
+  // "Montar plano": pede pra Vitoria ler as FONTES (insumos + PRDs) e propor
+  // as tasks/stories distribuídas nas sprints. É o atalho de 1 clique do kickoff/
+  // backfill — depois o PM revisa no painel e aplica.
   const handleKickoff = useCallback(() => {
     if (status === "streaming" || status === "submitted") return;
     sendMessage({
       text:
-        "Monta uma proposta de release planning: lê os PRDs disponíveis e os insumos " +
-        "(linkados e do pool do projeto) e distribui nas sprints, com justificativa por alocação.",
+        "Monta o plano: lê as fontes do projeto (insumos linkados + PRDs disponíveis) e " +
+        "propõe as tasks/stories distribuídas nas sprints, com justificativa. " +
+        "Use propose_tasks em lote quando derivar várias de uma fonte.",
     });
     if (isMobile) setMobileOpen(true);
   }, [status, sendMessage, isMobile]);
@@ -230,79 +250,6 @@ export default function PlanningSessionPage({
       }
     },
     [projectId, loadSession],
-  );
-
-  const handleOrchestrate = useCallback(() => {
-    if (!session) return;
-    setConfirmState({
-      title: "Gerar plano automático?",
-      description:
-        "Vitoria vai ler os PRDs do projeto + insumos linkados e montar o board de release sozinha. Pode levar alguns minutos.",
-      confirmLabel: "Gerar",
-      onConfirm: async () => {
-        setOrchestrating(true);
-        try {
-          await fetchOrThrow(`/api/planning-sessions/${session.id}/orchestrate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ targetVersion: "v1" }),
-          });
-          await loadSession();
-          toast.success("Plano gerado.");
-        } catch (err) {
-          showErrorToast(err, { label: "Falha ao gerar plano" });
-          await loadSession();
-        } finally {
-          setOrchestrating(false);
-        }
-      },
-    });
-  }, [session, loadSession]);
-
-  const handleApprove = useCallback(() => {
-    if (!session) return;
-    setConfirmState({
-      title: "Aprovar release planning?",
-      description:
-        "O plano será marcado como aprovado e fica read-only. PRDs de arquivo (cascata) movem de backlog → ready.",
-      confirmLabel: "Aprovar",
-      onConfirm: async () => {
-        setApproving(true);
-        try {
-          await fetchOrThrow(`/api/planning-sessions/${session.id}/approve`, {
-            method: "POST",
-          });
-          await loadSession();
-          toast.success("Release planning aprovado.");
-        } catch (err) {
-          showErrorToast(err, { label: "Falha ao aprovar" });
-        } finally {
-          setApproving(false);
-        }
-      },
-    });
-  }, [session, loadSession]);
-
-  const handlePrdDrag = useCallback(
-    async (prdId: string, sprintStart: number, order: number) => {
-      if (!session) return;
-      await fetchOrThrow(`/api/planning-sessions/${session.id}/prds/${prdId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sprintStart, order }),
-      });
-    },
-    [session],
-  );
-
-  const handleUnlinkPrd = useCallback(
-    async (prdRowId: string) => {
-      if (!session) return;
-      await fetchOrThrow(`/api/planning-sessions/${session.id}/prds/${prdRowId}`, {
-        method: "DELETE",
-      });
-    },
-    [session],
   );
 
   // ─── Render guards ──────────────────────────────────────────────────────
@@ -350,7 +297,24 @@ export default function PlanningSessionPage({
     | "aborted"
     | "error";
   const isApproved = status_ === "approved";
+  const busy = status === "streaming" || status === "submitted";
   const backHref = `/projects/${projectId}?tab=apps&app=ceremonies`;
+
+  // Fase DERIVADA do header (planner vivo): o status persistido só modela casos
+  // terminais legados (approved/aborted/error); a fase do dia-a-dia vem dos counts
+  // do painel — staging (tem pendente) → aplicado (tem entregue) → rascunho (vazio).
+  const phase: { label: string; tone: ChipTone } =
+    status_ === "aborted"
+      ? { label: "Abortado", tone: "red" }
+      : status_ === "error"
+        ? { label: "Erro", tone: "red" }
+        : status_ === "approved"
+          ? { label: "Aprovado", tone: "green" }
+          : planState.pendingCount > 0
+            ? { label: "Em staging", tone: "blue" }
+            : planState.doneCount > 0
+              ? { label: "Aplicado", tone: "green" }
+              : { label: "Rascunho", tone: "blue" };
 
   const chatPanel = (
     <ConversationPanel
@@ -358,6 +322,7 @@ export default function PlanningSessionPage({
       variant={isMobile ? "mobile" : "desktop"}
       messages={messages as UIMessage[]}
       status={status}
+      isLoading={chatHydrating}
       input={input}
       onInputChange={setInput}
       onSubmit={handleSubmit}
@@ -386,59 +351,52 @@ export default function PlanningSessionPage({
 
       <ReleasePlanningRibbon
         title={session.title}
-        status={status_}
+        phaseLabel={phase.label}
+        phaseTone={phase.tone}
         scheduledFor={session.scheduledFor}
         sprintCount={session.sprintCount}
-        prdCount={session.prds.length}
+        pendingCount={planState.pendingCount}
+        doneCount={planState.doneCount}
         insumoCount={insumoCount}
-        facilitatorName={null}
         backHref={backHref}
-        orchestrating={orchestrating}
-        approving={approving}
-        onOrchestrate={handleOrchestrate}
-        onApprove={handleApprove}
+        busy={busy}
+        readOnly={isApproved}
+        onMontar={handleKickoff}
         onOpenContext={() => setContextOpen(true)}
-        onLinkPrd={() => setPrdPickerOpen(true)}
         onEdit={() => setEditOpen(true)}
       />
 
-      {/* Command center: board de PRDs por sprint (esquerda) + chat Vitoria (direita) */}
+      {/* Canvas: plano (tasks/stories por sprint) à esquerda + chat Vitoria à direita.
+          PRD↔sprint board saiu (2026-06-19) — a planning lê fontes e produz tasks. */}
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] gap-4 p-4">
         <div className="surface overflow-y-auto min-h-0 p-4 space-y-4">
           <ReleasePlanningProposals
             planningCeremonyId={session.planningCeremonyId}
+            projectId={projectId}
             refreshKey={actionsRefresh}
             readOnly={isApproved}
+            onStateChange={setPlanState}
             onApplied={() => {
               void loadSession();
               setActionsRefresh((n) => n + 1);
             }}
           />
-          {session.prds.length === 0 ? (
+          {!hasPlan && (
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
               <p className="mb-4">
-                Board vazio. Vincule PRDs, peça pra Vitoria montar, ou clique em
-                &ldquo;Gerar plano&rdquo; pra cascata automática.
+                Plano vazio. Peça pra Vitoria montar a partir das fontes (insumos +
+                PRDs) — ela propõe as tasks por sprint, você revisa e aplica.
               </p>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleKickoff}
-                disabled={isApproved || status === "streaming" || status === "submitted"}
+                disabled={isApproved || busy}
               >
                 <Sparkles className="size-4" />
-                Pedir proposta pra Vitoria
+                Montar plano
               </Button>
             </div>
-          ) : (
-            <PlanningBoard
-              sessionId={session.id}
-              sprintCount={session.sprintCount}
-              prds={session.prds}
-              onPrdDrag={handlePrdDrag}
-              onUnlink={handleUnlinkPrd}
-              readOnly={isApproved}
-            />
           )}
         </div>
 
@@ -462,14 +420,6 @@ export default function PlanningSessionPage({
         open={contextOpen}
         onOpenChange={setContextOpen}
         onCountChange={setInsumoCount}
-      />
-
-      <PrdPicker
-        sessionId={session.id}
-        sprintCount={session.sprintCount}
-        open={prdPickerOpen}
-        onOpenChange={setPrdPickerOpen}
-        onLinked={loadSession}
       />
 
       <ReleasePlanningSheet

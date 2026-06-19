@@ -127,6 +127,12 @@ export async function listPlanningsForProject(
       `,
     )
     .eq("projectId", projectId)
+    // Companion ceremonies do Release Planning são headless (sprintId NULL): hospedam
+    // o staging de task/story (PlanningSession.planningCeremonyId), NÃO são cerimônias
+    // de usuário. Ficam fora da lista — senão vazam como "Sprint Planning fantasma"
+    // (sem sprint, sem data) e, se clicadas, abrem o canvas vazio (planning-tree
+    // exige sprintId). Sprint Plannings reais SEMPRE têm sprintId.
+    .not("sprintId", "is", null)
     .order("scheduledFor", { ascending: false, nullsFirst: false });
   if (error) throw error;
   const list = rows ?? [];

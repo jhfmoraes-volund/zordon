@@ -406,9 +406,13 @@ REGRAS:
     1. Chame \`get_project_indicators\` PRIMEIRO — alimenta a seção
        "Indicadores do time" com velocity das últimas sprints, throughput,
        blockers ativos. Sem isso a seção fica fraca.
-    2. Se houver \`transcriptRefId\` listado em "Fontes de contexto linkadas"
-       e VOCÊ ainda não leu, chame \`read_transcript_content\` neles antes
-       de sintetizar.
+    2. Chame \`list_linked_sources\` pra ver os insumos AO VIVO (a aba INSUMOS) —
+       o bloco "Fontes de contexto linkadas" é snapshot do 1º turn e não pega o
+       que o PM linkou depois. Leia cada id ANTES de sintetizar: transcript →
+       \`read_transcript_content\` (pagine com offset até hasMore=false); doc/
+       planilha → \`read_context_source\`. Você só enxerga o que está LINKADO —
+       se \`list_linked_sources\` vier vazio, não há insumo: diga ao PM, não
+       invente nem busque fora da aba INSUMOS.
     3. Aí sim, chame \`update_pm_review_report\` com markdown direto
        organizado nas 6 seções fixas. Cite source IDs (transcriptRefId /
        meetingId) e referencie decisões/questões abertas do contexto DS
@@ -436,6 +440,13 @@ Nunca peça projectId ao PM — você já tem.
 **${reportHint}**
 
 ## Fontes de contexto linkadas
+
+> ⚠️ SNAPSHOT do início da conversa — esta lista NÃO atualiza sozinha no meio
+> do chat. Estes são os ÚNICOS insumos que você pode ler (a aba INSUMOS deste
+> review). Se o PM disser que anexou algo e não estiver aqui, chame
+> \`list_linked_sources\` pra reconferir AO VIVO — pegue o id e leia. Se ainda
+> assim não aparecer, o link não chegou ao review: avise o PM (o insumo pode
+> ter sido importado mas não linkado). NÃO leia nada fora desta lista.
 
 ### Reuniões (meetingId — use em sourceMeetingIds das notes)
 ${linkedMeetingsBlock}
@@ -520,48 +531,68 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
   return {
     read_transcript_content: tool({
       description:
-        "Lê o conteúdo de um transcript linkado. Use para extrair insights antes de criar notas.",
+        "Lê o conteúdo de um transcript linkado, em JANELA (chunk) pra não " +
+        "estourar o teto de output do MCP. Pagine com offset: comece em 0; " +
+        "enquanto hasMore=true, chame de novo com offset=nextOffset até " +
+        "hasMore=false. Extraia insights antes de criar notas.",
       inputSchema: z.object({
         transcriptRefId: z.string().describe("ID do TranscriptRef"),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            "Caractere inicial da janela (default 0). Pagine com o nextOffset retornado até hasMore=false.",
+          ),
       }),
-      execute: async ({ transcriptRefId }) => {
+      execute: async ({ transcriptRefId, offset }) => {
         const { data: ref } = await db()
           .from("ContextSource")
           .select('id, title, source, "sourceId", "capturedAt", "meetingId", "fullText"')
           .eq("id", transcriptRefId)
           .single();
         if (!ref) return { ok: false, error: "ContextSource não encontrado" };
-        if (ref.fullText) {
-          return {
-            ok: true,
-            id: ref.id,
-            title: ref.title,
-            capturedAt: ref.capturedAt,
-            content: ref.fullText,
-          };
-        }
-        if (ref.meetingId) {
+
+        // Resolve o texto: fullText, ou notes da reunião, ou fallback metadados.
+        let title = ref.title;
+        let content: string;
+        if (ref.fullText && ref.fullText.length > 0) {
+          content = ref.fullText;
+        } else if (ref.meetingId) {
           const { data: meeting } = await db()
             .from("Meeting")
             .select("id, title, date, notes")
             .eq("id", ref.meetingId)
             .single();
-          if (meeting) {
-            return {
-              ok: true,
-              id: ref.id,
-              title: ref.title ?? meeting.title,
-              capturedAt: ref.capturedAt,
-              content: meeting.notes ?? "(sem conteúdo)",
-            };
-          }
+          title = ref.title ?? meeting?.title ?? title;
+          content = meeting?.notes ?? "(sem conteúdo)";
+        } else {
+          content = "(conteúdo não disponível — só metadados)";
         }
+
+        // JANELA: o daemon roda só tools MCP (Read nativo fica disallowed) e o
+        // SDK derrama resultado grande pra um arquivo em disco — inacessível pro
+        // agente. Empiricamente ~21k chars passam inline e ~62k estouram (teto
+        // ~25k de output MCP); 18k fica com folga. Acima disso, pagine via
+        // offset/nextOffset — assim transcript grande é lido 100%, em pedaços.
+        const WINDOW = 18_000;
+        const total = content.length;
+        const start = Math.min(Math.max(offset ?? 0, 0), total);
+        const slice = content.slice(start, start + WINDOW);
+        const nextOffset = start + slice.length;
+        const hasMore = nextOffset < total;
         return {
           ok: true,
           id: ref.id,
-          title: ref.title,
+          title,
           capturedAt: ref.capturedAt,
-          content: "(conteúdo não disponível — só metadados)",
+          content: slice,
+          offset: start,
+          returnedChars: slice.length,
+          totalChars: total,
+          hasMore,
+          nextOffset: hasMore ? nextOffset : null,
         };
       },
     }),

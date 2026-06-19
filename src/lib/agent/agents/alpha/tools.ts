@@ -143,20 +143,41 @@ export function assembleAlphaTools(
 
   tools.get_tasks = tool({
     description:
-      "Lista tasks com filtros opcionais por status, membro ou sprint. Retorna referencia, titulo, status, FP, e atribuicao.",
+      "Lista tasks (não-draft) com filtros opcionais por status, membro ou projeto. Retorna referencia, titulo, status, FP, projeto e atribuicao. Quando o usuário está numa página de projeto/sprint, filtra pelo escopo da rota automaticamente; passe `projectName` explicitamente pra escapar do escopo e consultar cross-project.",
     inputSchema: z.object({
       status: z.enum(TASK_STATUSES).optional().describe("Filtrar por status"),
       memberName: z.string().optional().describe("Filtrar por nome do membro atribuido"),
+      projectName: z.string().optional().describe("Nome parcial do projeto (case-insensitive). Passe explicitamente pra consultar cross-project, ignorando o escopo da rota."),
+      limit: z.number().int().min(1).max(200).default(50).describe("Máximo de tasks (default 50)"),
     }),
-    execute: async ({ status, memberName }) => {
+    execute: async ({ status, memberName, projectName, limit }) => {
+      // Resolve explicit projectName → id (pre-limit filter, not post-filter) so
+      // tasks de um projeto de baixa prioridade não sejam descartadas pelo cap global.
+      let scopedProjectId: string | undefined;
+      if (projectName) {
+        const { data: project } = await supabase
+          .from("Project")
+          .select("id, name")
+          .ilike("name", `%${projectName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (!project) return { error: `Projeto "${projectName}" não encontrado.` };
+        scopedProjectId = project.id;
+      }
+
       let query = supabase
         .from("Task")
-        .select("reference, title, status, type, functionPoints, dueDate, assignments:TaskAssignment(member:Member(id, name))")
+        .select("reference, title, status, type, functionPoints, dueDate, project:Project(name), assignments:TaskAssignment(member:Member(id, name))")
         .neq("status", "draft")
         .order("priority", { ascending: false })
-        .limit(50);
+        .limit(limit);
 
       if (status) query = query.eq("status", status);
+
+      // Escopo: projectName explícito > sprint da rota > projeto da rota > global.
+      if (scopedProjectId) query = query.eq("projectId", scopedProjectId);
+      else if (routeSprintId) query = query.eq("sprintId", routeSprintId);
+      else if (routeProjectId) query = query.eq("projectId", routeProjectId);
 
       const { data: tasks } = await query;
       let result = tasks || [];

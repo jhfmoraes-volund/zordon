@@ -19,6 +19,7 @@ import {
   streamViaClaudeDaemon,
   isDaemonOnline,
 } from "@/lib/agent/sse-chat-proxy";
+import { getActiveChatTurnForThread } from "@/lib/dal/chat-turn";
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 200;
@@ -58,7 +59,12 @@ export async function GET(
     .maybeSingle();
 
   if (!thread) {
-    return NextResponse.json({ threadId: null, messages: [], hasMore: false });
+    return NextResponse.json({
+      threadId: null,
+      messages: [],
+      hasMore: false,
+      activeTurn: null,
+    });
   }
 
   let q = supabase
@@ -80,7 +86,9 @@ export async function GET(
   const trimmed = hasMore ? slice.slice(0, limit) : slice;
   const messages = trimmed.slice().reverse();
 
-  return NextResponse.json({ threadId: thread.id, messages, hasMore });
+  const activeTurn = await getActiveChatTurnForThread(thread.id);
+
+  return NextResponse.json({ threadId: thread.id, messages, hasMore, activeTurn });
 }
 
 export async function POST(

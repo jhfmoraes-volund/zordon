@@ -1,9 +1,13 @@
 /**
- * PMReview — status machine enxuta (3 estados, transições sem volta).
+ * PMReview — status machine enxuta (transições sem volta).
  *
  * Diferente de PlanningCeremony (que tem 6 fases ligadas a propor→aprovar),
  * PM Review é "report sempre consultável": draft é construção, published é
- * disponibilizado (mas ainda editável), archived é fora da lista ativa.
+ * disponibilizado (mas ainda editável). Não se arquiva mais — PM Review se
+ * exclui (hard delete: DELETE /api/pm-review/[id], qualquer status).
+ *
+ * `archived` permanece no enum como estado LEGADO: linhas antigas no banco ainda
+ * carregam esse status e precisam renderizar/listar. Não há mais transição p/ ele.
  *
  * Sem trigger SQL (volume trivial). Validação só aqui + na API.
  */
@@ -13,14 +17,11 @@ export type PMReviewStatus = (typeof PM_REVIEW_STATUSES)[number];
 
 const ALLOWED: ReadonlyArray<readonly [PMReviewStatus, PMReviewStatus]> = [
   ["draft", "published"],
-  ["published", "archived"],
-  // Sem rollback. PM que quiser "começar do zero" dismissa notes + regera report
-  // (ver pm-review-plan.md, seção "closed → reopen não existe").
+  // Sem rollback e sem archive. PM que quiser "começar do zero" exclui + recria.
 ];
 
 export type StatusStamps = {
   publishedAt?: string;
-  archivedAt?: string;
 };
 
 export type TransitionOk = {
@@ -71,7 +72,6 @@ export function transition(
 
   const stamps: StatusStamps = {};
   if (to === "published") stamps.publishedAt = now();
-  if (to === "archived") stamps.archivedAt = now();
 
   return { ok: true, from, to, stamps };
 }

@@ -7,6 +7,7 @@ import {
   streamViaClaudeDaemon,
   isDaemonOnline,
 } from "@/lib/agent/sse-chat-proxy";
+import { getActiveChatTurnForThread } from "@/lib/dal/chat-turn";
 
 export const maxDuration = 300;
 
@@ -62,7 +63,12 @@ export async function GET(
     .maybeSingle();
 
   if (!thread) {
-    return NextResponse.json({ threadId: null, messages: [], hasMore: false });
+    return NextResponse.json({
+      threadId: null,
+      messages: [],
+      hasMore: false,
+      activeTurn: null,
+    });
   }
 
   // Resolve briefing-scope marker.
@@ -81,6 +87,7 @@ export async function GET(
         messages: [],
         hasMore: false,
         briefingPending: true,
+        activeTurn: null,
       });
     }
   }
@@ -107,10 +114,13 @@ export async function GET(
   // Send chronological asc — UI expects oldest first.
   const messages = trimmed.slice().reverse();
 
+  const activeTurn = await getActiveChatTurnForThread(thread.id);
+
   return NextResponse.json({
     threadId: thread.id,
     messages,
     hasMore,
+    activeTurn,
   });
 }
 

@@ -35,6 +35,11 @@ export function useDesignSessionChat() {
           setIsFallback(res.headers.get("X-Mode-Fallback") === "true");
           return res;
         },
+        // resumeStream() reconecta a um turn em vôo (canal web). O turn é
+        // resolvido server-side a partir do thread — sem id do cliente.
+        prepareReconnectToStreamRequest: () => ({
+          api: `/api/design-sessions/${ctx.sessionId}/chat/resume?channel=web`,
+        }),
       }),
     [ctx.sessionId, ctx.currentStepKey, threadId, planMode]
   );
@@ -65,8 +70,16 @@ export function useDesignSessionChat() {
               }))
           );
         }
+        // Geração em andamento no background → reconecta ao stream pra a UI
+        // voltar a "pensar" de onde parou (replay + tail do ChatTurnEvent).
+        if (data.activeTurn) {
+          void chat.resumeStream();
+        }
       })
       .catch(() => {});
+    // Carrega histórico uma vez por sessão; `chat` é estável o suficiente e
+    // adicioná-lo re-dispararia o fetch a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.sessionId]);
 
   const sendMessage = useCallback(
@@ -75,7 +88,7 @@ export function useDesignSessionChat() {
       setInput("");
       chat.sendMessage({ text });
     },
-    [chat.sendMessage]
+    [chat]
   );
 
   const toggle = useCallback(() => setIsOpen((prev) => !prev), []);

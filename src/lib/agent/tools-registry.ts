@@ -48,7 +48,11 @@ import {
   createLinkPrdDependencyTool,
   createListPrdsTool,
 } from "./tools/prd";
-import { createReadContextSourceTool } from "./tools/context-source";
+import {
+  createReadContextSourceTool,
+  createListContextSourcesTool,
+  createListLinkedSourcesTool,
+} from "./tools/context-source";
 import {
   createDescribeStructuredSourceTool,
   createQueryStructuredSourceTool,
@@ -205,6 +209,29 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
       sessionId: ctx.sessionId,
       pmReviewId: ctx.pmReviewId ?? null,
       planningId: ctx.planningId ?? null,
+      releasePlanningId: ctx.releasePlanningId ?? null,
+    }),
+
+  // INSUMOS estritos do ritual (EntityLink): só o que o PM linkou a ESTE
+  // review/planning. É a fonte do PM Review (sem pool aberto → sem vazamento).
+  // Re-consulta ao vivo, resolvendo o freeze do prompt em resume.
+  list_linked_sources: (ctx) =>
+    createListLinkedSourcesTool({
+      sessionId: ctx.sessionId,
+      pmReviewId: ctx.pmReviewId ?? null,
+      planningId: ctx.planningId ?? null,
+      releasePlanningId: ctx.releasePlanningId ?? null,
+    }),
+
+  // Pool ABERTO do projeto (curadoria) — Release Planning descobre fontes além
+  // das linkadas e cura com link_context_source. Marca `linked` e exclui o
+  // design_system. NÃO exposto ao PM Review (lá a fonte é só o linkado).
+  list_context_sources: (ctx) =>
+    createListContextSourcesTool(ctx.projectId, {
+      sessionId: ctx.sessionId,
+      pmReviewId: ctx.pmReviewId ?? null,
+      planningId: ctx.planningId ?? null,
+      releasePlanningId: ctx.releasePlanningId ?? null,
     }),
 
   // ── Insumos estruturados (JSON/CSV) — querying via SQL (DuckDB) ────────
@@ -212,47 +239,17 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
   describe_structured_source: () => createDescribeStructuredSourceTool(),
   query_structured_source: () => createQueryStructuredSourceTool(),
 
-  // ── Vitoria Release Planning — board tools (PRD↔sprint + curadoria) ────
-  // Surface 'release_planning'. read_prd/read_context_source reusam as
-  // entradas genéricas; o staging (propose_task_action…) usa ctx.planningId
-  // (companion ceremony, resolvida pelo tool router). As 6 abaixo usam o
-  // releasePlanningId (id da PlanningSession).
-  list_context_sources: (ctx) =>
-    buildReleasePlanningBoardTools(
-      requireReleasePlanningId(ctx),
-      ctx.projectId,
-      ctx.memberId ?? null,
-    ).list_context_sources,
+  // ── Vitoria Release Planning — curadoria de insumos ────────────────────
+  // Surface 'release_planning'. PRD↔sprint saiu (decisão 2026-06-19): a planning
+  // LÊ fontes (insumos + PRDs via list_prds/read_prd) e produz tasks/stories.
+  // O staging (propose_task_action…) usa ctx.planningId (companion ceremony);
+  // link_context_source usa releasePlanningId (id da PlanningSession).
   link_context_source: (ctx) =>
     buildReleasePlanningBoardTools(
       requireReleasePlanningId(ctx),
       ctx.projectId,
       ctx.memberId ?? null,
     ).link_context_source,
-  link_prd_to_sprint: (ctx) =>
-    buildReleasePlanningBoardTools(
-      requireReleasePlanningId(ctx),
-      ctx.projectId,
-      ctx.memberId ?? null,
-    ).link_prd_to_sprint,
-  move_prd: (ctx) =>
-    buildReleasePlanningBoardTools(
-      requireReleasePlanningId(ctx),
-      ctx.projectId,
-      ctx.memberId ?? null,
-    ).move_prd,
-  unlink_prd: (ctx) =>
-    buildReleasePlanningBoardTools(
-      requireReleasePlanningId(ctx),
-      ctx.projectId,
-      ctx.memberId ?? null,
-    ).unlink_prd,
-  set_sprint_count: (ctx) =>
-    buildReleasePlanningBoardTools(
-      requireReleasePlanningId(ctx),
-      ctx.projectId,
-      ctx.memberId ?? null,
-    ).set_sprint_count,
 
   // ── Workspace sandboxed (lê apenas dentro do workspace do projeto) ───
   read_workspace_file: (ctx) =>
@@ -437,6 +434,9 @@ const VITOR_TOOLS = new Set([
 const VITORIA_PMREVIEW_TOOLS = new Set<string>([
   "read_transcript_content",
   "read_context_source",
+  // PM Review lê SÓ os insumos linkados (aba INSUMOS) — list_linked_sources, não
+  // o pool aberto. Sem pool = sem vazamento de fonte não-curada pelo PM.
+  "list_linked_sources",
   "describe_structured_source",
   "query_structured_source",
   "add_pm_review_note",
@@ -452,6 +452,7 @@ const VITORIA_PLANNING_TOOLS = new Set<string>([
   ...VITORIA_PLANNING_PROJECT_NAMES,
   ...VITORIA_PLANNING_CEREMONY_NAMES,
   "read_context_source",
+  "list_context_sources",
   "describe_structured_source",
   "query_structured_source",
 ]);
@@ -468,16 +469,11 @@ const ALPHA_TOOLS = new Set<string>([
 // (PRD/insumos) + structured querying. read_prd/read_context_source reusam as
 // entradas genéricas. NÃO inclui as notas/report de PM Review.
 const VITORIA_RELEASE_PLANNING_TOOLS = new Set<string>([
-  // board
-  "link_prd_to_sprint",
-  "move_prd",
-  "unlink_prd",
-  "set_sprint_count",
+  // curadoria de insumos (PRD↔sprint board saiu — decisão 2026-06-19)
   "list_context_sources",
   "link_context_source",
-  // leitura
+  // leitura de FONTES: PRD (list/read) + insumos + structured query
   "read_prd",
-  // PRD-universe não vai mais no prompt (D14/Fase 3.0) — o agente descobre via SENSE.
   "list_prds",
   "read_context_source",
   "describe_structured_source",
@@ -492,7 +488,7 @@ const VITORIA_RELEASE_PLANNING_TOOLS = new Set<string>([
 /**
  * Quais tools cada agente expõe via MCP. Filtra o registry global por slug +
  * superfície. Vitoria dispatcha por `surface` (vem do thread.channel):
- * 'planning' → staging; 'release_planning' → board + staging; senão → PM Review.
+ * 'planning' → staging; 'release_planning' → fontes (insumos+PRD) + staging; senão → PM Review.
  */
 export function getToolNamesForAgent(
   agentSlug: string,

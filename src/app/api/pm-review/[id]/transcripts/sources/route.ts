@@ -240,8 +240,15 @@ export async function POST(
       fullText: detail.transcriptText,
       capturedAt: detail.start,
       importedById: member.id,
+      // Carimba o projeto: sem isto o ContextSource nasce com projectId=NULL e,
+      // se o link abaixo falhar, vira ÓRFÃO invisível (nem o pool nem o EntityLink
+      // o acham). Com o projectId, mesmo um import meio-feito é recuperável.
+      projectId,
     });
 
+    // Link é o que torna o transcript um INSUMO deste PM Review (a aba INSUMOS =
+    // EntityLink.pmReviewId, que o loadContext lê). Se isto falhar, o catch
+    // devolve erro ao PM em vez de "sucesso" silencioso com fonte solta.
     await linkTranscriptToPMReview({
       pmReviewId,
       transcriptRefId: refId,

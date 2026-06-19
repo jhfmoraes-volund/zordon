@@ -1,7 +1,7 @@
 /**
  * GET    /api/pm-review/[id]   — detail
  * PATCH  /api/pm-review/[id]   — edit facilitator/referenceWeek/scheduledFor
- * DELETE /api/pm-review/[id]   — hard delete (apenas em draft; published → archive)
+ * DELETE /api/pm-review/[id]   — hard delete (qualquer status; cascata derruba notes/links)
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -108,20 +108,8 @@ export async function DELETE(
       { status: 403 },
     );
 
-  // Política: hard delete só em draft. published/archived → use /archive.
-  const detail = await getPMReview(id);
-  if (!detail)
-    return NextResponse.json({ error: "PM Review não encontrado" }, { status: 404 });
-  if (detail.status !== "draft") {
-    return NextResponse.json(
-      {
-        error:
-          "PM Review já publicado não pode ser excluído. Use /archive pra remover da lista ativa.",
-      },
-      { status: 409 },
-    );
-  }
-
+  // Hard delete em qualquer status. Cascata (ON DELETE CASCADE) derruba
+  // PMReviewNote / PMReviewMeetingLink / PMReviewTranscriptLink / EntityLink.
   await deletePMReview(id);
   return NextResponse.json({ ok: true });
 }

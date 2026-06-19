@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -6,6 +5,13 @@ import {
 } from "ai";
 import { db } from "@/lib/db";
 import { createChatTurn, enqueueChatJob } from "@/lib/dal/chat-turn";
+import {
+  applyChatStreamEvent,
+  closeChatStream,
+  fromBroadcast,
+  newChatStreamState,
+  openChatStream,
+} from "@/lib/agent/chat-ui-stream";
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -45,13 +51,9 @@ export function streamViaClaudeDaemon(args: {
 
     const stream = createUIMessageStream({
       execute: async ({ writer }: { writer: UIMessageStreamWriter }) => {
-        const messageId = randomUUID();
-        writer.write({ type: "start", messageId });
-        writer.write({ type: "text-start", id: messageId });
+        const state = newChatStreamState();
+        openChatStream(writer, state);
 
-        let assistantText = "";
-        let reasoningId: string | null = null;
-        let finished = false;
         let resolveDone: (() => void) | null = null;
         const donePromise = new Promise<void>((r) => {
           resolveDone = r;
@@ -62,78 +64,23 @@ export function streamViaClaudeDaemon(args: {
           config: { broadcast: { self: true } },
         });
 
+        // Cada evento do broadcast é normalizado e aplicado pelo mesmo mapper
+        // do resume — UIMessage parts (text-delta, reasoning, tool chips, etc.).
+        const handle =
+          (event: string) =>
+          ({ payload }: { payload: unknown }) => {
+            const ev = fromBroadcast(event, payload);
+            if (!ev) return;
+            applyChatStreamEvent(writer, state, ev);
+            if (ev.type === "done") resolveDone?.();
+          };
+
         channel
-          .on("broadcast", { event: "delta" }, ({ payload }) => {
-            const text = (payload as { text?: string })?.text ?? "";
-            if (!text || finished) return;
-            assistantText += text;
-            writer.write({ type: "text-delta", delta: text, id: messageId });
-          })
-          .on("broadcast", { event: "reasoning" }, ({ payload }) => {
-            const text = (payload as { text?: string })?.text ?? "";
-            if (!text || finished) return;
-            // Raciocínio nativo (thinking) — parte separada da resposta. Abre
-            // o bloco de reasoning lazy no 1º delta; a UI renderiza num
-            // disclosure colapsável "Pensando…".
-            if (!reasoningId) {
-              reasoningId = randomUUID();
-              writer.write({ type: "reasoning-start", id: reasoningId });
-            }
-            writer.write({ type: "reasoning-delta", delta: text, id: reasoningId });
-          })
-          .on("broadcast", { event: "tool_use" }, ({ payload }) => {
-            if (finished) return;
-            const p = payload as {
-              id?: string;
-              tool?: string;
-              input?: unknown;
-            };
-            if (!p.id || !p.tool) return;
-            // Emit AI SDK tool-input-available UIMessage part — useChat
-            // renderiza chip "tool: <name>" automaticamente.
-            writer.write({
-              type: "tool-input-available",
-              toolCallId: p.id,
-              toolName: p.tool,
-              input: p.input ?? {},
-            });
-          })
-          .on("broadcast", { event: "tool_result" }, ({ payload }) => {
-            if (finished) return;
-            const p = payload as {
-              id?: string;
-              isError?: boolean;
-              preview?: string;
-            };
-            if (!p.id) return;
-            if (p.isError) {
-              writer.write({
-                type: "tool-output-error",
-                toolCallId: p.id,
-                errorText: p.preview ?? "tool error",
-              });
-            } else {
-              writer.write({
-                type: "tool-output-available",
-                toolCallId: p.id,
-                output: p.preview ?? "",
-              });
-            }
-          })
-          .on("broadcast", { event: "done" }, ({ payload }) => {
-            if (finished) return;
-            finished = true;
-            const fallback =
-              (payload as { responseText?: string })?.responseText ?? "";
-            if (fallback && fallback.length > assistantText.length) {
-              writer.write({
-                type: "text-delta",
-                delta: fallback.slice(assistantText.length),
-                id: messageId,
-              });
-            }
-            resolveDone?.();
-          });
+          .on("broadcast", { event: "delta" }, handle("delta"))
+          .on("broadcast", { event: "reasoning" }, handle("reasoning"))
+          .on("broadcast", { event: "tool_use" }, handle("tool_use"))
+          .on("broadcast", { event: "tool_result" }, handle("tool_result"))
+          .on("broadcast", { event: "done" }, handle("done"));
 
         await new Promise<void>((resolve, reject) => {
           const t = setTimeout(
@@ -164,11 +111,7 @@ export function streamViaClaudeDaemon(args: {
           new Promise<void>((res) => setTimeout(res, TIMEOUT_MS)),
         ]);
 
-        if (reasoningId) {
-          writer.write({ type: "reasoning-end", id: reasoningId });
-        }
-        writer.write({ type: "text-end", id: messageId });
-        writer.write({ type: "finish" });
+        closeChatStream(writer, state);
         await channel.unsubscribe();
       },
       onError: (err) => {

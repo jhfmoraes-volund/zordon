@@ -17,6 +17,9 @@ type Props = {
   messages: UIMessage[];
   status: MessageListStatus;
   emptyState?: ReactNode;
+  /** Hidratando histórico do thread — mostra spinner no corpo em vez do
+   *  empty-state, pra a área não piscar vazia antes das mensagens carregarem. */
+  isLoading?: boolean;
   /** Optional render after a given message — used for "Executar plano" button. */
   renderAfterMessage?: (message: UIMessage, index: number) => ReactNode;
   /** When true, an IntersectionObserver near the top fires `onLoadOlder` to prepend history. */
@@ -31,6 +34,7 @@ export function MessageList({
   messages,
   status,
   emptyState,
+  isLoading,
   renderAfterMessage,
   hasOlder,
   isLoadingOlder,
@@ -149,7 +153,14 @@ export function MessageList({
           className,
         )}
       >
-        {emptyState}
+        {isLoading ? (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <p className="text-xs">Carregando conversa…</p>
+          </div>
+        ) : (
+          emptyState
+        )}
       </div>
     );
   }

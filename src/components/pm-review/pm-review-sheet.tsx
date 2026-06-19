@@ -24,7 +24,6 @@ type ExistingPMReview = {
   facilitatorId: string | null;
   scheduledFor: string | null;
   referenceWeek: string; // YYYY-MM-DD
-  status?: "draft" | "published" | "archived";
 };
 
 type Props = {
@@ -139,24 +138,16 @@ export function PMReviewSheet({
     }
   };
 
-  const isArchive =
-    pmReview?.status === "published" || pmReview?.status === "archived";
-
   const handleDelete = () => {
     setConfirmState({
-      title: isArchive ? "Arquivar PM Review?" : "Excluir PM Review?",
-      description: isArchive
-        ? "O PM Review será arquivado e removido da lista ativa. Histórico preservado."
-        : "O PM Review e suas notes/links serão apagados permanentemente. Ação irreversível.",
-      confirmLabel: isArchive ? "Arquivar" : "Excluir",
+      title: "Excluir PM Review?",
+      description:
+        "O PM Review e suas notes/links serão apagados permanentemente. Ação irreversível.",
+      confirmLabel: "Excluir",
       destructive: true,
       onConfirm: async () => {
         if (onDelete) {
           await onDelete();
-        } else if (isArchive) {
-          await fetchOrThrow(`/api/pm-review/${pmReview!.id}/archive`, {
-            method: "POST",
-          });
         } else {
           await fetchOrThrow(`/api/pm-review/${pmReview!.id}`, {
             method: "DELETE",
@@ -235,7 +226,7 @@ export function PMReviewSheet({
                     disabled={busy}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    {isArchive ? "Arquivar PM Review" : "Excluir PM Review"}
+                    Excluir PM Review
                   </Button>
                 </div>
               )}

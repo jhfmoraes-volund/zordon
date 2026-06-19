@@ -49,6 +49,8 @@ export default function RitualDetailPage({
   const isMobile = useIsMobile();
   const { planMode, setPlanMode } = useChatPlanMode("vitoria");
   const [input, setInput] = useState("");
+  // Hidratando o histórico do thread no mount → spinner no corpo do chat.
+  const [chatHydrating, setChatHydrating] = useState(true);
 
   // ─── Data loading ────────────────────────────────────────────────────
 
@@ -87,11 +89,17 @@ export default function RitualDetailPage({
           if (tid) setThreadId(tid);
           return res;
         },
+        // resumeStream() reconecta a um turn em vôo. O turn é resolvido
+        // server-side a partir do thread — sem id do cliente.
+        prepareReconnectToStreamRequest: () => ({
+          api: `/api/planning/${id}/chat/resume`,
+        }),
       }),
     [id],
   );
 
-  const { messages, status, sendMessage, stop, setMessages } = useChat({ transport });
+  const { messages, status, sendMessage, stop, setMessages, resumeStream } =
+    useChat({ transport });
 
   // Hidrata o histórico do thread no mount — sem isso a conversa parecia
   // "perdida" a cada reload (mensagens existiam no banco, só não no estado).
@@ -102,6 +110,7 @@ export default function RitualDetailPage({
       .then((result: {
         threadId: string | null;
         messages: Array<{ id: string; role: string; content: string }>;
+        activeTurn?: { id: string; status: string } | null;
       }) => {
         if (cancelled) return;
         if (result.threadId) setThreadId(result.threadId);
@@ -113,8 +122,16 @@ export default function RitualDetailPage({
             parts: [{ type: "text", text: m.content }],
           }));
         if (restored.length > 0) setMessages(restored);
+        // Geração em andamento no background → reconecta ao stream pra a UI
+        // voltar a "pensar" de onde parou (replay + tail do ChatTurnEvent).
+        if (result.activeTurn) {
+          void resumeStream();
+        }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setChatHydrating(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -276,6 +293,7 @@ export default function RitualDetailPage({
       variant={isMobile ? "mobile" : "desktop"}
       messages={messages as UIMessage[]}
       status={status}
+      isLoading={chatHydrating}
       input={input}
       onInputChange={setInput}
       onSubmit={handleSubmit}

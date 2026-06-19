@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -118,6 +119,13 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
   const [isFallback, setIsFallback] = useState(false);
   const lastOpenedAtRef = useRef<number | null>(null);
 
+  // Espelha o threadId pro transport memoizado ler na hora de reconectar
+  // (resumeStream) sem recriar o transport.
+  const threadIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    threadIdRef.current = threadId;
+  }, [threadId]);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -133,6 +141,13 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
           setIsFallback(res.headers.get("X-Mode-Fallback") === "true");
           return res;
         },
+        // resumeStream() reconecta a um turn em vôo do thread aberto. Getter pra
+        // a leitura da ref ficar fora do render (regra react-hooks/refs).
+        prepareReconnectToStreamRequest: () => ({
+          get api() {
+            return `/api/agents/alpha/chat/resume?threadId=${threadIdRef.current ?? ""}`;
+          },
+        }),
       }),
     [],
   );
@@ -192,9 +207,16 @@ function AlphaChatProviderInner({ children }: { children: ReactNode }) {
       const res = await fetch(`/api/agents/alpha/chat?threadId=${id}`);
       if (!res.ok) return;
       const data = await res.json();
+      // Atualiza a ref de forma síncrona pro resume abaixo ler o thread certo.
+      threadIdRef.current = id;
       setThreadId(id);
       chat.setMessages(toUIMessages(data.messages || []));
       lastOpenedAtRef.current = Date.now();
+      // Conversa com geração em andamento → reconecta ao stream pra ver o
+      // agente "pensando" de onde parou (replay + tail do ChatTurnEvent).
+      if (data.activeTurn) {
+        void chat.resumeStream();
+      }
     },
     [chat],
   );

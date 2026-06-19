@@ -84,6 +84,78 @@ async function loadProjectSprintIds(projectId: string): Promise<Set<string>> {
   return new Set((data ?? []).map((s) => s.id));
 }
 
+type ProjectMemberRow = {
+  id: string;
+  name: string;
+  fpCapacity: number;
+  dedicationPercent: number;
+  isPM: boolean;
+};
+
+/**
+ * Membros de um projeto, unindo as TRÊS fontes que coexistem no schema (dedup por
+ * id, PM ganha do resto):
+ *   1. `Project.pmId`            — o PM (pode NÃO ter linha em ProjectMember).
+ *   2. `ProjectMember`           — contribuidores explícitos.
+ *   3. `ProjectSquad→SquadMember`— squad linkada, quando existe.
+ *
+ * O join SÓ-squad anterior regredia metade da carteira (8/16 projetos sem
+ * ProjectSquad) — incl. SILFAE, onde João (pmId) e Davi (ProjectMember) sumiam e
+ * a Vitoria devolvia squad vazio no Release Planning. UNION é o piso correto;
+ * espelha o que o Alpha já faz em get_allocated_project_members.
+ */
+async function loadProjectMembers(projectId: string): Promise<ProjectMemberRow[]> {
+  const supabase = db();
+  const byId = new Map<string, ProjectMemberRow>();
+
+  type MemberFields = {
+    id: string;
+    name: string;
+    fpCapacity: number;
+    dedicationPercent: number;
+  };
+
+  // 1) PM (Project.pmId) — fonte primária; frequentemente fora de ProjectMember.
+  const { data: project } = await supabase
+    .from("Project")
+    .select(
+      "pm:Member!Project_pmId_fkey(id, name, fpCapacity, dedicationPercent)",
+    )
+    .eq("id", projectId)
+    .maybeSingle();
+  const pm = (project?.pm ?? null) as MemberFields | null;
+  if (pm) byId.set(pm.id, { ...pm, isPM: true });
+
+  // 2) ProjectMember — contribuidores explícitos.
+  const { data: pmRows } = await supabase
+    .from("ProjectMember")
+    .select("member:Member(id, name, fpCapacity, dedicationPercent)")
+    .eq("projectId", projectId);
+  for (const row of (pmRows ?? []) as Array<{ member: MemberFields | null }>) {
+    if (row.member && !byId.has(row.member.id))
+      byId.set(row.member.id, { ...row.member, isPM: false });
+  }
+
+  // 3) Squad linkada (quando existe) — complementa, nunca substitui.
+  const { data: ps } = await supabase
+    .from("ProjectSquad")
+    .select("squadId")
+    .eq("projectId", projectId);
+  const squadIds = (ps ?? []).map((r) => r.squadId);
+  if (squadIds.length > 0) {
+    const { data: smRows } = await supabase
+      .from("SquadMember")
+      .select("member:Member(id, name, fpCapacity, dedicationPercent)")
+      .in("squadId", squadIds);
+    for (const row of (smRows ?? []) as Array<{ member: MemberFields | null }>) {
+      if (row.member && !byId.has(row.member.id))
+        byId.set(row.member.id, { ...row.member, isPM: false });
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
 export function buildVitoriaTools(planningId: string, projectId: string) {
   return {
     add_context_note: tool({
@@ -759,33 +831,15 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
 
     list_project_members: tool({
       description:
-        "Lista os membros do squad do projeto (id, nome, capacidade FP, dedicação). " +
+        "Lista os membros do projeto (id, nome, capacidade FP, dedicação, isPM). " +
+        "Une PM (Project.pmId) + ProjectMembers + squad linkada — funciona mesmo " +
+        "quando o projeto não tem squad cadastrada (caso comum). " +
         "Use SEMPRE antes de propor assigneeIds num create/update — nunca invente Member.id. " +
-        "Se o projeto não tem squad, retorna lista vazia (avise o PM que precisa cadastrar squad).",
+        "Lista vazia de verdade só se o projeto não tem PM nem membros: aí avise o PM.",
       inputSchema: z.object({}),
       execute: async () => {
-        const supabase = db();
-        const { data: ps } = await supabase
-          .from("ProjectSquad")
-          .select("squadId")
-          .eq("projectId", projectId);
-        const squadIds = (ps ?? []).map((r) => r.squadId);
-        if (squadIds.length === 0) return { ok: true, members: [] };
-
-        const { data: smRows, error } = await supabase
-          .from("SquadMember")
-          .select("member:Member(id, name, fpCapacity, dedicationPercent)")
-          .in("squadId", squadIds);
-        if (error) return { ok: false, error: error.message };
-
-        // Dedup por id (membro pode estar em >1 squad do projeto).
-        const byId = new Map<string, { id: string; name: string; fpCapacity: number; dedicationPercent: number }>();
-        for (const row of (smRows ?? []) as Array<{
-          member: { id: string; name: string; fpCapacity: number; dedicationPercent: number } | null;
-        }>) {
-          if (row.member) byId.set(row.member.id, row.member);
-        }
-        return { ok: true, members: Array.from(byId.values()) };
+        const members = await loadProjectMembers(projectId);
+        return { ok: true, members };
       },
     }),
 
@@ -808,33 +862,9 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           .is("dismissedAt", null);
         if (tErr) return { ok: false, error: tErr.message };
 
-        // Members do squad do projeto
-        const { data: ps } = await supabase
-          .from("ProjectSquad")
-          .select("squadId")
-          .eq("projectId", projectId);
-        const squadIds = (ps ?? []).map((r) => r.squadId);
-
-        type SquadMemberRow = {
-          memberId: string;
-          member: {
-            id: string;
-            name: string;
-            fpCapacity: number;
-            dedicationPercent: number;
-          } | null;
-        };
-
-        let members: SquadMemberRow[] = [];
-        if (squadIds.length > 0) {
-          const { data: smRows } = await supabase
-            .from("SquadMember")
-            .select(
-              "memberId, member:Member(id, name, fpCapacity, dedicationPercent)",
-            )
-            .in("squadId", squadIds);
-          members = (smRows ?? []) as unknown as SquadMemberRow[];
-        }
+        // Members do projeto (PM + ProjectMembers + squad) — mesma fonte que
+        // list_project_members; só-squad regredia projetos sem ProjectSquad.
+        const members = await loadProjectMembers(projectId);
 
         // FP planejado por member
         const fpByMember = new Map<string, number>();
@@ -850,23 +880,21 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           }
         }
 
-        const capacity = members
-          .filter((m) => m.member)
-          .map((m) => {
-            const planned = Math.round((fpByMember.get(m.memberId) ?? 0) * 10) / 10;
-            const cap = m.member?.fpCapacity ?? 0;
-            const dedication = (m.member?.dedicationPercent ?? 100) / 100;
-            const effectiveCap = Math.round(cap * dedication * 10) / 10;
-            return {
-              memberId: m.member?.id,
-              name: m.member?.name,
-              fpCapacity: cap,
-              dedicationPercent: m.member?.dedicationPercent,
-              effectiveCapacity: effectiveCap,
-              fpPlanned: planned,
-              utilization: effectiveCap > 0 ? Math.round((planned / effectiveCap) * 100) : null,
-            };
-          });
+        const capacity = members.map((m) => {
+          const planned = Math.round((fpByMember.get(m.id) ?? 0) * 10) / 10;
+          const cap = m.fpCapacity ?? 0;
+          const dedication = (m.dedicationPercent ?? 100) / 100;
+          const effectiveCap = Math.round(cap * dedication * 10) / 10;
+          return {
+            memberId: m.id,
+            name: m.name,
+            fpCapacity: cap,
+            dedicationPercent: m.dedicationPercent,
+            effectiveCapacity: effectiveCap,
+            fpPlanned: planned,
+            utilization: effectiveCap > 0 ? Math.round((planned / effectiveCap) * 100) : null,
+          };
+        });
 
         return { ok: true, sprintId, capacity };
       },

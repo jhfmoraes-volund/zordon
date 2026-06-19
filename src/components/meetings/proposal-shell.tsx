@@ -7,7 +7,7 @@
 // specific affordances bolted on.
 
 import { useState } from "react";
-import { Sparkles, Wand2 } from "lucide-react";
+import { ChevronRight, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ACTION_TYPE, lookupChip } from "@/lib/status-chips";
@@ -59,6 +59,9 @@ export function ProposalShell({
   children,
 }: ProposalShellProps) {
   const [busy, setBusy] = useState(false);
+  // Explicação da IA fica colapsada por default — é longa e o PM normalmente já
+  // decide pelo título/chip; expande sob demanda.
+  const [reasoningOpen, setReasoningOpen] = useState(false);
 
   const putAction = async (
     body: Record<string, unknown>,
@@ -134,9 +137,24 @@ export function ProposalShell({
           )}
         </div>
         {action.aiReasoning && (
-          <p className="mt-1.5 text-sm text-amber-900 dark:text-amber-200/90">
-            {action.aiReasoning}
-          </p>
+          <div className="mt-1.5">
+            <button
+              type="button"
+              onClick={() => setReasoningOpen((o) => !o)}
+              className="flex items-center gap-1 text-xs font-medium text-amber-800/80 hover:text-amber-900 dark:text-amber-300/80 dark:hover:text-amber-200"
+              aria-expanded={reasoningOpen}
+            >
+              <ChevronRight
+                className={`h-3 w-3 transition-transform ${reasoningOpen ? "rotate-90" : ""}`}
+              />
+              {reasoningOpen ? "Ocultar explicação" : "Ver explicação"}
+            </button>
+            {reasoningOpen && (
+              <p className="mt-1.5 text-sm text-amber-900 dark:text-amber-200/90">
+                {action.aiReasoning}
+              </p>
+            )}
+          </div>
         )}
       </div>
 

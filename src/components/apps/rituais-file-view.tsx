@@ -467,7 +467,6 @@ export function RituaisFileView({
                 facilitatorId: editingPMReview.facilitatorId,
                 scheduledFor: editingPMReview.scheduledFor,
                 referenceWeek: editingPMReview.referenceWeek,
-                status: editingPMReview.status,
               }
             : null
         }

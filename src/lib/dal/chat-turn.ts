@@ -110,6 +110,82 @@ export async function getChatTurn(id: string): Promise<ChatTurnRow | null> {
   return data ?? null;
 }
 
+const ACTIVE_TURN_STATUSES = ["queued", "running"] as const;
+
+export type ActiveChatTurn = { id: string; status: string };
+
+/**
+ * Último turn NÃO-terminal (queued|running) do thread, ou null. Usado pelos GET
+ * de histórico pra o cliente saber, ao remontar a página, que há uma geração em
+ * andamento (e disparar o resume). O daemon serializa turns por thread, então
+ * há no máximo um turn ativo por vez.
+ */
+export async function getActiveChatTurnForThread(
+  threadId: string,
+): Promise<ActiveChatTurn | null> {
+  const { data, error } = await db()
+    .from("ChatTurn")
+    .select("id, status")
+    .eq("threadId", threadId)
+    .in("status", ACTIVE_TURN_STATUSES as unknown as string[])
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { id: data.id, status: data.status } : null;
+}
+
+/**
+ * Último turn do thread (qualquer status), ou null. Usado pelo endpoint de
+ * resume: o cliente só chama resumeStream() quando o GET de histórico reportou
+ * um activeTurn, e nenhum turn novo começa antes disso (sem novo envio do user),
+ * então o último turn É o que ele viu ativo — mesmo que tenha acabado de virar
+ * `done` na corrida. streamResumeChatTurn trata turn terminal (replay + fecha).
+ */
+export async function getLatestChatTurnForThread(
+  threadId: string,
+): Promise<ActiveChatTurn | null> {
+  const { data, error } = await db()
+    .from("ChatTurn")
+    .select("id, status")
+    .eq("threadId", threadId)
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { id: data.id, status: data.status } : null;
+}
+
+export type ChatTurnEventRow = {
+  seq: number;
+  kind: string;
+  payload: Record<string, unknown> | null;
+};
+
+/**
+ * Eventos persistidos do turn com seq > afterSeq, em ordem. Replay durável que
+ * alimenta o resume stream (reconstrói resposta parcial + reasoning + tools que
+ * passaram enquanto o cliente estava fora). Append-only + seq monotônico ⇒
+ * entrega exactly-once sem dedup.
+ */
+export async function getChatTurnEventsAfter(
+  turnId: string,
+  afterSeq: number,
+): Promise<ChatTurnEventRow[]> {
+  const { data, error } = await db()
+    .from("ChatTurnEvent")
+    .select("seq, kind, payload")
+    .eq("turnId", turnId)
+    .gt("seq", afterSeq)
+    .order("seq", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    seq: r.seq,
+    kind: r.kind,
+    payload: (r.payload ?? null) as Record<string, unknown> | null,
+  }));
+}
+
 // ─── Daemon-side helpers (chamadas por exec-chat-turn.ts) ───────────────────
 
 /**

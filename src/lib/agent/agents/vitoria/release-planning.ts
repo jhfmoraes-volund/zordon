@@ -24,19 +24,14 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   getSession,
-  addLinkedPrd,
-  removeLinkedPrd,
-  updatePrdAssignment,
-  updateStatus,
-  updateSession,
   linkContextSource,
   ensureReleasePlanningCeremony,
 } from "@/lib/dal/planning-session";
 import { getPrdById } from "@/lib/dal/product-requirements";
 import { createReadContextSourceTool } from "@/lib/agent/tools/read-context-source";
+import { createListContextSourcesTool } from "@/lib/agent/tools/context-source";
 import { createListPrdsTool } from "@/lib/agent/tools/prd";
 import { buildVitoriaTools } from "./tools";
-import type { Database } from "@/lib/supabase/database.types";
 import type { PromptContext, SystemPrompt } from "../../types";
 
 // ─── Context loader ───────────────────────────────────────────────────────
@@ -62,10 +57,11 @@ export async function loadReleasePlanningContext(
     .eq("planningSessionId", sessionId)
     .not("contextSourceId", "is", null);
 
-  // Prompt magro (D14/Fase 3.0): squad, universo de PRDs e o calendário de sprints
-  // saíram do prompt — o agente os puxa via SENSE (list_project_members / list_prds /
-  // list_project_sprints includePast). Aqui carregamos só o que é estado de board
-  // (PRDs já alocados) + ponteiros (insumos) + identidade do projeto.
+  // Prompt magro (D14): squad, PRDs e o calendário de sprints saem do prompt —
+  // o agente os puxa via SENSE (list_project_members / list_prds /
+  // list_project_sprints includePast). PRD↔sprint board não existe mais (decisão
+  // 2026-06-19): a planning LÊ fontes (insumos + PRDs) e produz tasks/stories.
+  // Aqui carregamos só ponteiros (insumos) + identidade do projeto.
   const project = await supabase
     .from("Project")
     .select(
@@ -89,9 +85,6 @@ export async function loadReleasePlanningContext(
     projectRepoName: projectRow?.githubRepoName ?? null,
     projectRepoBranch: projectRow?.githubDefaultBranch ?? null,
     projectRepoManifest: projectRow?.repoManifest ?? null,
-    // PRDs já no board (estado atual — pequeno). O UNIVERSO de PRDs disponíveis
-    // o agente descobre via list_prds (não pré-carregado).
-    assignedPrds: session.prds,
     linkedContexts: linkedContextsRes.data ?? [],
     projectMemoryMd: projectRow?.memoryMd ?? null,
     memberId: memberId ?? null,
@@ -108,33 +101,11 @@ export function buildReleasePlanningPrompt(ctx: PromptContext): SystemPrompt {
   const sprintCount = agentContext.sprintCount as number;
   const projectName = agentContext.projectName as string | null;
 
-  const assignedPrds = (agentContext.assignedPrds as Array<{
-    id: string;
-    sprintStart: number;
-    sprintCount: number;
-    order: number;
-    prdSlug: string | null;
-    productRequirementId: string | null;
-    productRequirement: { reference: string; title: string; status: string } | null;
-  }>) ?? [];
-
   const linkedContexts = (agentContext.linkedContexts as Array<{
     contextSourceId: string;
     weight: string | null;
     source: { id: string; title: string | null; source: string; kind: string | null } | null;
   }>) ?? [];
-
-  const assignedBlock =
-    assignedPrds.length === 0
-      ? "(board vazio — nenhum PRD vinculado ainda)"
-      : assignedPrds
-          .map((p) => {
-            const label = p.productRequirement
-              ? `${p.productRequirement.reference} · ${p.productRequirement.title}`
-              : (p.prdSlug ?? "(?)");
-            return `- prdRowId=${p.id} · sprint ${p.sprintStart}-${p.sprintStart + p.sprintCount - 1} · ${label}`;
-          })
-          .join("\n");
 
   const contextsBlock =
     linkedContexts.length === 0
@@ -150,76 +121,63 @@ export function buildReleasePlanningPrompt(ctx: PromptContext): SystemPrompt {
 
   const projectMemoryMd = agentContext.projectMemoryMd as string | null;
 
-  const stable = `Você é Vitoria, conduzindo o **Planning** do projeto **${projectName ?? "(?)"}** — o planejamento multi-sprint: distribuir o trabalho em **${sprintCount} sprints** coesas e coerentes.
+  const stable = `Você é Vitoria, conduzindo o **Release Planning** do projeto **${projectName ?? "(?)"}** — o planejamento multi-sprint.
 
-Você opera em três modos, conforme o insumo. PRD é UMA das fontes de trabalho, não a única — story e task podem nascer de qualquer insumo:
-  • **Roadmap de PRDs** — há PRDs (output do Vitor): descubra-os via \`list_prds\` e monte o board ligando PRD↔sprint via \`link_prd_to_sprint\`.
-  • **Kickoff** — projeto novo sem PRD ainda: sintetize stories/tasks direto dos insumos (DS, docs, transcripts) e distribua nas sprints.
-  • **Backfill** — projeto que já rodou (ex: importado do Notion): registre o que foi entregue como tasks JÁ concluídas (\`status='done'\`), estimadas em FP, na sprint/dia em que aconteceram.
+O QUE ESTE PLANNING FAZ: lê FONTES e produz **tasks/stories** distribuídas nas sprints. PRD↔sprint não existe — você NÃO aloca PRD em coluna de sprint. Há duas fontes, ambas viram task/story:
+  • **Insumos** (DS, docs, transcripts, planilhas, Notion, Drive, GitHub) → tasks/stories.
+  • **PRD** (output do Vitor) → você LÊ o PRD e o decompõe em tasks/stories (o PRD é fonte de leitura, não some nem muda de estado).
 
-O que "coesa e coerente" significa:
+Dois jeitos de produzir, conforme o momento:
+  • **Kickoff** — projeto novo: sintetize stories/tasks das fontes e distribua nas sprints futuras.
+  • **Backfill** — projeto que já rodou: registre o que foi entregue como tasks JÁ concluídas (\`status='done'\`), estimadas em FP, na sprint/dia em que aconteceram.
+
+O que "coeso e coerente" significa:
   • Dependências respeitadas — o que depende de outro nunca vem antes dele.
-  • Cada sprint tem um tema/objetivo nomeável — não uma sacola de itens soltos.
-  • Fundação primeiro (auth, schema, infra) quando PRDs ou insumos indicarem.
-  • Carga distribuída de forma compatível com a capacidade do squad (veja \`list_project_members\`).
+  • Cada sprint com um tema/objetivo nomeável — não uma sacola de itens soltos.
+  • Fundação primeiro (auth, schema, infra) quando as fontes indicarem.
+  • Carga compatível com a capacidade do squad (veja \`list_project_members\`).
 
 COMO TRABALHAR — o estado vivo vem por TOOL, não pré-carregado no prompt. Puxe o que precisar:
-  1. **Leia antes de planejar.** \`list_prds\` lista os PRDs do projeto; \`read_prd\`
-     traz o conteúdo completo de um. \`list_context_sources\` mostra TODO o pool de
-     insumos (linkados e não); \`read_context_source\` abre um; \`link_context_source\`
-     traz um pra esta sessão. \`list_project_members\` dá o squad (capacidade +
+  1. **Leia as fontes antes de planejar.** \`list_prds\`/\`read_prd\` pros PRDs;
+     \`list_context_sources\`/\`read_context_source\` pros insumos (\`link_context_source\`
+     traz um do pool pra sessão). \`list_project_members\` dá o squad (capacidade +
      Member.id pra assignee). \`list_project_sprints\` dá as sprints — passe
      \`includePast=true\` no BACKFILL (a entrega cai em sprint já terminada).
   1b. **Insumos ESTRUTURADOS (JSON/CSV grandes) — NÃO leia inteiro.** Se
      \`read_context_source\` devolver um stub \`structured: true\` (ou for um
-     activity report / export), use \`describe_structured_source\` pro shape
-     (colunas/tipos/contagem) e \`query_structured_source\` pra consultar via SQL
-     (a fonte vira a tabela \`src\`). Ancore decisões em AGREGADOS (count/sum/group
-     by), nunca em leitura de blob cru. No BACKFILL, deixe o SQL contar (commits
-     por feature, período) e você decide o julgamento: sprint pela data, FP 1-13,
-     story vs task.
-  2. **Roadmap de PRDs:** \`link_prd_to_sprint\` (exige justification),
-     \`move_prd\`, \`unlink_prd\`.
-  3. **Criar trabalho em LOTE (kickoff/backfill):** quando derivar VÁRIAS tasks de
-     uma fonte, use \`propose_tasks\` — UMA chamada cria N tasks com lastro pela
-     FONTE: passe \`sourceId\` do insumo e ele cria a nota de procedência sozinho
-     (sem nota por item). Cada linha: \`title\`, \`functionPoints\` 1-13,
-     \`assigneeIds\` (Member.id de \`list_project_members\`), \`targetSprintId\`, e no
-     backfill \`status='done'\` + \`dueDate\` (dia entregue). A tool valida cada linha
-     e devolve \`{created, errors}\` — corrija só as que falharem. Pra 1-2 tasks
-     pontuais numa conversa, use \`propose_task_action\` (com \`add_context_note\` de
-     lastro). NÃO empurre um backfill inteiro por \`propose_task_action\` 1-a-1.
-  4. **Estado vivo:** chame \`get_planning_state\` no início de um turno que vá
+     activity report / export), use \`describe_structured_source\` pro shape e
+     \`query_structured_source\` pra consultar via SQL (a fonte vira a tabela \`src\`).
+     Ancore decisões em AGREGADOS (count/sum/group by), nunca em blob cru. No
+     BACKFILL, deixe o SQL contar (commits por feature, período) e você decide o
+     julgamento: sprint pela data, FP 1-13, story vs task.
+  2. **Produzir em LOTE:** quando derivar VÁRIAS tasks de uma fonte (insumo OU PRD),
+     use \`propose_tasks\` — UMA chamada cria N tasks com lastro pela FONTE: passe
+     \`sourceId\` (do insumo estruturado) e ele cria a nota de procedência sozinho
+     (sem nota por item). Cada linha: \`title\`, \`functionPoints\` 1-13, \`assigneeIds\`
+     (Member.id de \`list_project_members\`), \`targetSprintId\`, e no backfill
+     \`status='done'\` + \`dueDate\` (dia entregue). A tool valida cada linha e devolve
+     \`{created, errors}\` — corrija só as que falharem. Agrupe sob stories com
+     \`propose_story\` quando fizer sentido (kickoff). Pra 1-2 tasks pontuais numa
+     conversa, \`propose_task_action\` (com \`add_context_note\` de lastro). NÃO empurre
+     um backfill inteiro por \`propose_task_action\` 1-a-1.
+  3. **Estado vivo:** chame \`get_planning_state\` no início de um turno que vá
      editar/descartar proposta ou citar nota — IDs nunca se inventam.
-  5. **Quantidade de sprints é negociável.** Não coube (ou sobrou)? Proponha e
-     use \`set_sprint_count\` — explique o porquê antes. Mas no BACKFILL, NÃO crie
-     sprints só pra acomodar uma data: se não há atividade fora das sprints
-     existentes, tudo cabe nelas.
 
 REGRAS:
-  • PRDs são UMA fonte; você PODE sintetizar story/task direto de insumos quando
-    fizer sentido (kickoff sem PRD, backfill de trabalho entregue). O que você NÃO
-    faz é inventar PRD novo — se um insumo pedir um PRD formal, aponte pro PM criar
-    com o Vitor.
+  • Você NÃO gera PRD novo nem aloca PRD em sprint — PRD é fonte de leitura. Se um
+    insumo pedir um PRD formal, aponte pro PM criar com o Vitor.
   • Toda proposta carrega lastro de procedência (a FONTE via \`propose_tasks(sourceId)\`,
     ou \`sourceNoteIds\`/\`add_context_note\` no caso conversacional) e aiReasoning
     curta e concreta (dependência, fundação, risco, capacidade).
-  • Sprints vão de 1 a ${sprintCount}. Nunca aloque além disso (a menos que
-    ajuste via set_sprint_count primeiro).
-  • Tudo é staging — o plano só "fecha" quando o PM aprova. Board vazio + pedido
-    de proposta: leia PRDs/insumos primeiro, depois monte sprint a sprint narrando
-    o racional.
+  • Tudo é staging — vira task real só quando o PM clica **Aplicar**. No BACKFILL,
+    NÃO invente sprint pra acomodar uma data: se não há atividade fora das sprints
+    existentes, tudo cabe nelas.
 
 Nunca peça projectId ou sessionId — você já tem.
 
-## Estado atual do Release Planning (ID: ${sessionId})
+## Release Planning (ID: ${sessionId})
 
-**Título**: ${title}
-**Status**: ${status}
-**Sprints**: ${sprintCount}
-
-### PRDs já no board
-${assignedBlock}
+**Título**: ${title} · **Status**: ${status} · **Sprints**: ${sprintCount}
 
 ### Insumos linkados (índice — abra via tool, nunca está inteiro aqui)
 ${contextsBlock}
@@ -228,10 +186,10 @@ ${contextsBlock}
   // Mode block fica no volatile: o PM alterna PLAN/ACT por turno.
   const modeBlock = ctx.capabilities.planMode
     ? `## Modo atual: PLAN
-Você está em modo planejamento. NÃO chame tools de escrita (link_prd_to_sprint, move_prd, unlink_prd, link_context_source, set_sprint_count, add_context_note, propose_story, propose_task_action, propose_tasks, update_proposed_action, delete_proposed_action) — leitura é livre.
-Apresente a proposta em texto curto: alocação por sprint com o porquê. Quando o PM disser "vai" / "executa" / "aplica" / "pode", chame as tools de escrita SEM nova proposta — o ok já foi dado. Se ele ajustar o plano, refaça a proposta e espere novo ok.`
+Você está em modo planejamento. NÃO chame tools de escrita (link_context_source, add_context_note, propose_story, propose_task_action, propose_tasks, update_proposed_action, delete_proposed_action) — leitura é livre.
+Apresente a proposta em texto curto: o que entra em cada sprint e o porquê. Quando o PM disser "vai" / "executa" / "aplica" / "pode", chame as tools de escrita SEM nova proposta — o ok já foi dado. Se ele ajustar, refaça a proposta e espere novo ok.`
     : `## Modo atual: ACT
-Execute com confirmação proporcional: alocações/tasks pontuais que o PM pediu, faça direto; plano completo (3+ PRDs ou várias tasks de uma vez) ou set_sprint_count, proponha curto e peça ok antes.`;
+Execute com confirmação proporcional: tasks pontuais que o PM pediu, faça direto; plano completo (várias tasks de uma vez), proponha curto e peça ok antes.`;
 
   const volatile = `${modeBlock}
 
@@ -301,11 +259,11 @@ export async function buildReleasePlanningTools(
 }
 
 /**
- * As 6 tools de BOARD do Release Planning (vincular/mover/desvincular PRD,
- * ajustar nº de sprints, listar/linkar insumos). Síncrona e sem dependência da
- * companion ceremony — por isso pode ser registrada tool-a-tool no
- * TOOL_REGISTRY (path daemon), ao lado do staging (buildVitoriaTools) e do
- * read_prd/read_context_source genéricos.
+ * Tools de CURADORIA DE INSUMOS do Release Planning. PRD↔sprint saiu de cena
+ * (decisão 2026-06-19): o Release Planning não aloca PRD em coluna de sprint —
+ * ele LÊ fontes (insumos + PRDs) e produz tasks/stories. PRD virou fonte de
+ * leitura (list_prds/read_prd), não unidade de board. Síncrona e sem dependência
+ * da companion ceremony — registrada tool-a-tool no TOOL_REGISTRY (path daemon).
  */
 export function buildReleasePlanningBoardTools(
   sessionId: string,
@@ -313,31 +271,11 @@ export function buildReleasePlanningBoardTools(
   memberId: string | null,
 ) {
   return {
-    list_context_sources: tool({
-      description:
-        "Lista o pool de insumos do projeto (transcripts, docs, planilhas, " +
-        "Notion, Drive, GitHub) — inclusive os ainda NÃO linkados a este " +
-        "release planning. Use pra descobrir contexto além do que o PM linkou.",
-      inputSchema: z.object({
-        kind: z
-          .string()
-          .optional()
-          .describe("Filtra por kind (ex: transcript, document, notion, gdrive_file)"),
-      }),
-      execute: async ({ kind }) => {
-        let q = db()
-          .from("ContextSource")
-          .select("id, kind, title, source, capturedAt, summary")
-          .eq("projectId", projectId)
-          .order("capturedAt", { ascending: false, nullsFirst: false })
-          .limit(50);
-        if (kind) {
-          q = q.eq("kind", kind as Database["public"]["Enums"]["context_source_kind"]);
-        }
-        const { data, error } = await q;
-        if (error) return { ok: false, error: error.message };
-        return { ok: true, sources: data ?? [] };
-      },
+    // Project-scoped, compartilhada com PM Review / Planning — factory única em
+    // tools/context-source.ts. sessionId aqui É o planningSessionId → marca
+    // `linked` os insumos já curados neste release planning.
+    list_context_sources: createListContextSourcesTool(projectId, {
+      releasePlanningId: sessionId,
     }),
 
     link_context_source: tool({
@@ -350,99 +288,6 @@ export function buildReleasePlanningBoardTools(
       execute: async ({ contextSourceId }) => {
         const row = await linkContextSource(sessionId, contextSourceId, memberId);
         return { ok: true, linkId: row.id };
-      },
-    }),
-
-    link_prd_to_sprint: tool({
-      description:
-        "Vincula um PRD (ProductRequirement) a uma sprint do release planning. " +
-        "Use o productRequirementId — descubra-o via list_prds. " +
-        "Vincular um PRD coloca o plano em staging (status='in-review').",
-      inputSchema: z.object({
-        productRequirementId: z.string().uuid().describe("ID do ProductRequirement"),
-        sprintStart: z.number().int().min(1).max(12).describe("Sprint inicial (1-based)"),
-        sprintCount: z
-          .number()
-          .int()
-          .min(1)
-          .max(6)
-          .optional()
-          .describe("Quantas sprints o PRD ocupa. Default 1."),
-        justification: z
-          .string()
-          .min(1)
-          .describe(
-            "Por que este PRD entra NESTA sprint — dependência, fundação, risco ou capacidade. Curto e concreto; aparece no board.",
-          ),
-      }),
-      execute: async ({ productRequirementId, sprintStart, sprintCount, justification }) => {
-        const row = await addLinkedPrd(sessionId, productRequirementId, {
-          sprintStart,
-          sprintCount,
-          justification,
-        });
-        // Vincular conversacionalmente tira o draft do limbo → staging.
-        const session = await getSession(sessionId);
-        if (session?.status === "draft") {
-          await updateStatus(sessionId, "in-review");
-        }
-        return {
-          ok: true,
-          prdRowId: row.id,
-          sprintStart: row.sprintStart,
-          sprintCount: row.sprintCount,
-        };
-      },
-    }),
-
-    move_prd: tool({
-      description:
-        "Reposiciona um PRD já no board (muda sprint inicial, span ou ordem). " +
-        "Use o prdRowId listado em 'PRDs já no board'.",
-      inputSchema: z.object({
-        prdRowId: z.string().uuid().describe("ID da row de PlanningSessionPRD"),
-        sprintStart: z.number().int().min(1).max(12).optional(),
-        sprintCount: z.number().int().min(1).max(6).optional(),
-        order: z.number().int().min(0).optional(),
-        justification: z
-          .string()
-          .optional()
-          .describe("Novo porquê da posição, se o racional mudou."),
-      }),
-      execute: async ({ prdRowId, sprintStart, sprintCount, order, justification }) => {
-        const row = await updatePrdAssignment(prdRowId, {
-          sprintStart,
-          sprintCount,
-          order,
-          ...(justification !== undefined ? { agentJustification: justification } : {}),
-        });
-        return { ok: true, prdRowId: row.id, sprintStart: row.sprintStart };
-      },
-    }),
-
-    unlink_prd: tool({
-      description:
-        "Remove um PRD do board do release planning. Use o prdRowId. Não apaga o ProductRequirement.",
-      inputSchema: z.object({
-        prdRowId: z.string().uuid().describe("ID da row de PlanningSessionPRD"),
-      }),
-      execute: async ({ prdRowId }) => {
-        await removeLinkedPrd(prdRowId);
-        return { ok: true, prdRowId };
-      },
-    }),
-
-    set_sprint_count: tool({
-      description:
-        "Ajusta a quantidade de sprints do release planning (1-12). Proponha e " +
-        "explique o porquê ao PM antes de chamar.",
-      inputSchema: z.object({
-        sprintCount: z.number().int().min(1).max(12),
-        reason: z.string().min(1).describe("Por que o escopo pede esse número de sprints"),
-      }),
-      execute: async ({ sprintCount, reason }) => {
-        await updateSession(sessionId, { sprintCount });
-        return { ok: true, sprintCount, reason };
       },
     }),
   };

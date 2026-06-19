@@ -13,6 +13,7 @@ import {
   streamViaClaudeDaemon,
   isDaemonOnline,
 } from "@/lib/agent/sse-chat-proxy";
+import { getActiveChatTurnForThread } from "@/lib/dal/chat-turn";
 import type { Capabilities } from "@/lib/agent/types";
 
 export const maxDuration = 300;
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!threadId) {
-    return NextResponse.json({ threadId: null, messages: [] });
+    return NextResponse.json({ threadId: null, messages: [], activeTurn: null });
   }
 
   const { data: messages } = await db()
@@ -80,9 +81,12 @@ export async function GET(req: NextRequest) {
     .eq("threadId", threadId)
     .order("createdAt", { ascending: true });
 
+  const activeTurn = await getActiveChatTurnForThread(threadId);
+
   return NextResponse.json({
     threadId,
     messages: messages || [],
+    activeTurn,
   });
 }
 

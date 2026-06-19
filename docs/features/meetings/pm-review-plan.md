@@ -19,7 +19,7 @@
 
 5. **Cadência semanal.** `referenceWeek = data da segunda-feira` (consistente com [[project_sprint_week_model]]). UNIQUE `(projectId, referenceWeek)`.
 
-6. **Sem state machine complexa.** Estados enxutos: `draft` → `published` → `archived`. Published ≠ fechado; é "disponível pra consulta, ainda editável".
+6. **Sem state machine complexa.** Estados enxutos: `draft` → `published` (exclusão via hard delete; `archived` é estado legado — ver §Estados). Published ≠ fechado; é "disponível pra consulta, ainda editável".
 
 ## Pré-requisitos
 
@@ -127,12 +127,13 @@ ALTER TABLE "ChatThread"
 
 ## Estados
 
-3 estados, transições sem volta:
+Transições sem volta:
 
 | De → Para | Quem dispara | Side effect |
 |---|---|---|
 | `draft → published` | PM clica "Publicar" | stamp `publishedAt`. Continua editável. |
-| `published → archived` | PM manual OU cron 90d após `referenceWeek` | stamp `archivedAt`. Some da lista ativa. |
+
+> **Atualização 2026-06-19:** `archived` deixou de ser uma ação — PM Review agora se **exclui** (hard delete, `DELETE /api/pm-review/[id]` em qualquer status; cascata derruba notes/links). O valor `archived` segue no enum/CHECK só como estado **legado** de linhas antigas (renderiza/lista, mas nada transiciona para ele). Endpoint `POST /api/pm-review/[id]/archive` deletado.
 
 **Sem trigger SQL gerado** (volume de transições é trivial). Lib `src/lib/pm-review/status.ts` (~40 linhas) valida transições + stampa timestamps. Validação na API antes do UPDATE.
 
@@ -145,7 +146,7 @@ Espelha a estrutura de [src/lib/dal/planning.ts](../../../src/lib/dal/planning.t
 - `createPMReview({ projectId, referenceWeek?, facilitatorId? })` — `referenceWeek` default = segunda da semana corrente.
 - `updatePMReview(id, patch)` — facilitator, referenceWeek, scheduledFor.
 - `publishPMReview(id)` — status update + stamp.
-- `archivePMReview(id)` — idem.
+- `deletePMReview(id)` — hard delete (qualquer status; cascata `ON DELETE CASCADE`).
 - `linkTranscript(pmReviewId, transcriptRefId, weight?)` / `unlinkTranscript(...)`.
 - `linkMeeting(pmReviewId, meetingId)` / `unlinkMeeting(...)`.
 - `addNote(pmReviewId, { kind, content, sources })` / `updateNote` / `dismissNote`.
@@ -161,9 +162,8 @@ Sem `concludePMReview` cascata. Sem `MeetingTaskAction`. Sem `PlanningTree` aná
 | GET | `/api/projects/[id]/pm-reviews?status=published&limit=N` | Listar do projeto. |
 | GET | `/api/pm-review/[id]` | Detail. |
 | PATCH | `/api/pm-review/[id]` | Editar facilitator/referenceWeek/scheduledFor. |
-| DELETE | `/api/pm-review/[id]` | Hard delete (draft) ou archive (published). |
+| DELETE | `/api/pm-review/[id]` | Hard delete (qualquer status; cascata derruba notes/links). |
 | POST | `/api/pm-review/[id]/publish` | `draft → published`. |
-| POST | `/api/pm-review/[id]/archive` | `published → archived`. |
 | POST | `/api/pm-review/[id]/transcripts` | Link transcripts (body: `[{transcriptRefId, weight}]`). |
 | DELETE | `/api/pm-review/[id]/transcripts/[transcriptRefId]` | Unlink. |
 | POST | `/api/pm-review/[id]/meetings` | Link meetings. |
