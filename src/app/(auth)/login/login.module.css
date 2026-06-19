@@ -324,6 +324,7 @@
   font: 500 12px/1 var(--font-mono);
   letter-spacing: 0.28em;
   text-transform: uppercase;
+  text-decoration: none;
   cursor: pointer;
   transition: border-color 160ms, color 160ms, background 160ms, letter-spacing 220ms;
   display: inline-flex;
@@ -465,5 +466,101 @@
     max-height: 96px;
     margin-top: 16px;
     margin-bottom: 18px;
+  }
+}
+
+/* ============================================================
+   Forgot-password / recovery
+   Reusa .stage/.layout/.header/.field/.input/.submit/.error/
+   .footer do terminal de login acima. As classes abaixo cobrem
+   só o que é específico desta tela: o bloco de cópia e o estado
+   de "link enviado". Mesma linguagem visual, outro comando.
+   ============================================================ */
+
+/* Área central — ocupa o 1fr do meio do .layout e centraliza o
+   conteúdo verticalmente entre header e footer. */
+.body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+.lede {
+  margin: 0 0 28px;
+  max-width: 48ch;
+  font: 400 12px/1.7 var(--font-mono);
+  letter-spacing: 0.01em;
+  color: oklch(0.6 0 0);
+}
+.lede strong {
+  font-weight: 500;
+  color: oklch(0.82 0 0);
+}
+
+.backRow {
+  margin-top: 18px;
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: oklch(0.6 0 0);
+  text-decoration: none;
+  border-bottom: 1px dotted oklch(1 0 0 / 12%);
+  padding-bottom: 1px;
+  transition: color 160ms, border-color 160ms;
+}
+.backLink:hover {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+/* Estado de sucesso — confirmação de envio. */
+.sent {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sentHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 500 12px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(0.78 0.13 145);
+}
+.sentDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: oklch(0.65 0.13 145);
+  box-shadow: 0 0 8px oklch(0.65 0.13 145 / 60%);
+}
+.sentText {
+  margin: 0;
+  max-width: 48ch;
+  font: 400 12px/1.7 var(--font-mono);
+  color: oklch(0.6 0 0);
+}
+.sentText strong {
+  font-weight: 500;
+  color: oklch(0.82 0 0);
+}
+.sent .submit {
+  margin-top: 8px;
+}
+
+@media (max-width: 560px) {
+  .lede,
+  .sentText {
+    font-size: 12px;
+  }
+  .backRow {
+    margin-top: 16px;
+    font-size: 12px;
   }
 }

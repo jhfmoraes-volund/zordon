@@ -39,6 +39,7 @@ import {
 } from "./tools/memory";
 import { buildPMReviewTools } from "./agents/vitoria/pm-review";
 import { buildVitoriaTools } from "./agents/vitoria/tools";
+import { buildReleasePlanningBoardTools } from "./agents/vitoria/release-planning";
 import {
   createProposePrdTool,
   createReadPrdTool,
@@ -48,6 +49,10 @@ import {
   createListPrdsTool,
 } from "./tools/prd";
 import { createReadContextSourceTool } from "./tools/context-source";
+import {
+  createDescribeStructuredSourceTool,
+  createQueryStructuredSourceTool,
+} from "./tools/structured-source";
 import {
   createReadWorkspaceFileTool,
   createGlobWorkspaceTool,
@@ -79,6 +84,10 @@ export type ToolContext = {
   /** Vitoria Planning Ceremony surface — id da PlanningCeremony do thread
    *  (channel='planning'). Resolvido pelo tool router a partir do chatTurnId. */
   planningId?: string | null;
+  /** Vitoria Release Planning surface — id da PlanningSession do thread
+   *  (channel='release_planning'). As board tools (link_prd_to_sprint, …) usam
+   *  isto; o staging usa planningId (companion ceremony, resolvida pelo router). */
+  releasePlanningId?: string | null;
   /** Path absoluto do workspace clonado na Forja (<FORGE_HOME>/workspaces/<key>/).
    *  Null se projeto ainda não tem 1º Forge run. Workspace tools (read/glob/grep)
    *  validam todo path contra este prefix. */
@@ -114,6 +123,12 @@ function requirePMReviewId(ctx: ToolContext): string {
 function requirePlanningId(ctx: ToolContext): string {
   if (!ctx.planningId) throw new Error("planningId required for this tool");
   return ctx.planningId;
+}
+
+function requireReleasePlanningId(ctx: ToolContext): string {
+  if (!ctx.releasePlanningId)
+    throw new Error("releasePlanningId required for this tool");
+  return ctx.releasePlanningId;
 }
 
 type ToolFactory = (ctx: ToolContext) => Tool;
@@ -191,6 +206,53 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
       pmReviewId: ctx.pmReviewId ?? null,
       planningId: ctx.planningId ?? null,
     }),
+
+  // ── Insumos estruturados (JSON/CSV) — querying via SQL (DuckDB) ────────
+  // Execução roda AQUI (processo do app); o daemon só expõe o schema e proxia.
+  describe_structured_source: () => createDescribeStructuredSourceTool(),
+  query_structured_source: () => createQueryStructuredSourceTool(),
+
+  // ── Vitoria Release Planning — board tools (PRD↔sprint + curadoria) ────
+  // Surface 'release_planning'. read_prd/read_context_source reusam as
+  // entradas genéricas; o staging (propose_task_action…) usa ctx.planningId
+  // (companion ceremony, resolvida pelo tool router). As 6 abaixo usam o
+  // releasePlanningId (id da PlanningSession).
+  list_context_sources: (ctx) =>
+    buildReleasePlanningBoardTools(
+      requireReleasePlanningId(ctx),
+      ctx.projectId,
+      ctx.memberId ?? null,
+    ).list_context_sources,
+  link_context_source: (ctx) =>
+    buildReleasePlanningBoardTools(
+      requireReleasePlanningId(ctx),
+      ctx.projectId,
+      ctx.memberId ?? null,
+    ).link_context_source,
+  link_prd_to_sprint: (ctx) =>
+    buildReleasePlanningBoardTools(
+      requireReleasePlanningId(ctx),
+      ctx.projectId,
+      ctx.memberId ?? null,
+    ).link_prd_to_sprint,
+  move_prd: (ctx) =>
+    buildReleasePlanningBoardTools(
+      requireReleasePlanningId(ctx),
+      ctx.projectId,
+      ctx.memberId ?? null,
+    ).move_prd,
+  unlink_prd: (ctx) =>
+    buildReleasePlanningBoardTools(
+      requireReleasePlanningId(ctx),
+      ctx.projectId,
+      ctx.memberId ?? null,
+    ).unlink_prd,
+  set_sprint_count: (ctx) =>
+    buildReleasePlanningBoardTools(
+      requireReleasePlanningId(ctx),
+      ctx.projectId,
+      ctx.memberId ?? null,
+    ).set_sprint_count,
 
   // ── Workspace sandboxed (lê apenas dentro do workspace do projeto) ───
   read_workspace_file: (ctx) =>
@@ -328,6 +390,7 @@ const VITORIA_PLANNING_PROJECT_NAMES = [
 const VITORIA_PLANNING_CEREMONY_NAMES = [
   "add_context_note",
   "propose_task_action",
+  "propose_tasks",
   "update_proposed_action",
   "delete_proposed_action",
   "get_planning_state",
@@ -364,6 +427,7 @@ const VITOR_TOOLS = new Set([
   "add_open_question", "resolve_open_question", "list_open_questions",
   "propose_prd", "read_prd", "update_prd", "approve_prd", "link_prd_dependency", "list_prds",
   "read_context_source",
+  "describe_structured_source", "query_structured_source",
   "read_workspace_file", "glob_workspace", "grep_workspace",
 ]);
 
@@ -373,6 +437,8 @@ const VITOR_TOOLS = new Set([
 const VITORIA_PMREVIEW_TOOLS = new Set<string>([
   "read_transcript_content",
   "read_context_source",
+  "describe_structured_source",
+  "query_structured_source",
   "add_pm_review_note",
   "update_pm_review_report",
   "get_project_indicators",
@@ -386,17 +452,47 @@ const VITORIA_PLANNING_TOOLS = new Set<string>([
   ...VITORIA_PLANNING_PROJECT_NAMES,
   ...VITORIA_PLANNING_CEREMONY_NAMES,
   "read_context_source",
+  "describe_structured_source",
+  "query_structured_source",
 ]);
 
 const ALPHA_TOOLS = new Set<string>([
   ...ALPHA_READ_TOOL_NAMES,
   ...ALPHA_ROUTE_TOOL_NAMES,
+  "describe_structured_source",
+  "query_structured_source",
+]);
+
+// Release Planning (surface 'release_planning'): board (PRD↔sprint) + staging
+// (reusa as ceremony tools, ligadas à companion via ctx.planningId) + leitura
+// (PRD/insumos) + structured querying. read_prd/read_context_source reusam as
+// entradas genéricas. NÃO inclui as notas/report de PM Review.
+const VITORIA_RELEASE_PLANNING_TOOLS = new Set<string>([
+  // board
+  "link_prd_to_sprint",
+  "move_prd",
+  "unlink_prd",
+  "set_sprint_count",
+  "list_context_sources",
+  "link_context_source",
+  // leitura
+  "read_prd",
+  // PRD-universe não vai mais no prompt (D14/Fase 3.0) — o agente descobre via SENSE.
+  "list_prds",
+  "read_context_source",
+  "describe_structured_source",
+  "query_structured_source",
+  // núcleo compartilhado (sprint/tasks/capacidade/deps/DS)
+  ...VITORIA_SHARED_READ_NAMES,
+  // staging de tasks/stories (companion ceremony via ctx.planningId)
+  ...VITORIA_PLANNING_PROJECT_NAMES,
+  ...VITORIA_PLANNING_CEREMONY_NAMES,
 ]);
 
 /**
  * Quais tools cada agente expõe via MCP. Filtra o registry global por slug +
  * superfície. Vitoria dispatcha por `surface` (vem do thread.channel):
- * 'planning' → toolset de staging; qualquer outro (pm_review/default) → PM Review.
+ * 'planning' → staging; 'release_planning' → board + staging; senão → PM Review.
  */
 export function getToolNamesForAgent(
   agentSlug: string,
@@ -404,9 +500,10 @@ export function getToolNamesForAgent(
 ): string[] {
   if (agentSlug === "vitor") return [...VITOR_TOOLS];
   if (agentSlug === "vitoria") {
-    return surface === "planning"
-      ? [...VITORIA_PLANNING_TOOLS]
-      : [...VITORIA_PMREVIEW_TOOLS];
+    if (surface === "planning") return [...VITORIA_PLANNING_TOOLS];
+    if (surface === "release_planning")
+      return [...VITORIA_RELEASE_PLANNING_TOOLS];
+    return [...VITORIA_PMREVIEW_TOOLS];
   }
   if (agentSlug === "alpha") return [...ALPHA_TOOLS];
   return [];

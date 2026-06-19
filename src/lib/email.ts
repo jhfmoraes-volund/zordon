@@ -7,7 +7,12 @@ import "server-only";
  * Phase-1 where email infra isn't wired yet. Returns { ok } either way.
  */
 
-const RESEND_FROM = process.env.RESEND_FROM ?? "Zordon <onboarding@resend.dev>";
+// Remetente transacional. Domínio verificado no Resend (volund.com.br), então
+// qualquer local-part @volund.com.br é aceito sem precisar de mailbox real.
+// Hard-coded de propósito: não é segredo e funciona em qualquer ambiente sem
+// depender de env em produção. Ainda dá pra sobrescrever via RESEND_FROM.
+const RESEND_FROM =
+  process.env.RESEND_FROM ?? "Zordon <nao-responda@volund.com.br>";
 
 /**
  * Domínios autorizados a receber email transacional do Zordon. Regra de

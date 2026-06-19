@@ -5,6 +5,7 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { detectStructuredFormat } from "./structured-detect";
 
 export function createReadContextSourceTool(
   /** Para self-correcting errors — quando id não casar, listamos os IDs
@@ -47,7 +48,33 @@ export function createReadContextSourceTool(
       // estourar context). Acima disso, indica truncamento.
       if (data.fullText && data.fullText.length > 0) {
         const MAX = 50_000;
-        const truncated = data.fullText.length > MAX;
+        const totalLength = data.fullText.length;
+
+        // D10 (roteamento): fonte ESTRUTURADA grande não devolve o blob —
+        // truncar JSON/CSV no meio é inútil e queima o turno. Devolve um stub
+        // apontando pras structured tools (describe/query_structured_source),
+        // que consultam via SQL sem inlinar o conteúdo. Runbook §6/§9.
+        if (totalLength > MAX) {
+          const format = detectStructuredFormat(data);
+          if (format) {
+            return {
+              id: data.id,
+              kind: data.kind,
+              title: data.title,
+              capturedAt: data.capturedAt,
+              structured: true,
+              format,
+              totalLength,
+              note:
+                `Fonte ESTRUTURADA (${format.toUpperCase()}, ${totalLength.toLocaleString("pt-BR")} chars) — ` +
+                `grande demais pra ler inteira. Use describe_structured_source(sourceId='${data.id}') ` +
+                `pro shape (colunas/tipos/contagem), depois query_structured_source pra consultar via SQL. ` +
+                `NÃO tente ler o blob — ancore decisões em agregados.`,
+            };
+          }
+        }
+
+        const truncated = totalLength > MAX;
         return {
           id: data.id,
           kind: data.kind,
@@ -55,7 +82,7 @@ export function createReadContextSourceTool(
           capturedAt: data.capturedAt,
           fullText: truncated ? data.fullText.slice(0, MAX) : data.fullText,
           truncated,
-          totalLength: data.fullText.length,
+          totalLength,
         };
       }
 

@@ -3,6 +3,8 @@
 > **Pra dev criando o próximo agente neste repo**, depois de Vitor (Design Sessions) e Alpha (Ops). Documento auto-contido, opinionado, com paths reais. Stack: Next.js 16 + Supabase + AI SDK v6 + Anthropic Claude.
 >
 > **Como usar:** leia 0 → 4 antes de criar pasta nenhuma. Use 5 → 10 como referência durante o build. Use 11 → 12 pra calibrar com o usuário real (PM/CRO/etc) via Claude Code. Use 13 → 15 pra checar qualidade antes de mergear.
+>
+> **Antes de desenhar tools, leia a doutrina:** [agent-construction-doctrine.md](../platform/agent-construction-doctrine.md) — o *porquê* (poucas tools afiadas que leem a realidade; disciplina no ACT, liberdade no SENSE) + o checklist que toda tool nova passa. Este runbook é o *como* mecânico; a doutrina é o *porquê* que mantém o agente esperto.
 
 ---
 

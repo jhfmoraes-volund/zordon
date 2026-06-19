@@ -63,6 +63,27 @@ function validateCreatePayload(
   return issues;
 }
 
+/**
+ * Set de Member.id que EXISTEM, dado um conjunto de candidatos. Usado por
+ * `propose_tasks` pra validar `assigneeIds` em lote (D14: o piso é integridade —
+ * assignee inexistente vira FK-fail no conclude; pegar cedo devolve erro por-linha
+ * pro agente se corrigir). NÃO valida "está no squad do projeto": a calibração do
+ * eval mostrou que membership vive fora de ProjectSquad (contribuidor de backfill
+ * pode não estar no squad atual). O agente descobre os IDs válidos via
+ * list_project_members; aqui só barramos ID que não é Member nenhum.
+ */
+async function loadExistingMemberIds(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const { data } = await db().from("Member").select("id").in("id", ids);
+  return new Set((data ?? []).map((m) => m.id));
+}
+
+/** Set de Sprint.id do projeto — valida `targetSprintId` em lote (propose_tasks). */
+async function loadProjectSprintIds(projectId: string): Promise<Set<string>> {
+  const { data } = await db().from("Sprint").select("id").eq("projectId", projectId);
+  return new Set((data ?? []).map((s) => s.id));
+}
+
 export function buildVitoriaTools(planningId: string, projectId: string) {
   return {
     add_context_note: tool({
@@ -120,7 +141,10 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
         "Payload é JSON OBJECT (nunca string stringificada — schema rejeita se você passar `\"{...}\"` em vez de `{...}`) e tipado por `type`: create sem functionPoints/acceptanceCriteria/description SDD é rejeitado.",
       inputSchema: z
         .object({
-          projectId: z.string().describe("ID do projeto"),
+          // projectId NÃO é arg do modelo: vem do closure (buildVitoriaTools),
+          // resolvido autoritativamente pelo tool router a partir do escopo do
+          // turno. Espelha propose_story e as demais tools. Expor como input era
+          // footgun — o modelo adivinhava o projeto (FK violation / projeto errado).
           type: z
             .enum(["create", "update", "delete", "move"])
             .describe("Tipo de ação"),
@@ -201,7 +225,6 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           }
         }),
       execute: async ({
-        projectId,
         type,
         taskId,
         targetSprintId,
@@ -214,7 +237,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           .from("MeetingTaskAction")
           .insert({
             planningCeremonyId: planningId,
-            projectId,
+            projectId, // closure (buildVitoriaTools) — autoritativo, não vem do modelo
             type,
             taskId: taskId ?? null,
             targetSprintId: targetSprintId ?? null,
@@ -232,6 +255,246 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
 
         if (error) throw new Error(`Falha ao criar proposta: ${error.message}`);
         return { ok: true, actionId: data.id, type: data.type };
+      },
+    }),
+
+    propose_tasks: tool({
+      description:
+        "Cria N propostas de task de UMA vez (lote) pra aprovação do PM — o write " +
+        "que fala lote. Use quando montar várias tasks derivadas de uma fonte: " +
+        "BACKFILL (trabalho já entregue → status='done'), KICKOFF (tasks iniciais " +
+        "de uma DS/transcript) ou import de planilha. Pra 1-2 tasks conversacionais, " +
+        "use propose_task_action. " +
+        "PROCEDÊNCIA (obrigatória, lastro por-FONTE — não nota por item): passe " +
+        "`sourceId` (o ContextSource de onde o lote saiu — auto-cria UMA nota de " +
+        "lastro e a aplica a todas as tasks) OU `sourceNoteIds` (PlanningContextNote.id " +
+        "já existentes). " +
+        "Valida cada linha (FP 1-13, assignee no squad, sprint válida) e devolve " +
+        "{created, errors:[{index,msg}]} — corrija só as que falharem e re-chame com elas. " +
+        "PM aprova item a item; o lote é só no write.",
+      inputSchema: z.object({
+        // projectId + planningCeremonyId vêm do closure (D13) — nunca args do modelo.
+        sourceId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe(
+            "ContextSource de onde o lote derivou (ex: o JSON estruturado do " +
+              "backfill). Auto-cria UMA nota de lastro 'Lote de <título> — N tasks' " +
+              "e a usa em todas as tasks. Prefira isto quando o lote vem de uma fonte.",
+          ),
+        sourceNoteIds: z
+          .array(z.string().uuid())
+          .optional()
+          .describe(
+            "PlanningContextNote.id já existentes pra lastrear (kickoff sem fonte " +
+              "estruturada). Ignorado quando sourceId é passado. IDs vêm de get_planning_state.",
+          ),
+        reasoning: z
+          .string()
+          .min(20)
+          .describe(
+            "O critério COMUM do lote (vale pra todas as tasks). Ex: 'backfill das " +
+              "features entregues; FP por commit_count; sprint pela data do último commit'.",
+          ),
+        aiConfidence: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Confiança 0-1. Default 0.8."),
+        tasks: z
+          .array(
+            z.object({
+              title: z.string().min(3).describe("Título da task (ex: nome da feature)"),
+              functionPoints: z
+                .number()
+                .int()
+                .min(1)
+                .max(13)
+                .describe("Tamanho estimado 1-13"),
+              assigneeIds: z
+                .array(z.string().uuid())
+                .optional()
+                .describe(
+                  "Member.id responsáveis — resolva via list_project_members ANTES (nunca invente).",
+                ),
+              targetSprintId: z
+                .string()
+                .uuid()
+                .optional()
+                .describe(
+                  "Sprint destino. Backfill cai em sprint passada → use list_project_sprints includePast=true.",
+                ),
+              status: z
+                .string()
+                .optional()
+                .describe(
+                  "Status inicial. BACKFILL: 'done'. Sem isso: 'todo' (com sprint) ou 'backlog'.",
+                ),
+              dueDate: z
+                .string()
+                .optional()
+                .describe("YYYY-MM-DD — dia entregue (backfill) ou prazo."),
+              scope: z.string().optional().describe("'small'|'medium'|'large' (opcional)"),
+              description: z
+                .string()
+                .optional()
+                .describe("Descrição da task (opcional; backfill dispensa SDD)."),
+              userStoryId: z
+                .string()
+                .uuid()
+                .optional()
+                .describe("UserStory pra pendurar a task (crie antes via propose_story)."),
+            }),
+          )
+          .describe(
+            "Linhas do lote (≥1). Cada linha vira uma MeetingTaskAction(type=create) " +
+              "em staging. Sem teto de schema — validação/clamp é server-side.",
+          ),
+      }),
+      execute: async ({ sourceId, sourceNoteIds, reasoning, aiConfidence, tasks }) => {
+        const supabase = db();
+        if (!Array.isArray(tasks) || tasks.length === 0) {
+          return { ok: false, error: "tasks vazio — passe ≥1 task no lote." };
+        }
+
+        // Validação server-side por linha (D14: integridade/forma, não estratégia).
+        // 1× cada: existência dos assignees citados (piso anti-FK) + sprints do
+        // projeto (sprint é project-scoped — barra cross-project leak).
+        const allAssigneeIds = [
+          ...new Set(tasks.flatMap((t) => t.assigneeIds ?? [])),
+        ];
+        const [existingMemberIds, validSprintIds] = await Promise.all([
+          loadExistingMemberIds(allAssigneeIds),
+          loadProjectSprintIds(projectId),
+        ]);
+
+        const errors: { index: number; msg: string }[] = [];
+        const valid: Array<{ t: (typeof tasks)[number] }> = [];
+        tasks.forEach((t, index) => {
+          const issues: string[] = [];
+          if (typeof t.title !== "string" || t.title.trim().length < 3)
+            issues.push("title obrigatório (≥3 chars)");
+          if (
+            typeof t.functionPoints !== "number" ||
+            !Number.isInteger(t.functionPoints) ||
+            t.functionPoints < 1 ||
+            t.functionPoints > 13
+          )
+            issues.push("functionPoints inteiro 1-13");
+          if (t.assigneeIds && t.assigneeIds.length > 0) {
+            const bad = t.assigneeIds.filter((id) => !existingMemberIds.has(id));
+            if (bad.length)
+              issues.push(
+                `assigneeIds não é Member válido: ${bad.join(", ")} — resolva via list_project_members`,
+              );
+          }
+          if (t.targetSprintId && !validSprintIds.has(t.targetSprintId))
+            issues.push(
+              `targetSprintId inválido (${t.targetSprintId}) — use list_project_sprints includePast=true`,
+            );
+          if (issues.length) errors.push({ index, msg: issues.join("; ") });
+          else valid.push({ t });
+        });
+
+        if (valid.length === 0) {
+          return {
+            ok: false,
+            created: 0,
+            errors,
+            hint: "Nenhuma linha válida — corrija os erros por index e re-chame.",
+          };
+        }
+
+        // Procedência (D14): lastro por-FONTE. Só cria a nota quando há ≥1 linha
+        // válida (evita nota órfã se o lote inteiro falhar a validação).
+        let noteIds: string[];
+        if (sourceId) {
+          const { data: src } = await supabase
+            .from("ContextSource")
+            .select("id, title")
+            .eq("id", sourceId)
+            .maybeSingle();
+          if (!src)
+            return {
+              ok: false,
+              created: 0,
+              errors,
+              error: `sourceId ${sourceId} não encontrado (ContextSource).`,
+            };
+          const note = await addContextNote({
+            planningCeremonyId: planningId,
+            kind: "summary",
+            content: `Lote de "${src.title ?? "fonte"}" — ${valid.length} tasks. ${reasoning}`,
+            priority: 5,
+            generatedByAgent: "vitoria",
+          });
+          noteIds = [note.id];
+        } else if (sourceNoteIds && sourceNoteIds.length > 0) {
+          noteIds = sourceNoteIds;
+        } else {
+          return {
+            ok: false,
+            created: 0,
+            errors,
+            error:
+              "Procedência obrigatória: passe sourceId (fonte do lote) ou sourceNoteIds (notas existentes). Sem lastro não publica.",
+          };
+        }
+
+        // Bulk-insert das linhas válidas (1 statement). projectId + ceremony do
+        // closure — nunca do modelo (D13). targetSprintId top-level; status/FP/
+        // assigneeIds/dueDate no payload (mesmo contrato do executor de create).
+        const rows = valid.map(({ t }) => ({
+          planningCeremonyId: planningId,
+          projectId,
+          type: "create" as const,
+          taskId: null,
+          targetSprintId: t.targetSprintId ?? null,
+          payload: {
+            title: t.title,
+            functionPoints: t.functionPoints,
+            ...(t.assigneeIds && t.assigneeIds.length ? { assigneeIds: t.assigneeIds } : {}),
+            ...(t.status ? { status: t.status } : {}),
+            ...(t.dueDate ? { dueDate: t.dueDate } : {}),
+            ...(t.scope ? { scope: t.scope } : {}),
+            ...(t.description ? { description: t.description } : {}),
+            ...(t.userStoryId ? { userStoryId: t.userStoryId } : {}),
+          } as Json,
+          aiReasoning: reasoning,
+          aiConfidence: aiConfidence ?? 0.8,
+          sourceNoteIds: noteIds as unknown as string[],
+          decision: "pending" as const,
+          execution: "pending" as const,
+          source: "ai" as const,
+          notes: null,
+        }));
+
+        const { data, error } = await supabase
+          .from("MeetingTaskAction")
+          .insert(rows)
+          .select("id");
+        if (error)
+          return {
+            ok: false,
+            created: 0,
+            errors,
+            error: `Falha ao inserir lote: ${error.message}`,
+          };
+
+        return {
+          ok: errors.length === 0,
+          created: data?.length ?? 0,
+          actionIds: (data ?? []).map((r) => r.id),
+          sourceNoteIds: noteIds,
+          errors,
+          ...(errors.length
+            ? {
+                hint: "Corrija as linhas em `errors` (por index) e re-chame propose_tasks só com elas.",
+              }
+            : {}),
+        };
       },
     }),
 
@@ -417,17 +680,31 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
 
     list_project_sprints: tool({
       description:
-        "Lista as próximas 3 sprints do projeto (endDate >= hoje), ordenadas por startDate. Use SEMPRE antes de propor 'move' pra pegar o targetSprintId real.",
-      inputSchema: z.object({}),
-      execute: async () => {
-        const todayISO = new Date().toISOString().slice(0, 10);
-        const { data, error } = await db()
+        "Lista sprints do projeto, ordenadas por startDate. Default: as próximas 3 " +
+        "(endDate >= hoje) — use antes de propor 'move'. Para BACKFILL passe " +
+        "includePast=true: traz TODAS as sprints (passadas inclusive, com IDs e " +
+        "datas) pra cravar a task na sprint em que a entrega aconteceu.",
+      inputSchema: z.object({
+        includePast: z
+          .boolean()
+          .optional()
+          .describe(
+            "true = todas as sprints (passadas inclusive), sem limite. Default false (próximas 3).",
+          ),
+      }),
+      execute: async ({ includePast }) => {
+        let q = db()
           .from("Sprint")
           .select("id, name, startDate, endDate, status, goal")
           .eq("projectId", projectId)
-          .gte("endDate", todayISO)
-          .order("startDate", { ascending: true })
-          .limit(3);
+          .order("startDate", { ascending: true });
+        if (!includePast) {
+          // Default: só as futuras (move/planejamento pra frente). Backfill precisa
+          // das passadas (a entrega cai numa sprint já terminada) → includePast.
+          const todayISO = new Date().toISOString().slice(0, 10);
+          q = q.gte("endDate", todayISO).limit(3);
+        }
+        const { data, error } = await q;
         if (error) return { ok: false, error: error.message };
         return { ok: true, sprints: data ?? [] };
       },

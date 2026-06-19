@@ -9,6 +9,7 @@ import { case07ScopeCreep } from "./case-07-scope-creep";
 import { case08EditProposal } from "./case-08-edit-proposal";
 import { case09Deletion } from "./case-09-deletion";
 import { case10ForecastPrecommit } from "./case-10-forecast-precommit";
+import { case11BackfillBatch } from "./case-11-backfill-batch";
 
 export const allScenarios: EvalScenario[] = [
   case01CapacityOverflow,
@@ -21,4 +22,5 @@ export const allScenarios: EvalScenario[] = [
   case08EditProposal,
   case09Deletion,
   case10ForecastPrecommit,
+  case11BackfillBatch,
 ];

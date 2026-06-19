@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import type { ZodTypeAny } from "zod";
 import { db } from "@/lib/db";
 import { TOOL_REGISTRY } from "@/lib/agent/tools-registry";
+import { ensureReleasePlanningCeremony } from "@/lib/dal/planning-session";
 import { resolveWorkspacePath } from "@/lib/forge/paths";
 import {
   parseRoute,
@@ -94,6 +95,7 @@ export async function POST(
   let projectId: string | null = null;
   let pmReviewId: string | null = null;
   let planningId: string | null = null;
+  let releasePlanningId: string | null = null;
 
   // Alpha (ops) roda GLOBAL: thread channel='web', agentName='alpha', sem
   // sessionId nem projeto. Suas tools de leitura filtram via supabase direto
@@ -127,6 +129,17 @@ export async function POST(
       .eq("id", planningId)
       .maybeSingle();
     projectId = planning?.projectId ?? null;
+  } else if (thread.channel === "release_planning" && thread.agentName) {
+    // Release Planning thread — agentName carrega o sessionId (PlanningSession).
+    // As board tools usam releasePlanningId; o staging usa planningId (companion
+    // ceremony), resolvido logo abaixo após o memberId.
+    releasePlanningId = thread.agentName;
+    const { data: ps } = await supabase
+      .from("PlanningSession")
+      .select("projectId")
+      .eq("id", releasePlanningId)
+      .maybeSingle();
+    projectId = ps?.projectId ?? null;
   }
 
   if (!projectId && !isAlpha) {
@@ -146,6 +159,18 @@ export async function POST(
       .eq("userId", thread.createdBy)
       .maybeSingle();
     memberId = member?.id ?? null;
+  }
+
+  // Release Planning: a companion ceremony (headless) hospeda o staging de
+  // tasks/stories. ensureReleasePlanningCeremony é idempotente — reusa a viva
+  // ou cria. Vira o ctx.planningId pras staging tools (propose_task_action…),
+  // enquanto as board tools usam ctx.releasePlanningId.
+  if (releasePlanningId && projectId) {
+    planningId = await ensureReleasePlanningCeremony(
+      releasePlanningId,
+      projectId,
+      memberId,
+    );
   }
 
   // Resolve workspacePath se projeto tem workspace clonado na Forja.
@@ -181,6 +206,7 @@ export async function POST(
     projectId: projectId ?? "",
     pmReviewId,
     planningId,
+    releasePlanningId,
     memberId,
     workspacePath,
     routeProjectId,
