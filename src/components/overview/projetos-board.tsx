@@ -1406,7 +1406,7 @@ function PMReviewSection({ p }: { p: ProjectOverview }) {
         </h4>
         {shownReview && (
           <Link
-            href={`/pm-reviews/${shownReview.id}`}
+            href={`/projects/${p.id}/pm-review?week=${shownReview.referenceWeek}`}
             className="shrink-0 text-xs font-medium text-primary hover:underline"
           >
             Abrir →

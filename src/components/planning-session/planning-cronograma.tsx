@@ -2,26 +2,27 @@
 
 import { cn } from "@/lib/utils";
 
-/** Bloco do cronograma = uma sprint/semana. */
+/** Bloco do cronograma = uma célula da régua (sprint no Planning, semana no PM Review). */
 export type CronogramaBlock = {
-  /** sprintId (null = bucket "Sem sprint"). Key + alvo do select. */
-  sprintId: string | null;
-  /** Segunda da sprint (dd/mm) — eixo da régua. */
+  /**
+   * Identidade estável da célula = alvo do select. Planning: sprintId.
+   * PM Review: weekStart (YYYY-MM-DD). None/órfã: "__none__".
+   */
+  key: string;
+  /** Data da célula (dd/mm) — eixo da régua. */
   dateLabel: string;
-  /** Nome da sprint (tooltip). */
-  sprintName: string | null;
+  /** Rótulo/tooltip da célula (nome da sprint, ou null). */
+  label: string | null;
   kind: "past" | "current" | "future";
-  /** Nº de versões (PlanningEvent) criadas na janela dessa sprint. */
+  /** Nº de itens na janela (versões no Planning, notes no PM Review). */
   logCount: number;
 };
 
-const NONE_KEY = "__none__";
-
-/** Cor da barra do bloco — semântica de planning (atividade), não de delivery. */
+/** Cor da barra do bloco — semântica de atividade, não de delivery. */
 function barClass(b: CronogramaBlock): string {
   if (b.kind === "current") return "bg-primary/40 ring-1 ring-inset ring-primary/70";
   if (b.kind === "future") return "bg-muted/50";
-  // past: aceso (teve versões) vs tracejado (sem atividade).
+  // past: aceso (teve atividade) vs tracejado (sem atividade).
   return b.logCount > 0
     ? "bg-emerald-500/70"
     : "border border-dashed border-muted-foreground/30 bg-transparent";
@@ -35,20 +36,21 @@ function valueTone(b: CronogramaBlock): string {
 }
 
 function blockTitle(b: CronogramaBlock): string {
-  const sprint = b.sprintName ?? "Sem sprint";
+  const label = b.label ?? "Sem sprint";
   const logs = `${b.logCount} log${b.logCount === 1 ? "" : "s"}`;
   const when =
     b.kind === "current" ? " — corrente" : b.kind === "future" ? " — futura" : "";
-  return `${sprint}${when} · ${logs}`;
+  return `${label}${when} · ${logs}`;
 }
 
 /**
- * Cronograma de blocos do Release Planning — réplica do estilo da régua/timeline
- * dos cards de overview (uma célula por sprint/semana). Cor da barra = atividade
- * de planning. Clicar num bloco abre o histórico daquela semana.
+ * Cronograma de blocos — réplica do estilo da régua/timeline (uma célula por
+ * sprint/semana). Cor da barra = atividade. Clicar num bloco navega pra aquela
+ * janela. **Compartilhado** entre Planning (régua de sprint) e PM Review (grade
+ * semanal): a identidade da célula vem em `block.key` (parity via prop, não cópia).
  *
  *  • `mini`  — fileira fina (sem datas/labels) pro ribbon: glance + entrada.
- *  • `full`  — grid com data + nº de versões (vive no side-sheet, week-picker).
+ *  • `full`  — grid com data + nº de itens (vive no side-sheet, week-picker).
  */
 export function PlanningCronograma({
   blocks,
@@ -57,9 +59,9 @@ export function PlanningCronograma({
   variant = "full",
 }: {
   blocks: CronogramaBlock[];
-  /** Key do bloco selecionado (sprintId ou NONE_KEY); null = nenhum (ao vivo). */
+  /** Key do bloco selecionado; null = nenhum. */
   selectedKey: string | null;
-  onSelect: (sprintId: string | null) => void;
+  onSelect: (key: string) => void;
   variant?: "mini" | "full";
 }) {
   if (blocks.length === 0) return null;
@@ -68,15 +70,14 @@ export function PlanningCronograma({
     return (
       <div className="flex flex-wrap items-center gap-[3px]">
         {blocks.map((b) => {
-          const key = b.sprintId ?? NONE_KEY;
-          const isSelected = selectedKey === key;
+          const isSelected = selectedKey === b.key;
           return (
             <button
-              key={key}
+              key={b.key}
               type="button"
               title={blockTitle(b)}
               aria-pressed={isSelected}
-              onClick={() => onSelect(b.sprintId)}
+              onClick={() => onSelect(b.key)}
               className={cn(
                 "h-2.5 w-3.5 rounded-[3px] transition-transform hover:scale-110",
                 barClass(b),
@@ -92,15 +93,14 @@ export function PlanningCronograma({
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-x-2 gap-y-4">
       {blocks.map((b) => {
-        const key = b.sprintId ?? NONE_KEY;
-        const isSelected = selectedKey === key;
+        const isSelected = selectedKey === b.key;
         return (
           <button
-            key={key}
+            key={b.key}
             type="button"
             title={blockTitle(b)}
             aria-pressed={isSelected}
-            onClick={() => onSelect(b.sprintId)}
+            onClick={() => onSelect(b.key)}
             className={cn(
               "group min-w-0 cursor-pointer rounded-md p-1 text-left transition-colors hover:bg-accent/40",
               isSelected && "bg-primary/10 ring-1 ring-primary/40",

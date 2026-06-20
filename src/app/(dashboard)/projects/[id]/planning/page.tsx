@@ -16,7 +16,7 @@ import { PageTitle } from "@/components/app-shell";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { ConversationFab } from "@/components/ui/conversation/conversation-fab";
 import { ConversationPanel } from "@/components/ui/conversation";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile, XL_BREAKPOINT } from "@/hooks/use-mobile";
 import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { toast } from "sonner";
@@ -101,7 +101,9 @@ export default function PlanningSessionPage({
     threadIdRef.current = threadId;
   }, [threadId]);
 
-  const isMobile = useIsMobile();
+  // Abaixo de xl (1280px) o split canvas+chat não cabe → chat vira drawer
+  // (FAB + bottom sheet), igual mobile. Evita empilhar 2 painéis desktop.
+  const chatAsDrawer = useIsMobile(XL_BREAKPOINT);
   const { planMode, setPlanMode } = useChatPlanMode("vitoria");
 
   // sessionId estável pro transport/chat — só muda quando troca de session.
@@ -298,8 +300,8 @@ export default function PlanningSessionPage({
     }
 
     const list: CronogramaBlock[] = sorted.map((s) => ({
-      sprintId: s.id,
-      sprintName: s.name,
+      key: s.id,
+      label: s.name,
       dateLabel: `${s.startDate.slice(8, 10)}/${s.startDate.slice(5, 7)}`,
       kind: today < s.startDate ? "future" : today > s.endDate ? "past" : "current",
       logCount: byBlock.get(s.id)?.length ?? 0,
@@ -308,8 +310,8 @@ export default function PlanningSessionPage({
     const orphan = byBlock.get(NONE_KEY)?.length ?? 0;
     if (orphan > 0) {
       list.push({
-        sprintId: null,
-        sprintName: "Sem sprint",
+        key: NONE_KEY,
+        label: "Sem sprint",
         dateLabel: "—",
         kind: "past",
         logCount: orphan,
@@ -359,8 +361,7 @@ export default function PlanningSessionPage({
   // auto-abre a versão mais recente dela (API ordena desc) e abre o navegador.
   // Sair do histórico é só pelo "Ao vivo".
   const handleSelectBlock = useCallback(
-    (sprintId: string | null) => {
-      const key = sprintId ?? NONE_KEY;
+    (key: string) => {
       setHistoryBlockKey(key);
       const bucket = eventsByBlock.get(key) ?? [];
       setHistoryEventId(bucket[0]?.id ?? null);
@@ -372,7 +373,7 @@ export default function PlanningSessionPage({
   // Eventos + rótulo do bloco selecionado (alimentam o sheet).
   const drawerEvents = historyBlockKey ? eventsByBlock.get(historyBlockKey) ?? [] : [];
   const selectedBlockLabel =
-    blocks.find((b) => (b.sprintId ?? NONE_KEY) === historyBlockKey)?.sprintName ?? null;
+    blocks.find((b) => b.key === historyBlockKey)?.label ?? null;
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
@@ -395,8 +396,8 @@ export default function PlanningSessionPage({
         "referencie o taskId pra mover/editar o que já existe, só crie o que é novo " +
         "(não recrie — duplicata é pulada no Aplicar).",
     });
-    if (isMobile) setMobileOpen(true);
-  }, [historyMode, status, sendMessage, isMobile]);
+    if (chatAsDrawer) setMobileOpen(true);
+  }, [historyMode, status, sendMessage, chatAsDrawer]);
 
   // Guards do "Montar plano": (#7) sem fontes linkadas a Vitoria parte do zero e
   // pode inventar tasks; (#6) com staging pendente, montar de novo empilha por
@@ -528,7 +529,7 @@ export default function PlanningSessionPage({
   const chatPanel = (
     <ConversationPanel
       agent="vitoria"
-      variant={isMobile ? "mobile" : "desktop"}
+      variant={chatAsDrawer ? "mobile" : "desktop"}
       messages={messages as UIMessage[]}
       status={status}
       isLoading={chatHydrating}
@@ -538,7 +539,7 @@ export default function PlanningSessionPage({
       onStop={stop}
       isOpen={mobileOpen}
       onOpenChange={setMobileOpen}
-      onClose={isMobile ? () => setMobileOpen(false) : undefined}
+      onClose={chatAsDrawer ? () => setMobileOpen(false) : undefined}
       planMode={planMode}
       onPlanModeChange={setPlanMode}
       composerSubmitDisabled={chatReadOnly}
@@ -647,10 +648,10 @@ export default function PlanningSessionPage({
           )}
         </div>
 
-        {!isMobile && <div className="min-h-0">{chatPanel}</div>}
+        {!chatAsDrawer && <div className="min-h-0">{chatPanel}</div>}
       </div>
 
-      {isMobile && (
+      {chatAsDrawer && (
         <>
           <ConversationFab
             agent="vitoria"

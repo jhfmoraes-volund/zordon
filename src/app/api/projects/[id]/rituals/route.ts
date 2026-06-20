@@ -25,6 +25,8 @@ type RitualItem =
       status: "draft" | "published" | "archived";
       scheduledFor: string | null;
       referenceWeek: string;
+      /** Contínuo (como Planning): última atividade entre as reviews. */
+      lastActivityAt: string;
       sortKey: string;
       href: string;
       badges: {
@@ -55,31 +57,6 @@ type RitualItem =
       facilitatorId: string | null;
       facilitatorName: string | null;
     };
-
-function fmtWeekTitle(referenceWeek: string): string {
-  // Ex: "PM Review · semana de 27/mai".
-  try {
-    const d = new Date(referenceWeek + "T00:00:00Z");
-    const day = String(d.getUTCDate()).padStart(2, "0");
-    const months = [
-      "jan",
-      "fev",
-      "mar",
-      "abr",
-      "mai",
-      "jun",
-      "jul",
-      "ago",
-      "set",
-      "out",
-      "nov",
-      "dez",
-    ];
-    return `PM Review · semana de ${day}/${months[d.getUTCMonth()]}`;
-  } catch {
-    return `PM Review · semana de ${referenceWeek}`;
-  }
-}
 
 export async function GET(
   _req: NextRequest,
@@ -155,24 +132,43 @@ export async function GET(
     });
   }
 
-  for (const r of pmReviews) {
+  // PM Review é contínuo por projeto (como Planning): UMA linha "PM Review do
+  // Projeto". As semanas — inclusive as antigas — viram navegação na régua
+  // (cronograma) DENTRO da app, não itens soltos aqui. A linha aparece quando
+  // há ≥1 review viva; criar a 1ª semana vive na app (célula vazia) ou no picker.
+  // Archived fica fora (D11 do runbook pm-review-unified-app).
+  const liveReviews = pmReviews.filter((r) => r.status !== "archived");
+  const latest = liveReviews[0]; // listPMReviewsForProject vem desc por referenceWeek
+  if (latest) {
+    const lastActivityAt =
+      liveReviews
+        .flatMap((r) => [
+          r.reportGeneratedAt,
+          r.publishedAt,
+          r.scheduledFor,
+          r.referenceWeek,
+        ])
+        .filter((d): d is string => !!d)
+        .sort()
+        .at(-1) ?? latest.referenceWeek;
     items.push({
       kind: "pm_review",
-      id: r.id,
-      title: fmtWeekTitle(r.referenceWeek),
-      status: r.status,
-      scheduledFor: r.scheduledFor,
-      referenceWeek: r.referenceWeek,
-      sortKey: r.referenceWeek,
-      href: `/pm-reviews/${r.id}`,
+      id: latest.id,
+      title: "PM Review do Projeto",
+      status: latest.status,
+      scheduledFor: latest.scheduledFor,
+      referenceWeek: latest.referenceWeek,
+      lastActivityAt,
+      sortKey: lastActivityAt,
+      href: `/projects/${projectId}/pm-review`,
       badges: {
-        linkedCount: r.linkedMeetingCount + r.linkedTranscriptCount,
-        noteCount: r.noteTotal,
-        noteByKind: r.noteCountByKind,
-        reportGenerated: r.reportGeneratedAt !== null,
+        linkedCount: latest.linkedMeetingCount + latest.linkedTranscriptCount,
+        noteCount: latest.noteTotal,
+        noteByKind: latest.noteCountByKind,
+        reportGenerated: latest.reportGeneratedAt !== null,
       },
-      facilitatorId: r.facilitatorId,
-      facilitatorName: r.facilitatorName,
+      facilitatorId: latest.facilitatorId,
+      facilitatorName: latest.facilitatorName,
     });
   }
 

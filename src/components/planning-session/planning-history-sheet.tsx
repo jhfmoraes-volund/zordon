@@ -43,7 +43,7 @@ export function PlanningHistorySheet({
   onOpenChange: (open: boolean) => void;
   blocks: CronogramaBlock[];
   selectedKey: string | null;
-  onSelectBlock: (sprintId: string | null) => void;
+  onSelectBlock: (key: string) => void;
   /** Rótulo da semana selecionada (nome da sprint). */
   weekLabel: string | null;
   events: PlanningEvent[];

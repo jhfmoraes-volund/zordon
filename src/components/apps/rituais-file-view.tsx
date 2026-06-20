@@ -48,6 +48,8 @@ type RitualPMReview = {
   status: PMReviewStatus;
   scheduledFor: string | null;
   referenceWeek: string;
+  /** Contínuo (como Planning): última atividade entre as reviews. */
+  lastActivityAt: string;
   sortKey: string;
   href: string;
   badges: { linkedCount: number; noteCount: number; reportGenerated: boolean };
@@ -94,16 +96,6 @@ const KIND_META: Record<
     tile: "bg-indigo-500/15 text-indigo-500",
   },
 };
-
-/** Badge de ciclo de vida do PM Review (rascunho → publicado → arquivado). */
-function pmReviewStatusBadge(status: PMReviewStatus): {
-  label: string;
-  tone: "green" | "amber" | "muted";
-} {
-  if (status === "published") return { label: "publicado", tone: "green" };
-  if (status === "archived") return { label: "arquivado", tone: "muted" };
-  return { label: "rascunho", tone: "amber" };
-}
 
 /**
  * Planning é singleton contínuo — nunca "publica", então não tem ciclo de vida
@@ -215,10 +207,10 @@ export function RituaisFileView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId, referenceWeek, facilitatorId }),
       });
-      const created = (await res.json()) as { id: string };
+      await res.json();
       setPMReviewSheetOpen(false);
       toast.success("PM Review criado.");
-      router.push(`/pm-reviews/${created.id}`);
+      router.push(`/projects/${projectId}/pm-review?week=${referenceWeek}`);
     } catch (err) {
       showErrorToast(err, { label: "Falha ao criar PM Review" });
     } finally {
@@ -289,13 +281,20 @@ export function RituaisFileView({
       );
       metaText = undefined;
     } else {
-      const status = pmReviewStatusBadge(item.status);
+      // PM Review é contínuo por projeto (como Planning): "ativo" + última
+      // atividade. As semanas (inclusive antigas) viram navegação na régua da app.
       badge = (
-        <span className="flex shrink-0 items-center gap-1">
-          <AppFileBadge tone={status.tone}>{status.label}</AppFileBadge>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <AppFileBadge tone="green">
+            <span className="size-1.5 rounded-full bg-current" />
+            ativo
+          </AppFileBadge>
+          <span className="text-[11px] text-muted-foreground">
+            atualizado {fmtDate(item.lastActivityAt)}
+          </span>
         </span>
       );
-      metaText = item.scheduledFor ? fmtDate(item.scheduledFor) : undefined;
+      metaText = undefined;
     }
 
     return (
