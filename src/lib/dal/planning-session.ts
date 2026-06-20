@@ -31,6 +31,17 @@ export type PlanningSessionStatus =
   | "aborted"
   | "error";
 
+/**
+ * Status "ativos" (não-terminais) de uma planning. Espelha o predicado do índice
+ * único parcial `planning_session_one_active_per_project` — a fonte da verdade do
+ * singleton "1 planning viva por projeto". Mantê-los em sincronia.
+ */
+export const ACTIVE_PLANNING_STATUSES: PlanningSessionStatus[] = [
+  "draft",
+  "orchestrating",
+  "in-review",
+];
+
 // ─── CRUD: PlanningSession ────────────────────────────────────────────────────
 
 /**
@@ -110,6 +121,27 @@ export async function getSession(
     projectName: project?.name ?? null,
     prds: hydrated,
   };
+}
+
+/**
+ * Retorna a PlanningSession ATIVA (não-terminal) de um projeto, se existir.
+ * Base do resolve-or-create do singleton: a API usa isso pra devolver a planning
+ * existente em vez de criar uma 2ª. O índice único parcial
+ * `planning_session_one_active_per_project` é a garantia dura no banco.
+ */
+export async function findActiveSessionForProject(
+  projectId: string,
+): Promise<PlanningSessionRow | null> {
+  const { data, error } = await db()
+    .from("PlanningSession")
+    .select("*")
+    .eq("projectId", projectId)
+    .in("status", ACTIVE_PLANNING_STATUSES)
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
 }
 
 /**

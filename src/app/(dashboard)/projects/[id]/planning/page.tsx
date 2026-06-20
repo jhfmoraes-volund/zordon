@@ -246,9 +246,15 @@ export default function PlanningSessionPage({
             scheduledFor: cfg.scheduledFor,
           }),
         });
-        await res.json();
+        // Singleton: o backend faz resolve-or-create. `existed` = já havia uma
+        // ativa, então só abrimos a existente (info, não "criado").
+        const { existed } = (await res.json()) as { existed?: boolean };
         setCreateOpen(false);
-        toast.success("Release Planning criado.");
+        if (existed) {
+          toast.info("Já existe um Release Planning ativo — abrindo o existente.");
+        } else {
+          toast.success("Release Planning criado.");
+        }
         await loadSession();
       } catch (err) {
         showErrorToast(err, { label: "Falha ao criar Release Planning" });

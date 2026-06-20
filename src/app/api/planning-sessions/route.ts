@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getUser, getMemberId } from "@/lib/dal";
+import { getUser, getMemberId, requireProjectEditTasksApi } from "@/lib/dal";
 import {
   createSession,
   listForProject,
+  findActiveSessionForProject,
   type PlanningSessionStatus,
 } from "@/lib/dal/planning-session";
+
+/** Postgres unique_violation — corrida de dois POSTs simultâneos. */
+function isUniqueViolation(e: unknown): boolean {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    (e as { code?: string }).code === "23505"
+  );
+}
 
 const createSchema = z.object({
   projectId: z.string().uuid(),
@@ -28,6 +38,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const denied = await requireProjectEditTasksApi(parsed.data.projectId);
+  if (denied) return denied;
+
+  // Singleton: "1 planning viva por projeto". Se já existe uma ATIVA, devolve ela
+  // (resolve-or-create) em vez de nascer uma 2ª — a UI abre a existente com toast
+  // informativo. O índice único parcial é a garantia dura; isto dá a resposta
+  // amigável antes de bater nele.
+  const existing = await findActiveSessionForProject(parsed.data.projectId);
+  if (existing) {
+    return NextResponse.json({ session: existing, existed: true }, { status: 200 });
+  }
+
   const memberId = await getMemberId();
 
   try {
@@ -36,8 +58,16 @@ export async function POST(req: NextRequest) {
       status: "draft" as PlanningSessionStatus,
       facilitatorId: parsed.data.facilitatorId ?? memberId,
     });
-    return NextResponse.json({ session }, { status: 201 });
+    return NextResponse.json({ session, existed: false }, { status: 201 });
   } catch (e) {
+    // Corrida: dois POSTs concorrentes passam pelo check acima e batem no índice
+    // único (23505). Re-resolve e devolve a vencedora em vez de 500.
+    if (isUniqueViolation(e)) {
+      const raced = await findActiveSessionForProject(parsed.data.projectId);
+      if (raced) {
+        return NextResponse.json({ session: raced, existed: true }, { status: 200 });
+      }
+    }
     const msg = e instanceof Error ? e.message : "create failed";
     return NextResponse.json({ error: msg }, { status: 500 });
   }

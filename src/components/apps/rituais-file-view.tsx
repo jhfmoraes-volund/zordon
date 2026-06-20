@@ -316,9 +316,15 @@ export function RituaisFileView({
           scheduledFor: input.scheduledFor,
         }),
       });
-      await res.json();
+      // Singleton: backend faz resolve-or-create. `existed` = já havia uma ativa,
+      // então abrimos a existente em vez de criar uma 2ª.
+      const { existed } = (await res.json()) as { existed?: boolean };
       setReleaseSheetOpen(false);
-      toast.success("Release Planning criado.");
+      if (existed) {
+        toast.info("Já existe um Release Planning ativo — abrindo o existente.");
+      } else {
+        toast.success("Release Planning criado.");
+      }
       router.push(`/projects/${projectId}/planning`);
     } catch (err) {
       showErrorToast(err, { label: "Falha ao criar Release Planning" });

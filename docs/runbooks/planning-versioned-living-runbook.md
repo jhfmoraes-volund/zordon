@@ -192,3 +192,17 @@ Entregue. O canvas do Release Planning não fica mais "Plano vazio" depois do "A
 - **Write não-atômico.** `concludePlanning` não tem transação (Supabase JS), e o gancho é best-effort (try/catch, não derruba o apply). Se o insert do `PlanningEvent` passar mas o dos `PlanningEventSprint` falhar, fica um evento com briefing+counts e **sem chips de FP** (degradado, não quebrado). Atomizar = mover pra RPC (junto do batch-reconcile da Fase 2).
 - **Snapshot inclui todo o board do projeto** (todas as tasks não-dismissed agrupadas por sprint), não só o que essa planning tocou — fiel ao "estado do plano naquele instante" (§6), mas quando a atribuição companion↔session ficar fina (Fase 2), reavaliar.
 - **`manual_browser` não verificado por agente** (auth-walled). Os outros verifiables passaram: `tsc` 0 erros; eslint limpo; tabelas+RLS no banco; write→read provado transacionalmente (insert+select+ROLLBACK); agregação de FP bateu com dados reais (SILFAE: 180 FP/38 tasks em 5 sprints); `GET /events` responde 401 sem auth (rota viva e gateada). **Falta:** aplicar uma planning pela UI e ver a timeline render.
+
+## 13. Rev. 2 — Singleton "1 planning viva por projeto" (2026-06-20)
+
+Bug observado em prod: na SILFAE existiam **2 Release Plannings `draft`**, e a página (que carrega a mais recente não-abortada) mostrava a vazia, ofuscando a real (que já tinha 37 tasks aplicadas). Causa-raiz dupla:
+1. **A EXCLUDE `one_active_planning_per_project` não estava mais no banco** (provável vítima de refactor anterior) → zero enforcement. E mesmo a definição original tinha furo: `(projectId WITH =, status WITH <>)` só conflita status DIFERENTES, deixando passar duas `draft`.
+2. **Create não fazia resolve-or-create** — dois entrypoints (`planning/page.tsx` + `rituais-file-view.tsx` "Novo Ritual") chamavam `POST /api/planning-sessions` sem checar se já havia uma viva.
+
+**Fix (consolida o modelo singleton decidido na conversa de design):**
+- Migration `20260620a_planning_session_singleton.sql`: índice único **parcial** `planning_session_one_active_per_project` em `projectId WHERE status IN ('draft','orchestrating','in-review')` — barra QUALQUER 2ª planning viva (terminais approved/aborted/error coexistem → começar um ciclo novo é explícito).
+- `POST /api/planning-sessions` virou **resolve-or-create**: se já existe ativa, devolve `{session, existed:true}` (200) em vez de criar; trata corrida (23505) re-resolvendo; agora exige `requireProjectEditTasksApi`. DAL: `findActiveSessionForProject` + `ACTIVE_PLANNING_STATUSES` (espelha o predicado do índice).
+- Caminho não-feliz organizado: ambos os entrypoints leem `existed` e dão **`toast.info` "abrindo o existente"** (não erro). 403/5xx caem no `showErrorToast` canônico (sem permissão / retry).
+- Duplicata vazia (`8b67149f`) removida; 0 violações no projeto inteiro.
+
+**Decomposição que isto trava (importante pra Fase 2):** a **Planning é singleton longevo** (não imutável — ganha versões); cada **Versão (apply) é o átomo transacional** (o "commit"). Hoje o apply ainda é não-atômico (ver Rev. 1) — atomizar via RPC junto do batch-reconcile (§7).
