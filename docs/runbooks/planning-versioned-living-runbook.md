@@ -123,7 +123,7 @@ A capability nova que o modelo vivo exige (Fase ≥ 2): **batch reconcile**.
 | Fase | Entrega | Estado |
 |---|---|---|
 | **1 — Log** | `PlanningEvent` + `PlanningEventSprint`; gancho no apply; `GET /events`; **timeline visível** no canvas (substitui "Plano vazio"). Para o sangramento. | ✅ **Implementada (2026-06-19, Rev. 1)** |
-| **2 — Versionado vivo** | Versão = diff sobre board vivo (motor batch-reconcile §7); guard de trabalho-em-curso (D4); chat por-versão (D5); strip de versões via `Regua` (D9). | Desenho fechado |
+| **2 — Versionado vivo** | **2.0 ✅ board vivo no canvas (Rev. 3, 2026-06-20)** · Versão = diff sobre board vivo (motor batch-reconcile §7); guard de trabalho-em-curso (D4); chat por-versão (D5); strip de versões via `Regua` (D9). | 2.0 done · 2.1-2.3 desenho fechado |
 | **3 — Memória + aprendizado** | Memória destilada por versão (D6); outcome planned-vs-delivered por-sprint (D7) → Metrics Registry. | Desenho fechado |
 | **4 — Merge Sprint Planning** | Absorver `PlanningCeremony` per-sprint como filtro da Planning viva. Taxonomia cai de 3 → 2 rituais (PM Review + Planning). | Adiado (D10) |
 
@@ -206,3 +206,16 @@ Bug observado em prod: na SILFAE existiam **2 Release Plannings `draft`**, e a p
 - Duplicata vazia (`8b67149f`) removida; 0 violações no projeto inteiro.
 
 **Decomposição que isto trava (importante pra Fase 2):** a **Planning é singleton longevo** (não imutável — ganha versões); cada **Versão (apply) é o átomo transacional** (o "commit"). Hoje o apply ainda é não-atômico (ver Rev. 1) — atomizar via RPC junto do batch-reconcile (§7).
+
+## 14. Rev. 3 — Fase 2.0: board vivo no canvas (2026-06-20)
+
+Cumpre o invariante "build on the live board" na camada de **display** (sem o motor ainda). O canvas do Release Planning agora mostra o **board real do projeto**, não só o que evaporou.
+
+- `ReleasePlanningProposals` deixou de filtrar `status==='done'`: agora lista **todas** as tasks de `/api/tasks?projectId=` (que já exclui draft+dismissed) agrupadas por sprint, cada uma com **StatusChip** (TASK_STATUS) + FP. Header de sprint mostra `N tasks · X FP`. Staging (propostas) continua por cima.
+- Contrato de counts ganhou `planCount` (tasks no board) ao lado de `pendingCount`/`doneCount`. Página: `hasPlan`/empty-state usam `planCount`; fase derivada vira **"Com plano"** quando há board sem staging. Ribbon: subtítulo "N no plano · D entregues".
+- `snapshotFpBySprint` (Fase 1) passou a excluir `draft` também — o FP do Log bate com o que o canvas mostra.
+- De quebra: corrigido o toast de "Aplicar" (`result.applied` é `{applied,failed}` aninhado, lia errado).
+
+**Efeito direto:** a SILFAE (37 todo + 1 done, 5 sprints, ~180 FP) deixa de mostrar "Plano vazio" — o canvas reflete o board.
+
+**Ainda falta na Fase 2:** o motor batch-reconcile (§7) + guard de status (D4) — hoje o board é **read-only** no canvas (click → TaskSheet); editar a distribuição via agente ainda só CRIA (duplica). É o próximo slice (2.1). `manual_browser` da 2.0 não verificado por agente (auth-walled); tsc/eslint limpos.
