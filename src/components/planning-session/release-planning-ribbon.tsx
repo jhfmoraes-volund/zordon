@@ -17,6 +17,8 @@ type Props = {
   sprintCount: number;
   /** Counts do painel — alimentam o subtítulo (sem "0 PRDs"). */
   pendingCount: number;
+  /** Tasks no board vivo (Fase 2.0). */
+  planCount: number;
   doneCount: number;
   insumoCount: number;
   backHref: string;
@@ -42,6 +44,7 @@ export function ReleasePlanningRibbon({
   scheduledFor,
   sprintCount,
   pendingCount,
+  planCount,
   doneCount,
   insumoCount,
   backHref,
@@ -54,6 +57,7 @@ export function ReleasePlanningRibbon({
   const stats = [
     `${sprintCount} sprint${sprintCount === 1 ? "" : "s"}`,
     pendingCount > 0 ? `${pendingCount} em staging` : null,
+    planCount > 0 ? `${planCount} no plano` : null,
     doneCount > 0 ? `${doneCount} entregue${doneCount === 1 ? "" : "s"}` : null,
     insumoCount > 0 ? `${insumoCount} insumo${insumoCount === 1 ? "" : "s"}` : null,
   ].filter(Boolean) as string[];

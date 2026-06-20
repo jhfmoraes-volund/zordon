@@ -134,7 +134,8 @@ async function loadLatestBriefing(sessionId: string): Promise<{
 /**
  * Agrupa as Task do projeto por sprint e soma FP — o "Sprint 1 ~87 FP" que o
  * briefing mostra. Cumulativo (não delta): inclui tasks de todas as fases/status.
- * Exclui dismissed (saíram do board). sprintId NULL = bucket backlog.
+ * Exclui dismissed E draft — mesmo recorte do board vivo (`/api/tasks`), pra o FP
+ * do snapshot bater com o que o canvas mostra. sprintId NULL = bucket backlog.
  */
 async function snapshotFpBySprint(projectId: string): Promise<
   Array<{
@@ -149,6 +150,7 @@ async function snapshotFpBySprint(projectId: string): Promise<
     .from("Task")
     .select("sprintId, functionPoints, sprint:Sprint(name)")
     .eq("projectId", projectId)
+    .neq("status", "draft")
     .is("dismissedAt", null);
   if (error) throw error;
 

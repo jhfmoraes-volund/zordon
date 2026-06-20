@@ -58,15 +58,18 @@ export default function PlanningSessionPage({
   // Bump pra re-fetchar as propostas de task (companion ceremony) quando um turno
   // da Vitoria termina — ela pode ter proposto/editado/descartado tasks via tool.
   const [actionsRefresh, setActionsRefresh] = useState(0);
-  // Counts do painel (staging + entregue) — derivam a fase do header e decidem
-  // mostrar o empty-state. PRD↔sprint board saiu (2026-06-19): a planning lê
-  // fontes (insumos + PRDs) e produz tasks/stories.
-  const [planState, setPlanState] = useState({ pendingCount: 0, doneCount: 0 });
+  // Counts do painel — derivam a fase do header e decidem o empty-state.
+  // `planCount` = tasks no board vivo (Fase 2.0); `doneCount` = quantas done.
+  const [planState, setPlanState] = useState({
+    pendingCount: 0,
+    planCount: 0,
+    doneCount: 0,
+  });
   // Planning Vivo Versionado — Fase 1: nº de versões aplicadas (PlanningEvent).
-  // O canvas só fica "Plano vazio" se NÃO houver staging, entregue, NEM histórico.
+  // O canvas só fica "Plano vazio" se NÃO houver board, staging, NEM histórico.
   const [eventCount, setEventCount] = useState(0);
   const hasPlan =
-    planState.pendingCount > 0 || planState.doneCount > 0 || eventCount > 0;
+    planState.pendingCount > 0 || planState.planCount > 0 || eventCount > 0;
 
   const threadIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -313,7 +316,7 @@ export default function PlanningSessionPage({
 
   // Fase DERIVADA do header (planner vivo): o status persistido só modela casos
   // terminais legados (approved/aborted/error); a fase do dia-a-dia vem dos counts
-  // do painel — staging (tem pendente) → aplicado (tem entregue) → rascunho (vazio).
+  // do painel — staging (tem pendente) → com plano (board vivo tem task) → rascunho.
   const phase: { label: string; tone: ChipTone } =
     status_ === "aborted"
       ? { label: "Abortado", tone: "red" }
@@ -323,8 +326,8 @@ export default function PlanningSessionPage({
           ? { label: "Aprovado", tone: "green" }
           : planState.pendingCount > 0
             ? { label: "Em staging", tone: "blue" }
-            : planState.doneCount > 0
-              ? { label: "Aplicado", tone: "green" }
+            : planState.planCount > 0
+              ? { label: "Com plano", tone: "green" }
               : { label: "Rascunho", tone: "blue" };
 
   const chatPanel = (
@@ -367,6 +370,7 @@ export default function PlanningSessionPage({
         scheduledFor={session.scheduledFor}
         sprintCount={session.sprintCount}
         pendingCount={planState.pendingCount}
+        planCount={planState.planCount}
         doneCount={planState.doneCount}
         insumoCount={insumoCount}
         backHref={backHref}
