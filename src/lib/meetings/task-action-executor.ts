@@ -29,13 +29,26 @@ const ORDER: Record<ActionRow["type"], number> = {
  */
 const FROZEN_STATUSES = new Set(["in_progress", "review", "done"]);
 
-/** Sinaliza "pula esta action" (vs falhar) quando bate no guard de status D4. */
-class FrozenTaskSkip extends Error {
+/** Base de "pula esta action" (vs falhar) — applyActions marca `skipped`. */
+class ActionSkip extends Error {}
+
+/** Guard de status D4: task-alvo está em trabalho em curso. */
+class FrozenTaskSkip extends ActionSkip {
   constructor(taskStatus: string) {
     super(
       `task '${taskStatus}' — congelada (trabalho em curso); não tocada pra não atropelar o builder (D4)`,
     );
     this.name = "FrozenTaskSkip";
+  }
+}
+
+/** Anti-duplicador: create da IA cujo título já existe no projeto. */
+class DuplicateTaskSkip extends ActionSkip {
+  constructor(existingRef: string) {
+    super(
+      `título duplicado de ${existingRef} no projeto — create pulado (re-plano não recria; referencie o taskId pra mover/editar)`,
+    );
+    this.name = "DuplicateTaskSkip";
   }
 }
 
@@ -57,6 +70,33 @@ async function guardFrozenForAi(
   if (task && FROZEN_STATUSES.has(task.status)) {
     throw new FrozenTaskSkip(task.status);
   }
+}
+
+/**
+ * Anti-duplicador (§7 — "não há dedup por conteúdo"). Uma planning viva é
+ * re-lida por semanas; cada "Montar plano" propõe creates. Sem dedup, re-rodar
+ * duplica tasks que já existem. Guard: create da IA cujo título normalizado
+ * (trim+case-insensitive) já existe no projeto (não-dismissed) é PULADO — o
+ * re-plano constrói sobre o board, não recria. Conservador (só título exato):
+ * non-destrutivo + visível (skipped + ref citada). Humano passa direto.
+ */
+async function guardDuplicateForAi(
+  supabase: Supabase,
+  action: ActionRow,
+  proposedTitle: string,
+): Promise<void> {
+  if (action.source !== "ai") return;
+  const title = proposedTitle.trim();
+  if (!title) return;
+  const { data: existing } = await supabase
+    .from("Task")
+    .select("id, reference")
+    .eq("projectId", action.projectId)
+    .is("dismissedAt", null)
+    .ilike("title", title) // sem wildcard → match exato case-insensitive
+    .limit(1)
+    .maybeSingle();
+  if (existing) throw new DuplicateTaskSkip(existing.reference ?? existing.id);
 }
 
 export async function applyApprovedActions(
@@ -164,8 +204,8 @@ async function applyActions(
       result.applied++;
       result.details.push({ id: action.id, type: action.type, status: "applied" });
     } catch (e) {
-      if (e instanceof FrozenTaskSkip) {
-        // D4: trabalho em curso é congelado ao agente — skip, NÃO fail.
+      if (e instanceof ActionSkip) {
+        // D4 (congelada) ou anti-duplicador (título já existe) — skip, NÃO fail.
         await markExecuted(supabase, action.id, "skipped");
         result.skipped++;
         result.details.push({ id: action.id, type: action.type, status: "skipped", error: e.message });
@@ -239,6 +279,10 @@ async function applyCreate(
   fallbackSprintId: string | null = null,
 ) {
   const p = (action.payload ?? {}) as Record<string, unknown>;
+
+  // Anti-duplicador ANTES de queimar uma reference (next_task_reference
+  // incrementa um contador — não gastar número num create que vai ser pulado).
+  await guardDuplicateForAi(supabase, action, (p.title as string) ?? "");
 
   const { data: reference, error: rpcErr } = await supabase.rpc(
     "next_task_reference",

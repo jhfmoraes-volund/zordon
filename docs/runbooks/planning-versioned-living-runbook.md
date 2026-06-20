@@ -123,7 +123,7 @@ A capability nova que o modelo vivo exige (Fase ≥ 2): **batch reconcile**.
 | Fase | Entrega | Estado |
 |---|---|---|
 | **1 — Log** | `PlanningEvent` + `PlanningEventSprint`; gancho no apply; `GET /events`; **timeline visível** no canvas (substitui "Plano vazio"). Para o sangramento. | ✅ **Implementada (2026-06-19, Rev. 1)** |
-| **2 — Versionado vivo** | **2.0 ✅ board vivo no canvas (Rev. 3, 2026-06-20)** · Versão = diff sobre board vivo (motor batch-reconcile §7); guard de trabalho-em-curso (D4); chat por-versão (D5); strip de versões via `Regua` (D9). | 2.0 done · 2.1-2.3 desenho fechado |
+| **2 — Versionado vivo** | **2.0 ✅ board vivo · 2.1 ✅ guard D4 + anti-duplicador (Rev. 3-4, 2026-06-20)** · chat por-versão (D5, 2.2); strip de versões via `Regua` (D9, 2.3). | 2.0+2.1 done · 2.2-2.3 desenho fechado |
 | **3 — Memória + aprendizado** | Memória destilada por versão (D6); outcome planned-vs-delivered por-sprint (D7) → Metrics Registry. | Desenho fechado |
 | **4 — Merge Sprint Planning** | Absorver `PlanningCeremony` per-sprint como filtro da Planning viva. Taxonomia cai de 3 → 2 rituais (PM Review + Planning). | Adiado (D10) |
 
@@ -219,3 +219,15 @@ Cumpre o invariante "build on the live board" na camada de **display** (sem o mo
 **Efeito direto:** a SILFAE (37 todo + 1 done, 5 sprints, ~180 FP) deixa de mostrar "Plano vazio" — o canvas reflete o board.
 
 **Ainda falta na Fase 2:** o motor batch-reconcile (§7) + guard de status (D4) — hoje o board é **read-only** no canvas (click → TaskSheet); editar a distribuição via agente ainda só CRIA (duplica). É o próximo slice (2.1). `manual_browser` da 2.0 não verificado por agente (auth-walled); tsc/eslint limpos.
+
+## 15. Rev. 4 — Fase 2.1: guard de status D4 + anti-duplicador (2026-06-20)
+
+Fecha o §7 ("batch reconcile") na prática. Descoberta que encurtou o slice: **os primitivos já existiam** — `list_project_tasks` (agente vê o board com taskIds/status/sprint) + `propose_task_action` (update/move/delete por taskId). O gap real era (a) sem guard de status e (b) sem dedup por conteúdo + o agente não era instruído a reconciliar. Sem motor novo.
+
+**2.1a — guard de status (D4):** `task-action-executor.ts` agora PULA (não falha) `move`/`update`/`delete` da IA quando a task-alvo está `in_progress`/`review`/`done` (`FROZEN_STATUSES`, mais amplo que o literal "in_progress/done" — `review` também é trabalho começado). Humano passa direto (TaskSheet não usa o executor). `ActionSkip` base → `applyActions` marca `skipped`. **Verificado e2e** (executor real, rows throwaway): AI move em task `done` → skipped; em `todo` → applied.
+
+**2.1b — anti-duplicador:** `guardDuplicateForAi` em `applyCreate` — create da IA cujo título normalizado (trim + case-insensitive via `ilike`) já existe no projeto (não-dismissed) é PULADO antes de queimar uma reference. Conservador (só título exato), non-destrutivo, visível (skipped + ref citada). **Verificado e2e:** create de título existente → skipped (board fica com 1, não cria 2ª); título novo → applied. Complementado por prompt: regra de reconcile no `release-planning.ts` (lê o board, referencia taskId, só cria o novo) + kickoff message reconcile-aware (`planning/page.tsx`).
+
+**Decisão fixada:** dedup = título-exato, AI-only, **skip** (não fuzzy, não convert-to-update). Tradeoff aceito: 2 tasks legítimas de mesmo título → a 2ª é pulada (PM renomeia). Em troca: re-rodar a planning vira idempotente.
+
+**🐛 Bug PRÉ-EXISTENTE descoberto (fora do escopo 2.1, NÃO regressão):** após um `create` aplicado, `MeetingTaskAction.taskId` NÃO é linkado (fica null) — o código de link no fim de `applyCreate` (intocado por mim) não persiste. Repro: aplicar um create da IA → action fica `applied` mas `taskId=null`. Impacto: trilha de auditoria/telemetria (`AgentProposalOutcome` não aponta pra task criada), NÃO afeta dedup/reconcile (que usam `Task.id` direto). Candidato a fix separado. Também notado: companions órfãs acumulam do recycling (detrito pré-existente, harmless).

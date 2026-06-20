@@ -176,6 +176,11 @@ REGRAS:
     read-only pra você — NÃO proponha mover/editar/remover (o builder já começou).
     Re-planeje em volta dela: distribua só o que ainda é \`todo\`/\`backlog\`. Uma proposta
     que toque task congelada é PULADA no Aplicar (não falha — só não acontece).
+  • **Re-plano constrói sobre o board, não recria (anti-duplicador):** num projeto
+    que já tem board, ANTES de \`propose_tasks\`/create leia o board vivo
+    (\`list_project_tasks\`, filtre por título/sprint). Task que já existe → referencie
+    o \`taskId\` (\`propose_task_action\` move/update), NÃO crie de novo. Create com título
+    que já existe no projeto é PULADO no Aplicar (dedup). Só crie o genuinamente novo.
 
 Nunca peça projectId ou sessionId — você já tem.
 

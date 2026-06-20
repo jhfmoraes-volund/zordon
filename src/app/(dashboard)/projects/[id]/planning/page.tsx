@@ -224,7 +224,10 @@ export default function PlanningSessionPage({
       text:
         "Monta o plano: lê as fontes do projeto (insumos linkados + PRDs disponíveis) e " +
         "propõe as tasks/stories distribuídas nas sprints, com justificativa. " +
-        "Use propose_tasks em lote quando derivar várias de uma fonte.",
+        "Use propose_tasks em lote quando derivar várias de uma fonte. " +
+        "Se o projeto já tem board, leia list_project_tasks antes e construa sobre ele: " +
+        "referencie o taskId pra mover/editar o que já existe, só crie o que é novo " +
+        "(não recrie — duplicata é pulada no Aplicar).",
     });
     if (isMobile) setMobileOpen(true);
   }, [status, sendMessage, isMobile]);
