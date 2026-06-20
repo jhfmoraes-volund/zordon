@@ -12,6 +12,11 @@ import { requireProjectEditTasksApi, getCurrentMember } from "@/lib/dal";
 import { getPlanningById, concludePlanning } from "@/lib/dal/planning";
 import { recordPlanningEventFromCeremony } from "@/lib/dal/planning-event";
 
+// Aplica o plano inteiro em cascata (pode ser dezenas de tasks). Com o executor
+// em lote roda em ~2-3s, mas damos folga ao budget da plataforma pra um backfill
+// grande não ser cortado no meio.
+export const maxDuration = 60;
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },

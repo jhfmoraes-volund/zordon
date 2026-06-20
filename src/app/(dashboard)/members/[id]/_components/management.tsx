@@ -100,7 +100,7 @@ export function ProjectNavItem({
         {/* contrato editável inline — número destacado, label muted */}
         <span className="inline-flex items-baseline gap-1">
           <InlineContract value={project.contract} canEdit={canEdit} onCommit={onContractChange} />
-          <span className="text-[10px] text-muted-foreground">FP/sprint</span>
+          <span className="text-[10px] text-muted-foreground">PFV/sprint</span>
         </span>
         <span
           title={overShare ? "este contrato sozinho já passa do contrato total do builder" : "fração do contrato total do builder"}
@@ -288,7 +288,7 @@ function ProjectHeader({
               {project.contract}
             </button>
           )}
-          <span className="text-[10px] leading-none text-muted-foreground">FP/sprint</span>
+          <span className="text-[10px] leading-none text-muted-foreground">PFV/sprint</span>
           {saved && <Check className="h-3.5 w-3.5 text-green-500" />}
         </div>
       </div>

@@ -8,7 +8,7 @@ import { OPEN_STATUSES } from "@/lib/function-points";
  * aggregate "Big Numbers" derived through ProjectSquad → Project → Task/Sprint.
  *
  * All metrics flow through the squad's projects (Squad has no direct children).
- * Capacity is the sum of members' fpCapacity vs. FP allocated to the squad's
+ * Capacity is the sum of members' fpCapacity vs. PFV allocated to the squad's
  * members on the projects' active sprints.
  */
 export async function GET(
@@ -86,7 +86,7 @@ export async function GET(
       .map((s) => s.id);
     activeSprintCount = activeSprintIds.length;
 
-    // FP allocated this cycle = sum of squad members' allocations on the
+    // PFV allocated this cycle = sum of squad members' allocations on the
     // projects' active sprints.
     if (activeSprintIds.length > 0 && memberIds.length > 0) {
       const { data: allocs } = await supabase

@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = db();
 
-  // Auto-suggest FP if not provided
+  // Auto-suggest PFV if not provided
   if (data.functionPoints === undefined || data.functionPoints === null) {
     data.functionPoints = suggestFunctionPoints(
       data.scope || "small",

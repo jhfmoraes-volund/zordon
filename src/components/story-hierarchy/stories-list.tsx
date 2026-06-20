@@ -154,7 +154,7 @@ function StoryGroup({
               <span>Refinement</span>
               <span>Status</span>
               <span className="text-right">Tasks</span>
-              <span className="text-right">FP</span>
+              <span className="text-right">PFV</span>
               {showMenu ? <span /> : null}
             </div>
             {rows.map((story, i) => (

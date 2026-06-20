@@ -172,7 +172,9 @@ export default function ProjectDetailPage({
   } = useProjectMembers(id, sprintIds);
 
   const [accessOpen, setAccessOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
+  // ?edit=project abre o sheet de edição do projeto direto (deep-link do botão
+  // "Definir prazo" do Planning, quando faltam datas do contrato).
+  const [editOpen, setEditOpen] = useState(searchParams.get("edit") === "project");
   const [wikiOpen, setWikiOpen] = useState(rawTabParam === "wiki");
   const [selectedStoryRef, setSelectedStoryRef] = useState<string | null>(null);
   const [selectedTaskRef, setSelectedTaskRef] = useState<string | null>(taskParam);

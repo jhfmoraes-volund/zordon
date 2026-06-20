@@ -18,7 +18,7 @@ export async function GET() {
   // Fetch members from view (includes squad_count and active_task_count)
   const [membersRes, tasksRes] = await Promise.all([
     supabase.from("member_summary").select("*").order("name"),
-    // Fetch active tasks with assignments for FP calculation
+    // Fetch active tasks with assignments for PFV calculation
     supabase
       .from("Task")
       .select("id, functionPoints, status, sprintId, assignments:TaskAssignment(memberId)")
@@ -30,7 +30,7 @@ export async function GET() {
     return NextResponse.json({ error: membersRes.error.message }, { status: 500 });
   }
 
-  // Aggregate FP per member from active tasks
+  // Aggregate PFV per member from active tasks
   const fpMap: Record<string, number> = {};
   for (const task of (tasksRes.data ?? []) as any[]) {
     const fp = task.functionPoints ?? 0;

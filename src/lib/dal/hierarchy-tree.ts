@@ -54,7 +54,7 @@ export type BuildHierarchyOptions = {
    * Planning usa `false` (só módulos tocados pela sprint).
    */
   includeEmptyModules?: boolean;
-  /** Mascarar FP (guest mode). Não muda a árvore — só zera fps nos stats e nas tasks. */
+  /** Mascarar PFV (guest mode). Não muda a árvore — só zera fps nos stats e nas tasks. */
   guest?: boolean;
 };
 

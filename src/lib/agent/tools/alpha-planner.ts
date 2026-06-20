@@ -171,7 +171,7 @@ export function getProjectCapacityForOpsTool(projectId: string) {
 export function listUnplannedTasksForOpsTool(projectId: string) {
   return tool({
     description:
-      "Lista tasks no backlog (sem sprint) prontas pra alocar — só inclui tasks com FP definido. Use ANTES de propor distribuição. Filtra opcionalmente por module ou só tasks vinculadas a story.",
+      "Lista tasks no backlog (sem sprint) prontas pra alocar — só inclui tasks com PFV definido. Use ANTES de propor distribuição. Filtra opcionalmente por module ou só tasks vinculadas a story.",
     inputSchema: z.object({
       moduleId: z
         .string()
@@ -292,7 +292,7 @@ export function listUnplannedTasksForOpsTool(projectId: string) {
 export function verifySprintDistributionForOpsTool(projectId: string) {
   return tool({
     description:
-      "Calcula totais reais por sprint e assignee a partir de uma distribuição planejada. Retorna FP somado server-side via SQL — NUNCA confie em soma manual em planos com mais de 20 tasks. Use ANTES de mostrar tabela resumo ao PM. Resolve o bug histórico de alucinar totais.",
+      "Calcula totais reais por sprint e assignee a partir de uma distribuição planejada. Retorna PFV somado server-side via SQL — NUNCA confie em soma manual em planos com mais de 20 tasks. Use ANTES de mostrar tabela resumo ao PM. Resolve o bug histórico de alucinar totais.",
     inputSchema: z.object({
       updates: z
         .array(

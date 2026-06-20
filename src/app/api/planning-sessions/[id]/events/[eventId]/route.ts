@@ -2,7 +2,7 @@
  * GET /api/planning-sessions/[id]/events/[eventId]
  *
  * Planning Vivo Versionado — snapshot COMPLETO de uma versão (canvas histórico):
- * o evento + FP por sprint + a lista de tasks daquele "Aplicar". Lazy-load — só
+ * o evento + PFV por sprint + a lista de tasks daquele "Aplicar". Lazy-load — só
  * é buscado quando o usuário seleciona um log no cronograma.
  *
  * Auth: caller precisa ter acesso ao projeto da sessão (requireProjectViewApi).

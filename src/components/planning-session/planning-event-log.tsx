@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/date-utils";
 
-/** Child row de FP por sprint (snapshot imutável). */
+/** Child row de PFV por sprint (snapshot imutável). */
 export type EventSprint = {
   id: string;
   sprintId: string | null;
@@ -43,7 +43,7 @@ export function eventCountsLine(ev: PlanningEvent): string {
 
 /**
  * Linha de uma versão do plano (PlanningEvent) — clicável, selecionável. É o
- * "git log" do plano: data + quem aplicou + counts + chips de FP por sprint
+ * "git log" do plano: data + quem aplicou + counts + chips de PFV por sprint
  * (snapshot denormalizado, imutável). Selecionar carrega o canvas histórico
  * daquela versão (o briefing vive lá, não inline). Compartilhada pela drawer
  * de logs da semana e por qualquer lista de versões.
@@ -83,7 +83,7 @@ export function PlanningEventRow({
             <span className="text-xs text-muted-foreground">· {counts}</span>
           )}
         </div>
-        {/* Chips de FP por sprint — o snapshot denormalizado, imutável. */}
+        {/* Chips de PFV por sprint — o snapshot denormalizado, imutável. */}
         {event.sprints.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {event.sprints.map((s) => (
@@ -92,7 +92,7 @@ export function PlanningEventRow({
                 variant="outline"
                 title={`${s.taskCount} task${s.taskCount === 1 ? "" : "s"}`}
               >
-                {s.sprintLabel} · {s.fpTotal} FP
+                {s.sprintLabel} · {s.fpTotal} PFV
               </Badge>
             ))}
           </div>

@@ -136,7 +136,7 @@ em Settings") — NÃO chame read_context_source como fallback (ela só lê READ
 
          ## Invariantes
          <o que NÃO pode quebrar após esta task — perf, contrato, dado existente>
-   - functionPoints — inteiro 1-13 (estimativa). NÃO escreva FP só na prosa.
+   - functionPoints — inteiro 1-13 (estimativa). NÃO escreva PFV só na prosa.
    - acceptanceCriteria — array de ≥3 strings, cada uma verificável pelo PM
      ("dashboard exibe 12 OKRs", "5 retries de teste passam", etc).
    - priority opcional 0-3 (0=top, default 1).
@@ -180,7 +180,7 @@ em Settings") — NÃO chame read_context_source como fallback (ela só lê READ
 - **list_project_members** — membros do squad do projeto (id, nome, capacity).
   **Regra dura**: chame antes de usar assigneeIds — nunca invente Member.id.
   Se vier vazio, o projeto não tem squad: avise o PM.
-- **get_sprint_capacity(sprintId)** — FP planejado vs capacity dos members.
+- **get_sprint_capacity(sprintId)** — PFV planejado vs capacity dos members.
   Use pra avaliar risco de sobrecarga antes de propor novas tasks na sprint.
 - **get_dependency_graph(sprintId)** — grafo de bloqueios (1 hop) da sprint.
   Use quando o PM perguntar "o que está bloqueado?" ou "qual a ordem disso?".
@@ -257,7 +257,7 @@ E pra **gravar** o que você aprende na planning como memória durável do proje
 - Prefira propor ações "create" para tarefas novas identificadas nas transcrições.
 - Para tarefas existentes com bloqueios, prefira "update" com as informações novas.
 - Quando as transcrições indicam capacidade reduzida de um membro, adicione uma nota kind="capacity_signal".
-- **Use a "Memória de sprints"** (seção do contexto): compare o total de FP que você propõe pra esta sprint com a velocity média histórica — se ficar muito acima, sinalize risco de sobrecarga em vez de só propor. Continuidade é o ponto: você lembra do que aconteceu.
+- **Use a "Memória de sprints"** (seção do contexto): compare o total de PFV que você propõe pra esta sprint com a velocity média histórica — se ficar muito acima, sinalize risco de sobrecarga em vez de só propor. Continuidade é o ponto: você lembra do que aconteceu.
 - **Carryover e temas de retro são sinal, não ruído.** Se uma sprint fechou com carryover alto ou um tema de retro recorrente (bloqueio repetido, escopo estourando), levante isso na planning e proponha ação concreta — não repita o mesmo erro silenciosamente.
 - Nunca invente dados. Se não encontrou informação, diga explicitamente.
 - **Nunca infira intent que o PM não expressou.** Se ele perguntou "X?",
@@ -311,7 +311,7 @@ Quando pedir mais contexto ao PM, limite a 1-2 perguntas por vez.`;
   const squadBlock = squadMembers.length > 0
     ? squadMembers.map((m) => {
         const effective = Math.round(m.fpCapacity * (m.dedicationPercent / 100) * 10) / 10;
-        return `- ${m.name} (${m.position ?? m.role}${m.seniority ? `, ${m.seniority}` : ""}) — capacity ${effective} FP/semana`;
+        return `- ${m.name} (${m.position ?? m.role}${m.seniority ? `, ${m.seniority}` : ""}) — capacity ${effective} PFV/semana`;
       }).join("\n")
     : "nenhum member no squad";
 
@@ -420,7 +420,7 @@ Quando pedir mais contexto ao PM, limite a 1-2 perguntas por vez.`;
     ? sprintOutcomes
         .map((o) => {
           const pct = o.totalCount > 0 ? Math.round((o.doneCount / o.totalCount) * 100) : 0;
-          const head = `- **${o.name ?? "(sprint)"}** (até ${o.endDate ?? "?"}) — ${o.doneCount}/${o.totalCount} tasks (${pct}%), velocity ${o.velocityFp}/${o.plannedFp} FP, carryover ${o.carryoverCount}${o.goal ? ` · objetivo: ${truncate(o.goal, 80)}` : ""}`;
+          const head = `- **${o.name ?? "(sprint)"}** (até ${o.endDate ?? "?"}) — ${o.doneCount}/${o.totalCount} tasks (${pct}%), velocity ${o.velocityFp}/${o.plannedFp} PFV, carryover ${o.carryoverCount}${o.goal ? ` · objetivo: ${truncate(o.goal, 80)}` : ""}`;
           const retro: string[] = [];
           if (o.retro?.good) retro.push(`    ✓ ${truncate(o.retro.good, 160)}`);
           if (o.retro?.bad) retro.push(`    ✗ ${truncate(o.retro.bad, 160)}`);
@@ -434,7 +434,7 @@ Quando pedir mais contexto ao PM, limite a 1-2 perguntas por vez.`;
     : null;
   const outcomesSection = `## Memória de sprints (últimas concluídas — continuidade)
 
-${avgVelocity != null ? `**Velocity média**: ~${avgVelocity} FP/sprint — calibre a capacidade desta planning contra esse número.\n\n` : ""}${outcomesBlock}`;
+${avgVelocity != null ? `**Velocity média**: ~${avgVelocity} PFV/sprint — calibre a capacidade desta planning contra esse número.\n\n` : ""}${outcomesBlock}`;
 
   const statusLabel = status === "closed" ? "Concluída" : "Em planejamento";
 

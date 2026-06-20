@@ -49,7 +49,7 @@ export function createTaskTool(
 ) {
   return tool({
     description:
-      "Cria uma task tecnica vinculada a uma User Story. Cada task deve ser um BRIEF AUTOSSUFICIENTE: um LLM em sessao futura, sem acesso a esta design session, deve conseguir ler a task e executar sozinho. AC aqui e TECNICO (verificavel no PR — lint, typecheck, regression de comportamento). NAO duplique AC de produto da story. A tool calcula Function Points automaticamente.",
+      "Cria uma task tecnica vinculada a uma User Story. Cada task deve ser um BRIEF AUTOSSUFICIENTE: um LLM em sessao futura, sem acesso a esta design session, deve conseguir ler a task e executar sozinho. AC aqui e TECNICO (verificavel no PR — lint, typecheck, regression de comportamento). NAO duplique AC de produto da story. A tool calcula PFV (Ponto de Função Volund) automaticamente.",
     inputSchema: z.object({
       userStoryId: z
         .string()

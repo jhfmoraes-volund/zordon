@@ -127,7 +127,7 @@ export function CapacityWidget({
           </p>
           <p className="font-mono tabular-nums text-3xl font-bold leading-none" style={{ color: "oklch(0.82 0.2 22)" }}>
             {breakdown.suggested}
-            <span className="text-sm text-muted-foreground/60 font-normal ml-1">FP</span>
+            <span className="text-sm text-muted-foreground/60 font-normal ml-1">PFV</span>
           </p>
         </div>
       </div>
@@ -240,7 +240,7 @@ export function CapacityWidget({
             disabled={!canEdit}
             className="font-mono tabular-nums w-24"
           />
-          <span className="text-xs text-muted-foreground">FP/sprint</span>
+          <span className="text-xs text-muted-foreground">PFV/sprint</span>
           <Button
             type="button"
             variant="outline"

@@ -50,7 +50,7 @@ export async function GET(
       totalStories: stats.totalStories,
       totalTasks: stats.totalTasks,
       draftTasks: stats.draftTasks,
-      // DS Briefing usa "totalFp" para FP de tasks draft (não todas).
+      // DS Briefing usa "totalFp" para PFV de tasks draft (não todas).
       totalFp: guest ? null : draftFpOf(tree),
       proposedModulesCount: stats.proposedModulesCount,
       approvedModulesCount: stats.approvedModulesCount,
@@ -58,7 +58,7 @@ export async function GET(
   });
 }
 
-/** Soma FP só das tasks com status 'draft' — convenção do BriefingRibbon. */
+/** Soma PFV só das tasks com status 'draft' — convenção do BriefingRibbon. */
 function draftFpOf(tree: Awaited<ReturnType<typeof buildHierarchyTree>>["tree"]) {
   let s = 0;
   for (const m of tree) {

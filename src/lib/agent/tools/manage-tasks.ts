@@ -200,7 +200,7 @@ export function updateTaskTool(sessionId: string) {
       if (updates.complexity !== undefined) payload.complexity = updates.complexity;
       if (updates.scope !== undefined) payload.scope = updates.scope;
 
-      // Recalculate FP if either changed
+      // Recalculate PFV if either changed
       if (updates.complexity !== undefined || updates.scope !== undefined) {
         const newComplexity = updates.complexity ?? existing.complexity;
         const newScope = updates.scope ?? existing.scope;

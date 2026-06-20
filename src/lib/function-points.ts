@@ -1,11 +1,24 @@
 /**
- * Auto-suggest Function Points from scope × complexity.
+ * Auto-suggest PFV (Ponto de Função Volund) from scope × complexity.
  * Pure module — safe to import from client and server.
  *
  * The default matrix below is the seed value. The tuned matrix lives in
  * AgentConfig (key: "fp_matrix") and is loaded server-side via
  * `loadFpMatrix` in `src/lib/agent/config.ts`.
  */
+
+/**
+ * Nome canônico da unidade, exibido ao usuário: **PFV** (Ponto de Função Volund).
+ *
+ * Só o *display* usa este nome. Identificadores internos seguem `functionPoints`
+ * / `fp*` / coluna `"functionPoints"` — renomeá-los seria churn sem valor (ninguém
+ * os lê). Para rotular a unidade na UI/prompt, referencie `PFV` ou `formatPfv`.
+ */
+export const PFV = {
+  abbr: "PFV",
+  full: "Ponto de Função Volund",
+  plural: "Pontos de Função Volund",
+} as const;
 
 export type FpMatrix = Record<string, Record<string, number>>;
 

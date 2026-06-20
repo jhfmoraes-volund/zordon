@@ -11,16 +11,53 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * Estouro do `timeoutMs` do fetchOrThrow. Distinto de um AbortError cru de
+ * propósito: showErrorToast ENGOLE AbortError (mutation superada por outra mais
+ * nova), mas um timeout É um erro que o usuário precisa ver — senão o request
+ * pendura, o botão reseta calado e ninguém sabe se aplicou.
+ */
+export class TimeoutError extends Error {
+  constructor(message = "tempo esgotado") {
+    super(message);
+    this.name = "TimeoutError";
+  }
+}
+
+/**
+ * @param opts.timeoutMs aborta o fetch após N ms e lança `TimeoutError`. Ignorado
+ *   se `init.signal` já foi passado (o caller controla o abort). Use pra operações
+ *   longas (ex: aplicar plano inteiro) que não podem pendurar a UI pra sempre.
+ */
 export async function fetchOrThrow(
   input: RequestInfo | URL,
   init?: RequestInit,
+  opts?: { timeoutMs?: number },
 ): Promise<Response> {
-  const res = await fetch(input, init);
-  if (!res.ok) {
-    const body = await res.text().catch(() => null);
-    throw new HttpError(res.status, body, `${res.status} ${res.statusText}`);
+  const timeoutMs = opts?.timeoutMs;
+  const useTimeout = !!timeoutMs && !init?.signal;
+  const controller = useTimeout ? new AbortController() : undefined;
+  let timedOut = false;
+  const timer = useTimeout
+    ? setTimeout(() => {
+        timedOut = true;
+        controller!.abort();
+      }, timeoutMs)
+    : undefined;
+
+  try {
+    const res = await fetch(input, controller ? { ...init, signal: controller.signal } : init);
+    if (!res.ok) {
+      const body = await res.text().catch(() => null);
+      throw new HttpError(res.status, body, `${res.status} ${res.statusText}`);
+    }
+    return res;
+  } catch (e) {
+    if (timedOut) throw new TimeoutError(`tempo esgotado após ${Math.round(timeoutMs! / 1000)}s`);
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  return res;
 }
 
 export type ErrorClass =
@@ -28,10 +65,14 @@ export type ErrorClass =
   | "conflict"
   | "server"
   | "network"
+  | "timeout"
   | "client"
   | "unknown";
 
 export function classifyError(error: unknown): ErrorClass {
+  if (error instanceof TimeoutError) {
+    return "timeout";
+  }
   if (error instanceof DOMException && error.name === "AbortError") {
     return "network";
   }
@@ -105,6 +146,8 @@ function describe(cls: ErrorClass, label: string, error: unknown): string {
       return `${label}: erro de servidor. Tente de novo.`;
     case "network":
       return `${label}: sem conexão. Mudança revertida.`;
+    case "timeout":
+      return `${label}: demorou demais. Recarregue e confira se foi aplicado.`;
     case "client": {
       const detail =
         error instanceof HttpError && error.body

@@ -135,7 +135,7 @@ export async function loadWikiContext(
 
   const completedTasks = (tasksRes.data ?? []).map((t) => ({
     ref: { type: "task" as const, id: t.id },
-    label: `Task concluída "${t.title}" (${t.doneAt?.slice(0, 10) ?? "?"}${t.functionPoints ? `, ${t.functionPoints} FP` : ""})`,
+    label: `Task concluída "${t.title}" (${t.doneAt?.slice(0, 10) ?? "?"}${t.functionPoints ? `, ${t.functionPoints} PFV` : ""})`,
     body: "",
   }));
 

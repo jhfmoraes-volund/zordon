@@ -1,6 +1,6 @@
 /**
  * Bucket sprint allocations into ISO weeks (Monday → Sunday) and
- * prorate FP by the overlapping days. Assumes weekly capacity =
+ * prorate PFV by the overlapping days. Assumes weekly capacity =
  * Member.fpCapacity, since the company runs 7-day sprints.
  *
  * A sprint that starts on a Monday fits exactly in one week. A sprint
@@ -38,13 +38,13 @@ export type WeekSprintRow = {
   overlapDays: number;
   /** Total days of the sprint (used for ratio display). */
   sprintTotalDays: number;
-  /** Prorated FP allocation (contract) for the week. */
+  /** Prorated PFV allocation (contract) for the week. */
   fpAllocationWeek: number;
-  /** Prorated FP planned (≠ backlog) for the week. */
+  /** Prorated PFV planned (≠ backlog) for the week. */
   fpPlannedWeek: number;
-  /** Prorated FP done for the week. */
+  /** Prorated PFV done for the week. */
   fpDoneWeek: number;
-  /** Prorated FP open for the week. */
+  /** Prorated PFV open for the week. */
   fpOpenWeek: number;
   hasOverride: boolean;
 };
@@ -129,7 +129,7 @@ type Options = {
 
 /**
  * Build the list of week buckets for the given range, populating each
- * with the sprints that overlap and their prorated FP.
+ * with the sprints that overlap and their prorated PFV.
  */
 export function bucketSprintsByWeek(
   sprints: SprintInput[],
@@ -211,9 +211,9 @@ export type DoneWeekBucket = {
   weekStart: Date;
   weekEnd: Date;
   isCurrent: boolean;
-  /** Σ FP done in this week. */
+  /** Σ PFV done in this week. */
   doneFp: number;
-  /** Per-project breakdown of done FP. */
+  /** Per-project breakdown of done PFV. */
   byProject: { projectId: string; projectName: string; doneFp: number }[];
 };
 

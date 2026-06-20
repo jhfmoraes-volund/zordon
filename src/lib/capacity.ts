@@ -1,12 +1,12 @@
 /**
  * Suggested-capacity model.
  *
- * Capacity is the FP/sprint a member can deliver. We compute a
+ * Capacity is the PFV/sprint a member can deliver. We compute a
  * recommendation from 3 inputs:
  *
  *   capacity = baseRole × seniorityMult × dedicationFactor
  *
- * Senior at 100% dedication = 500 FP/sprint (the baseline observed in
+ * Senior at 100% dedication = 500 PFV/sprint (the baseline observed in
  * actual team throughput). Other seniority levels scale ±15% per step.
  */
 
@@ -14,7 +14,7 @@ import type { Role } from "./roles";
 
 // ─── Tunable tables ─────────────────────────────────────
 
-/** Base FP/sprint for a senior, full-time member of each role. */
+/** Base PFV/sprint for a senior, full-time member of each role. */
 export const ROLE_BASE: Record<Role, number> = {
   "product-builder": 500,
   "principal-engineer": 500,
@@ -57,7 +57,7 @@ export type CapacityBreakdown = {
   base: number;
   seniorityMult: number;
   dedication: number;
-  /** Final suggested FP/sprint (rounded). */
+  /** Final suggested PFV/sprint (rounded). */
   suggested: number;
 };
 

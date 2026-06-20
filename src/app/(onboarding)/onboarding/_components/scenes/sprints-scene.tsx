@@ -45,7 +45,7 @@ export function SprintsScene() {
                 <span className="text-sm text-muted-foreground">/{totalCap}</span>
               </div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                FP alocados
+                PFV alocados
               </div>
             </div>
           </div>
@@ -82,7 +82,7 @@ export function SprintsScene() {
                     </span>
                   </div>
                   <span className="font-mono tabular-nums text-muted-foreground">
-                    {m.used}/{m.capacity} FP
+                    {m.used}/{m.capacity} PFV
                   </span>
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">

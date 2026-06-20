@@ -260,9 +260,39 @@ export async function ensurePMReviewThread(
 }
 
 /**
+ * Cria SEMPRE um thread NOVO de Release Planning (channel='release_planning',
+ * agentName=sessionId). Como o GET do chat pega o thread mais recente, o novo
+ * vira o ativo e o anterior vira histórico — é o mecanismo do "chat fresco por
+ * versão" (Planning vivo versionado): ao aplicar uma versão do plano, abre-se
+ * uma conversa limpa pra a próxima iteração.
+ */
+export async function startNewReleasePlanningThread(
+  sessionId: string,
+  createdBy?: string,
+): Promise<string> {
+  const { data: created, error } = await db()
+    .from("ChatThread")
+    .insert({
+      sessionId: null,
+      agentName: sessionId,
+      channel: "release_planning",
+      createdBy: createdBy || null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[startNewReleasePlanningThread] insert failed:", error.message);
+    throw new Error(`Failed to start new release_planning thread: ${error.message}`);
+  }
+
+  return created!.id;
+}
+
+/**
  * Ensures a thread exists for a Release Planning (PlanningSession).
  * channel = 'release_planning', agentName = sessionId — mesma estratégia do
- * ensurePlanningThread.
+ * ensurePlanningThread. Reusa o mais recente; só cria se não houver nenhum.
  */
 export async function ensureReleasePlanningThread(
   sessionId: string,
@@ -279,23 +309,7 @@ export async function ensureReleasePlanningThread(
 
   if (existing) return existing.id;
 
-  const { data: created, error } = await db()
-    .from("ChatThread")
-    .insert({
-      sessionId: null,
-      agentName: sessionId,
-      channel: "release_planning",
-      createdBy: createdBy || null,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("[ensureReleasePlanningThread] insert failed:", error.message);
-    throw new Error(`Failed to create release_planning thread: ${error.message}`);
-  }
-
-  return created!.id;
+  return startNewReleasePlanningThread(sessionId, createdBy);
 }
 
 /**

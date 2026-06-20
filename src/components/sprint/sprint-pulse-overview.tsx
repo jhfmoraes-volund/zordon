@@ -67,7 +67,7 @@ export function SprintPulseVitals({ sprint, tasks }: SharedProps) {
       {/* Grid plano de mini-cards */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <StatCard
-          label="FP"
+          label="PFV"
           value={`${fp.done}`}
           unit={`/ ${fp.total}`}
         />
@@ -89,7 +89,7 @@ export function SprintPulseVitals({ sprint, tasks }: SharedProps) {
         <StatCard
           label="Velocity"
           value={completion.velocity.toFixed(1)}
-          unit="FP/dia"
+          unit="PFV/dia"
         />
         <StatCard
           label="ETA"
@@ -106,7 +106,7 @@ export function SprintPulseVitals({ sprint, tasks }: SharedProps) {
         <StatCard
           label="Billable"
           value={`${mix.billablePct}%`}
-          unit={`${mix.billableFp} / ${mix.totalFp} FP`}
+          unit={`${mix.billableFp} / ${mix.totalFp} PFV`}
         />
         <StatCard
           label="AI-generated"

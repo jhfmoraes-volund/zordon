@@ -20,9 +20,9 @@ export type SprintOutcome = {
   carryoverCount: number;
   /** Tasks planejadas no total (status ∉ {draft,backlog}). */
   totalCount: number;
-  /** Σ FP done — a velocity da sprint. */
+  /** Σ PFV done — a velocity da sprint. */
   velocityFp: number;
-  /** Σ FP planejado (status ∉ {draft,backlog}). */
+  /** Σ PFV planejado (status ∉ {draft,backlog}). */
   plannedFp: number;
   /** Texto livre da retrospectiva, se preenchida. */
   retro: { good: string | null; bad: string | null; ideas: string | null } | null;

@@ -45,7 +45,7 @@ export async function GET() {
   const tasks = assignmentsRes.data.map((a: any) => a.task);
   const projects = projectAllocationsRes.data.map((pa: any) => pa.project);
 
-  // FP em aberto (open statuses)
+  // PFV em aberto (open statuses)
   const fpOpen = tasks
     .filter((t: any) => [...OPEN_STATUSES].includes(t.status))
     .reduce((sum: number, t: any) => sum + (t.functionPoints ?? 0), 0);

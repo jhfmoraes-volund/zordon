@@ -315,8 +315,8 @@ export async function GET(
 
   const guest = await isGuestActor();
 
-  // Guest: oculta DS internas, zera FP em tasks/sprints/projectMembers/members,
-  // omite memberCapacity (relatório interno), e zera FP do health summary.
+  // Guest: oculta DS internas, zera PFV em tasks/sprints/projectMembers/members,
+  // omite memberCapacity (relatório interno), e zera PFV do health summary.
   const safeDesignSessions = guest
     ? designSessions.filter((s) => s.visibility === "public")
     : designSessions;

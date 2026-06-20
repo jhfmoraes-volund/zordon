@@ -165,7 +165,7 @@ export function ReleasePlanningContextSheet({
     (linkId: string, title: string) => {
       setConfirmState({
         title: "Desvincular insumo?",
-        description: `"${title}" será removido deste release planning.`,
+        description: `"${title}" será removido deste planning.`,
         confirmLabel: "Desvincular",
         destructive: true,
         onConfirm: async () => {
@@ -207,7 +207,7 @@ export function ReleasePlanningContextSheet({
       <ContextSheet
         open={open}
         onOpenChange={onOpenChange}
-        ritualLabel="Release Planning"
+        ritualLabel="Planning"
         linkedItems={linkedItems}
         capabilities={{ pool: true, transcript: true, file: true, github: true }}
         uploadingFile={uploadingFile}
@@ -232,7 +232,7 @@ export function ReleasePlanningContextSheet({
         apiUrl={`/api/planning-sessions/${sessionId}/transcripts`}
         open={transcriptModalOpen}
         onOpenChange={setTranscriptModalOpen}
-        subtitle="Vitória vai usar a transcrição como contexto do release planning."
+        subtitle="Vitória vai usar a transcrição como contexto do planning."
         onImported={() => {
           void refetch();
           onChanged?.();

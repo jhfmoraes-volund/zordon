@@ -20,7 +20,7 @@ export type MembersListItem = {
   isExternal: boolean;
   isGuest: boolean;
   fpCapacity: number;
-  /** Soma de FP planejados (≠ backlog) nas sprints que rodam na semana atual. */
+  /** Soma de PFV planejados (≠ backlog) nas sprints que rodam na semana atual. */
   fpPlannedWeek: number;
   /** Skill rows from the member self-assessment, one per tower. */
   skills: MemberSkillRow[];
@@ -33,7 +33,7 @@ export type MembersListItem = {
 };
 
 /**
- * Carrega Members + skills + carga semanal de FP (sprints da semana atual).
+ * Carrega Members + skills + carga semanal de PFV (sprints da semana atual).
  * Funciona tanto com server client (`@/lib/supabase/server`) quanto com
  * client client (`@/lib/supabase/client`) — só lê dados. RLS aplica nos dois.
  */

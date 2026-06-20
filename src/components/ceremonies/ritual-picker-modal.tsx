@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, ChartLine, Handshake, Sparkles, Users } from "lucide-react";
+import { ChartLine, Handshake, Sparkles, Users } from "lucide-react";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 
 export type RitualType =
   | "pm_review"
-  | "sprint_planning"
   | "release_planning"
   | "kickoff_interno"
   | "kickoff_externo";
@@ -21,7 +20,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (type: RitualType) => void;
-  /** Manager-level — habilita Sprint Planning + Release Planning. */
+  /** Manager-level — habilita Planning. */
   canManage: boolean;
   /** Permissão específica de PM Review (lead/admin). */
   canPMReview: boolean;
@@ -29,7 +28,7 @@ type Props = {
 
 const RITUAL_OPTIONS: {
   type: RitualType;
-  icon: typeof CalendarClock;
+  icon: typeof ChartLine;
   title: string;
   description: string;
   cadence: string;
@@ -42,19 +41,12 @@ const RITUAL_OPTIONS: {
     cadence: "Semanal",
   },
   {
-    type: "sprint_planning",
-    icon: CalendarClock,
-    title: "Sprint Planning",
-    description: "Planejamento da sprint — contexto, propostas e ações.",
-    cadence: "Semanal",
-  },
-  {
     type: "release_planning",
     icon: Sparkles,
-    title: "Release Planning",
+    title: "Planning",
     description:
-      "Plano de release — transforma os PRDs do projeto em user stories e tasks.",
-    cadence: "Uma vez por projeto",
+      "Planejamento contínuo do projeto — lê as fontes (PRDs + insumos) e distribui o trabalho em sprints, evoluindo a qualquer momento.",
+    cadence: "Contínuo",
   },
   {
     type: "kickoff_interno",

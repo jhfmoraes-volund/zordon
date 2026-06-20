@@ -62,7 +62,7 @@ function statusChip(status: string): { label: string; tone: Parameters<typeof St
  * Painel do Release Planning, agrupado por sprint. Mostra DOIS planos:
  *
  *  • **Board vivo** (Fase 2.0): TODAS as tasks reais do projeto por sprint, com
- *    status e FP atuais. É o substrato — "build on the live board". Substitui o
+ *    status e PFV atuais. É o substrato — "build on the live board". Substitui o
  *    antigo extrato só-de-done, que deixava o canvas vazio num projeto cujas
  *    tasks ainda são `todo` (caso SILFAE).
  *  • **Staging**: propostas (MeetingTaskAction) ainda pendentes na companion
@@ -233,14 +233,19 @@ export function ReleasePlanningProposals({
     setConfirmState({
       title: `Aplicar ${pendingCount} proposta${pendingCount === 1 ? "" : "s"}?`,
       description:
-        "As propostas não-descartadas viram Tasks de verdade (com FP, sprint e — no backfill — já concluídas). Append-only e irreversível. As descartadas são ignoradas.",
+        "As propostas não-descartadas viram Tasks de verdade (com PFV, sprint e — no backfill — já concluídas). As descartadas são ignoradas. Você pode re-planejar a qualquer momento — o board vivo é a base.",
       confirmLabel: "Aplicar",
       onConfirm: async () => {
         setApplying(true);
         try {
+          // Timeout generoso: o apply em lote roda em ~2-3s, mas se o request
+          // pendurar (server travado/conexão caída) o AbortController dispara,
+          // o botão reseta e um toast claro aparece — em vez de congelar até o
+          // usuário dar hard refresh (sintoma original).
           const res = await fetchOrThrow(
             `/api/planning/${planningCeremonyId}/complete`,
             { method: "POST" },
+            { timeoutMs: 90_000 },
           );
           const result = (await res.json()) as {
             applied?: { applied?: number; failed?: number };
@@ -293,7 +298,7 @@ export function ReleasePlanningProposals({
           const summary = [
             propCount > 0 ? `${propCount} proposta${propCount === 1 ? "" : "s"}` : null,
             g.tasks.length > 0
-              ? `${g.tasks.length} task${g.tasks.length === 1 ? "" : "s"} · ${fpTotal} FP`
+              ? `${g.tasks.length} task${g.tasks.length === 1 ? "" : "s"} · ${fpTotal} PFV`
               : null,
           ]
             .filter(Boolean)
@@ -320,7 +325,7 @@ export function ReleasePlanningProposals({
                     <span className="truncate text-sm">{t.title}</span>
                     {t.functionPoints !== null && (
                       <Badge variant="secondary" className="shrink-0">
-                        {t.functionPoints} FP
+                        {t.functionPoints} PFV
                       </Badge>
                     )}
                     {t.assignees.length > 0 && (
@@ -372,7 +377,7 @@ export function ReleasePlanningProposals({
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                        {fp !== null && <Badge variant="secondary">{fp} FP</Badge>}
+                        {fp !== null && <Badge variant="secondary">{fp} PFV</Badge>}
                         {isDone && <Badge variant="outline">concluída</Badge>}
                         {dueDate && <span>· {dueDate}</span>}
                       </div>

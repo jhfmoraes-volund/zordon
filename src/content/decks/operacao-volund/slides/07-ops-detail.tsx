@@ -56,7 +56,7 @@ export function Slide07OpsDetail() {
             <div className="body">
               <p>Condução de sprints seguindo formato Scrum Volund.</p>
               <p>
-                Sprints com cap de FP entendendo bem nossa capacity para
+                Sprints com cap de PFV entendendo bem nossa capacity para
                 operação contínua.
               </p>
             </div>

@@ -67,8 +67,8 @@ export function SprintCapacityCard({
       {/* Summary strip */}
       {sprintCaps.length > 0 ? (
         <div className="grid grid-cols-3 divide-x border-b bg-background/15 text-center">
-          <SummaryCell label="Alocação" value={allocation} unit="FP" />
-          <SummaryCell label="Entregue" value={deliveredTotal} unit="FP" />
+          <SummaryCell label="Alocação" value={allocation} unit="PFV" />
+          <SummaryCell label="Entregue" value={deliveredTotal} unit="PFV" />
           <SummaryCell
             label="Utilização"
             value={`${utilPct}%`}

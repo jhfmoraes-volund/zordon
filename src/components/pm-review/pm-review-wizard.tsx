@@ -387,7 +387,7 @@ export function PMReviewWizard({
             <em>OU</em> <strong>≥3 notas ativas</strong>.
           </p>
           <p className="text-[11px]">
-            DS, business context e indicadores do time (velocity, FP) são
+            DS, business context e indicadores do time (velocity, PFV) são
             carregados automaticamente pra Vitoria — você não precisa fazer
             nada além dos passos 1 e 2.
           </p>

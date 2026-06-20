@@ -287,7 +287,7 @@ export const TOWERS = [
       { key: "planning", label: "Planejamento de sprint e roadmap" },
       { key: "stakeholder", label: "Comunicação com cliente / stakeholder" },
       { key: "risk", label: "Gestão de risco e bloqueios" },
-      { key: "estimation", label: "Estimativa (FP, story points, t-shirt)" },
+      { key: "estimation", label: "Estimativa (PFV, story points, t-shirt)" },
       { key: "facilitation", label: "Facilitação (planning, daily, retro)" },
       { key: "decisions", label: "Documentação de decisão (ADR, RFC)" },
       { key: "scope", label: "Gestão de escopo e prazo" },

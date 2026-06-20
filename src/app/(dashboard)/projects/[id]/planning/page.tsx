@@ -143,20 +143,27 @@ export default function PlanningSessionPage({
   }, [loadSession]);
 
   // Sprints do projeto → blocos do cronograma. status=all inclui as futuras.
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/sprints?projectId=${projectId}&status=all`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(
-        (rows: Array<{ id: string; name: string; startDate: string; endDate: string }>) => {
-          if (!cancelled) setSprints(rows ?? []);
-        },
-      )
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+  // useCallback pra o sheet poder re-disparar após gerar "Sprints do prazo".
+  const loadSprints = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/sprints?projectId=${projectId}&status=all`);
+      const rows = r.ok
+        ? ((await r.json()) as Array<{
+            id: string;
+            name: string;
+            startDate: string;
+            endDate: string;
+          }>)
+        : [];
+      setSprints(rows ?? []);
+    } catch {
+      // silencioso — cronograma apenas não renderiza
+    }
   }, [projectId]);
+
+  useEffect(() => {
+    void loadSprints();
+  }, [loadSprints]);
 
   // Versões aplicadas (PlanningEvent) — alimentam o cronograma + a drawer.
   // Refetcha após cada "Aplicar" (actionsRefresh bump).
@@ -310,6 +317,30 @@ export default function PlanningSessionPage({
     setHistorySheetOpen(false);
   }, []);
 
+  // Pós-aplicar uma versão do plano (Planning vivo versionado): a versão foi
+  // commitada → (1) volta pro "ao vivo", (2) abre um CHAT NOVO com a Vitoria pra
+  // a próxima iteração (o anterior vira histórico), (3) recarrega o canvas no
+  // estado vivo (staging consumido → tasks reais no board, ao lado do chat novo).
+  const handleApplied = useCallback(async () => {
+    exitHistory();
+    if (sessionId) {
+      try {
+        const res = await fetchOrThrow(
+          `/api/planning-sessions/${sessionId}/chat/new`,
+          { method: "POST" },
+        );
+        const { threadId: fresh } = (await res.json()) as { threadId: string };
+        setMessages([]);
+        setThreadId(fresh);
+      } catch {
+        // Best-effort: se o chat novo falhar, o anterior segue e o board ainda
+        // atualiza — não trava o fluxo de aplicar.
+      }
+    }
+    void loadSession();
+    setActionsRefresh((n) => n + 1);
+  }, [sessionId, exitHistory, loadSession, setMessages]);
+
   // Click num bloco (mini-régua OU cronograma do sheet): seleciona a semana,
   // auto-abre a versão mais recente dela (API ordena desc) e abre o navegador.
   // Sair do histórico é só pelo "Ao vivo".
@@ -356,21 +387,15 @@ export default function PlanningSessionPage({
   // ─── Actions ────────────────────────────────────────────────────────────
 
   const handleCreate = useCallback(
-    async (cfg: {
-      facilitatorId: string | null;
-      scheduledFor: string | null;
-      sprintCount: number;
-    }) => {
+    async (cfg: { facilitatorId: string | null }) => {
       try {
         const res = await fetchOrThrow("/api/planning-sessions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId,
-            title: "Release Planning",
-            sprintCount: cfg.sprintCount,
+            title: "Planning",
             facilitatorId: cfg.facilitatorId,
-            scheduledFor: cfg.scheduledFor,
           }),
         });
         // Singleton: o backend faz resolve-or-create. `existed` = já havia uma
@@ -378,13 +403,13 @@ export default function PlanningSessionPage({
         const { existed } = (await res.json()) as { existed?: boolean };
         setCreateOpen(false);
         if (existed) {
-          toast.info("Já existe um Release Planning ativo — abrindo o existente.");
+          toast.info("Já existe um Planning ativo — abrindo o existente.");
         } else {
-          toast.success("Release Planning criado.");
+          toast.success("Planning criado.");
         }
         await loadSession();
       } catch (err) {
-        showErrorToast(err, { label: "Falha ao criar Release Planning" });
+        showErrorToast(err, { label: "Falha ao criar Planning" });
       }
     },
     [projectId, loadSession],
@@ -395,7 +420,7 @@ export default function PlanningSessionPage({
   if (loading) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        Carregando release planning…
+        Carregando planning…
       </div>
     );
   }
@@ -403,17 +428,18 @@ export default function PlanningSessionPage({
   if (!session) {
     return (
       <div className="space-y-6">
-        <PageTitle title="Release Planning" />
+        <PageTitle title="Planning" />
         <div className="mx-auto max-w-md rounded-lg border border-dashed p-10 text-center">
           <Sparkles className="mx-auto mb-3 size-8 text-muted-foreground/60" />
-          <p className="mb-1 font-medium">Nenhum release planning ativo</p>
+          <p className="mb-1 font-medium">Nenhum planning ativo</p>
           <p className="mb-4 text-sm text-muted-foreground">
-            Crie um pra distribuir os PRDs do projeto ao longo das sprints — com a Vitoria ou
-            automático.
+            Crie pra planejar o trabalho do projeto ao longo das sprints — a Vitoria lê as
+            fontes (PRDs + insumos) e propõe as tasks. Um planejamento contínuo, evolui a
+            qualquer momento.
           </p>
           <Button onClick={() => setCreateOpen(true)}>
             <Sparkles className="size-4" />
-            Criar Release Planning
+            Criar Planning
           </Button>
         </div>
 
@@ -422,6 +448,7 @@ export default function PlanningSessionPage({
           onOpenChange={setCreateOpen}
           projectId={projectId}
           onCreate={handleCreate}
+          onSprintsGenerated={loadSprints}
         />
       </div>
     );
@@ -478,7 +505,7 @@ export default function PlanningSessionPage({
         historyMode
           ? "Histórico — read-only (não dá pra interagir com a Vitoria)"
           : isApproved
-            ? "Release planning aprovado — read-only"
+            ? "Planning aprovado — read-only"
             : undefined
       }
       className="h-full"
@@ -489,9 +516,11 @@ export default function PlanningSessionPage({
     <div className="-mx-3 -my-4 flex h-[calc(100svh-3rem)] flex-col overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
       <PageTitle
         title={session.projectName ?? session.title}
-        subtitle={`${session.title} · ${session.sprintCount} sprint${
-          session.sprintCount === 1 ? "" : "s"
-        }`}
+        subtitle={
+          sprints.length > 0
+            ? `${session.title} · ${sprints.length} sprint${sprints.length === 1 ? "" : "s"} no contrato`
+            : session.title
+        }
       />
 
       <ReleasePlanningRibbon
@@ -499,7 +528,7 @@ export default function PlanningSessionPage({
         phaseLabel={phase.label}
         phaseTone={phase.tone}
         scheduledFor={session.scheduledFor}
-        sprintCount={session.sprintCount}
+        sprintCount={sprints.length}
         pendingCount={planState.pendingCount}
         planCount={planState.planCount}
         doneCount={planState.doneCount}
@@ -512,6 +541,7 @@ export default function PlanningSessionPage({
         onOpenContext={() => setContextOpen(true)}
         onEdit={() => setEditOpen(true)}
         onExitHistory={exitHistory}
+        onOpenVersions={() => setHistorySheetOpen(true)}
       />
 
       {/* Mini-régua sempre visível no ribbon — glance + entrada. Click num bloco
@@ -552,10 +582,7 @@ export default function PlanningSessionPage({
                 refreshKey={actionsRefresh}
                 readOnly={isApproved}
                 onStateChange={setPlanState}
-                onApplied={() => {
-                  void loadSession();
-                  setActionsRefresh((n) => n + 1);
-                }}
+                onApplied={handleApplied}
               />
               {!hasPlan && (
                 <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -564,7 +591,7 @@ export default function PlanningSessionPage({
                     PRDs) — ela propõe as tasks por sprint, você revisa e aplica.
                   </p>
                   <Button
-                    variant="outline"
+                    variant="magic"
                     size="sm"
                     onClick={handleKickoff}
                     disabled={isApproved || busy}
@@ -621,12 +648,11 @@ export default function PlanningSessionPage({
         planning={{
           id: session.id,
           facilitatorId: session.facilitatorId,
-          scheduledFor: session.scheduledFor,
-          sprintCount: session.sprintCount,
           status: session.status,
         }}
         onUpdated={loadSession}
         onDeleted={loadSession}
+        onSprintsGenerated={loadSprints}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />

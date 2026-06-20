@@ -294,7 +294,7 @@ function MemberCapacityRow({
       {/* Planejado nas sprints active+planning vs contrato aqui */}
       <span
         className="inline-flex items-center gap-1 text-xs tabular-nums shrink-0"
-        title={`Planejado nas sprints ativas (${member.fpPlannedActiveSprints} FP) vs contrato aqui (${member.fpAllocation} FP)`}
+        title={`Planejado nas sprints ativas (${member.fpPlannedActiveSprints} PFV) vs contrato aqui (${member.fpAllocation} PFV)`}
       >
         <Zap className="h-3 w-3 text-amber-500" />
         <span className="font-mono font-semibold text-foreground">
@@ -369,7 +369,7 @@ function AllocationEditor({
   if (!canEdit) {
     return (
       <span className="text-xs text-muted-foreground shrink-0">
-        <span className="font-mono tabular-nums text-foreground">{currentValue}</span> FP/sem
+        <span className="font-mono tabular-nums text-foreground">{currentValue}</span> PFV/sem
       </span>
     );
   }
@@ -388,7 +388,7 @@ function AllocationEditor({
           if (e.key === "Escape") setValue(String(currentValue));
         }}
         className="h-7 w-16 text-right font-mono text-sm tabular-nums"
-        title="FP/semana alocados nesta pessoa pra este projeto"
+        title="PFV/semana alocados nesta pessoa pra este projeto"
       />
       <Button
         size="sm"

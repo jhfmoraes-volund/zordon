@@ -14,7 +14,7 @@ type Bubble = {
 
 const BUBBLES: Bubble[] = [
   { agent: "vitor", text: "Inception capturada — 8 decisões, 3 dúvidas abertas.", delay: 0.5 },
-  { agent: "alpha", text: "Sprint 12 alocada · 78/108 FP", delay: 1.0 },
+  { agent: "alpha", text: "Sprint 12 alocada · 78/108 PFV", delay: 1.0 },
   { agent: "vitor", text: "Gerando tasks a partir do briefing…", delay: 1.5, shimmer: true },
   { agent: "alpha", text: "Deploy staging concluído ✓", delay: 2.0 },
 ];

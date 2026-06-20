@@ -2,7 +2,7 @@
  * GET /api/planning-sessions/[id]/events
  *
  * Planning Vivo Versionado — Fase 1 (Log). Lista os PlanningEvent de um Release
- * Planning (mais recente primeiro), cada um com o snapshot de FP por sprint e o
+ * Planning (mais recente primeiro), cada um com o snapshot de PFV por sprint e o
  * briefing. Alimenta a timeline do canvas (substitui o "Plano vazio").
  *
  * Keyed pela PlanningSession (estável) — a companion PlanningCeremony é reciclada

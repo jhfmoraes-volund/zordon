@@ -162,7 +162,7 @@ async function buildBaseline(): Promise<Baseline> {
     const committed = Number(m.committed) || 0;
     if (cap > 0 && committed > cap) {
       batteryAlerts.push(
-        `⚠ Bateria: ${m.name} com overcommit (${committed}/${cap} FP comprometidos em ${m.project_count} projeto(s))`,
+        `⚠ Bateria: ${m.name} com overcommit (${committed}/${cap} PFV comprometidos em ${m.project_count} projeto(s))`,
       );
     }
   }
@@ -175,7 +175,7 @@ async function buildBaseline(): Promise<Baseline> {
       const rem = Number(m.remaining) || 0;
       const pc = Number(m.project_count) || 0;
       const flag = rem < 0 ? " 🔴 overcommit" : rem === 0 ? " 🟡 cheia" : "";
-      return `- **${m.name}** (${m.position}): ${committed}/${cap} FP comprometidos em ${pc} projeto(s), ${rem} livre${flag}`;
+      return `- **${m.name}** (${m.position}): ${committed}/${cap} PFV comprometidos em ${pc} projeto(s), ${rem} livre${flag}`;
     }),
   ].join("\n");
 
@@ -278,10 +278,10 @@ async function buildGlobalContext(
     const used = Number(m.fp_open) || 0;
     if (alloc > 0 && used > alloc * config.fp_overflow_threshold) {
       const tag = m.has_sprint_override ? " (override)" : "";
-      alerts.push(`⚠ Sprint: ${m.member_name} estourou alocação no projeto${tag} (${used}/${alloc} FP)`);
+      alerts.push(`⚠ Sprint: ${m.member_name} estourou alocação no projeto${tag} (${used}/${alloc} PFV)`);
     }
     if (alloc > 0 && used < alloc * config.min_utilization_percent) {
-      alerts.push(`⚠ Subutilização: ${m.member_name} usando ${used}/${alloc} FP (< ${Math.round(config.min_utilization_percent * 100)}%)`);
+      alerts.push(`⚠ Subutilização: ${m.member_name} usando ${used}/${alloc} PFV (< ${Math.round(config.min_utilization_percent * 100)}%)`);
     }
     if (alloc === 0) {
       alerts.push(`⚠ Sem alocação: ${m.member_name} está no projeto mas sem fpAllocation definido`);
@@ -292,7 +292,7 @@ async function buildGlobalContext(
     const cap = Number(capacity.capacity) || 0;
     const alloc = Number(capacity.open) || 0;
     if (cap > 0 && alloc > cap * config.fp_overflow_threshold) {
-      alerts.push(`⚠ Sprint acima da capacidade do time: ${alloc}/${cap} FP (threshold ${Math.round(config.fp_overflow_threshold * 100)}%)`);
+      alerts.push(`⚠ Sprint acima da capacidade do time: ${alloc}/${cap} PFV (threshold ${Math.round(config.fp_overflow_threshold * 100)}%)`);
     }
   }
 
@@ -319,9 +319,9 @@ async function buildGlobalContext(
         `- **Projeto:** ${(activeSprint.project as { name: string } | null)?.name || "N/A"}`,
         `- **Período:** ${activeSprint.startDate || "?"} a ${activeSprint.endDate || "?"}`,
         `- **Status:** ${activeSprint.status}`,
-        `- **Capacidade do sprint:** ${capacity?.capacity ?? 0} FP (soma de alocações no projeto)`,
-        `- **Em aberto:** ${capacity?.open ?? 0} FP (tasks ativas)`,
-        `- **Restante:** ${(Number(capacity?.capacity) || 0) - (Number(capacity?.open) || 0)} FP`,
+        `- **Capacidade do sprint:** ${capacity?.capacity ?? 0} PFV (soma de alocações no projeto)`,
+        `- **Em aberto:** ${capacity?.open ?? 0} PFV (tasks ativas)`,
+        `- **Restante:** ${(Number(capacity?.capacity) || 0) - (Number(capacity?.open) || 0)} PFV`,
       ].join("\n")
     : "## Sprint Ativo\nNenhum sprint ativo encontrado.";
 
@@ -343,7 +343,7 @@ async function buildGlobalContext(
           const used = Number(m.fp_open) || 0;
           const pct = alloc > 0 ? Math.round((used / alloc) * 100) : 0;
           const tag = m.has_sprint_override ? " [override]" : "";
-          return `- **${m.member_name}**${tag}: ${used}/${alloc} FP (${pct}%)`;
+          return `- **${m.member_name}**${tag}: ${used}/${alloc} PFV (${pct}%)`;
         }),
       ].join("\n")
     : "";
@@ -355,7 +355,7 @@ async function buildGlobalContext(
       : taskList.map((t) => {
           const assignments = (t.assignments as Array<{ member: { name: string } | null }> | null | undefined) ?? [];
           const assignee = assignments[0]?.member;
-          return `- [${t.reference}] ${t.title} | ${t.status} | ${t.functionPoints || "?"}FP | ${assignee?.name || "sem atribuição"}`;
+          return `- [${t.reference}] ${t.title} | ${t.status} | ${t.functionPoints || "?"}PFV | ${assignee?.name || "sem atribuição"}`;
         })),
   ].join("\n");
 
@@ -363,7 +363,7 @@ async function buildGlobalContext(
     ? [
         `## Backlog (top ${backlog.length} por prioridade)`,
         ...backlog.slice(0, 20).map((t) =>
-          `- [${t.reference}] ${t.title} | ${t.type} | ${t.functionPoints || "?"}FP`,
+          `- [${t.reference}] ${t.title} | ${t.type} | ${t.functionPoints || "?"}PFV`,
         ),
         ...(backlog.length > 20 ? [`... e mais ${backlog.length - 20} tasks no backlog`] : []),
       ].join("\n")
@@ -485,7 +485,7 @@ async function buildProjectFocus(
       `### Sprint atual do projeto: ${activeSprint.name}`,
       `- Período: ${activeSprint.startDate || "?"} → ${activeSprint.endDate || "?"} | status: ${activeSprint.status}`,
       cap
-        ? `- Capacidade: ${cap.capacity ?? 0} FP | Em aberto: ${cap.open ?? 0} FP | Restante: ${(Number(cap.capacity) || 0) - (Number(cap.open) || 0)} FP`
+        ? `- Capacidade: ${cap.capacity ?? 0} PFV | Em aberto: ${cap.open ?? 0} PFV | Restante: ${(Number(cap.capacity) || 0) - (Number(cap.open) || 0)} PFV`
         : "- Capacidade: sem dados",
       "",
       "**Alocação no sprint:**",
@@ -496,7 +496,7 @@ async function buildProjectFocus(
             const ac = Number(a.fp_allocation) || 0;
             const pct = ac > 0 ? Math.round((used / ac) * 100) : 0;
             const tag = a.has_sprint_override ? " [override]" : "";
-            return `- ${a.member_name}${tag}: ${used}/${ac} FP (${pct}%)`;
+            return `- ${a.member_name}${tag}: ${used}/${ac} PFV (${pct}%)`;
           })),
       "",
       "**Tasks do sprint (top 15 por prioridade):**",
@@ -505,7 +505,7 @@ async function buildProjectFocus(
         : taskList.map((t) => {
             const assignments = (t.assignments as Array<{ member: { name: string } | null }> | null) ?? [];
             const who = assignments[0]?.member?.name ?? "sem atribuição";
-            return `- [${t.reference}] ${t.title} | ${t.status} | ${t.functionPoints ?? "?"}FP | ${who}`;
+            return `- [${t.reference}] ${t.title} | ${t.status} | ${t.functionPoints ?? "?"}PFV | ${who}`;
           })),
     ].join("\n");
   }
@@ -523,7 +523,7 @@ async function buildProjectFocus(
         ...memberList.map((m) => {
           const member = m.member as { name: string; role: string; position: string | null; fpCapacity: number } | null;
           if (!member) return "- (membro removido)";
-          return `- ${member.name} (${member.position}): ${m.fpAllocation} FP/sprint dedicado a este projeto (capacity total ${member.fpCapacity})`;
+          return `- ${member.name} (${member.position}): ${m.fpAllocation} PFV/sprint dedicado a este projeto (capacity total ${member.fpCapacity})`;
         }),
       ].join("\n")
     : "_Nenhum membro alocado ao projeto._";
@@ -531,7 +531,7 @@ async function buildProjectFocus(
   const backlogBlock = (backlog || []).length > 0
     ? [
         `**Backlog do projeto (top ${(backlog || []).length}):**`,
-        ...(backlog || []).map((t) => `- [${t.reference}] ${t.title} | ${t.type} | ${t.functionPoints ?? "?"}FP`),
+        ...(backlog || []).map((t) => `- [${t.reference}] ${t.title} | ${t.type} | ${t.functionPoints ?? "?"}PFV`),
       ].join("\n")
     : "_Backlog vazio._";
 
@@ -564,7 +564,7 @@ async function buildProjectFocus(
 
   // Sprint Planner block — only injected when:
   //   (a) user message has planning intent, AND
-  //   (b) backlog ready ≥ 10 tasks (with FP), AND
+  //   (b) backlog ready ≥ 10 tasks (with PFV), AND
   //   (c) at least 1 ProjectMember with fpAllocation > 0.
   // Without intent we don't want planner-mode polluting normal conversations.
   // Without (b)/(c), planning is impossible — explain the gap up front.
@@ -628,7 +628,7 @@ async function maybeBuildPlannerBlock(
     ].join("\n");
   }
 
-  // Need ≥ 10 backlog-ready tasks (with FP) to make planning worthwhile
+  // Need ≥ 10 backlog-ready tasks (with PFV) to make planning worthwhile
   const supabase = db();
   const { count: readyCount } = await supabase
     .from("Task")
@@ -641,7 +641,7 @@ async function maybeBuildPlannerBlock(
   if ((readyCount ?? 0) < 10) {
     return [
       "## Planner mode (gate)",
-      `_Pedido tem intenção de planejamento, mas só ${readyCount ?? 0} tasks no backlog ready (precisam de FP definido + estar em backlog sem sprint). Antes de propor distribuição, peça pro PM refinar mais tasks ou estimar FP das pendentes._`,
+      `_Pedido tem intenção de planejamento, mas só ${readyCount ?? 0} tasks no backlog ready (precisam de PFV definido + estar em backlog sem sprint). Antes de propor distribuição, peça pro PM refinar mais tasks ou estimar PFV das pendentes._`,
     ].join("\n");
   }
 
@@ -657,7 +657,7 @@ async function maybeBuildPlannerBlock(
     "**Antes de propor distribuição, siga o fluxo de Sprint Planning** (veja a seção do prompt). Em ordem:",
     "1. **PERGUNTE as 4 perguntas obrigatórias** (preferências de assignee, prioridade, ausências, escopo). Não pule.",
     "2. Após o PM responder, chame `get_project_capacity` (uma vez) e `list_unplanned_tasks` pra dimensionar.",
-    "3. Mostre o plano em texto (tabela por sprint × member com FP), peça confirmação.",
+    "3. Mostre o plano em texto (tabela por sprint × member com PFV), peça confirmação.",
     "4. Após confirma, execute `bulk_update_tasks` em UMA chamada com TODAS as mudanças.",
   ].join("\n");
 }
@@ -713,14 +713,14 @@ async function buildSprintFocus(
     const ac = Number(a.fp_allocation) || 0;
     if (ac > 0 && used > ac * config.fp_overflow_threshold) {
       const tag = a.has_sprint_override ? " (override)" : "";
-      alerts.push(`⚠ ${a.member_name} estourou alocação${tag}: ${used}/${ac} FP`);
+      alerts.push(`⚠ ${a.member_name} estourou alocação${tag}: ${used}/${ac} PFV`);
     }
   }
   if (cap) {
     const c = Number(cap.capacity) || 0;
     const al = Number(cap.open) || 0;
     if (c > 0 && al > c * config.fp_overflow_threshold) {
-      alerts.push(`⚠ Sprint acima da capacidade do time: ${al}/${c} FP`);
+      alerts.push(`⚠ Sprint acima da capacidade do time: ${al}/${c} PFV`);
     }
   }
   const unassigned = taskList.filter(
@@ -743,7 +743,7 @@ async function buildSprintFocus(
     `## Foco: Sprint ${sprint.name} (Projeto ${proj})`,
     `- ID: ${sprint.id} | Status: ${sprint.status} | Período: ${sprint.startDate || "?"} → ${sprint.endDate || "?"}`,
     cap
-      ? `- Capacidade: ${cap.capacity ?? 0} FP | Em aberto: ${cap.open ?? 0} FP | Restante: ${(Number(cap.capacity) || 0) - (Number(cap.open) || 0)} FP`
+      ? `- Capacidade: ${cap.capacity ?? 0} PFV | Em aberto: ${cap.open ?? 0} PFV | Restante: ${(Number(cap.capacity) || 0) - (Number(cap.open) || 0)} PFV`
       : "- Capacidade: sem dados",
     "",
     "**Alocação por membro:**",
@@ -754,7 +754,7 @@ async function buildSprintFocus(
           const ac = Number(a.fp_allocation) || 0;
           const pct = ac > 0 ? Math.round((used / ac) * 100) : 0;
           const tag = a.has_sprint_override ? " [override]" : "";
-          return `- ${a.member_name}${tag}: ${used}/${ac} FP (${pct}%)`;
+          return `- ${a.member_name}${tag}: ${used}/${ac} PFV (${pct}%)`;
         })),
     "",
     `**Tasks (${taskList.length}):**`,
@@ -763,7 +763,7 @@ async function buildSprintFocus(
       : taskList.map((t) => {
           const assignments = (t.assignments as Array<{ member: { name: string } | null }> | null) ?? [];
           const who = assignments[0]?.member?.name ?? "sem atribuição";
-          return `- [${t.reference}] ${t.title} | ${t.status} | ${t.functionPoints ?? "?"}FP | ${who}`;
+          return `- [${t.reference}] ${t.title} | ${t.status} | ${t.functionPoints ?? "?"}PFV | ${who}`;
         })),
     ...(alerts.length > 0 ? ["", "**Alertas:**", ...alerts] : []),
     "",
@@ -915,12 +915,12 @@ function renderParams(config: AlphaConfig): string {
 function renderFpMatrix(matrix: FpMatrix): string {
   const scopes = Object.keys(matrix);
   const complexities = scopes.length > 0 ? Object.keys(matrix[scopes[0]]) : [];
-  if (scopes.length === 0 || complexities.length === 0) return "## Matriz FP (vazia)";
+  if (scopes.length === 0 || complexities.length === 0) return "## Matriz PFV (vazia)";
 
   const header = `| scope \\ complexity | ${complexities.join(" | ")} |`;
   const divider = `|${" --- |".repeat(complexities.length + 1)}`;
   const rows = scopes.map((s) => `| **${s}** | ${complexities.map((c) => matrix[s]?.[c] ?? "?").join(" | ")} |`);
-  return ["## Matriz de Function Points (editável em AgentConfig.fp_matrix)", header, divider, ...rows].join("\n");
+  return ["## Matriz de PFV — Ponto de Função Volund (editável em AgentConfig.fp_matrix)", header, divider, ...rows].join("\n");
 }
 
 function renderHeuristicsIndex(items: HeuristicIndexEntry[]): string {

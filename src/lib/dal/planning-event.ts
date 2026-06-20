@@ -24,13 +24,13 @@ export type PlanningEventRow = Tables["PlanningEvent"]["Row"];
 export type PlanningEventSprintRow = Tables["PlanningEventSprint"]["Row"];
 export type PlanningEventTaskRow = Tables["PlanningEventTask"]["Row"];
 
-/** Evento + child rows de FP por sprint + nome de quem aplicou — shape pra UI. */
+/** Evento + child rows de PFV por sprint + nome de quem aplicou — shape pra UI. */
 export type PlanningEventWithSprints = PlanningEventRow & {
   sprints: PlanningEventSprintRow[];
   createdByName: string | null;
 };
 
-/** Evento + snapshot COMPLETO (FP por sprint + lista de tasks) — pro canvas histórico. */
+/** Evento + snapshot COMPLETO (PFV por sprint + lista de tasks) — pro canvas histórico. */
 export type PlanningEventSnapshot = PlanningEventWithSprints & {
   tasks: PlanningEventTaskRow[];
 };
@@ -73,7 +73,7 @@ export async function recordPlanningEventFromCeremony(input: {
   // 2. Briefing = CÓPIA do último turn assistant do thread (auto-contido).
   const { briefingMarkdown, chatMessageId } = await loadLatestBriefing(session.id);
 
-  // 3. Snapshot CUMULATIVO do plano nesse instante: agregado de FP por sprint +
+  // 3. Snapshot CUMULATIVO do plano nesse instante: agregado de PFV por sprint +
   //    a lista COMPLETA de tasks (o board exato daquela versão).
   const { sprints: sprintRows, tasks: taskRows } = await snapshotPlan(session.projectId);
 
@@ -157,7 +157,7 @@ async function loadLatestBriefing(sessionId: string): Promise<{
   return { briefingMarkdown: msg.content ?? null, chatMessageId: msg.id };
 }
 
-/** Agregado de FP por sprint (chip do briefing/timeline). */
+/** Agregado de PFV por sprint (chip do briefing/timeline). */
 type SprintAgg = {
   sprintId: string | null;
   sprintLabel: string;
@@ -179,7 +179,7 @@ type TaskSnap = {
 
 /**
  * Snapshot CUMULATIVO do plano num instante: lê as Task do projeto UMA vez e
- * deriva dois recortes — o agregado de FP por sprint (briefing) e a lista
+ * deriva dois recortes — o agregado de PFV por sprint (briefing) e a lista
  * completa de tasks (o board exato, pro canvas histórico). Não é delta: inclui
  * tasks de todas as fases/status. Exclui dismissed E draft — mesmo recorte do
  * board vivo (`/api/tasks`), pra bater com o que o canvas mostra. sprintId
@@ -239,7 +239,7 @@ async function snapshotPlan(
 
 /**
  * Lista os PlanningEvent de uma sessão (mais recente primeiro) com os child
- * rows de FP por sprint e o nome de quem aplicou. Alimenta a timeline do canvas.
+ * rows de PFV por sprint e o nome de quem aplicou. Alimenta a timeline do canvas.
  */
 export async function listPlanningEventsForSession(
   sessionId: string,
@@ -280,7 +280,7 @@ export async function listPlanningEventsForSession(
 }
 
 /**
- * Um PlanningEvent + snapshot COMPLETO (FP por sprint + lista de tasks) — o
+ * Um PlanningEvent + snapshot COMPLETO (PFV por sprint + lista de tasks) — o
  * "canvas histórico" de uma versão. Retorna null se o evento não existe. O
  * caller valida acesso ao projeto (db() bypassa RLS).
  */

@@ -5,7 +5,7 @@ import { CalendarRange } from "lucide-react";
 
 const FEATURES = [
   "Sprints fixos de 1 semana",
-  "Capacity por pessoa em FP/semana × dedicação",
+  "Capacity por pessoa em PFV/semana × dedicação",
   "Auto-allocation respeita disponibilidade",
   "Burn em tempo real conforme tasks fecham",
 ] as const;
@@ -28,7 +28,7 @@ export function SprintsStep() {
           Cadência semanal.
         </h1>
         <p className="text-base leading-relaxed text-muted-foreground">
-          Sprint = container da entrega. O Zordon sabe quanto FP cada um
+          Sprint = container da entrega. O Zordon sabe quanto PFV cada um
           aguenta na semana e usa isso pra distribuir tasks sem estourar.
         </p>
       </div>

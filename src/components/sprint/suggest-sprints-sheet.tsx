@@ -733,7 +733,7 @@ export function SuggestSprintsSheet({
                   {preview.context.mode === "fill-existing"
                     ? `Preenchendo ${preview.context.targetSprintName}`
                     : `${preview.sprints.length} sprint${preview.sprints.length > 1 ? "s" : ""}`}{" "}
-                  · {preview.context.capacityPerSprint} FP
+                  · {preview.context.capacityPerSprint} PFV
                 </span>
               </button>
             ) : (
@@ -991,7 +991,7 @@ function Controls({
         <FormBody density="compact">
           {mode ? (
             <Field name="capacity">
-              <Field.Label>Capacidade por sprint (FP)</Field.Label>
+              <Field.Label>Capacidade por sprint (PFV)</Field.Label>
               <Field.Control>
                 <Input
                   type="number"
@@ -1004,7 +1004,7 @@ function Controls({
               <Field.Hint>
                 {preview
                   ? `Default: ${preview.context.capacityDefault} (${labelForSource(preview.context.capacitySource)}).`
-                  : "Default: soma de FP das tasks nas 3 últimas sprints do projeto."}
+                  : "Default: soma de PFV das tasks nas 3 últimas sprints do projeto."}
               </Field.Hint>
             </Field>
           ) : null}
@@ -1029,7 +1029,7 @@ function Controls({
 function labelForSource(s: ApiContext["capacitySource"]): string {
   switch (s) {
     case "task_function_points_avg":
-      return "média de FP das últimas 3 sprints";
+      return "média de PFV das últimas 3 sprints";
     case "sprint_member_allocation_avg":
       return "soma de alocação do time";
     case "fallback_40":
@@ -1119,7 +1119,7 @@ function SprintCard({
             />
           )}
           <Badge variant={overCapacity ? "destructive" : "secondary"}>
-            {totalPoints}/{sprint.capacityPoints} FP
+            {totalPoints}/{sprint.capacityPoints} PFV
           </Badge>
         </div>
         <Textarea

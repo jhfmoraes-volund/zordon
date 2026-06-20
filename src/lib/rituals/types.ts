@@ -3,7 +3,7 @@
 // registry (capability-registry.ts); aqui ficam só os shapes + constantes que
 // a UI e o runtime compartilham.
 
-export type RitualType = "pm_review" | "planning" | "release_planning";
+export type RitualType = "pm_review" | "release_planning";
 
 export type CapabilityKey = "load_context" | "redact" | "emphasis";
 

@@ -6,7 +6,7 @@ import { loadMemberInsights } from "@/lib/members/member-capacity-load";
 /**
  * GET /api/members/[id]/insights?weeks=12
  *
- * Throughput histórico: FP *entregue* (Task.doneAt) por semana, nas últimas
+ * Throughput histórico: PFV *entregue* (Task.doneAt) por semana, nas últimas
  * N semanas, com breakdown por projeto. Difere de sprint_member_capacity.fp_done
  * (que é baseado em status atual, não em timestamp) — aqui a métrica é
  * doneAt-based, pra refletir entrega ao longo do tempo.

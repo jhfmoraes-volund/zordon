@@ -3,7 +3,7 @@
 import { PixelBar, pixelTone, PixelHud } from "@/components/ui/pixel-bar";
 
 /**
- * Battery-style visualization of a member's FP commitment, using
+ * Battery-style visualization of a member's PFV commitment, using
  * the same arcade-retro pixel bar from skills/load widgets.
  *
  * capacity   = Member.fpCapacity (sprint-level total)
@@ -81,7 +81,7 @@ export function MemberBattery({
             <span className="font-mono text-sm tabular-nums leading-none text-muted-foreground">
               / {capacity}
             </span>
-            <PixelHud size="xs" tone="muted" className="ml-1">FP</PixelHud>
+            <PixelHud size="xs" tone="muted" className="ml-1">PFV</PixelHud>
           </span>
           {overcommit ? (
             <PixelHud size="xs" style={{ color: "oklch(0.82 0.2 22)" }}>

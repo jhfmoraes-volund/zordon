@@ -10,7 +10,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireProjectViewApi } from "@/lib/dal";
-import { listPlanningsForProject } from "@/lib/dal/planning";
 import {
   listPMReviewsForProject,
   type PMReviewNoteKind,
@@ -19,20 +18,6 @@ import { listForProject as listPlanningSessionsForProject } from "@/lib/dal/plan
 import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
 
 type RitualItem =
-  | {
-      kind: "planning";
-      id: string;
-      title: string;
-      status: string;
-      scheduledFor: string | null;
-      sortKey: string;
-      href: string;
-      badges: { linkedCount: number; noteCount: number; pendingCount: number };
-      facilitatorId: string | null;
-      facilitatorName: string | null;
-      sprintId: string | null;
-      sprintName: string | null;
-    }
   | {
       kind: "pm_review";
       id: string;
@@ -57,7 +42,6 @@ type RitualItem =
       title: string;
       status: string;
       scheduledFor: string | null;
-      sprintCount: number;
       sortKey: string;
       href: string;
       badges: { linkedCount: number; noteCount: number };
@@ -98,9 +82,8 @@ export async function GET(
   const denied = await requireProjectViewApi(projectId);
   if (denied) return denied;
 
-  const [plannings, pmReviews, planningSessions, canCreatePMReview] =
+  const [pmReviews, planningSessions, canCreatePMReview] =
     await Promise.all([
-      listPlanningsForProject(projectId),
       listPMReviewsForProject(projectId),
       listPlanningSessionsForProject(projectId),
       canCreatePMReviewForProject(projectId),
@@ -131,37 +114,16 @@ export async function GET(
     items.push({
       kind: "release_planning",
       id: releasePlanning.id,
-      title: `${releasePlanning.sprintCount ?? 6} sprints`,
+      // Planning é contínuo (lê as sprints do contrato) — o título não carrega
+      // mais o nº de sprints; é só o ritual do projeto.
+      title: "Planning do Projeto",
       status: releasePlanning.status,
       scheduledFor,
-      sprintCount: releasePlanning.sprintCount ?? 6,
       sortKey: scheduledFor ?? "0",
       href: `/projects/${projectId}/planning`,
       badges: { linkedCount: linkedCountRes.count ?? 0, noteCount: 0 },
       facilitatorId: releasePlanning.facilitatorId,
       facilitatorName: (facilitator.data as { name: string } | null)?.name ?? null,
-    });
-  }
-
-  for (const p of plannings) {
-    const baseDate = p.scheduledFor ?? p.startedAt ?? null;
-    items.push({
-      kind: "planning",
-      id: p.id,
-      title: `Planning${p.sprintName ? ` · ${p.sprintName}` : ""}`,
-      status: p.phase,
-      scheduledFor: baseDate,
-      sortKey: baseDate ?? "0",
-      href: `/rituals/${p.id}`,
-      badges: {
-        linkedCount: p.linkedMeetingCount + p.linkedTranscriptCount,
-        noteCount: p.contextNoteCount,
-        pendingCount: p.pendingActionCount,
-      },
-      facilitatorId: p.facilitatorId,
-      facilitatorName: p.facilitatorName,
-      sprintId: p.sprintId,
-      sprintName: p.sprintName,
     });
   }
 

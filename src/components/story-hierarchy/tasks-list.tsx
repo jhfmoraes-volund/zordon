@@ -892,7 +892,7 @@ function StoryGroupBlock({
           </span>
           {!isGuest && (
             <span className="font-mono tabular-nums">
-              {doneFP}/{totalFP} FP
+              {doneFP}/{totalFP} PFV
             </span>
           )}
         </span>
@@ -960,7 +960,7 @@ function TasksTable({
   storyHint?: (task: Task) => { module: string | null; ref: string | null };
 }) {
   // Match StoriesList grid look. Cells are spans inside a clickable row.
-  // Cols: [✓] · Ref · Title · [Story] · [Sprint] · Status · FP · Assignee · [⋯]
+  // Cols: [✓] · Ref · Title · [Story] · [Sprint] · Status · PFV · Assignee · [⋯]
   //
   // Inline style instead of `grid-cols-[...]` because Tailwind only ships
   // classes that appear LITERALLY in source — runtime-built strings don't
@@ -976,7 +976,7 @@ function TasksTable({
   layoutParts.push("56px", `minmax(${titleMin}px, 1fr)`);
   if (storyHint) layoutParts.push("200px");
   if (editing.showSprint) layoutParts.push("130px");
-  // FP column oculta pra guest.
+  // PFV column oculta pra guest.
   layoutParts.push("130px");
   if (!isGuest) layoutParts.push("44px");
   layoutParts.push("170px");
@@ -1044,7 +1044,7 @@ function TasksTable({
           ) : null}
           <SortHeader sortKey="status" label="Status" editing={editing} />
           {!isGuest && (
-            <SortHeader sortKey="fp" label="FP" editing={editing} align="right" />
+            <SortHeader sortKey="fp" label="PFV" editing={editing} align="right" />
           )}
           <SortHeader sortKey="assignee" label="Assignee" editing={editing} align="right" />
           {editing.showMenu ? <span /> : null}

@@ -102,7 +102,7 @@ const roleDetails: Record<string, {
       "Monitorar velocity e flags de atencao",
       "Preparar e conduzir demos a cada sprint",
     ],
-    suggestedCapacity: "30-40 FP/sprint (tasks de gestao)",
+    suggestedCapacity: "30-40 PFV/sprint (tasks de gestao)",
   },
   "product-builder": {
     label: "Product Builder",
@@ -114,7 +114,7 @@ const roleDetails: Record<string, {
       "Garantir qualidade, performance e acessibilidade",
       "Apoiar outros builders em duvidas tecnicas da sua area",
     ],
-    suggestedCapacity: "80-100 FP/sprint",
+    suggestedCapacity: "80-100 PFV/sprint",
   },
   "principal-engineer": {
     label: "Principal Engineer",
@@ -127,7 +127,7 @@ const roleDetails: Record<string, {
       "Definir stack tecnologico e avaliar novas tecnologias",
       "Garantir consistencia tecnica entre projetos",
     ],
-    suggestedCapacity: "30-50 FP/sprint (foco em arquitetura e decisoes, nao volume)",
+    suggestedCapacity: "30-50 PFV/sprint (foco em arquitetura e decisoes, nao volume)",
   },
   "head-ops": {
     label: "Head Ops",
@@ -135,7 +135,7 @@ const roleDetails: Record<string, {
     responsibilities: [
       "Supervisionar a alocacao de squads e membros nos projetos",
       "Garantir aderencia aos processos e metodologia da empresa",
-      "Monitorar indicadores de performance dos projetos (velocity, FP, prazos)",
+      "Monitorar indicadores de performance dos projetos (velocity, PFV, prazos)",
       "Intervir em projetos com flags de atencao ou criticos",
       "Otimizar fluxos operacionais e remover impedimentos sistemicos",
       "Conduzir reunioes semanais de acompanhamento",
@@ -276,7 +276,7 @@ function MemberCardMobile({
             </span>
             <span className="font-mono text-xs tabular-nums leading-none text-muted-foreground/70">
               {m.fpPlannedWeek}/{m.fpCapacity}
-              <span className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase ml-1">FP</span>
+              <span className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase ml-1">PFV</span>
             </span>
           </div>
         </div>
@@ -299,7 +299,7 @@ export function MembersView({ initial }: { initial: Member[] }) {
   const isAdmin = hasMinLevel(realRole, ADMIN);
   // Builder gets a read-only view: directory listing + skills sheet only.
   // Capacity drilldown (Gauge → /members/[id]) is manager+ since it shows
-  // FP allocation/commitment data that's planning territory.
+  // PFV allocation/commitment data that's planning territory.
   const canViewCapacity = hasMinAccessLevel(effectiveAccessLevel, "manager");
   const membersCollection = useOptimisticCollection<Member>(initial);
   const members = membersCollection.items;
@@ -577,7 +577,7 @@ export function MembersView({ initial }: { initial: Member[] }) {
                             </span>
                             <span className="font-mono text-sm tabular-nums leading-none text-muted-foreground/70">
                               {m.fpPlannedWeek}/{m.fpCapacity}
-                              <span className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase ml-1">FP</span>
+                              <span className="font-sans font-semibold text-[10px] tracking-[0.12em] uppercase ml-1">PFV</span>
                             </span>
                           </div>
                         </div>
@@ -832,7 +832,7 @@ export function MembersView({ initial }: { initial: Member[] }) {
                 <Input value={form.githubUsername} onChange={(e) => setForm({ ...form, githubUsername: e.target.value })} />
               </div>
               <div className="grid gap-2">
-                <Label>FP Capacity por Sprint</Label>
+                <Label>PFV Capacity por Sprint</Label>
                 <Input
                   type="number"
                   value={form.fpCapacity}

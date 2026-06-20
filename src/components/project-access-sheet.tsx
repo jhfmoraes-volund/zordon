@@ -388,7 +388,7 @@ function Section({
                   )}
                 {!r.isManager && r.isMember && r.fpAllocation !== null && (
                   <div className="text-[11px] text-muted-foreground mt-0.5">
-                    FP: {r.fpAllocation}
+                    PFV: {r.fpAllocation}
                   </div>
                 )}
               </div>

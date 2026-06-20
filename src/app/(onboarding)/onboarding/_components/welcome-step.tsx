@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 const PILLARS = [
-  { icon: KanbanSquare, label: "Tasks com FP, status e owner" },
+  { icon: KanbanSquare, label: "Tasks com PFV, status e owner" },
   { icon: CalendarRange, label: "Sprints semanais com capacity" },
   { icon: Target, label: "Skills, PDI e ciclos de evolução" },
   { icon: Bot, label: "Vitor e Alpha — agentes que ajudam" },

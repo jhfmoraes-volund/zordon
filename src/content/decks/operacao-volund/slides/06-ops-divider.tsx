@@ -75,7 +75,7 @@ export function Slide06OpsDivider() {
           </div>
           <div className="cell">
             <div className="k">Cadência</div>
-            <div className="v">Sprints com cap FP</div>
+            <div className="v">Sprints com cap PFV</div>
           </div>
           <div className="cell">
             <div className="k">Output principal</div>

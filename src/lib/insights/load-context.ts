@@ -135,7 +135,7 @@ export async function loadInsightContext(
   const sprintsList = sprintsRaw ?? [];
   const sprintIds = sprintsList.map((s) => s.id);
 
-  // 3. Tasks per sprint — used to compute FP done/total and status mix.
+  // 3. Tasks per sprint — used to compute PFV done/total and status mix.
   const { data: tasks } = sprintIds.length
     ? await client
         .from("Task")
@@ -246,7 +246,7 @@ export async function loadInsightContext(
     );
     if (daysLeft <= 2 && snap.fpDone < snap.fpTotal * 0.7) {
       sprintAlerts.push(
-        `sprint termina em ${daysLeft}d com ${snap.fpDone}/${snap.fpTotal} FP feitos`,
+        `sprint termina em ${daysLeft}d com ${snap.fpDone}/${snap.fpTotal} PFV feitos`,
       );
     }
     if (snap.deployedToStagingAt === null && snap.fpDone > 0) {

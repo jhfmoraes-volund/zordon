@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
  * SQL, sem LLM. Cache em memória 5min por projeto — é leitura executiva,
  * não telemetria de precisão.
  *
- * FP vive em Task.functionPoints (não existe tabela FunctionPoint).
+ * PFV vive em Task.functionPoints (não existe tabela FunctionPoint).
  */
 
 export type WikiMetrics = {
@@ -22,7 +22,7 @@ export type WikiMetrics = {
     nextMilestoneDays: number | null;
   };
   metrics: {
-    /** Últimas 3 sprints concluídas (velocity = FP done por sprint). */
+    /** Últimas 3 sprints concluídas (velocity = PFV done por sprint). */
     velocity: Array<{ sprintName: string; fpDone: number; tasksDone: number }>;
   };
   team: Array<{
@@ -123,7 +123,7 @@ export async function getWikiMetrics(projectId: string): Promise<WikiMetrics> {
     );
   }
 
-  // Velocity: FP done por sprint concluída (tasks done com sprintId nelas).
+  // Velocity: PFV done por sprint concluída (tasks done com sprintId nelas).
   const doneSprints = doneSprintsRes.data ?? [];
   const velocity = doneSprints.map((s) => {
     const sprintTasks = doneTasks.filter((t) => t.sprintId === s.id);

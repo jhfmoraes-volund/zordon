@@ -22,6 +22,8 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         field:
           "border border-input bg-transparent text-foreground font-normal hover:bg-muted/40 aria-expanded:bg-muted/40 dark:bg-input/30 dark:hover:bg-input/50",
+        magic:
+          "relative btn-magic text-foreground bg-violet-500/10 hover:bg-violet-500/15 [&_svg]:text-violet-600 dark:bg-[oklch(0.24_0.03_300)] dark:hover:bg-[oklch(0.275_0.035_300)] dark:[&_svg]:text-[oklch(0.82_0.14_305)]",
       },
       size: {
         default:

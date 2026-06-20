@@ -4,7 +4,7 @@
  * Lê brainstorm + personas_journeys + research log + business context e retorna:
  *  - pass: boolean — se a feature pode ser MVP
  *  - blockers: razões pra NÃO ser MVP (sem dor priorizada, sem evidência, etc)
- *  - warnings: sinais amarelos (FP alto vs runway, etc)
+ *  - warnings: sinais amarelos (PFV alto vs runway, etc)
  *  - suggestion: "MVP" | "Next" | "Out" | "needs_more_info"
  *
  * Vitor é instruído a chamar isso ANTES de update_item({bucket: "mvp"}).

@@ -101,7 +101,7 @@ export function TeamCapacityWidget({
                   <span className="text-xs tabular-nums shrink-0 flex items-center gap-1.5">
                     <span>
                       <span className="font-mono font-semibold">{m.fpPlanned}</span>
-                      <span className="text-muted-foreground">/{m.fpCapacity} FP</span>
+                      <span className="text-muted-foreground">/{m.fpCapacity} PFV</span>
                     </span>
                     {m.fpCapacity > 0 && (
                       <span
@@ -134,11 +134,11 @@ export function TeamCapacityWidget({
                   <span className="text-muted-foreground tabular-nums">
                     contrato {m.fpContract}
                     {overContract ? (
-                      <span className="text-amber-500"> → +{contractDelta} FP acima</span>
+                      <span className="text-amber-500"> → +{contractDelta} PFV acima</span>
                     ) : idle ? (
                       <span className="text-muted-foreground"> → 💤 ocioso</span>
                     ) : m.fpContract > 0 ? (
-                      <span className="text-muted-foreground"> → sobra {Math.max(m.fpContract - m.fpPlanned, 0)} FP</span>
+                      <span className="text-muted-foreground"> → sobra {Math.max(m.fpContract - m.fpPlanned, 0)} PFV</span>
                     ) : null}
                   </span>
                   <span className="inline-flex items-center gap-1 tabular-nums text-muted-foreground">

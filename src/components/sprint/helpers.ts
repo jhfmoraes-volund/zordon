@@ -103,7 +103,7 @@ export function sprintDays(
   return { elapsed, total };
 }
 
-/** Sum of done FP per memberId, across tasks of this sprint. */
+/** Sum of done PFV per memberId, across tasks of this sprint. */
 export function deliveredFpByMember(
   sprintId: string,
   tasks: Task[],
@@ -119,7 +119,7 @@ export function deliveredFpByMember(
 }
 
 /**
- * Sum of "planejado" FP per memberId — tasks com status ≠ backlog (e ≠ draft,
+ * Sum of "planejado" PFV per memberId — tasks com status ≠ backlog (e ≠ draft,
  * já que drafts ainda não foram aceitos pro plano). Inclui done + in-flight.
  */
 export function plannedFpByMember(
@@ -145,9 +145,9 @@ export type BurndownPoint = {
   day: number;
   /** YYYY-MM-DD of the day end. */
   date: string;
-  /** Ideal FP remaining at end of this day (linear). */
+  /** Ideal PFV remaining at end of this day (linear). */
   ideal: number;
-  /** Actual FP remaining at end of this day. null if day is in the future. */
+  /** Actual PFV remaining at end of this day. null if day is in the future. */
   actual: number | null;
   /** Projection from last actual day onward. null otherwise. */
   projected: number | null;
@@ -167,7 +167,7 @@ export type BurndownSeries = {
  *  - Day d (1..total) represents end-of-day d.
  *  - `actual` is filled for days whose end is <= today; otherwise null.
  *  - `projected` is filled for days after the last actual point, using the
- *     simple velocity heuristic (avg FP done per day in last `lookbackDays`).
+ *     simple velocity heuristic (avg PFV done per day in last `lookbackDays`).
  */
 export function burndownSeries(
   sprint: Sprint,
@@ -189,7 +189,7 @@ export function burndownSeries(
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
-  // Aggregate FP done by day index (1..totalDays) using doneAt timestamps.
+  // Aggregate PFV done by day index (1..totalDays) using doneAt timestamps.
   const doneByDay: Record<number, number> = {};
   for (const t of own) {
     if (t.status !== "done" || !t.doneAt) continue;
@@ -273,9 +273,9 @@ export type Completion = {
   etaDays: number;
   /** Short label for UI. */
   etaText: string;
-  /** Average FP done per day in the lookback window. */
+  /** Average PFV done per day in the lookback window. */
   velocity: number;
-  /** FP still remaining today. */
+  /** PFV still remaining today. */
   remaining: number;
 };
 
@@ -338,7 +338,7 @@ export function projectCompletion(
     };
   }
 
-  // Velocity: avg FP done per day, last `lookbackDays` (clamped).
+  // Velocity: avg PFV done per day, last `lookbackDays` (clamped).
   const lookbackStart = Math.max(
     1,
     currentDay - lookbackDays + 1,

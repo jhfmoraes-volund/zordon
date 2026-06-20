@@ -123,7 +123,7 @@ const REVIEW_REASONS: Array<{ key: string; label: string }> = [
   { key: "scope", label: "Escopo" },
   { key: "acceptance_criteria", label: "Critérios de aceitação" },
   { key: "dependencies", label: "Dependências" },
-  { key: "estimate", label: "Estimativa (FP / scope / complexity)" },
+  { key: "estimate", label: "Estimativa (PFV / scope / complexity)" },
   { key: "assignee", label: "Quem assume" },
   { key: "other", label: "Outro" },
 ];

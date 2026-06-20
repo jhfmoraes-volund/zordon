@@ -195,7 +195,7 @@ export async function POST(
     .filter((d) => d.kind?.toLowerCase() === "blocks")
     .map((d) => ({ taskId: d.taskId, dependsOn: d.dependsOn }));
 
-  // Capacidade: primeira escolha = soma empírica de FP das últimas 3 sprints
+  // Capacidade: primeira escolha = soma empírica de PFV das últimas 3 sprints
   // (>0). Fallback = soma de SprintMember.fpAllocation. Fallback final = 40.
   const lastSprintIds = (sprintsRes.data ?? []).slice(0, 3).map((s) => s.id);
   const fpSums = lastSprintIds

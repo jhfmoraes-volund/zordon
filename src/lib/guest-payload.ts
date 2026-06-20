@@ -4,7 +4,7 @@ import "server-only";
  * Filtros de payload pra guests — defesa em profundidade.
  *
  * Pontos de Função são considerados informação interna (capacidade contratual,
- * alocação por membro, sugestão de FP por task). Cliente externo (guest) nunca
+ * alocação por membro, sugestão de PFV por task). Cliente externo (guest) nunca
  * vê. A UI também esconde — mas o backend zera antes de mandar pra garantir
  * que um componente novo não vaze por esquecimento.
  *
@@ -28,7 +28,7 @@ type WithFP = Record<string, unknown> & {
 };
 
 /**
- * Zera campos FP em um objeto. Não muta — devolve cópia rasa.
+ * Zera campos PFV em um objeto. Não muta — devolve cópia rasa.
  * Use em payloads de saída de Task/Member/ProjectMember.
  */
 export function stripFPFields<T extends WithFP>(obj: T): T {
@@ -45,7 +45,7 @@ export function stripFPList<T extends WithFP>(list: T[]): T[] {
 }
 
 /**
- * Helper de uma linha: se `isGuest=true`, retorna versão sem FP; caso contrário,
+ * Helper de uma linha: se `isGuest=true`, retorna versão sem PFV; caso contrário,
  * devolve o objeto intacto.
  */
 export function maskFPIfGuest<T extends WithFP>(obj: T, isGuest: boolean): T {

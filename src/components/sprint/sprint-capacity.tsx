@@ -14,9 +14,9 @@ import type { SprintMemberCapacity } from "./types";
 type Props = {
   capacities: SprintMemberCapacity[];
   members: Member[];
-  /** Map of memberId → FP done in this sprint. */
+  /** Map of memberId → PFV done in this sprint. */
   deliveredFp?: Record<string, number>;
-  /** Map of memberId → FP planejado no sprint (status ≠ backlog/draft). */
+  /** Map of memberId → PFV planejado no sprint (status ≠ backlog/draft). */
   plannedFp?: Record<string, number>;
 };
 
@@ -102,7 +102,7 @@ export function SprintCapacity({
                 className="text-xs text-muted-foreground tabular-nums shrink-0"
                 title="Capacity total da pessoa por sprint"
               >
-                <span className="font-mono text-foreground">{cap.fpCapacity}</span> FP/sprint
+                <span className="font-mono text-foreground">{cap.fpCapacity}</span> PFV/sprint
               </span>
             </div>
 

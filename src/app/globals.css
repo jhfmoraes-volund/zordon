@@ -354,6 +354,41 @@
     -webkit-text-fill-color: transparent;
     animation: shimmer 1.8s ease-in-out infinite;
   }
+
+  /* Generative/AI action button — animated violet hairline border. Reusa o
+     keyframe `shimmer` (mesmo motor do .shimmer-text). O fill fica quieto: é a
+     BORDA (não um fundo gritante) que carrega o "mágico", liberando o vermelho
+     --primary pra "ao vivo"/destructive. Pareado com a variant `magic` do Button. */
+  .btn-magic::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      110deg,
+      transparent 22%,
+      oklch(0.7 0.18 295) 45%,
+      oklch(0.86 0.12 320) 55%,
+      transparent 78%
+    );
+    background-size: 220% 100%;
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation: shimmer 2.6s linear infinite;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-magic::before {
+      animation: none;
+    }
+  }
 }
 
 @keyframes shimmer {

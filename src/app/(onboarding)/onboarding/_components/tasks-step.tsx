@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { KanbanSquare } from "lucide-react";
 
 const FEATURES = [
-  "Cada task tem FP, status, owner e sprint",
+  "Cada task tem PFV, status, owner e sprint",
   "Origem nas design sessions ou criadas pelo Alpha",
   "Filtros por sprint, projeto, especialidade",
   "Edita inline — status muda, sprint troca",
@@ -28,7 +28,7 @@ export function TasksStep() {
           Onde a entrega vive.
         </h1>
         <p className="text-base leading-relaxed text-muted-foreground">
-          Toda task é tipada — FP pra estimar esforço, status pra acompanhar
+          Toda task é tipada — PFV pra estimar esforço, status pra acompanhar
           o fluxo, owner pra responsabilidade clara. Da ideia ao deploy.
         </p>
       </div>

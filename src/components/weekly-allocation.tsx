@@ -60,7 +60,7 @@ export function WeeklyAllocation({ sprints, weeklyCapacity, projects }: Props) {
             <Calendar className="h-4 w-4 text-primary" />
             Alocação por semana
             <PixelHud size="xs" tone="muted">
-              cap. {weeklyCapacity} FP/sem
+              cap. {weeklyCapacity} PFV/sem
             </PixelHud>
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -177,7 +177,7 @@ function WeekBlock({
           </div>
         </div>
 
-        {/* Bottom row (mobile) / inline (desktop): bar + FP + % */}
+        {/* Bottom row (mobile) / inline (desktop): bar + PFV + % */}
         <div className="flex items-center gap-2 w-full sm:w-auto sm:gap-3 sm:contents">
           {/* Pixel bar of weekly load */}
           <div className="flex items-center gap-2 flex-1 sm:flex-none sm:w-40 shrink-0 sm:shrink">
@@ -195,7 +195,7 @@ function WeekBlock({
             </div>
           </div>
 
-          {/* FP planejado / capacity da semana (com sub-info done/open) */}
+          {/* PFV planejado / capacity da semana (com sub-info done/open) */}
           <div className="text-right shrink-0 w-24">
             {!empty && (
               <>
@@ -237,7 +237,7 @@ function WeekBlock({
             <div className="flex items-center gap-1.5 text-xs pt-1">
               <AlertTriangle className="h-3 w-3 text-amber-500" />
               <span className="text-amber-500">
-                +{bucket.totalPlanned - weeklyCapacity} FP acima da capacity semanal
+                +{bucket.totalPlanned - weeklyCapacity} PFV acima da capacity semanal
               </span>
             </div>
           )}
@@ -271,7 +271,7 @@ function SprintRowInWeek({ row }: { row: WeekSprintRow }) {
         </div>
       </div>
 
-      {/* Bottom row (mobile) / inline (desktop): bar + FP + Board button */}
+      {/* Bottom row (mobile) / inline (desktop): bar + PFV + Board button */}
       <div className="flex items-center gap-2 w-full sm:w-auto sm:gap-3 sm:contents">
         {/* Allocation usage bar */}
         <div className="flex items-center gap-2 flex-1 sm:flex-none sm:w-36 shrink-0 sm:shrink">
@@ -291,7 +291,7 @@ function SprintRowInWeek({ row }: { row: WeekSprintRow }) {
           </span>
         </div>
 
-        {/* FP planejado / contrato (com sub done/open) */}
+        {/* PFV planejado / contrato (com sub done/open) */}
         <div className="text-right shrink-0 w-20">
           <p className="text-sm font-bold tabular-nums">
             <span style={{ color: tone.fg }}>{row.fpPlannedWeek}</span>

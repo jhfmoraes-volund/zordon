@@ -21,7 +21,7 @@ export type Threshold = {
 };
 
 export type MetricValue = {
-  value: number | null;           // null = não computável (ex.: projeto sem FP)
+  value: number | null;           // null = não computável (ex.: projeto sem PFV)
   components?: Record<string, number>; // numerador/denominador — auditável
   asOf: string;                   // ISO date
 };

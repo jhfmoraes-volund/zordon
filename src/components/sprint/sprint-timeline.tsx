@@ -67,7 +67,7 @@ export function SprintTimeline({
               </div>
               <div className="flex items-center justify-between text-[11px]">
                 <span className="font-mono tabular-nums text-muted-foreground">
-                  {fp.done}/{fp.total} FP
+                  {fp.done}/{fp.total} PFV
                 </span>
                 <span className="font-mono tabular-nums font-medium">
                   {pct}%

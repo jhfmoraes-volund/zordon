@@ -6,6 +6,7 @@ import {
   TASK_TYPE,
   type ChipDescriptor,
 } from "@/lib/status-chips";
+import { PFV } from "@/lib/function-points";
 
 export type ActivityItem = {
   id: string;
@@ -139,7 +140,7 @@ const renderers: Record<string, Renderer> = {
     const after = item.payload.after ?? "—";
     return (
       <>
-        Function Points: <strong>{String(before)}</strong> →{" "}
+        {PFV.abbr}: <strong>{String(before)}</strong> →{" "}
         <strong>{String(after)}</strong>
       </>
     );

@@ -8,6 +8,7 @@
  */
 
 import { PixelBar, PixelHud, PixelDot, pixelTone } from "@/components/ui/pixel-bar";
+import { PFV } from "@/lib/function-points";
 
 export type SquadMetrics = {
   projectCount: number;
@@ -72,7 +73,7 @@ export function SquadBigNumbers({ metrics }: { metrics: SquadMetrics }) {
         </p>
       </Stat>
 
-      <Stat label="Function Points">
+      <Stat label={PFV.abbr}>
         <p className="text-2xl font-bold leading-none tabular-nums">
           {metrics.fpDone}
           <span className="text-sm font-medium text-muted-foreground">
@@ -102,7 +103,7 @@ export function SquadBigNumbers({ metrics }: { metrics: SquadMetrics }) {
           />
         </div>
         <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
-          {metrics.fpAllocated} / {metrics.fpCapacity} FP·sem
+          {metrics.fpAllocated} / {metrics.fpCapacity} PFV·sem
         </p>
       </Stat>
     </div>

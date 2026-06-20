@@ -27,7 +27,7 @@ export interface NumberField extends BaseField {
   min?: number;
   max?: number;
   step?: number;
-  /** Optional unit suffix for display (e.g. "FP", "dias", "%"). */
+  /** Optional unit suffix for display (e.g. "PFV", "dias", "%"). */
   unit?: string;
 }
 

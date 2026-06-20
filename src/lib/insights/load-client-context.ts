@@ -169,7 +169,7 @@ export async function loadClientInsightContext(
       );
       if (daysLeft <= 2 && fpDone < fpTotal * 0.7 && fpTotal > 0) {
         alerts.push(
-          `sprint termina em ${daysLeft}d com ${fpDone}/${fpTotal} FP feitos`,
+          `sprint termina em ${daysLeft}d com ${fpDone}/${fpTotal} PFV feitos`,
         );
       }
       if (!sprint.deployedToStagingAt && fpDone > 0) {

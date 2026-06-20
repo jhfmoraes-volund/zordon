@@ -2,7 +2,7 @@
 
 /**
  * Member card for the squad lounge — vertical, avatar-centered. Five at a row
- * on desktop. Surfaces, per member: FP capacity, project chips, task count in
+ * on desktop. Surfaces, per member: PFV capacity, project chips, task count in
  * the active sprint, and the join date ("desde").
  *
  * Phase 1: avatar is a Slack-style colored initial (no photo column yet).
@@ -85,9 +85,9 @@ export function MemberCard({
         </PixelHud>
       ) : null}
 
-      {/* FP + tasks in sprint */}
+      {/* PFV + tasks in sprint */}
       <div className="mt-3 flex w-full items-start justify-center gap-5">
-        <Stat value={member.fpCapacity} label="FP" />
+        <Stat value={member.fpCapacity} label="PFV" />
         <Stat value={member.sprintTaskCount} label="tasks/sprint" />
       </div>
 

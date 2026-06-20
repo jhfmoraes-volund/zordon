@@ -7,7 +7,7 @@
  *     ANTES (UI) ou roda como sistema (cron/Alpha).
  *   • Throw em erro; null/empty pra "não existe".
  *
- * Fontes: views `sprint_member_capacity` (FP por member×sprint, com override)
+ * Fontes: views `sprint_member_capacity` (PFV por member×sprint, com override)
  * e `member_commitment_overview` (compromisso cross-projeto corrente).
  * `getProjectCapacityForOpsTool` (alpha-planner) continua dona da leitura de
  * planejamento — as fórmulas aqui são de utilização histórica, que não
@@ -20,9 +20,9 @@ import { db } from "@/lib/db";
 export const UTILIZATION_WINDOW = 6;
 
 export type UtilizationWindow = {
-  /** Σ FP done na janela. */
+  /** Σ PFV done na janela. */
   done: number;
-  /** Σ FP de capacidade alocada (fp_allocation) na janela. */
+  /** Σ PFV de capacidade alocada (fp_allocation) na janela. */
   capacity: number;
   /** Nº de amostras (member×sprint) que entraram na janela. */
   samples: number;

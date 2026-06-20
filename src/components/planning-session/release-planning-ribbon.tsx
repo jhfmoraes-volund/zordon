@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Loader2, Pencil, Radio, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { ChipTone } from "@/lib/status-chips";
 import { fmtDate } from "@/lib/date-utils";
 import { InsumosButton } from "@/components/agent/context-import";
+import { LiveHistoryToggle } from "@/components/planning-session/live-history-toggle";
 
 type Props = {
   title: string;
@@ -33,6 +34,8 @@ type Props = {
   onEdit: () => void;
   /** Sai do modo histórico → volta ao plano vivo. */
   onExitHistory: () => void;
+  /** Reabre o navegador de versões (segmento "Histórico" do toggle). */
+  onOpenVersions: () => void;
 };
 
 /**
@@ -59,9 +62,12 @@ export function ReleasePlanningRibbon({
   onOpenContext,
   onEdit,
   onExitHistory,
+  onOpenVersions,
 }: Props) {
   const stats = [
-    `${sprintCount} sprint${sprintCount === 1 ? "" : "s"}`,
+    sprintCount > 0
+      ? `${sprintCount} sprint${sprintCount === 1 ? "" : "s"} no contrato`
+      : null,
     pendingCount > 0 ? `${pendingCount} em staging` : null,
     planCount > 0 ? `${planCount} no plano` : null,
     doneCount > 0 ? `${doneCount} entregue${doneCount === 1 ? "" : "s"}` : null,
@@ -83,32 +89,25 @@ export function ReleasePlanningRibbon({
           )}
         </div>
 
-        <StatusChip
-          tone={historyMode ? "amber" : phaseTone}
-          label={historyMode ? "Histórico" : phaseLabel}
-          dot
-        />
-
         {historyMode ? (
-          // Modo histórico: única ação é voltar ao plano vivo. Edit/Montar somem
-          // (canvas + chat estão congelados).
-          <Button
-            size="sm"
-            onClick={onExitHistory}
-            title="Sair do histórico e voltar ao plano vivo"
-          >
-            <Radio className="mr-1.5 h-3.5 w-3.5" />
-            Ao vivo
-          </Button>
+          // Modo histórico: o segmented toggle É o controle. "Ao vivo" (dot
+          // pulsante) sai pro plano vivo; "Histórico" (ativo) reabre as versões.
+          // Edit/Insumos/Montar somem — canvas + chat estão congelados.
+          <LiveHistoryToggle
+            onGoLive={onExitHistory}
+            onOpenVersions={onOpenVersions}
+          />
         ) : (
           <>
+            <StatusChip tone={phaseTone} label={phaseLabel} dot />
+
             {!readOnly && (
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={onEdit}
                 className="h-8 w-8 p-0"
-                title="Editar Release Planning"
+                title="Editar Planning"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
@@ -122,7 +121,13 @@ export function ReleasePlanningRibbon({
             />
 
             {!readOnly && (
-              <Button size="sm" disabled={busy} onClick={onMontar} title="Vitoria lê as fontes (insumos + PRDs) e propõe as tasks">
+              <Button
+                size="sm"
+                variant="magic"
+                disabled={busy}
+                onClick={onMontar}
+                title="Vitoria lê as fontes (insumos + PRDs) e propõe as tasks"
+              >
                 {busy ? (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 ) : (

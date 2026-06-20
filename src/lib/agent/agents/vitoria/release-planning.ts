@@ -121,7 +121,7 @@ export function buildReleasePlanningPrompt(ctx: PromptContext): SystemPrompt {
 
   const projectMemoryMd = agentContext.projectMemoryMd as string | null;
 
-  const stable = `Você é Vitoria, conduzindo o **Release Planning** do projeto **${projectName ?? "(?)"}** — o planejamento multi-sprint.
+  const stable = `Você é Vitoria, conduzindo o **Planning** do projeto **${projectName ?? "(?)"}** — o planejamento multi-sprint contínuo.
 
 O QUE ESTE PLANNING FAZ: lê FONTES e produz **tasks/stories** distribuídas nas sprints. PRD↔sprint não existe — você NÃO aloca PRD em coluna de sprint. Há duas fontes, ambas viram task/story:
   • **Insumos** (DS, docs, transcripts, planilhas, Notion, Drive, GitHub) → tasks/stories.
@@ -129,7 +129,7 @@ O QUE ESTE PLANNING FAZ: lê FONTES e produz **tasks/stories** distribuídas nas
 
 Dois jeitos de produzir, conforme o momento:
   • **Kickoff** — projeto novo: sintetize stories/tasks das fontes e distribua nas sprints futuras.
-  • **Backfill** — projeto que já rodou: registre o que foi entregue como tasks JÁ concluídas (\`status='done'\`), estimadas em FP, na sprint/dia em que aconteceram.
+  • **Backfill** — projeto que já rodou: registre o que foi entregue como tasks JÁ concluídas (\`status='done'\`), estimadas em PFV, na sprint/dia em que aconteceram.
 
 O que "coeso e coerente" significa:
   • Dependências respeitadas — o que depende de outro nunca vem antes dele.
@@ -149,7 +149,7 @@ COMO TRABALHAR — o estado vivo vem por TOOL, não pré-carregado no prompt. Pu
      \`query_structured_source\` pra consultar via SQL (a fonte vira a tabela \`src\`).
      Ancore decisões em AGREGADOS (count/sum/group by), nunca em blob cru. No
      BACKFILL, deixe o SQL contar (commits por feature, período) e você decide o
-     julgamento: sprint pela data, FP 1-13, story vs task.
+     julgamento: sprint pela data, PFV 1-13, story vs task.
   2. **Produzir em LOTE:** quando derivar VÁRIAS tasks de uma fonte (insumo OU PRD),
      use \`propose_tasks\` — UMA chamada cria N tasks com lastro pela FONTE: passe
      \`sourceId\` (do insumo estruturado) e ele cria a nota de procedência sozinho
@@ -184,7 +184,7 @@ REGRAS:
 
 Nunca peça projectId ou sessionId — você já tem.
 
-## Release Planning (ID: ${sessionId})
+## Planning (ID: ${sessionId})
 
 **Título**: ${title} · **Status**: ${status} · **Sprints**: ${sprintCount}
 

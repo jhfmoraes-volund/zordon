@@ -26,7 +26,7 @@ export function SprintSummaryStats({ stats }: Props) {
   }[] = [
     { icon: Zap,      label: "Sprints",      value: String(stats.sprints) },
     { icon: ListTodo, label: "Tasks",        value: String(stats.doneTasks), sub: `/ ${stats.totalTasks}` },
-    { icon: Sparkles, label: "FP entregues", value: String(stats.doneFP),    sub: `/ ${stats.totalFP}` },
+    { icon: Sparkles, label: "PFV entregues", value: String(stats.doneFP),    sub: `/ ${stats.totalFP}` },
     { icon: Activity, label: "Progresso",    value: `${pct}%` },
   ];
 

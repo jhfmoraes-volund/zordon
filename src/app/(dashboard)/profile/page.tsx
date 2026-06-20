@@ -387,7 +387,7 @@ export default function ProfilePage() {
                   <TableHead>Projeto</TableHead>
                   <TableHead>Sprint</TableHead>
                   <TableHead className="w-[120px]">Status</TableHead>
-                  <TableHead className="w-[50px] text-center">FP</TableHead>
+                  <TableHead className="w-[50px] text-center">PFV</TableHead>
                   <TableHead className="w-[80px]">Prazo</TableHead>
                 </TableRow>
               </TableHeader>
@@ -471,7 +471,7 @@ export default function ProfilePage() {
                         </div>
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-mono tabular-nums text-muted-foreground">
-                            {s.fpDone}/{s.fpTotal} FP
+                            {s.fpDone}/{s.fpTotal} PFV
                           </span>
                           <span className="font-mono tabular-nums font-medium">
                             {pct}%
@@ -631,7 +631,7 @@ function CapacityCard({ summary }: { summary: CapacitySummary | null }) {
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-medium truncate flex-1">{p.projectName}</span>
                         <span className="font-mono tabular-nums text-xs" style={{ color: projectTone.fg }}>
-                          {p.fpPlanned} FP
+                          {p.fpPlanned} PFV
                         </span>
                         <span className="font-mono tabular-nums text-[10px] text-muted-foreground">
                           contrato {p.fpContract}

@@ -251,7 +251,7 @@ function EmptyReport({
     },
     {
       ok: projectContext.hasSprint,
-      label: "Ops Info (capacity / FP / velocity)",
+      label: "Ops Info (capacity / PFV / velocity)",
       detail: projectContext.hasSprint
         ? "projeto tem sprint — Vitoria consulta via get_project_indicators"
         : "opcional — sem sprint, indicadores ficam vazios no report",

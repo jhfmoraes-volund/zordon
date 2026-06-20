@@ -140,7 +140,7 @@ export const ALERT_REGISTRY: AlertDef[] = [
     severity: "info",
     ruleText: "committed = 0 com capacity > 0, product-builders (member_commitment_overview)",
     defense:
-      "Builder com capacidade e zero FP prometida em qualquer projeto — ociosidade visível, não acusação. Substituiu o threshold local de 10% da aba (D11).",
+      "Builder com capacidade e zero PFV prometida em qualquer projeto — ociosidade visível, não acusação. Substituiu o threshold local de 10% da aba (D11).",
     lineage: ["member_commitment_overview"],
     compute: async (ctx): Promise<AlertValue> => {
       const builders = await getCachedBuilderCommitments(ctx);

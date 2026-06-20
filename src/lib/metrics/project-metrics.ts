@@ -123,7 +123,7 @@ export const PROJECT_METRICS: MetricDef[] = [
       unit: "pct",
       formulaText: "closed ÷ total",
       defense:
-        "Avanço guiado por sprint — o dado universal da fábrica (FP existe em ~1/3 dos projetos).",
+        "Avanço guiado por sprint — o dado universal da fábrica (PFV existe em ~1/3 dos projetos).",
       lineage: ["Project", "Sprint"],
       snapshot: true,
     },
@@ -155,7 +155,7 @@ export const PROJECT_METRICS: MetricDef[] = [
       name: "% do escopo",
       question: "quanto do escopo de hoje está entregue?",
       unit: "pct",
-      formulaText: "Σ FP done ÷ Σ FP de tasks vivas",
+      formulaText: "Σ PFV done ÷ Σ PFV de tasks vivas",
       defense:
         "Contra o escopo de hoje — cliente adicionou escopo, % cai, e é honesto que caia.",
       lineage: ["Task"],
@@ -169,7 +169,7 @@ export const PROJECT_METRICS: MetricDef[] = [
   projectDef(
     {
       id: "project.avg_fp_per_sprint",
-      name: "Média FP/sprint",
+      name: "Média PFV/sprint",
       question: "qual o ritmo real recente da linha?",
       unit: "fp_per_sprint",
       formulaText: "Σ done ÷ n, últimas 6 fechadas com planned > 0",
@@ -186,7 +186,7 @@ export const PROJECT_METRICS: MetricDef[] = [
       question: "quanto da capacidade alocada vira entrega?",
       unit: "pct",
       formulaText: "Σ done ÷ Σ capacity, mesma janela",
-      defense: "De cada 100 FP de capacidade alocada, quantos viraram entrega.",
+      defense: "De cada 100 PFV de capacidade alocada, quantos viraram entrega.",
       lineage: ["Sprint", "sprint_capacity_overview"],
       snapshot: true,
     },
@@ -196,11 +196,11 @@ export const PROJECT_METRICS: MetricDef[] = [
     {
       id: "project.delivery_rate",
       name: "Entrega do planejado",
-      question: "das FP planejadas nas sprints, quantas viraram done?",
+      question: "das PFV planejadas nas sprints, quantas viraram done?",
       unit: "pct",
       formulaText: "Σ done ÷ Σ planned, últimas 6 fechadas com planned > 0",
       defense:
-        "Das FP que o time puxou pra sprint, quantas saíram. Planejado e entregue na mesma escala — erro de calibração de FP cancela dos dois lados. Razão ponderada, não média de percentuais: sprint grande pesa mais.",
+        "Das PFV que o time puxou pra sprint, quantas saíram. Planejado e entregue na mesma escala — erro de calibração de PFV cancela dos dois lados. Razão ponderada, não média de percentuais: sprint grande pesa mais.",
       lineage: ["Sprint", "sprint_delivery_overview"],
       thresholds: [
         { label: "entrega alta", tone: "green", gte: 85 },

@@ -49,7 +49,7 @@ export const ALPHA_SETTINGS: SettingsSchema = {
     category: "Comportamento",
     options: [
       { value: "urgency", label: "Urgência (prazo + prioridade)" },
-      { value: "capacity", label: "Capacidade (quem tem mais FP livre)" },
+      { value: "capacity", label: "Capacidade (quem tem mais PFV livre)" },
       { value: "skill_match", label: "Match de skill (especialidade do membro)" },
     ],
   },
@@ -62,8 +62,8 @@ export const ALPHA_SETTINGS: SettingsSchema = {
   },
   fp_matrix: {
     type: "matrix",
-    label: "Matriz de Function Points",
-    description: "Valor de FP por combinação de scope × complexity. Usado em auto-cálculo ao criar/estimar tasks.",
+    label: "Matriz de PFV — Ponto de Função Volund",
+    description: "Valor de PFV por combinação de scope × complexity. Usado em auto-cálculo ao criar/estimar tasks.",
     category: "Estimativa",
     rows: SCOPES,
     cols: COMPLEXITIES,

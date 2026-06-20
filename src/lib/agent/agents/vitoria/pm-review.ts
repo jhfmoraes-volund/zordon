@@ -356,7 +356,7 @@ export function buildPMReviewPrompt(ctx: PromptContext): SystemPrompt {
   const sprintScopeBlock =
     sprintScopeTasks.length === 0
       ? "(sem tasks na sprint atual)"
-      : `${sprintScopeTasks.length} tasks · ${doneFp}/${totalFp} FP done · status: ${Object.entries(
+      : `${sprintScopeTasks.length} tasks · ${doneFp}/${totalFp} PFV done · status: ${Object.entries(
           tasksByStatus,
         )
           .map(([s, c]) => `${s}=${c}`)
@@ -488,7 +488,7 @@ ${notesBlock}
       : squad
           .map(
             (m) =>
-              `- ${m.name} (${m.position ?? "?"}) — capacity ${m.fpCapacity} FP · ${m.dedicationPercent}% dedicação`,
+              `- ${m.name} (${m.position ?? "?"}) — capacity ${m.fpCapacity} PFV · ${m.dedicationPercent}% dedicação`,
           )
           .join("\n");
 
@@ -751,7 +751,7 @@ export function buildPMReviewTools(pmReviewId: string, projectId: string) {
     get_project_indicators: tool({
       description:
         "Retorna indicadores do time do projeto: velocity das últimas 3 sprints fechadas, " +
-        "throughput (tasks done), blockers ativos, capacity FP vs delivered. " +
+        "throughput (tasks done), blockers ativos, capacity PFV vs delivered. " +
         "Use pra preencher a seção 'Indicadores do time' do report.",
       inputSchema: z.object({}),
       execute: async () => {

@@ -6,7 +6,7 @@ import { hasMinAccessLevel } from "@/lib/roles";
 /**
  * True iff o nível efetivo do usuário é 'guest' (abaixo de builder).
  *
- * Use em componentes que precisam esconder FP / botões internos / etc. quando
+ * Use em componentes que precisam esconder PFV / botões internos / etc. quando
  * o viewer é guest. Para impersonation, segue o nível efetivo (admin
  * impersonando guest vê como guest).
  */

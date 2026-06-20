@@ -23,7 +23,7 @@ function validateCreatePayload(
   const issues: { path: (string | number)[]; message: string }[] = [];
   // Backfill: trabalho JÁ entregue (status='done') não precisa da cerimônia de
   // planejamento pra frente (SDD ≥60 chars + 3 AC observáveis) — só do registro
-  // fiel + estimativa em FP. Pra criação prospectiva, a cerimônia continua dura.
+  // fiel + estimativa em PFV. Pra criação prospectiva, a cerimônia continua dura.
   const isBackfill = payload.status === "done";
   const title = payload.title;
   if (typeof title !== "string" || title.trim().length < 3) {
@@ -341,7 +341,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
         "`sourceId` (o ContextSource de onde o lote saiu — auto-cria UMA nota de " +
         "lastro e a aplica a todas as tasks) OU `sourceNoteIds` (PlanningContextNote.id " +
         "já existentes). " +
-        "Valida cada linha (FP 1-13, assignee no squad, sprint válida) e devolve " +
+        "Valida cada linha (PFV 1-13, assignee no squad, sprint válida) e devolve " +
         "{created, errors:[{index,msg}]} — corrija só as que falharem e re-chame com elas. " +
         "PM aprova item a item; o lote é só no write.",
       inputSchema: z.object({
@@ -367,7 +367,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           .min(20)
           .describe(
             "O critério COMUM do lote (vale pra todas as tasks). Ex: 'backfill das " +
-              "features entregues; FP por commit_count; sprint pela data do último commit'.",
+              "features entregues; PFV por commit_count; sprint pela data do último commit'.",
           ),
         aiConfidence: z
           .number()
@@ -516,7 +516,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
         }
 
         // Bulk-insert das linhas válidas (1 statement). projectId + ceremony do
-        // closure — nunca do modelo (D13). targetSprintId top-level; status/FP/
+        // closure — nunca do modelo (D13). targetSprintId top-level; status/PFV/
         // assigneeIds/dueDate no payload (mesmo contrato do executor de create).
         const rows = valid.map(({ t }) => ({
           planningCeremonyId: planningId,
@@ -831,7 +831,7 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
 
     list_project_members: tool({
       description:
-        "Lista os membros do projeto (id, nome, capacidade FP, dedicação, isPM). " +
+        "Lista os membros do projeto (id, nome, capacidade PFV, dedicação, isPM). " +
         "Une PM (Project.pmId) + ProjectMembers + squad linkada — funciona mesmo " +
         "quando o projeto não tem squad cadastrada (caso comum). " +
         "Use SEMPRE antes de propor assigneeIds num create/update — nunca invente Member.id. " +
@@ -845,14 +845,14 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
 
     get_sprint_capacity: tool({
       description:
-        "Mostra FP planejado vs capacity dos members do squad numa sprint. Use pra avaliar risco de sobrecarga antes de propor novas tasks.",
+        "Mostra PFV planejado vs capacity dos members do squad numa sprint. Use pra avaliar risco de sobrecarga antes de propor novas tasks.",
       inputSchema: z.object({
         sprintId: z.string().describe("ID da sprint"),
       }),
       execute: async ({ sprintId }) => {
         const supabase = db();
 
-        // Tasks da sprint com assignees + FP
+        // Tasks da sprint com assignees + PFV
         const { data: tasks, error: tErr } = await supabase
           .from("Task")
           .select(
@@ -866,13 +866,13 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
         // list_project_members; só-squad regredia projetos sem ProjectSquad.
         const members = await loadProjectMembers(projectId);
 
-        // FP planejado por member
+        // PFV planejado por member
         const fpByMember = new Map<string, number>();
         for (const t of tasks ?? []) {
           const fp = t.functionPoints ?? 0;
           const assigns = (t.TaskAssignment ?? []) as Array<{ memberId: string | null }>;
           if (assigns.length === 0) continue;
-          // Divide FP igual entre assignees (heurística simples)
+          // Divide PFV igual entre assignees (heurística simples)
           const share = fp / assigns.length;
           for (const a of assigns) {
             if (!a.memberId) continue;

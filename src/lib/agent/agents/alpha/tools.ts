@@ -143,7 +143,7 @@ export function assembleAlphaTools(
 
   tools.get_tasks = tool({
     description:
-      "Lista tasks (não-draft) com filtros opcionais por status, membro ou projeto. Retorna referencia, titulo, status, FP, projeto e atribuicao. Quando o usuário está numa página de projeto/sprint, filtra pelo escopo da rota automaticamente; passe `projectName` explicitamente pra escapar do escopo e consultar cross-project.",
+      "Lista tasks (não-draft) com filtros opcionais por status, membro ou projeto. Retorna referencia, titulo, status, PFV, projeto e atribuicao. Quando o usuário está numa página de projeto/sprint, filtra pelo escopo da rota automaticamente; passe `projectName` explicitamente pra escapar do escopo e consultar cross-project.",
     inputSchema: z.object({
       status: z.enum(TASK_STATUSES).optional().describe("Filtrar por status"),
       memberName: z.string().optional().describe("Filtrar por nome do membro atribuido"),
@@ -225,10 +225,10 @@ export function assembleAlphaTools(
         const allocated = Number(m.fp_allocated) || 0;
         const capacity = Number(m.fp_capacity) || 0;
         if (capacity > 0 && allocated > capacity) {
-          alerts.push(`${m.name} sobrecarregado: ${allocated}/${capacity} FP`);
+          alerts.push(`${m.name} sobrecarregado: ${allocated}/${capacity} PFV`);
         }
         if (capacity > 0 && allocated === 0) {
-          alerts.push(`${m.name} sem tasks alocadas (${capacity} FP disponiveis)`);
+          alerts.push(`${m.name} sem tasks alocadas (${capacity} PFV disponiveis)`);
         }
       }
 
@@ -580,7 +580,7 @@ export function assembleAlphaTools(
 
     tools.create_task = tool({
       description:
-        "Cria uma nova task no backlog. Auto-calcula Function Points a partir de scope x complexity. Opcionalmente atribui a um membro.",
+        "Cria uma nova task no backlog. Auto-calcula PFV (Ponto de Função Volund) a partir de scope x complexity. Opcionalmente atribui a um membro.",
       inputSchema: z.object({
         title: z.string().min(1).describe("Titulo curto e acionavel em portugues"),
         description: z.string().optional().describe("Descricao do que entregar e por que"),
@@ -686,11 +686,11 @@ export function assembleAlphaTools(
         scope: z
           .enum(SCOPES)
           .optional()
-          .describe("Novo scope — junto com complexity recalcula FP"),
+          .describe("Novo scope — junto com complexity recalcula PFV"),
         complexity: z
           .enum(COMPLEXITIES)
           .optional()
-          .describe("Nova complexity — junto com scope recalcula FP"),
+          .describe("Nova complexity — junto com scope recalcula PFV"),
         sprintName: z
           .string()
           .nullable()
@@ -746,7 +746,7 @@ export function assembleAlphaTools(
           changes.priority = { from: task.priority, to: input.priority };
         }
 
-        // FP recalc only if scope or complexity changed
+        // PFV recalc only if scope or complexity changed
         if (input.scope !== undefined || input.complexity !== undefined) {
           const newScope = input.scope ?? task.scope;
           const newComplexity = input.complexity ?? task.complexity;
@@ -917,7 +917,7 @@ export function assembleAlphaTools(
           .min(0)
           .max(500)
           .optional()
-          .describe("FP/sprint dedicados (obrigatório se action='set')"),
+          .describe("PFV/sprint dedicados (obrigatório se action='set')"),
       }),
       execute: async ({
         scope,
@@ -1002,7 +1002,7 @@ export function assembleAlphaTools(
             member: member.name,
             fpAllocation,
             ...(overcommit && {
-              warning: `${member.name} ficou em overcommit (${commit?.committed}/${commit?.capacity} FP).`,
+              warning: `${member.name} ficou em overcommit (${commit?.committed}/${commit?.capacity} PFV).`,
             }),
           };
         }

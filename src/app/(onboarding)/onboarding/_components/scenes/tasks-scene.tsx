@@ -76,7 +76,7 @@ export function TasksScene() {
                       {card.id}
                     </span>
                     <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] tabular-nums text-primary">
-                      {card.fp} FP
+                      {card.fp} PFV
                     </span>
                   </div>
                   <div className="mt-1.5 text-[11px] font-medium leading-tight text-foreground">

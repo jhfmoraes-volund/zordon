@@ -5,7 +5,7 @@ import type { WikiMetrics } from "@/lib/dal/wiki-metrics";
 
 /**
  * Linha Hero da Wiki (PRD §9): status do projeto legível em 1s.
- * "Sprint N (d/7d) · X% · Y/Z FP · marco em Wd" — FP some pra guest (D9).
+ * "Sprint N (d/7d) · X% · Y/Z PFV · marco em Wd" — PFV some pra guest (D9).
  */
 export function WikiHero({ hero }: { hero: WikiMetrics["hero"] }) {
   const canSeeFP = useCanSeeFunctionPoints();
@@ -20,7 +20,7 @@ export function WikiHero({ hero }: { hero: WikiMetrics["hero"] }) {
   }
   parts.push(`${hero.completionPercent}%`);
   if (canSeeFP && hero.fpTotal > 0) {
-    parts.push(`${hero.fpDone}/${hero.fpTotal} FP`);
+    parts.push(`${hero.fpDone}/${hero.fpTotal} PFV`);
   }
   if (hero.nextMilestoneDays !== null) {
     parts.push(

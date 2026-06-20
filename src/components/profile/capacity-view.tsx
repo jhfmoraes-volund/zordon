@@ -41,7 +41,7 @@ export function CapacityView({ data }: { data: CapacityPayload }) {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm text-muted-foreground">
-            Acordo contratual — {commitment.committed} / {commitment.capacity} FP/sem
+            Acordo contratual — {commitment.committed} / {commitment.capacity} PFV/sem
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -59,7 +59,7 @@ export function CapacityView({ data }: { data: CapacityPayload }) {
                 <div key={p.projectId} className="flex items-center gap-3 text-sm">
                   <span className="flex-1 truncate">{p.projectName}</span>
                   <span className="font-mono tabular-nums text-sm">{p.fpAllocation}</span>
-                  <span className="text-xs text-muted-foreground">FP/sem</span>
+                  <span className="text-xs text-muted-foreground">PFV/sem</span>
                 </div>
               ))}
             </div>

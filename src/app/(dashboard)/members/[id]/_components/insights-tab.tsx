@@ -134,8 +134,8 @@ export function InsightsTab({
               color={adherenceTone}
             />
             <div className="text-right text-xs text-muted-foreground">
-              entregou <span className="font-mono tabular-nums text-foreground">{m.avgDone}</span> FP/sprint em média<br />
-              contrato médio <span className="font-mono tabular-nums text-foreground">{m.avgContract}</span> FP ·
+              entregou <span className="font-mono tabular-nums text-foreground">{m.avgDone}</span> PFV/sprint em média<br />
+              contrato médio <span className="font-mono tabular-nums text-foreground">{m.avgContract}</span> PFV ·
               plan accuracy <span className="font-mono tabular-nums text-foreground">{m.planAccuracy}%</span>
             </div>
           </div>
@@ -159,7 +159,7 @@ export function InsightsTab({
             <StatBlock
               label="quanto produz? · throughput médio"
               value={m.avgDone}
-              unit="FP/sprint"
+              unit="PFV/sprint"
               trend={{ dir: m.trendPct >= 0 ? "up" : "down", pct: m.trendPct }}
             />
             <PixelSparkline values={m.doneSeries} height={40} />
@@ -186,7 +186,7 @@ export function InsightsTab({
                     <div key={x.name} className="flex items-center gap-2 text-xs">
                       <span className="inline-block h-2.5 w-2.5 rounded-[1px]" style={{ background: MIX_COLORS[i % MIX_COLORS.length] }} />
                       <span className="flex-1 truncate">{x.name}</span>
-                      <span className="font-mono tabular-nums text-muted-foreground">{x.fp} FP</span>
+                      <span className="font-mono tabular-nums text-muted-foreground">{x.fp} PFV</span>
                       <span className="w-10 text-right font-mono tabular-nums">{x.pct}%</span>
                     </div>
                   ))}

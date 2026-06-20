@@ -56,7 +56,7 @@ export async function loadAgentHeuristicsIndex(
 }
 
 /**
- * Loads the tuned FP matrix for an agent from AgentConfig.
+ * Loads the tuned PFV matrix for an agent from AgentConfig.
  * Falls back to FP_MATRIX_DEFAULT if the key is absent or malformed.
  * Cached per-process for 60s.
  */

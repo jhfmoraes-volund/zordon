@@ -118,7 +118,7 @@ export function SprintBurndown({
       className="block h-48 w-full sm:h-56"
       preserveAspectRatio="xMidYMid meet"
       role="img"
-      aria-label={`Burndown — ${doneFP} de ${totalFP} FP entregues, ${completion.etaText}`}
+      aria-label={`Burndown — ${doneFP} de ${totalFP} PFV entregues, ${completion.etaText}`}
     >
       {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
         const fp = totalFP * frac;
@@ -218,7 +218,7 @@ export function SprintBurndown({
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
       <Legend label="Ideal" swatchClass="bg-muted-foreground/40" dashed />
       <Legend
-        label={`Real · ${doneFP}/${totalFP} FP entregues`}
+        label={`Real · ${doneFP}/${totalFP} PFV entregues`}
         swatchClass="bg-primary"
       />
       {projectedPath ? (
@@ -248,7 +248,7 @@ export function SprintBurndown({
             <span className="font-mono tabular-nums text-foreground">
               {completion.velocity.toFixed(1)}
             </span>{" "}
-            FP/dia
+            PFV/dia
           </span>
           <span
             className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${pillClass}`}
@@ -285,7 +285,7 @@ export function SprintBurndown({
             <span className="font-mono tabular-nums text-foreground">
               {completion.velocity.toFixed(1)}
             </span>{" "}
-            FP/dia
+            PFV/dia
           </span>
           <span
             className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${pillClass}`}

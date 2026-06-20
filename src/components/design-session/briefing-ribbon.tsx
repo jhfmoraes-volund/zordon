@@ -26,7 +26,7 @@ import {
  * Faixa horizontal compacta que vive no topo do briefing step.
  *
  * Concentra três coisas que antes ocupavam três caixas grandes:
- *   1. Stats (stories, tasks, FP) — chips inline
+ *   1. Stats (stories, tasks, PFV) — chips inline
  *   2. Briefing consolidado — botão que abre o BriefingSheet (lateral)
  *   3. Governance — Concluir / Reabrir + blockers via tooltip
  *
@@ -141,7 +141,7 @@ export function BriefingRibbon({
       }
       const summary =
         json.tasksPromoted > 0
-          ? `${json.storiesCommitted} story(s), ${json.tasksPromoted} task(s) no backlog (${json.totalFp} FP)`
+          ? `${json.storiesCommitted} story(s), ${json.tasksPromoted} task(s) no backlog (${json.totalFp} PFV)`
           : `${json.storiesCommitted} story(s) consolidada(s)`;
       toast.success(`Sessão concluída · ${summary}`);
       await load();
@@ -224,7 +224,7 @@ export function BriefingRibbon({
             </span>
             <span className="text-border">·</span>
             <span className="tabular-nums">
-              <span className="font-medium text-foreground">{stats.totalFp}</span> FP
+              <span className="font-medium text-foreground">{stats.totalFp}</span> PFV
             </span>
           </div>
         )}

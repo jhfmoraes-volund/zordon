@@ -282,7 +282,7 @@ export async function withAuth<T extends Response>(
 //
 // Visibility (and edit permission) is sourced from ProjectAccess,
 // the single source of truth. ProjectMember now exclusively models
-// FP allocation; it's no longer a visibility gate.
+// PFV allocation; it's no longer a visibility gate.
 //
 // Impersonation note:
 //   - getMemberId / verifySession / getRealRole → REAL user.
@@ -400,7 +400,7 @@ export async function canEditSessions(projectId: string): Promise<boolean> {
   return ids.includes(projectId);
 }
 
-/** True se o nível efetivo é guest. Helper p/ filtros de visibility e FP. */
+/** True se o nível efetivo é guest. Helper p/ filtros de visibility e PFV. */
 export function isGuest(level: AccessLevel | null | undefined): boolean {
   return level === "guest";
 }

@@ -161,7 +161,7 @@ export function pixelBarLabel(score: number | null | undefined): {
 
 /**
  * HUD label — sans uppercase com tracking generoso.
- * Use pra: MAX/HIGH/MID/LOW, contadores tipo "01/20", labels de barra ("FP", "Torre primária"), versioning ("ZRD/v3").
+ * Use pra: MAX/HIGH/MID/LOW, contadores tipo "01/20", labels de barra ("PFV", "Torre primária"), versioning ("ZRD/v3").
  *
  * Pra números (score "85") use font-mono tabular-nums direto via className.
  */

@@ -82,7 +82,7 @@ export function TaskRow({ task, decorations, onOpenTask, onOpenAction }: Props) 
         {task.status}
       </Badge>
       <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
-        {task.functionPoints ?? 0} FP · {task.scope}
+        {task.functionPoints ?? 0} PFV · {task.scope}
       </span>
     </button>
   );

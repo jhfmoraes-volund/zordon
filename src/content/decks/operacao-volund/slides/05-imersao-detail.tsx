@@ -75,7 +75,7 @@ export function Slide05ImersaoDetail() {
             <div className="body">
               <p>
                 Formalização de uma proposta para o cliente, com orçamento
-                estimando o esforço em FP (Function Points).
+                estimando o esforço em PFV (Ponto de Função Volund).
               </p>
             </div>
             <div className="outputs">

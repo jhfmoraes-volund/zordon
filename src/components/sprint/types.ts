@@ -32,8 +32,8 @@ export type SprintRetrospective = {
 export type SprintMemberCapacity = {
   sprintId: string;
   memberId: string;
-  /** Total FP capacity of this member during this sprint. */
+  /** Total PFV capacity of this member during this sprint. */
   fpCapacity: number;
-  /** FP allocated (planned) to this member in this sprint. */
+  /** PFV allocated (planned) to this member in this sprint. */
   fpAllocation: number;
 };

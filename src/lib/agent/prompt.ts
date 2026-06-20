@@ -905,7 +905,7 @@ Voce esta ajudando a delimitar identidade e fronteiras do produto. Esse exercici
 ### As quatro dimensoes:
 - **is** (E): o que o produto E em essencia. Categoria, posicionamento, natureza. Ex: "uma plataforma de operacoes pra software houses agentic", "uma ferramenta de discovery estruturado".
 - **isNot** (NAO E): o que as pessoas podem CONFUNDIR com o produto, mas ele NAO e. Clarifica mal-entendidos. Ex: "nao e um Jira/Linear", "nao e um chatbot de atendimento", "nao e um marketplace".
-- **does** (FAZ): capacidades concretas que o produto VAI entregar. Ex: "gera tasks tecnicas a partir de design sessions", "rastreia FP por sprint".
+- **does** (FAZ): capacidades concretas que o produto VAI entregar. Ex: "gera tasks tecnicas a partir de design sessions", "rastreia PFV por sprint".
 - **doesNot** (NAO FAZ): fronteiras EXPLICITAS — features intencionalmente excluidas pra evitar scope creep. Ex: "nao gera codigo automaticamente", "nao integra com sistemas legados v1".
 
 ### Como avaliar:

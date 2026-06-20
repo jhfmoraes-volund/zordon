@@ -505,7 +505,7 @@ function StorySheetInner({
                   {counts.done} / {counts.total} tasks
                 </span>
                 <span className="font-mono tabular-nums">
-                  {fps.done} / {fps.total} FP
+                  {fps.done} / {fps.total} PFV
                 </span>
                 {onCreateTaskForStory ? (
                   <Button
@@ -572,7 +572,7 @@ function StorySheetInner({
                     ) : null}
                     <span className="flex-1 truncate">{task.title}</span>
                     <span className="font-mono tabular-nums text-muted-foreground">
-                      {task.functionPoints} FP
+                      {task.functionPoints} PFV
                     </span>
                     <TaskStatusChip status={task.status} />
                   </button>

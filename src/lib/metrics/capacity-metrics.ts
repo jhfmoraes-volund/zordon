@@ -45,7 +45,7 @@ export const CAPACITY_METRICS: MetricDef[] = [
     scope: "member",
     formulaText: "Σ done ÷ Σ capacity do builder, janela 6 sprints fechadas",
     defense:
-      "De cada 100 FP que este builder tinha de capacidade, quantos viraram entrega. ⚠ capacity reflete alocação corrente — time que mudou no meio carrega viés (congelar por sprint = v2).",
+      "De cada 100 PFV que este builder tinha de capacidade, quantos viraram entrega. ⚠ capacity reflete alocação corrente — time que mudou no meio carrega viés (congelar por sprint = v2).",
     lineage: ["sprint_member_capacity", "Sprint"],
     snapshot: true,
     compute: async (ctx, scopeId): Promise<MetricValue> => {
@@ -147,7 +147,7 @@ export const CAPACITY_METRICS: MetricDef[] = [
     scope: "factory",
     formulaText: "Σ committed ÷ Σ capacity dos product-builders internos",
     defense:
-      "De cada 100 FP de capacidade dos builders, quantos já estão prometidos a projetos. Abaixo de 70 há ociosidade; acima de 100 é superlotação. ⚠ committed soma alocações de todos os projetos com membro alocado, inclusive pausados.",
+      "De cada 100 PFV de capacidade dos builders, quantos já estão prometidos a projetos. Abaixo de 70 há ociosidade; acima de 100 é superlotação. ⚠ committed soma alocações de todos os projetos com membro alocado, inclusive pausados.",
     lineage: ["member_commitment_overview"],
     thresholds: [
       { label: "superlotação", tone: "red", gte: 101 },

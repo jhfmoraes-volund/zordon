@@ -291,7 +291,7 @@ export function MemberCapacityView({ memberId: id, initialPayload, initialDoneWe
               className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
             >
               <Gauge className="h-3.5 w-3.5" />
-              Contrato total · {health.capacity} FP
+              Contrato total · {health.capacity} PFV
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -303,17 +303,17 @@ export function MemberCapacityView({ memberId: id, initialPayload, initialDoneWe
               {health.overStructural ? (
                 <PixelHud size="xs" style={{ color: WARN_RED }}>
                   <AlertTriangle className="mr-1 inline h-3 w-3" />
-                  +{Math.abs(health.remaining)} FP além do contrato total
+                  +{Math.abs(health.remaining)} PFV além do contrato total
                 </PixelHud>
               ) : (
-                <PixelHud size="xs" style={{ color: OK_GREEN }}>✓ {health.remaining} FP livre</PixelHud>
+                <PixelHud size="xs" style={{ color: OK_GREEN }}>✓ {health.remaining} PFV livre</PixelHud>
               )}
             </div>
             <PixelBar score={Math.min((health.committed / Math.max(health.capacity, 1)) * 100, 100)} cells={28} height={12} variant="load" />
             <div className="flex items-center justify-between text-xs">
               <span className="font-mono tabular-nums">
                 <span style={{ color: health.overStructural ? WARN_RED : OK_GREEN }} className="text-base font-bold">{health.committed}</span>
-                <span className="text-muted-foreground"> / {health.capacity} FP contratados</span>
+                <span className="text-muted-foreground"> / {health.capacity} PFV contratados</span>
               </span>
               <span className="text-muted-foreground">
                 {projectViews.length} projetos

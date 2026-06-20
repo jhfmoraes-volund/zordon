@@ -20,7 +20,7 @@ import { playbookCapabilitiesSchema } from "@/lib/rituals/capability-registry";
 import type { RitualType } from "@/lib/rituals/types";
 import type { Json } from "@/lib/supabase/database.types";
 
-const RITUAL_TYPES: RitualType[] = ["pm_review", "planning", "release_planning"];
+const RITUAL_TYPES: RitualType[] = ["pm_review", "release_planning"];
 
 function parseRitualType(raw: string | null): RitualType {
   return RITUAL_TYPES.includes(raw as RitualType) ? (raw as RitualType) : "pm_review";
@@ -66,7 +66,7 @@ export async function GET(
 }
 
 const putSchema = z.object({
-  ritualType: z.enum(["pm_review", "planning", "release_planning"]).optional(),
+  ritualType: z.enum(["pm_review", "release_planning"]).optional(),
   capabilities: playbookCapabilitiesSchema,
   enabled: z.boolean().optional(),
 });

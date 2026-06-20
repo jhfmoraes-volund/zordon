@@ -42,7 +42,7 @@ function statusChip(status: string): {
 /**
  * Canvas HISTÓRICO (read-only) de uma versão do Release Planning. Renderiza o
  * snapshot imutável daquele "Aplicar": briefing + o board exato (tasks por
- * sprint, com status/FP/assignees congelados). Sem edição, sem apply — informa,
+ * sprint, com status/PFV/assignees congelados). Sem edição, sem apply — informa,
  * não restaura (restaurar versão é feature futura).
  */
 export function PlanningHistoricalCanvas({
@@ -144,7 +144,7 @@ export function PlanningHistoricalCanvas({
                 <header className="flex items-center gap-2 bg-muted/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <span>{g.sprintLabel}</span>
                   <span className="font-mono normal-case tracking-normal">
-                    {g.tasks.length} task{g.tasks.length === 1 ? "" : "s"} · {fpTotal} FP
+                    {g.tasks.length} task{g.tasks.length === 1 ? "" : "s"} · {fpTotal} PFV
                   </span>
                 </header>
                 {g.tasks.map((t) => {
@@ -158,7 +158,7 @@ export function PlanningHistoricalCanvas({
                       <span className="truncate text-sm">{t.title}</span>
                       {t.functionPoints !== null && (
                         <Badge variant="secondary" className="shrink-0">
-                          {t.functionPoints} FP
+                          {t.functionPoints} PFV
                         </Badge>
                       )}
                       {t.assignees.length > 0 && (

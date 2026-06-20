@@ -33,7 +33,7 @@ const LOG_POOL: { type: LineType; text: string; tag: string }[] = [
 
 const PROCESS_LINES = [
   "síntese de design session",
-  "estimativa de function points · sprint volund-web v3",
+  "estimativa de PFV · sprint volund-web v3",
   "agrupamento de insights · cliente_x",
   "calibragem de capacity por membro",
   "indexação de playbooks de discovery",

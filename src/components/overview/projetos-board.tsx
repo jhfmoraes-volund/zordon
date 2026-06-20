@@ -336,12 +336,12 @@ function meanOf(values: Array<number | null>): number | null {
 }
 
 function fmtAvg(v: number | null): string {
-  return v === null ? "—" : `${v.toLocaleString("pt-BR")} FP/sp`;
+  return v === null ? "—" : `${v.toLocaleString("pt-BR")} PFV/sp`;
 }
 
 // ─── Régua ────────────────────────────────────────────────
 
-/** Cor do segmento fechado pela entrega da sprint (sem FP = cinza neutro). */
+/** Cor do segmento fechado pela entrega da sprint (sem PFV = cinza neutro). */
 function segmentColor(deliveryPct: number | null): string {
   if (deliveryPct === null) return "bg-muted-foreground/40";
   if (deliveryPct >= 85) return "bg-emerald-500/70";
@@ -356,7 +356,7 @@ function segmentTitle(g: ProjectStats["segments"][number]): string {
     return g.sprintId ? `${sprint} — corrente` : `${sprint} — corrente, sem sprint ativa`;
   if (g.kind === "future") return `${sprint} — futura`;
   return g.deliveryPct === null
-    ? `${sprint} — fechada (sem FP)`
+    ? `${sprint} — fechada (sem PFV)`
     : `${sprint} — entregue ${g.deliveryPct}% do planejado`;
 }
 
@@ -478,7 +478,7 @@ function ReguaSummaryTip({ stats }: { stats: ProjectStats }) {
 
 /** Texto da célula na timeline expandida — entrega em %, estados em palavra. */
 function segmentValueLabel(g: ReguaSegment): string {
-  if (g.kind === "closed") return g.deliveryPct === null ? "sem FP" : `${g.deliveryPct}%`;
+  if (g.kind === "closed") return g.deliveryPct === null ? "sem PFV" : `${g.deliveryPct}%`;
   if (g.kind === "hole") return "desligada";
   if (g.kind === "current") return g.sprintId ? "corrente" : "sem sprint";
   return ""; // futura — a data abaixo já diz tudo
@@ -612,7 +612,7 @@ function PaceBadge({
 
 /**
  * Linha de stats do card: posição no contrato + entrega do planejado. Só fatos
- * de calendário e a métrica autocalibrada — pace/FP-sp/buracos vivem no drawer
+ * de calendário e a métrica autocalibrada — pace/PFV-sp/buracos vivem no drawer
  * (buraco a régua já mostra como célula tracejada).
  */
 function RowStatsLine({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
@@ -938,11 +938,11 @@ function RibbonPanel({
             />
           ))}
         {sampled.length === 0 && (
-          <p className="px-2 text-xs text-muted-foreground">Nenhuma linha com amostra de FP.</p>
+          <p className="px-2 text-xs text-muted-foreground">Nenhuma linha com amostra de PFV.</p>
         )}
         {noSample.length > 0 && (
           <p className="px-2 pt-1.5 text-xs text-muted-foreground/70">
-            Sem amostra (sprints fechadas sem FP): {noSample.map((p) => p.name).join(", ")}
+            Sem amostra (sprints fechadas sem PFV): {noSample.map((p) => p.name).join(", ")}
           </p>
         )}
       </div>
@@ -959,7 +959,7 @@ function RibbonPanel({
       <div className="space-y-0.5">
         {factoryLoad.components && (
           <p className="px-2 pb-1.5 text-xs text-muted-foreground">
-            Total: {factoryLoad.components.committed}/{factoryLoad.components.capacity} FP
+            Total: {factoryLoad.components.committed}/{factoryLoad.components.capacity} PFV
             comprometidos em {factoryLoad.components.builders} builders. Ociosos primeiro:
           </p>
         )}
@@ -971,7 +971,7 @@ function RibbonPanel({
               <span className="truncate">{b.name}</span>
               <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
                 <span>
-                  {b.committed}/{b.capacity} FP
+                  {b.committed}/{b.capacity} PFV
                 </span>
                 <PanelBar
                   pct={pct ?? 0}
@@ -1866,7 +1866,7 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
               </>
             ) : (
               <span className="cursor-help" title={ui.defenses["project.pace_gap"]}>
-                Pace em calibração — aparece com {DELIVERY_MIN_SAMPLE} sprints fechadas e FP
+                Pace em calibração — aparece com {DELIVERY_MIN_SAMPLE} sprints fechadas e PFV
                 done registrado.
               </span>
             )}

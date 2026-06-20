@@ -3,7 +3,7 @@
  *
  * Cruza, por projeto:
  *   • STATS — prazo (régua de semanas do contrato), entrega (sprints fechadas
- *     + escopo FP), ritmo (média FP/sprint + aproveitamento) e projeção de
+ *     + escopo PFV), ritmo (média PFV/sprint + aproveitamento) e projeção de
  *     término. Dicionário de métricas: docs/features/overview/stats-dictionary.md
  *   • capacidade da sprint corrente (sprint_capacity_overview)
  *   • sinais operacionais (vencidas / paradas +3d / sem dono)
@@ -80,7 +80,7 @@ export type ProjectStats = {
   holes: number;
   fpDone: number;
   fpTotal: number;
-  /** FP done ÷ FP total do backlog vivo; null sem FP estimado. */
+  /** PFV done ÷ PFV total do backlog vivo; null sem PFV estimado. */
   scopePct: number | null;
   // RITMO
   /** Σ done ÷ n, últimas 6 sprints fechadas com planned > 0. */
@@ -104,7 +104,7 @@ export type ProjectStats = {
   milestoneIndex: number | null;
 };
 
-/** Sprints fechadas na amostra de ritmo (média FP/sprint + aproveitamento). */
+/** Sprints fechadas na amostra de ritmo (média PFV/sprint + aproveitamento). */
 const RHYTHM_WINDOW = 6;
 /** Sprints exibidas na régua rolante de projetos sem prazo. */
 const ROLLING_WINDOW = 8;
@@ -650,7 +650,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
     supabase
       .from("sprint_delivery_overview")
       .select("sprintId, planned, done, tasks_sem_fp"),
-    // Escopo FP — backlog vivo (sem draft, sem dismissed).
+    // Escopo PFV — backlog vivo (sem draft, sem dismissed).
     supabase
       .from("Task")
       .select("projectId, functionPoints, status")
@@ -703,7 +703,7 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
       .filter((t) => (t.assignments?.length ?? 0) === 0),
   );
 
-  // Escopo FP por projeto
+  // Escopo PFV por projeto
   const fpByProject = new Map<string, { done: number; total: number }>();
   for (const t of (fpRes.data ?? []) as {
     projectId: string | null;

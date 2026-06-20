@@ -657,7 +657,7 @@ function OverviewTab({
                 {sprintFP(active.id, tasks).done}
                 <span className="text-muted-foreground">
                   {" / "}
-                  {sprintFP(active.id, tasks).total} FP
+                  {sprintFP(active.id, tasks).total} PFV
                 </span>
               </span>
               <span className="font-mono tabular-nums text-muted-foreground">

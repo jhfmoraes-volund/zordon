@@ -8866,6 +8866,10 @@ export type Database = {
       kick_project_insight_drain: { Args: never; Returns: undefined }
       kick_wiki_daily: { Args: never; Returns: undefined }
       next_task_reference: { Args: { p_project_id: string }; Returns: string }
+      next_task_references: {
+        Args: { p_count: number; p_project_id: string }
+        Returns: string[]
+      }
       next_user_story_reference: {
         Args: { p_project_id: string }
         Returns: string
