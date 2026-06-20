@@ -106,6 +106,18 @@ export async function applyPendingActionsForPlanning(
 
   const result = await applyActions(supabase, refreshed, planning.sprintId);
 
+  // Falhas NÃO ficam órfãs (achado #3): as que falharam voltam pra pending+limpo
+  // → reaparecem no staging, retentáveis. O concludePlanning NÃO fecha a phase
+  // quando houve falha (companion fica viva). As que aplicaram ficam
+  // execution='applied' (somem do staging; o anti-dup protege no re-apply).
+  if (result.failed > 0) {
+    await supabase
+      .from("MeetingTaskAction")
+      .update({ decision: "pending", execution: "pending", errorMessage: null, updatedAt: nowIso })
+      .eq("planningCeremonyId", planningCeremonyId)
+      .eq("execution", "failed");
+  }
+
   // Consome as DESCARTADAS (decision=rejected, execution=pending). Sem isto elas
   // ficam execution=pending e o loadAll (filtra pending) as re-exibe riscadas em
   // todo ciclo futuro — dívida de staging que só cresce (achado #5). Marca como

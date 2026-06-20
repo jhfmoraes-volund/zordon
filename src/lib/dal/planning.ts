@@ -327,8 +327,10 @@ export async function updatePlanningPhase(
  *      validar e obter stamps.
  *   3. UPDATE phase='closed' + closedAt (trigger SQL revalida como fail-safe).
  *
- * Não há transação real (Supabase JS não expõe). Se passo 1 falha parcial,
- * actions ficam com `execution='failed'` e a phase NÃO é avançada.
+ * Não há transação real (Supabase JS não expõe). Apply PARCIAL (alguma action
+ * falha): a phase NÃO fecha, a companion fica viva, e as falhas voltam pra
+ * `pending` (retentáveis no staging) — não orfana trabalho (achado #3). Fecha
+ * só no apply LIMPO (failed=0).
  */
 export async function concludePlanning(
   id: string,
@@ -351,7 +353,24 @@ export async function concludePlanning(
   // 2. Aplica pending actions (auto-approve + execute em ordem).
   const applied = await applyPendingActionsForPlanning(supabase, id, decidedById);
 
-  // 3. State machine + UPDATE phase.
+  // Apply PARCIAL (achado #3): houve falha → NÃO fecha a phase. As falhas já
+  // voltaram pra pending no executor (retentáveis no staging) e a companion fica
+  // viva — fechar reciclaria a companion e orfanaria as falhas (re-conclude só
+  // pega pending). Fecha só no apply LIMPO.
+  if (applied.failed > 0) {
+    const { data: open, error: openErr } = await supabase
+      .from("PlanningCeremony")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (openErr) throw openErr;
+    return {
+      planning: open,
+      applied: { applied: applied.applied, failed: applied.failed, skipped: applied.skipped },
+    };
+  }
+
+  // 3. State machine + UPDATE phase (apply limpo).
   const ctx = await getPlanningPhaseContext(id);
   const result = transition(current, "closed", ctx, "pm");
   if (!result.ok) {

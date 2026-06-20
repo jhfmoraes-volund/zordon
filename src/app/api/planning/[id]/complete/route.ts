@@ -55,19 +55,26 @@ export async function POST(
     // a request. No-op se a ceremony for uma Sprint Planning (não Release Planning).
     //
     // INVARIANTE: o snapshot INFORMA versões futuras, nunca vira estado a restaurar.
-    try {
-      await recordPlanningEventFromCeremony({
-        planningCeremonyId: id,
-        createdById: me.id,
-        appliedCount: result.applied.applied,
-        failedCount: result.applied.failed,
-        skippedCount: result.applied.skipped,
-      });
-    } catch (logErr) {
-      console.error(
-        `[planning/complete] PlanningEvent log falhou (ceremony=${id}); apply OK, seguindo:`,
-        logErr,
-      );
+    //
+    // Só versiona se ALGO foi aplicado (achado #3): apply que aplicou 0 (tudo
+    // falhou/pulado) é no-op — não vira chip de versão no cronograma (ruído). Apply
+    // parcial (applied>0, failed>0) versiona o que entrou; as falhas seguem
+    // retentáveis no staging (a companion ficou viva).
+    if (result.applied.applied > 0) {
+      try {
+        await recordPlanningEventFromCeremony({
+          planningCeremonyId: id,
+          createdById: me.id,
+          appliedCount: result.applied.applied,
+          failedCount: result.applied.failed,
+          skippedCount: result.applied.skipped,
+        });
+      } catch (logErr) {
+        console.error(
+          `[planning/complete] PlanningEvent log falhou (ceremony=${id}); apply OK, seguindo:`,
+          logErr,
+        );
+      }
     }
 
     return NextResponse.json(result);

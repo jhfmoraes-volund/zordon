@@ -331,10 +331,11 @@ export default function PlanningSessionPage({
   const handleApplied = useCallback(
     async (result: { applied: number; failed: number; skipped: number }) => {
       exitHistory();
-      // Só vira pro chat novo (próxima versão) se ALGO foi aplicado. Apply que não
-      // aplicou nada (tudo falhou/pulado) PRESERVA o papo — é exatamente aí que o
-      // PM precisa do contexto pra pedir "Vitoria, conserta isso" (achado #2).
-      if (sessionId && result.applied > 0) {
+      // Vira pro chat novo (próxima versão) só num apply LIMPO (aplicou algo E sem
+      // falhas). Apply parcial/falho PRESERVA o papo — a companion fica viva com as
+      // falhas retentáveis no staging, e é aí que o PM precisa do contexto pra pedir
+      // "Vitoria, conserta isso" (achados #2 + #3).
+      if (sessionId && result.applied > 0 && result.failed === 0) {
         try {
           const res = await fetchOrThrow(
             `/api/planning-sessions/${sessionId}/chat/new`,

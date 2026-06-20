@@ -253,5 +253,16 @@ Resposta a uma auditoria do fluxo de Aplicar (8 achados). **6 corrigidos:**
 - **#8 timeout coerente:** `maxDuration` do `/complete` 60→120 (≥ timeout do cliente 90s) — antes o server cortava aos 60s e o cliente esperava por algo morto.
 
 **2 FLAGGED (estruturais, precisam de decisão):**
-- **#3 apply parcial órfã as falhas:** `concludePlanning` não tem transação; se algumas escritas falham, a phase fecha mesmo assim, as actions viram `execution=failed`, e o re-conclude idempotente só pega `pending` → as `failed` ficam presas sem retry (pior: a companion é reciclada, então a próxima nem as vê). Fix candidato: caminho de "retentar falhas" (reset `failed→pending` na companion + re-run) OU não fechar a phase com falhas pendentes. Liga com o **apply atômico via RPC**.
-- **#4 `agentBusy` ancora no stream, não no turn server-side:** o gate do Aplicar usa `useChat.status` (streaming/submitted). Se o SSE cair mas o daemon seguir escrevendo `propose_*` em lote, o cliente vê `ready` → habilita Aplicar sobre um batch meio-escrito. Fix: derivar "lote completo" do status do `ChatTurn` no servidor (`getActiveChatTurnForThread`), não do cliente.
+- ~~**#3 apply parcial órfã as falhas**~~ → **RESOLVIDO (Rev. 7).**
+- **#4 `agentBusy` ancora no stream, não no turn server-side:** o gate do Aplicar usa `useChat.status` (streaming/submitted). Se o SSE cair mas o daemon seguir escrevendo `propose_*` em lote, o cliente vê `ready` → habilita Aplicar sobre um batch meio-escrito. Fix: derivar "lote completo" do status do `ChatTurn` no servidor (`getActiveChatTurnForThread`), não do cliente. **(único achado ainda aberto)**
+
+## 18. Rev. 7 — #3 resolvido: apply parcial não orfana mais (2026-06-20)
+
+Em vez do RPC atômico (que jogaria fora o sucesso parcial), adotou-se a forma alinhada ao invariante "tolerar drift, versionar, re-convergir" (decisão de design com o João): **sucesso parcial é desejável** (ops independentes — 59/60 > 0/60).
+
+- **Executor (`applyPendingActionsForPlanning`):** após o apply, se `failed>0` as actions `execution='failed'` voltam pra `decision='pending' + execution='pending' + errorMessage=null` → reaparecem no staging, **retentáveis**. As que aplicaram ficam `applied` (somem do staging; anti-dup protege no re-apply).
+- **`concludePlanning`:** se `failed>0`, **NÃO fecha a phase** (retorna a companion viva) — fechar reciclaria a companion e orfanaria as falhas. Fecha só no apply LIMPO.
+- **Route `/complete`:** só grava `PlanningEvent` se `applied>0` — apply que aplicou 0 (tudo falhou) é no-op, não vira chip de versão (ruído). Parcial (applied>0) versiona o que entrou.
+- **`handleApplied`:** chat só vira pra nova versão num apply LIMPO (`applied>0 && failed===0`); parcial/falho PRESERVA o papo (contexto pra consertar).
+
+**Verificado e2e** (executor real, create válido + create com assignee inválido): `applied=1, failed=1`; a válida → `applied`; a falha → resetada pra `pending/pending` (retentável). Resta o **#4** (gate por turn server-side).

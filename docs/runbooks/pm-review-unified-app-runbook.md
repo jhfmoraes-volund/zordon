@@ -1,7 +1,8 @@
 # PM Review como app única (cronograma navegável) — runbook
 
-> **Status:** Rev. 3 — design + raio de explosão + legado + autoria retrospectiva (2026-06-20). Nada implementado ainda.
-> **Decisões fechadas com o João:** régua = **grade de semanas ancorada nos sprints** · nó = semana (1 snapshot por PM Review) · **editabilidade por status (rascunho edita / publicada congela), em qualquer semana** · autoria back-dated em célula vazia ≤ hoje · zero schema novo (1 param de backend) · reuso do chassi do Planning (menos o toggle live/histórico) · órfãs navegáveis · archived fora da timeline.
+> **Status:** Rev. 4 — pós-crítica adversarial (premissas verificadas no código). 2026-06-20. Nada implementado ainda.
+> **Decisões fechadas com o João:** régua = **grade de semanas ancorada nos sprints** (construída do zero — ver §4 D1) · nó = semana (1 snapshot por PM Review) · **toda review é editável (published NÃO congela pro humano — comportamento atual); sem modo read-only** · autoria back-dated agora, fidelidade "aproximada" + **disclosure honesto** no report (point-in-time depois) · zero schema novo · órfãs navegáveis · archived fora da timeline.
+> **Mudança vs Rev. 3 (o que a crítica derrubou):** "published congela" era **regressão** (hoje é editável de propósito) → removido. "back-dated não toca o agente" só vale na fidelidade aproximada → escolhida, com disclosure. "reuso de `weeks[]`/`CronogramaBlock`" era otimista → grade construída do zero, com teste de regressão no Planning. Detalhes em §12.
 > **Mockup fiel (atual × proposta):** artifact `pm-review-app` (Ao vivo · Histórico · mapeamento).
 > **Companheiro:** [planning-versioned-living-runbook.md](planning-versioned-living-runbook.md) — o template que estamos espelhando.
 
@@ -15,7 +16,7 @@ Hoje o PM Review é uma **coleção de páginas soltas**:
 - A "memória viva da operação" — a sequência de riscos, decisões e milestones semana após semana — **é invisível na superfície**. Existe no banco (`PMReview` por `referenceWeek`), mas o usuário nunca vê a linha do tempo.
 - O Planning acabou de ganhar exatamente isso (cronograma + canvas histórico navegável, ZRD-JM-176). O PM Review ficou para trás: dois rituais da Vitoria, duas UXs diferentes — viola a parity de agente ([[feedback_agent_ui_parity]]).
 
-**O que queremos:** uma app única por projeto, abre na semana corrente, com a régua de sprint no topo e navegação por semana. Editabilidade segue o status (rascunho edita / publicada congela), em qualquer semana — inclusive autorar reviews retrospectivas. Os logs viram a memória viva.
+**O que queremos:** uma app única por projeto, abre na semana corrente, com a régua de sprint no topo e navegação por semana. **Toda review é editável** quando aberta (published não congela — comportamento atual), e dá pra autorar reviews retrospectivas de semanas passadas. Os logs viram a memória viva.
 
 ---
 
@@ -31,9 +32,9 @@ O Planning precisou inventar `PlanningEvent` + `PlanningEventSprint` + `Planning
 | Nó da timeline | `PlanningEvent` (criado a cada apply) | **a própria `PMReview`** (1 por `referenceWeek`) — **já existe** |
 | Snapshot congelado | precisa copiar (board vaza) | report+notes da semana **são** a fonte da verdade — não vazam |
 | Thread de chat | regenera por versão (`startNewReleasePlanningThread`, [context.ts:294](../../src/lib/agent/context.ts#L294)) | **já é 1 thread por semana** (`ensurePMReviewThread`, agentName=pmReviewId, [context.ts:228](../../src/lib/agent/context.ts#L228)) |
-| Binning por semana | construído do zero no page.tsx | **já existe** em [project-overview.ts:153](../../src/lib/dal/project-overview.ts#L153) (`weeks[]` com `isCurrentWeek`) |
+| Binning por semana | construído do zero no page.tsx | **construído do zero também** — o `weeks[]` de [project-overview.ts:153](../../src/lib/dal/project-overview.ts#L153) é janela fixa de 4, só published, sem âncora de sprint (só referência de mapeamento) |
 
-**Conclusão:** o trabalho é quase todo **frontend + reuso de chassi**. Zero migração de schema. A thread por-semana e o get-or-create da semana corrente já estão prontos no backend. **Única exceção de backend:** parametrizar a janela de síntese por `referenceWeek` pra autoria back-dated (D14) — não é schema, é um argumento.
+**Conclusão:** o trabalho é quase todo **frontend + reuso de chassi**. Zero migração de schema, e a **Fase 1 não toca o agente** (a fidelidade aproximada da D14). O backend muda **pouco**: param de `referenceWeek` + filtro `capturedAt` no `refresh` (D14) e 2 guards de API (D3 imutável, D13 futuro). A Rev. 3 dizia "1 param só" — era otimista (crítica). A thread por-semana e o get-or-create da semana corrente já estão prontos.
 
 **Onde NÃO é mais limpo (o que exige cuidado):** o PM Review tem **mais conexões downstream** que o Planning (Wiki, overview executivo, cron, playbook, daemon, feeds Granola/Drive). É aí que mora o risco — não na feature em si, mas em **não atropelar quem lê PMReview**. Ver §5.
 
@@ -42,26 +43,24 @@ O Planning precisou inventar `PlanningEvent` + `PlanningEventSprint` + `Planning
 ## §3 — Modelo mental
 
 ```
-                 RÉGUA DE SPRINT (mesma do Planning)
+                 GRADE SEMANAL ancorada na régua de sprint
   ┌────┬────┬────┬────┬────┬──────┬────┬────┐
-  │ s1 │ s2 │ s3 │ s4 │ s5 │ [s6] │ s7 │ s8 │   ← cada bloco = 1 sprint-semana
+  │ w1 │ w2 │ w3 │ w4 │ w5 │ [w6] │ w7 │ w8 │   ← cada célula = 1 semana (= sprint, onde existe)
   └────┴────┴────┴────┴────┴──────┴────┴────┘
-   pub  pub  ∅    pub  pub  CORRENTE fut  fut
-                            (ao vivo)
-        └──── histórico (read-only) ────┘   └─ futuro (sem review) ─┘
+   pub  pub  ∅    pub  rasc CORRENTE  ·    ·
+        └──── todas EDITÁVEIS quando abertas ───┘   └─ futuro (inerte) ─┘
+   ∅ = semana sem review (clica → "Fazer PM Review")   · = futuro, sem autoria
 
   Nó = a PMReview daquela semana. Memória viva = ler a cadeia de nós.
 ```
 
-- **Editabilidade segue o STATUS, não a data.** PM Review é **retrospectivo** — revisar o passado *é* o trabalho (≠ Planning, onde não se "planeja o passado"). Logo, **não há binário live/histórico**:
-  - `draft` → **editável em qualquer semana** (Vitoria trabalha, chat habilitado), inclusive catch-up de semana passada.
-  - `published` → congelada, read-only (reabrir = extensão natural).
-- **O cronograma é a espinha** (sem toggle live/histórico). Cada célula = uma semana com estado: rascunho · publicada · vazia · futura. "Semana atual" = botão de pular-pra-hoje.
-- **Autoria back-dated**: célula vazia no passado/presente → "Fazer PM Review desta semana" cria rascunho daquele `referenceWeek`. Células futuras são inertes.
-- **Régua** = grade de semanas ancorada nos sprints (1:1 com `referenceWeek`, já que sprint = seg→dom, [[project_sprint_week_model]]).
+- **Toda review é editável quando aberta — NÃO há modo read-only.** PM Review é **retrospectivo** — revisar o passado *é* o trabalho (≠ Planning). E published, no código atual, **continua editável de propósito** ("marcador de disponível pra consulta, não fechado"). Então não há binário live/histórico nem read-only por data/status: abriu a célula, edita (chat da Vitoria disponível). O único "freeze" é o **cron não sobrescrever** uma review published (já existe).
+- **O cronograma é a espinha** (sem toggle live/histórico). Cada célula = uma semana com estado-rótulo: rascunho · publicada · vazia · futura. "Semana atual" = botão de pular-pra-hoje.
+- **Autoria back-dated**: célula vazia ≤ hoje → "Fazer PM Review desta semana" cria rascunho daquele `referenceWeek`. A síntese usa os **insumos daquela semana**, mas o contexto de projeto (sprint/tasks) é o de hoje → o report **declara essa limitação** de forma minimalista e honesta (D14/D15). Células futuras são inertes.
+- **Régua** = grade de semanas ancorada nos sprints (1:1 com `referenceWeek`, já que sprint = seg→dom, [[project_sprint_week_model]]). **Construída do zero** — o `weeks[]` do overview e o `CronogramaBlock` do Planning não servem direto (§4 D1, §7).
 - **Memória viva da operação** = a leitura cross-semana (tendência de risco, decisões acumuladas, milestones) — **não** um estado acumulado como o board do Planning.
 
-Invariante central: **o status manda na editabilidade (rascunho edita / publicada congela), em qualquer semana; a grade-semanal ancorada em sprint alinha os dois rituais.**
+Invariante central: **toda review é editável; a navegação é por célula de semana; a grade-semanal ancorada em sprint alinha os dois rituais; review retroativa declara sua limitação de contexto.**
 
 ---
 
@@ -69,20 +68,22 @@ Invariante central: **o status manda na editabilidade (rascunho edita / publicad
 
 | Dn | Decisão | Por quê |
 |----|---------|---------|
-| **D1** | Régua = **grade de semanas ancorada na grade de sprint** (não blocos de sprint puros). Cada review = 1 célula de semana; semana com sprint é rotulada pelo sprint, semana sem sprint pela data. | Sprint = semana (1:1), então a grade semanal **sobrepõe** a de sprints onde elas existem → mantém o alinhamento com o Planning pro overlay (Fase 3), mas **preserva navegação 1:1 das reviews em semanas sem sprint** (ver §5.6). Blocos-de-sprint puros colapsariam as órfãs num bucket único. |
+| **D1** | Régua = **grade de semanas ancorada na grade de sprint** (não blocos de sprint puros), **construída do zero**. Cada review = 1 célula de semana; semana com sprint é rotulada pelo sprint, semana sem sprint pela data. | Sprint = semana (1:1), a grade sobrepõe a de sprints onde existem → alinhamento com o Planning (Fase 3), mas preserva navegação 1:1 das órfãs (§5.6). **Crítica corrigiu:** o `CronogramaBlock` do Planning é keyed por `sprintId` e colapsa órfãs num bucket único; o `weeks[]` do overview é janela fixa de 4, só published. Nenhum serve direto — a grade é nova (e regeneralizar o `CronogramaBlock` mexe no Planning em prod → teste de regressão, §7). |
 | **D2** | Nó da timeline = a própria `PMReview` (1 por `referenceWeek`). **Zero tabela nova.** | O artefato semanal já é discreto e congelável. Não há substrato mutável que vaze — não precisa snapshot copiado tipo `PlanningEventTask`. |
 | **D3** | `referenceWeek` é **imutável depois de criada**. | É a chave do nó. Hoje o PATCH permite trocar ([pm-review/[id]/route.ts](../../src/app/api/pm-review/[id]/route.ts)) — adicionar guard. Trocar a semana = outro nó, não editar o mesmo. |
-| **D4** | Review **published congela** (read-only, exceto append de note). | Já é respeitado pelo refresh ([refresh.ts:127](../../src/lib/pm-review/refresh.ts#L127) → `frozen`). UI histórica reforça via `composerSubmitDisabled`. |
-| **D5** | Read-only é determinado por **`status==published`, NÃO por "semana passada"**. Um `draft` de semana passada **é editável** (Vitoria trabalha). Read-only é client-side (composer desabilitado + canvas read). **Sem mudança no agente.** | PM Review é retrospectivo — drafts passados (ex: ALESP 08/06, Zordon 01/06) precisam ser termináveis. A thread já existe por semana; congelar = só não deixar mandar mensagem quando published. Espelha `chatReadOnly` ([planning/page.tsx:493](../../src/app/(dashboard)/projects/[id]/planning/page.tsx#L493)) mas com gatilho de status, não de data. |
-| **D6** | Chassi (cronograma, toggle, history-sheet) vira **compartilhado por prop** entre os 2 rituais. | Parity de agente ([[feedback_agent_ui_parity]]). Diferença vem por prop, nunca por cópia. |
+| **D4** | Review published **NÃO congela pro humano** — segue editável (comportamento atual). O único freeze é o **cron não sobrescrever** published ([refresh.ts:127](../../src/lib/pm-review/refresh.ts#L127) → `frozen`). Sem guard de status nas rotas. | **Crítica corrigiu Rev. 3:** o código deixa published editável de propósito (comentário em `publish/route.ts`: "disponível pra consulta, não fechado"). Congelar seria **regressão** + guards de backend. Decidido manter editável. `status='archived'` continua fora da timeline (D11), aí sim é "aposentada". |
+| **D5** | **Não há modo read-only** (nem por data, nem por status). Toda review é editável quando aberta; o chat da Vitoria fica disponível em qualquer semana. | Decorre da D4. Simplifica: sem `composerSubmitDisabled`, sem canvas read-only, sem live↔histórico. A célula só carrega um **rótulo** de status (rascunho/publicada). A thread já existe por review ([context.ts:228](../../src/lib/agent/context.ts#L228)). |
+| **D6** | Chassi (cronograma, history-sheet) vira **compartilhado por prop** entre os 2 rituais — mas com **teste de regressão no Planning** (está em prod). | Parity de agente ([[feedback_agent_ui_parity]]). **Crítica avisou:** o `CronogramaBlock` é keyed por `sprintId` e deriva `kind` de hoje-vs-janela-de-sprint; regeneralizar pra `weekStart` + N células órfãs **toca o Planning**. Sem o toggle live/histórico (D5 o tornou desnecessário). |
 | **D7** | Digest executivo (`audience='executive'`) e notes de detalhe (`audience='detail'`) **continuam separados**. | Consumido separadamente pelo overview ([project-overview.ts:798](../../src/lib/dal/project-overview.ts#L798)) e Wiki. Não fundir. |
 | **D8** | Playbook, cron, owner-resolution e feeds permanecem **por projeto** (não por semana/review). | A automação semanal é batched por projeto no cron. Mover pra nível de review/semana quebra o batching. |
 | **D9** | Rota canônica vira `/projects/[id]/pm-review` (espelha `/projects/[id]/planning`). Antiga `/pm-reviews/[id]` → redirect. | Single-app por projeto; back-href já aponta pro mesmo lugar (`?tab=apps&app=ceremonies`). |
 | **D10** | Review em **semana sem sprint** (órfã) = célula de semana navegável, tom "fora de sprint" (não colapsa em bucket). | Padrão estrutural (projeto sem sprints, gap entre contratos, semana pré-kickoff). Hoje 4/13 (§5.6). |
 | **D11** | Reviews `status='archived'` ficam **fora da timeline**. | Archived = aposentada; não polui a régua. Hoje 2/13 (Validação 25/05, Volundly 25/05). |
 | **D12** | Drafts passados com `reportMarkdown` vazio = célula **esmaecida** "rascunho sem síntese"; **sem backfill**. Sem digest executivo → fallback nas notes de detalhe. | Zero schema; renderiza o que existe. Fallback já é o comportamento do overview ([project-overview.ts:175](../../src/lib/dal/project-overview.ts#L175)). Hoje 2 reports vazios (Zordon, Vivix). |
-| **D13** | Célula **vazia no passado/presente** → "Fazer PM Review desta semana" cria `draft` daquele `referenceWeek`. Células **futuras** são inertes (sem autoria). | PM Review é retrospectivo: autorar review de semana ≤ hoje é legítimo (catch-up); de semana futura não faz sentido. O `createPMReview` já aceita `referenceWeek` arbitrário; só falta o ponto de entrada na UI. |
-| **D14** | A **síntese de review back-dated ancora a janela de fontes no `referenceWeek` da review**, não em `now`. | [refresh.ts:101](../../src/lib/pm-review/refresh.ts#L101) hoje crava `brtMonday(now)`. Pra autorar a semana passada com os insumos *daquela* semana, `refreshPMReviewForProject` precisa aceitar uma semana explícita. **Única mudança de backend do projeto** (parametrização pequena). |
+| **D13** | Célula **vazia ≤ hoje** → "Fazer PM Review desta semana" cria `draft` daquele `referenceWeek`. Células **futuras** são inertes, **e o backend rejeita `referenceWeek > brtMonday(now)`**. | PM Review é retrospectivo: autorar ≤ hoje é legítimo (catch-up); futuro não faz sentido. O `createPMReview` já aceita `referenceWeek` arbitrário (e normaliza p/ segunda); **crítica achou que o POST aceita futuro** → adicionar guard de servidor, não só esconder na UI. |
+| **D14** | Back-dated usa fidelidade **"aproximada"**: a janela de **fontes** ancora no `referenceWeek` da review, mas o **contexto de projeto (sprint/tasks/decisões) é o de hoje**. Aceito porque (a) é barato e (b) a limitação é **declarada** no report (D15). | **Crítica corrigiu 2 coisas:** (1) `vitoria/pm-review.ts` ancora sprint/tasks em `todayISO` → fidelidade total exigiria threadar `referenceWeek` no context loader = **tocar o agente nos 2 repos** (adiado p/ Fase 2). (2) a janela de fontes filtra por `createdAt` ([refresh.ts:135](../../src/lib/pm-review/refresh.ts#L135)) → transcript de reunião antiga subido hoje cairia fora; **filtrar por `capturedAt`** na via back-dated. Backend muda: param de semana no `refresh` + filtro `capturedAt`. |
+| **D15** | Review back-dated **declara sua limitação** no report, de forma minimalista e honesta (ex: nota/seletor "review retroativa — contexto de projeto é o atual, não o da semana de referência; insumos são da semana correta"). | Princípio anti-alucinação ([[feedback_grounded_no_hallucination]]): separar fato (insumos da semana) de limitação (contexto = hoje). Torna a fidelidade aproximada (D14) **honesta e já entregável**, sem esperar o point-in-time. |
+| **D16** | A âncora de semana da grade é **`brtMonday`** (a mesma do cron/refresh), não `mondayOf` (UTC) nem `startOfWeek` (TZ do server). | **Crítica achou 3 funções divergentes** de "segunda da semana" no código (`refresh.ts:62`, `pm-review.ts:157`, `project-overview.ts:189`). A régua TEM que casar com o cron que cria as reviews, senão a célula da semana corrente desalinha em borda de domingo→segunda BRT. |
 
 ---
 
@@ -94,9 +95,9 @@ Invariante central: **o status manda na editabilidade (rascunho edita / publicad
 
 | Conexão | Arquivo:linha | Quebra se |
 |---|---|---|
-| Redirect pós-create | [rituais-file-view.tsx:209](../../src/components/apps/rituais-file-view.tsx#L209) `router.push(/pm-reviews/${created.id})` | rota muda e este não aponta pra nova → cria review e cai em 404 |
+| Redirect pós-create | [rituais-file-view.tsx:221](../../src/components/apps/rituais-file-view.tsx#L221) `router.push(/pm-reviews/${created.id})` | rota muda e este não aponta pra nova → cria review e cai em 404 |
 | Link "Abrir →" no widget de projetos | [projetos-board.tsx:1409](../../src/components/overview/projetos-board.tsx#L1409) `href={/pm-reviews/${...}}` | idem 404 |
-| href na API de Rituais | [rituals/route.ts:139](../../src/app/api/projects/[id]/rituals/route.ts#L139) `href: /pm-reviews/${r.id}` | a lista de Rituais e o `onOpen` ([rituais-file-view.tsx:269](../../src/components/apps/rituais-file-view.tsx#L269)) leem daqui → corrigir aqui cobre os dois |
+| href na API de Rituais | [rituals/route.ts:167](../../src/app/api/projects/[id]/rituals/route.ts#L167) `href: /pm-reviews/${r.id}` | a lista de Rituais e o `onOpen` ([rituais-file-view.tsx:310](../../src/components/apps/rituais-file-view.tsx#L310)) leem daqui → corrigir aqui cobre os dois (a create-push :221 é fix separado) |
 | Rota antiga | `src/app/(dashboard)/pm-reviews/[id]/page.tsx` | deletar sem redirect → links externos/bookmarks 404. **Manter como redirect.** |
 | Importadores de `components/pm-review/*` | só a página + `rituais-file-view` (usa `PMReviewSheet`) | baixo — componentes migram junto |
 
@@ -137,7 +138,7 @@ Estes leem PMReview **por query, não por URL** — então a mudança de rota/sh
 
 ### 5.5 — Schema & RLS (🟢 — intacto)
 
-`UNIQUE(projectId, referenceWeek)` + CHECK `referenceWeek` = segunda ([20260529d_pm_review.sql](../../supabase/migrations/20260529d_pm_review.sql)) são **load-bearing e permanecem**. RLS encadeia por `PMReview.projectId` (select via `can_view_project`, edit via `can_create_pm_review`). EntityLink XOR (meeting|contextSource|...) permanece. **Nada muda aqui** (exceto, opcionalmente, o guard D3 de imutabilidade de `referenceWeek`, que é validação de API, não DDL).
+`UNIQUE(projectId, referenceWeek)` + CHECK `referenceWeek` = segunda ([20260529d_pm_review.sql](../../supabase/migrations/20260529d_pm_review.sql)) são **load-bearing e permanecem**. RLS encadeia por `PMReview.projectId` (select via `can_view_project`, edit via `can_create_pm_review`). EntityLink XOR (meeting|contextSource|...) permanece. **Nada de DDL muda aqui.** Duas validações de **API** (não schema) entram: guard D3 (`referenceWeek` imutável pós-create) e guard D13 (rejeitar `referenceWeek` futuro). A corrida no `UNIQUE` em autoria back-dated já é tratada (refresh é conflict-safe, [refresh.ts:144-161](../../src/lib/pm-review/refresh.ts#L144)).
 
 ### 5.6 — Reviews legadas: casam bem na UX nova? (dados reais 2026-06-20)
 
@@ -145,16 +146,18 @@ Snapshot do banco: **13 reviews, 10 projetos, 4 semanas (25/05→15/06)** — ca
 
 **As 4 órfãs (semana sem sprint) — padrão estrutural, não exceção:**
 
-| Review | Modo de falha | Tratamento (D10) |
+| Review | Modo de falha | Tratamento |
 |---|---|---|
-| ALESP 08/06 (draft) | projeto com **0 sprints** | célula de semana avulsa, navegável |
-| Validação 25/05 (archived) | **antes** do 1º sprint (15/06) | **fora da timeline** (D11) |
+| ALESP 08/06 (draft) | projeto com **0 sprints** | célula de semana avulsa, navegável (D10) |
 | Vivix 08/06 (draft, vazio) | **antes** do 1º sprint (22/06) | célula esmaecida "rascunho" (D10+D12) |
 | Zordon 01/06 (draft, vazio) | **gap depois** do último sprint (24/05) | célula esmaecida "rascunho" (D10+D12) |
+| Validação 25/05 (archived) | **antes** do 1º sprint (15/06) **e** archived | **fora da timeline** (D11) — não renderiza |
+
+> **Correção da crítica:** a 4ª órfã verdadeira é a **Validação 25/05** (archived, sem sprint). A **Volundly 25/05** *tem* sprint cobrindo — não é órfã; é archived alinhada, e sai pela D11 mesmo assim.
 
 **Estados legados a renderizar com graça (sem migração):**
 - **2 reports vazios** (Zordon, Vivix): drafts nunca sintetizados → "rascunho sem síntese" esmaecido (D12).
-- **2 archived** (Validação, Volundly, ambas 25/05): fora da régua (D11) → na prática some 1 das órfãs e 1 das alinhadas.
+- **2 archived** (Validação 25/05 órfã, Volundly 25/05 com-sprint): ambas fora da régua (D11).
 - **sem digest executivo** em reviews antigas: fallback nas notes de detalhe, comportamento que o overview já tem.
 
 **Veredito:** com a régua de grade-semanal (D1) + D10/D11/D12, **casam bem**. A grade absorve órfãs como células avulsas; archived saem; drafts vazios viram células esmaecidas honestas. **Zero backfill.** O único risco real era o bucket "Sem sprint" colapsando o histórico — eliminado pela D1.
@@ -176,17 +179,18 @@ Contraste deliberado com o Planning, que precisou de 3 tabelas novas. Aqui o mot
 
 ### Construir (novo)
 1. **Shell `/projects/[id]/pm-review/page.tsx`** — espelha [planning/page.tsx](../../src/app/(dashboard)/projects/[id]/planning/page.tsx). Carrega lista de reviews do projeto (`GET /api/projects/[id]/pm-reviews`), resolve a semana corrente como "ao vivo" (get-or-create via refresh já existente), monta `CronogramaBlock[]` na régua de sprint.
-2. **Grade-semanal ancorada nos sprints** (D1) — montar células de semana cobrindo o span [primeira review/sprint → semana corrente]; cada review = 1 célula. Semana com sprint → rótulo do sprint; sem sprint → rótulo da data, tom "fora de sprint" (D10). **Excluir `status='archived'`** (D11). Drafts vazios → célula esmaecida (D12). **Reusar a lógica de `weeks[]` de [project-overview.ts:153](../../src/lib/dal/project-overview.ts#L153)** (já mapeia review→semana→isCurrentWeek) e a aritmética `brtMonday`/`referenceWeek`. `logCount` = nº de notes ativos da semana.
-3. **Guard D3** — PATCH bloqueia troca de `referenceWeek` pós-create.
-4. **3 hrefs** → `/projects/[id]/pm-review` (§5.1) + redirect da rota antiga.
+2. **Grade-semanal ancorada nos sprints, do zero** (D1, D16) — montar células de semana cobrindo o span [primeira review/sprint → semana corrente]; cada review = 1 célula. Semana com sprint → rótulo do sprint; sem sprint → rótulo da data, tom "fora de sprint" (D10). **Excluir `status='archived'`** (D11). Drafts vazios → célula esmaecida (D12). Âncora = `brtMonday` (D16). **Não dá pra reusar `weeks[]`** (janela fixa de 4, só published) — só serve de referência de mapeamento review→semana. `logCount` = nº de notes ativos.
+3. **Guard D3 + guard D13** — API bloqueia troca de `referenceWeek` pós-create **e** rejeita `referenceWeek` futuro.
+4. **3 hrefs** → `/projects/[id]/pm-review` (§5.1, linhas 221/1409/167) + redirect da rota antiga.
 5. **Entry point de autoria back-dated** (D13) — célula vazia ≤ hoje → "Fazer PM Review desta semana" → `POST /api/pm-review { referenceWeek }` (já existe) → abre o draft editável.
-6. **Parametrizar a janela de síntese** (D14) — `refreshPMReviewForProject` aceita `referenceWeek` explícito (default `brtMonday(now)`). **Única mudança de backend.**
+6. **Backend da síntese back-dated** (D14) — `refreshPMReviewForProject` aceita `referenceWeek` explícito (default `brtMonday(now)`) **e** filtra fontes por `capturedAt` (não `createdAt`) na via retroativa. Não é "1 param só" como dizia a Rev. 3.
+7. **Disclosure de review retroativa** (D15) — nota/banner minimalista no report quando o contexto é aproximado.
 
 ### Reusar (generalizar por prop)
-- [planning-cronograma.tsx](../../src/components/planning-session/planning-cronograma.tsx) — `CronogramaBlock` já é genérico; mover pra local neutro/ritual-aware.
+- [planning-cronograma.tsx](../../src/components/planning-session/planning-cronograma.tsx) — **regeneralizar** `CronogramaBlock` (`sprintId` → `weekStart` + N células órfãs; `kind` por estado, não por hoje-vs-sprint). **Toca o Planning em prod → exige teste de regressão da mini-régua** (D6).
 - [planning-history-sheet.tsx](../../src/components/planning-session/planning-history-sheet.tsx) — picker; eventos viram "reviews da semana".
-- **Canvas:** renderizar [pm-review-report.tsx](../../src/components/pm-review/pm-review-report.tsx) (já existe); read-only quando `status==published`, editável quando `draft`.
-- **NÃO reusar o binário** [live-history-toggle.tsx](../../src/components/planning-session/live-history-toggle.tsx) como modo. PM Review não tem live↔history; tem **editabilidade por status** (D5) + um botão "Semana atual" (pular-pra-hoje). O `composerSubmitDisabled` ([planning/page.tsx:510](../../src/app/(dashboard)/projects/[id]/planning/page.tsx#L510)) é reusado, mas com gatilho `status==published`, não "semana passada".
+- **Canvas:** renderizar [pm-review-report.tsx](../../src/components/pm-review/pm-review-report.tsx) (já existe), **sempre editável** (D4/D5) — sem modo read-only.
+- **NÃO reusar** [live-history-toggle.tsx](../../src/components/planning-session/live-history-toggle.tsx). PM Review não tem live↔history nem read-only (D5); a navegação é a grade + botão "Semana atual" (pular-pra-hoje). Sem `composerSubmitDisabled`.
 
 **Recomendação de ordem:** extrair os 3 componentes de chassi pra um lugar compartilhado **antes** de plugar no PM Review, pra Planning e PM Review dividirem um só código (senão viram 2 cópias divergentes).
 
@@ -196,11 +200,11 @@ Contraste deliberado com o Planning, que precisou de 3 tabelas novas. Aqui o mot
 
 | Fase | Entrega | Toca |
 |------|---------|------|
-| **1 — App única + cronograma** | Rota nova, abre na semana corrente; mini-régua de sprint (grade-semanal); navegação por célula; editabilidade por status (rascunho edita / publicada read-only); autoria back-dated em célula vazia; botão "Semana atual"; 3 hrefs + redirect; param de `referenceWeek` no refresh (D14). | frontend + chassi compartilhado + 1 param de backend. **Não** toca agente/daemon/cron/playbook/schema. |
-| **2 — Leitura de tendência (memória viva)** | Cross-semana: evolução de riscos (stance), decisões acumuladas, milestones na timeline. Indicador de "o que mudou desde a semana passada". | leitura nova sobre dados existentes; talvez 1 helper de DAL. |
+| **1 — App única + cronograma** | Rota nova, abre na semana corrente; grade-semanal (do zero); navegação por célula; **toda review editável** (sem read-only); autoria back-dated com fidelidade aproximada + disclosure (D14/D15); botão "Semana atual"; 3 hrefs + redirect; guards D3/D13. | frontend + chassi (com teste de regressão no Planning) + backend pequeno no refresh (param de semana + `capturedAt`). **Não** toca o agente/daemon/schema. |
+| **2 — Fidelidade point-in-time + tendência** | Back-dated fiel: threadar `referenceWeek` no context loader da Vitoria (sprint/tasks/decisões da semana-alvo) — **toca o agente nos 2 repos**. + leitura cross-semana (evolução de riscos, decisões, milestones; "o que mudou desde a semana passada"). | agente (2 repos) + leitura nova sobre dados existentes. |
 | **3 — Sobreposição com Planning** | Mesma régua de sprint → ver "plano" (Planning) e "pulso" (PM Review) na mesma posição. Possível ribbon unificado. | UI; nada de dados. |
 
-Fase 1 entrega ≥ o que existe hoje (a lista vira navegação interna + ganha timeline). Sem regressão.
+Fase 1 entrega ≥ o que existe hoje (a lista vira navegação interna + ganha timeline + autoria retroativa) **sem regressão** — porque published continua editável (D4), nada é tirado.
 
 ---
 
@@ -222,19 +226,46 @@ Fase 1 entrega ≥ o que existe hoje (a lista vira navegação interna + ganha t
 Para o próximo agente que implementar a Fase 1:
 
 1. **NÃO** crie tabela de snapshot. O nó é a `PMReview`. (≠ Planning)
-2. **NÃO** mude a chave da thread. `agentName=pmReviewId, channel='pm_review'` já é por-semana. Read-only é client-side.
-3. **NÃO** toque em surface/tools/daemon na Fase 1. É só rota + chassi. (Se um dia tocar tool → regra das 2 cópias + restart do daemon.)
-4. **NÃO** reimplemente a aritmética de semana. Reuse `brtMonday`/`referenceWeek`/`weeks[]`.
+2. **NÃO** crie modo read-only nem congele published — toda review é editável (D4/D5). A thread já é por-semana (`agentName=pmReviewId, channel='pm_review'`); não mude a chave.
+3. **NÃO** toque em surface/tools/daemon na **Fase 1** (a fidelidade aproximada da D14 não toca o agente). Point-in-time é Fase 2 → aí sim 2 repos + restart do daemon.
+4. **NÃO** reimplemente a aritmética de semana e **NÃO** use `weeks[]` (janela fixa de 4, só published). Use `brtMonday` (D16) — a mesma do cron.
 5. **NÃO** funda `audience='detail'` e `'executive'`. Overview e Wiki dependem do split.
 6. **NÃO** mova playbook/cron/owner pra nível de semana. É por projeto.
-7. **SEMPRE** atualize os 3 hrefs juntos + redirect da rota antiga, ou vira 404.
-8. **VERIFIQUE** depois: Wiki composer e overview executivo continuam lendo PMReview sem erro (smoke nos 2 widgets).
+7. **SEMPRE** atualize os 3 hrefs juntos (221/1409/167) + redirect da rota antiga, ou vira 404.
+8. **TESTE de regressão no Planning** ao regeneralizar o `CronogramaBlock` — ele está em prod (D6).
+9. **Back-dated:** filtre fontes por `capturedAt` (D14) e rejeite semana futura no POST (D13).
+10. **VERIFIQUE** depois: Wiki composer e overview executivo continuam lendo PMReview sem erro (smoke nos 2 widgets).
 
 ---
 
 ## §11 — Open questions
 
-- **OQ1 (Fase 1):** a rota antiga `/pm-reviews/[id]` vira redirect server-side pra `/projects/[id]/pm-review` (sem deep-link pra review específica) ou pra `/projects/[id]/pm-review?week=YYYY-MM-DD`? (preferência: com `?week` pra preservar bookmarks de reviews antigas).
-- **OQ2 (Fase 1):** projeto com **0 sprints** (ex: ALESP) — a grade-semanal degenera pra "só as semanas com review + a corrente". Confirmar que é aceitável (timeline fina) vs. exigir ≥1 sprint pra abrir a app.
-- **OQ3 (Fase 2):** "o que mudou desde a semana passada" é computado on-read (diff de notes) ou a Vitoria escreve um note `kind='summary'` de delta? (não-bloqueante p/ Fase 1).
-- **OQ4 (Fase 3):** ribbon unificado Planning+PM Review é uma 3ª app ("Operação") ou dois toggles na mesma régua? (decidir só ao chegar na Fase 3).
+- **OQ1 (Fase 1, bloqueia o builder):** o redirect da rota antiga precisa resolver `id → projectId + referenceWeek` (um lookup no banco no server) pra mandar pra `/projects/[id]/pm-review?week=YYYY-MM-DD` e preservar bookmarks. 301 ou 302? E qual a forma de redirect server-side no **Next 16** (ler `node_modules/next/dist/docs/`)?
+- **OQ2 (Fase 1, bloqueia o builder):** projeto com **0 sprints** (ex: ALESP) — a grade degenera pra "só semanas com review + a corrente". Aceitável (timeline fina) ou exigir ≥1 sprint pra abrir?
+- **OQ3 (Fase 1):** **rollback/feature-flag.** Com a rota antiga virando redirect, se a app nova regredir não há fallback. Flag pra rota nova + manter a antiga viva atrás dela até estabilizar?
+- **OQ4 (Fase 1):** **concorrência cron × humano** — humano editando draft às 10:59, cron dispara 11:00 na mesma thread. Hoje o refresh só pula se há turn em voo; não há lock de edição manual. Aceitável ou precisa de guard?
+- **OQ5 (Fase 2):** "o que mudou desde a semana passada" é on-read (diff de notes) ou a Vitoria escreve um note `kind='summary'` de delta?
+- **OQ6 (Fase 3):** ribbon unificado Planning+PM Review é uma 3ª app ("Operação") ou dois toggles na mesma régua?
+
+---
+
+## §12 — Registro da crítica adversarial (Rev. 4)
+
+Um subagente revisou a Rev. 3 **verificando cada premissa no código** (e re-rodando o `psql`). Resultado: esqueleto aprovado, 3 premissas derrubadas, correções aplicadas.
+
+**Premissas verificadas:**
+
+| Premissa (Rev. 3) | Verdict | Evidência | Consequência |
+|---|---|---|---|
+| Thread já é por-semana | ✅ | `context.ts:228-260`, `prepare-turn:176-200` | mantido |
+| Downstream lê por query, não URL | ✅ | `wiki/composer.ts:90`, `project-overview.ts:682,778` | mantido |
+| Snapshot 13/9/4/2/2 | ✅ (atribuição trocada) | psql | §5.6 corrigido (Validação é a órfã, não Volundly) |
+| `createPMReview` aceita semana arbitrária | ⚠️ aceita **futuro** | `api/pm-review/route.ts` | +guard D13 |
+| "Published congela" | ❌ **editável de propósito** | `publish/route.ts` (comentário) | D4 reescrito (sem freeze) |
+| "Back-dated não toca o agente" | ❌ só na fidelidade aproximada | `vitoria/pm-review.ts:87-103` (`todayISO`) | D14 reescrito; point-in-time → Fase 2 |
+| "reabrir = natural" | ❌ não existe na state machine | `pm-review/status.ts` | irrelevante agora (D4 não congela) |
+| Reuso `weeks[]`/`CronogramaBlock` | ❌ otimista | `project-overview.ts:153,187`; `planning-cronograma.tsx:6` | grade do zero (D1); +teste de regressão (D6) |
+| Janela de fontes por `createdAt` | ⚠️ bug p/ back-dated | `refresh.ts:135` | D14: filtrar `capturedAt` |
+| 3 funções de "segunda da semana" | ⚠️ divergem | `refresh.ts:62`, `pm-review.ts:157`, `project-overview.ts:189` | +D16 (usar `brtMonday`) |
+
+**O que mudou de Rev. 3 → 4:** D4 (published não congela), D5 (sem read-only), D14 (fidelidade aproximada + `capturedAt`), +D13 guard futuro, +D15 disclosure honesto, +D16 âncora de semana. Faseamento: point-in-time foi pra Fase 2. Backend deixou de ser "1 param" → param + `capturedAt` + 2 guards (ainda sem schema, sem agente na Fase 1). +OQ3 (rollback/flag), +OQ4 (concorrência cron×humano).
