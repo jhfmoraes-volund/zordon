@@ -42,6 +42,13 @@ type RitualItem =
       title: string;
       status: string;
       scheduledFor: string | null;
+      /**
+       * Quando o plano foi mexido pela última vez — o mais recente entre a última
+       * versão aplicada (PlanningEvent), a última edição (updatedAt) e a criação.
+       * Planning é singleton contínuo (nunca "publica"), então a UI mostra
+       * atividade em vez de status de ciclo de vida. Ver rituais-file-view.
+       */
+      lastActivityAt: string;
       sortKey: string;
       href: string;
       badges: { linkedCount: number; noteCount: number };
@@ -95,8 +102,10 @@ export async function GET(
   // (listForProject vem desc por createdAt).
   const releasePlanning = planningSessions.find((s) => s.status !== "aborted");
   if (releasePlanning) {
-    // Resolve nome do facilitador + contagem de insumos linkados (EntityLink).
-    const [facilitator, linkedCountRes] = await Promise.all([
+    // Resolve nome do facilitador + insumos linkados (EntityLink) + a última
+    // versão aplicada (PlanningEvent, desc por createdAt) — fonte mais forte do
+    // "usado pela última vez".
+    const [facilitator, linkedCountRes, lastEventRes] = await Promise.all([
       releasePlanning.facilitatorId
         ? db()
             .from("Member")
@@ -109,8 +118,26 @@ export async function GET(
         .select("id", { count: "exact", head: true })
         .eq("planningSessionId", releasePlanning.id)
         .not("contextSourceId", "is", null),
+      db()
+        .from("PlanningEvent")
+        .select("createdAt")
+        .eq("planningSessionId", releasePlanning.id)
+        .order("createdAt", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
     const scheduledFor = releasePlanning.scheduledFor ?? releasePlanning.createdAt;
+    // Última atividade = o mais recente entre: versão aplicada, edição, criação.
+    // ISO 8601 ordena lexicograficamente = cronologicamente.
+    const lastActivityAt =
+      [
+        (lastEventRes.data as { createdAt: string } | null)?.createdAt,
+        releasePlanning.updatedAt,
+        releasePlanning.createdAt,
+      ]
+        .filter((d): d is string => !!d)
+        .sort()
+        .at(-1) ?? releasePlanning.createdAt;
     items.push({
       kind: "release_planning",
       id: releasePlanning.id,
@@ -119,6 +146,7 @@ export async function GET(
       title: "Planning do Projeto",
       status: releasePlanning.status,
       scheduledFor,
+      lastActivityAt,
       sortKey: scheduledFor ?? "0",
       href: `/projects/${projectId}/planning`,
       badges: { linkedCount: linkedCountRes.count ?? 0, noteCount: 0 },

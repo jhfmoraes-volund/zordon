@@ -76,19 +76,25 @@ export function ReleasePlanningRibbon({
 
   return (
     <div className="shrink-0 border-b bg-background px-6 py-3 space-y-2">
-      <div className="flex items-center gap-2 flex-wrap">
-        <Link href={backHref}>
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-base font-bold truncate">{title}</h1>
-          {scheduledFor && (
-            <p className="text-xs text-muted-foreground">{fmtDate(scheduledFor)}</p>
-          )}
+      {/* Mobile: empilha em rows separadas (título → ações). Desktop (md+): tudo
+          numa linha, título flex-1 empurra as ações pra direita. */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center">
+        {/* Row 1 (mobile) — título dedicado, sem truncar contra os botões. */}
+        <div className="flex items-center gap-2 min-w-0 md:flex-1">
+          <Link href={backHref}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base font-bold truncate">{title}</h1>
+            {scheduledFor && (
+              <p className="text-xs text-muted-foreground">{fmtDate(scheduledFor)}</p>
+            )}
+          </div>
         </div>
 
+        {/* Row 2 (mobile) — ações. */}
         {historyMode ? (
           // Modo histórico: o segmented toggle É o controle. "Ao vivo" (dot
           // pulsante) sai pro plano vivo; "Histórico" (ativo) reabre as versões.
@@ -98,7 +104,7 @@ export function ReleasePlanningRibbon({
             onOpenVersions={onOpenVersions}
           />
         ) : (
-          <>
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <StatusChip tone={phaseTone} label={phaseLabel} dot />
 
             {!readOnly && (
@@ -136,7 +142,7 @@ export function ReleasePlanningRibbon({
                 Montar plano
               </Button>
             )}
-          </>
+          </div>
         )}
       </div>
 

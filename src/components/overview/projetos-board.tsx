@@ -211,9 +211,9 @@ function horizonLabel(p: ProjectOverview): string {
 
 // ─── Freshness de ritual ("contexto vivo") ────────────────
 
-/** Cortes de freshness — a DIREÇÃO da seta classifica, não a cor. */
-const RITUAL_FRESH_DAYS = 7; // ≤7d → ↑ recente
-const RITUAL_AGING_DAYS = 14; // 8–14d → → envelhecendo; acima/ausente → ↓ parado
+/** Cortes de freshness — a DIREÇÃO da seta classifica; a cor (verde) só no vivíssimo. */
+const RITUAL_FRESH_DAYS = 1; // ≤1d (hoje/ontem) → ↑ verde
+const RITUAL_AGING_DAYS = 14; // 2–14d → → envelhecendo (cinza); acima/ausente → ↓ parado
 
 const RITUAL_LABEL: Record<RitualKind, string> = {
   review: "Review",
@@ -266,7 +266,8 @@ const FRESHNESS_PILL: Record<FreshnessLevel, string> = {
  * (review / planning / release). "Ter ritual = projeto vivo": o estado fresh
  * ganha um verde sutil (recompensa por aspiração, puxa o PM a manter), enquanto
  * parado/sem ritual fica tracejado e quieto, convidando a preencher. A direção
- * da seta classifica (↑ ≤7d · → ≤14d · ↓ >14d/ausente); a cor reforça só o vivo.
+ * da seta classifica (↑ ≤1d/hoje-ontem · → ≤14d · ↓ >14d/ausente); o verde
+ * reforça só o vivíssimo — ritual de hoje ou ontem.
  * Health (vermelho) mora no dot do card — aqui staleness nunca vira alarme.
  * Só em fase produtiva; comercial/post_ops não rodam ritual, então fica quieto.
  */
@@ -557,29 +558,6 @@ function paceIsMature(stats: ProjectStats): boolean {
 /** Amostra mínima pra ritmo virar veredito (delivery_rate e pace). */
 const DELIVERY_MIN_SAMPLE = 3;
 
-/** Entrega do planejado (project.delivery_rate) — só com amostra madura. */
-function DeliveryRate({
-  stats,
-  bands,
-  hint,
-}: {
-  stats: ProjectStats;
-  bands: Threshold[];
-  hint?: string;
-}) {
-  if (stats.deliveryRatePct === null || stats.deliverySprints < DELIVERY_MIN_SAMPLE) return null;
-  const band = bandOf(stats.deliveryRatePct, bands);
-  return (
-    <span title={hint} className={cn("whitespace-nowrap", hint && "cursor-help")}>
-      entregou{" "}
-      <span className={cn("font-medium tabular-nums", band && TONE_CLS[band.tone])}>
-        {stats.deliveryRatePct}%
-      </span>{" "}
-      do planejado
-    </span>
-  );
-}
-
 /** Veredito de pace: gap = %escopo − %prazo. Label/tom vêm do registry (D6). */
 function PaceBadge({
   stats,
@@ -611,15 +589,16 @@ function PaceBadge({
 }
 
 /**
- * Linha de stats do card: posição no contrato + entrega do planejado. Só fatos
- * de calendário e a métrica autocalibrada — pace/PFV-sp/buracos vivem no drawer
- * (buraco a régua já mostra como célula tracejada).
+ * Linha de stats do card (sob a régua): posição no contrato + entrega do
+ * planejado. Compartilhada por Lista e Kanban — alinhada à esquerda, embaixo da
+ * régua (nunca ao lado, pra não espremer o cronograma). Só fatos de calendário e
+ * a métrica autocalibrada; pace/PFV-sp/buracos vivem no drawer.
  */
-function RowStatsLine({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
+function ScheduleStats({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   const s = p.stats;
   if (s.mode === "none") return null;
   return (
-    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground">
       {s.mode === "contract" ? (
         <span className="cursor-help" title={ui.defenses["project.sprints_elapsed"]}>
           <StatusChip
@@ -656,13 +635,40 @@ function RowStatsLine({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
           }
         />
       )}
-      <DeliveryRate
-        stats={s}
-        bands={ui.bands["project.delivery_rate"] ?? []}
-        hint={ui.defenses["project.delivery_rate"]}
-      />
     </div>
   );
+}
+
+/**
+ * Corpo do cronograma do card — disposição ÚNICA em Lista e Kanban: régua em
+ * linha própria + a linha de stats logo ABAIXO (nunca ao lado, pra a régua não
+ * espremer quando o contrato/entrega ocupa largura). Sem sprints, cai nos
+ * estados de texto por fase (comercial / produção sem sprint / horizonte).
+ */
+function CardSchedule({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
+  if (p.stats.mode !== "none") {
+    return (
+      <div className="space-y-2">
+        <Regua stats={p.stats} />
+        <ScheduleStats p={p} ui={ui} />
+      </div>
+    );
+  }
+  if (p.phase === "commercial") {
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        Em comercial há {p.daysInPhase}d · {horizonLabel(p)}
+      </p>
+    );
+  }
+  if (PRODUCING_PHASES.includes(p.phase)) {
+    return (
+      <p className="flex items-center gap-1.5 text-[11px] text-yellow-500">
+        <AlertTriangle className="h-3 w-3" /> produção sem sprint
+      </p>
+    );
+  }
+  return <p className="text-[11px] text-muted-foreground">{horizonLabel(p)}</p>;
 }
 
 // ─── Ribbon do topo ───────────────────────────────────────
@@ -1029,7 +1035,6 @@ function ProjectRow({
 }) {
   const milestone = milestoneChip(p);
   const motivo = cardMotivo(p);
-  const producing = PRODUCING_PHASES.includes(p.phase);
 
   return (
     <button
@@ -1069,27 +1074,8 @@ function ProjectRow({
         </span>
       </div>
 
-      <div className="mt-2 flex items-center gap-3 pl-[18px]">
-        {p.stats.mode !== "none" ? (
-          <>
-            <div className="min-w-0 flex-1">
-              <Regua stats={p.stats} />
-            </div>
-            <div className="shrink-0">
-              <RowStatsLine p={p} ui={ui} />
-            </div>
-          </>
-        ) : p.phase === "commercial" ? (
-          <p className="text-[11px] text-muted-foreground">
-            Em comercial há {p.daysInPhase}d · {horizonLabel(p)}
-          </p>
-        ) : producing ? (
-          <p className="flex items-center gap-1.5 text-[11px] text-yellow-500">
-            <AlertTriangle className="h-3 w-3" /> produção sem sprint — régua vazia
-          </p>
-        ) : (
-          <p className="text-[11px] text-muted-foreground">{horizonLabel(p)}</p>
-        )}
+      <div className="mt-2 pl-[18px]">
+        <CardSchedule p={p} ui={ui} />
       </div>
     </button>
   );
@@ -1102,7 +1088,15 @@ function ProjectRow({
  * em formato vertical. Clique abre o drawer; o wrapper draggable vive no
  * ProjetosKanban (drop muda a fase).
  */
-function ProjectKanbanCard({ p, onOpen }: { p: ProjectOverview; onOpen: () => void }) {
+function ProjectKanbanCard({
+  p,
+  ui,
+  onOpen,
+}: {
+  p: ProjectOverview;
+  ui: RegistryUi;
+  onOpen: () => void;
+}) {
   const milestone = milestoneChip(p);
   const motivo = cardMotivo(p);
   const producing = PRODUCING_PHASES.includes(p.phase);
@@ -1125,19 +1119,7 @@ function ProjectKanbanCard({ p, onOpen }: { p: ProjectOverview; onOpen: () => vo
         {p.pmName ? ` · ${p.pmName}` : ""}
       </p>
       <div className="mt-2 pl-4">
-        {p.stats.mode !== "none" ? (
-          <Regua stats={p.stats} />
-        ) : p.phase === "commercial" ? (
-          <p className="text-[11px] text-muted-foreground">
-            Em comercial há {p.daysInPhase}d · {horizonLabel(p)}
-          </p>
-        ) : producing ? (
-          <p className="flex items-center gap-1.5 text-[11px] text-yellow-500">
-            <AlertTriangle className="h-3 w-3" /> produção sem sprint
-          </p>
-        ) : (
-          <p className="text-[11px] text-muted-foreground">{horizonLabel(p)}</p>
-        )}
+        <CardSchedule p={p} ui={ui} />
       </div>
       {(milestone || motivo || producing) && (
         <div className="mt-2 flex flex-wrap items-center gap-1 pl-4">
@@ -1171,10 +1153,12 @@ function ProjectKanbanCard({ p, onOpen }: { p: ProjectOverview; onOpen: () => vo
  */
 function ProjetosKanban({
   projects,
+  ui,
   onOpen,
   onPhaseChange,
 }: {
   projects: ProjectOverview[];
+  ui: RegistryUi;
   onOpen: (id: string) => void;
   onPhaseChange: (id: string, phase: ProjectPhase) => void;
 }) {
@@ -1228,7 +1212,7 @@ function ProjetosKanban({
                   }}
                   className="cursor-move"
                 >
-                  <ProjectKanbanCard p={p} onOpen={() => onOpen(p.id)} />
+                  <ProjectKanbanCard p={p} ui={ui} onOpen={() => onOpen(p.id)} />
                 </div>
               ))}
             </div>
@@ -2315,6 +2299,7 @@ export function ProjetosBoard({
           {view === "kanban" ? (
             <ProjetosKanban
               projects={visibleFlat}
+              ui={ui}
               onOpen={(id) => navigate(id, "push")}
               onPhaseChange={changePhase}
             />

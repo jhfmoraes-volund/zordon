@@ -61,6 +61,8 @@ type RitualReleasePlanning = {
   title: string;
   status: ReleaseStatus;
   scheduledFor: string | null;
+  /** Quando o plano foi usado/atualizado pela última vez (ver GET /rituals). */
+  lastActivityAt: string;
   sortKey: string;
   href: string;
   badges: { linkedCount: number; noteCount: number };
@@ -93,19 +95,29 @@ const KIND_META: Record<
   },
 };
 
-function statusBadge(item: RitualItem): {
+/** Badge de ciclo de vida do PM Review (rascunho → publicado → arquivado). */
+function pmReviewStatusBadge(status: PMReviewStatus): {
   label: string;
   tone: "green" | "amber" | "muted";
 } {
-  if (item.kind === "pm_review") {
-    if (item.status === "published") return { label: "publicado", tone: "green" };
-    if (item.status === "archived") return { label: "arquivado", tone: "muted" };
-    return { label: "rascunho", tone: "amber" };
-  }
-  if (item.status === "approved") return { label: "aprovado", tone: "green" };
-  if (item.status === "error" || item.status === "aborted")
-    return { label: item.status === "error" ? "erro" : "abortado", tone: "muted" };
+  if (status === "published") return { label: "publicado", tone: "green" };
+  if (status === "archived") return { label: "arquivado", tone: "muted" };
   return { label: "rascunho", tone: "amber" };
+}
+
+/**
+ * Planning é singleton contínuo — nunca "publica", então não tem ciclo de vida
+ * pra exibir. A linha mostra "ativo" + última atividade (ver renderRow). Só os
+ * estados terminais raros (abortado/erro) ganham chip próprio; os demais
+ * retornam null = renderiza o chip "ativo".
+ */
+function releaseTerminalBadge(status: ReleaseStatus): {
+  label: string;
+  tone: "muted";
+} | null {
+  if (status === "aborted") return { label: "abortado", tone: "muted" };
+  if (status === "error") return { label: "erro", tone: "muted" };
+  return null;
 }
 
 type FilterKey = "all" | "pm_review" | "release_planning";
@@ -250,9 +262,42 @@ export function RituaisFileView({
   // primária. A sheet de metadados abre só pelo ícone de editar.
   function renderRow(item: RitualItem) {
     const meta = KIND_META[item.kind];
-    const status = statusBadge(item);
     const facilitator = item.facilitatorName ?? "Sem facilitador definido";
     const subtitle = `${meta.label} · ${facilitator}`;
+
+    // Planning (contínuo): chip "ativo" + "atualizado <data>" no lugar do status
+    // de ciclo de vida + data crua. Estados terminais (abortado/erro) mantêm chip.
+    // PM Review: badge de ciclo de vida + data agendada (como antes).
+    let badge: React.ReactNode;
+    let metaText: string | undefined;
+    if (item.kind === "release_planning") {
+      const terminal = releaseTerminalBadge(item.status);
+      badge = (
+        <span className="flex shrink-0 items-center gap-1.5">
+          {terminal ? (
+            <AppFileBadge tone={terminal.tone}>{terminal.label}</AppFileBadge>
+          ) : (
+            <AppFileBadge tone="green">
+              <span className="size-1.5 rounded-full bg-current" />
+              ativo
+            </AppFileBadge>
+          )}
+          <span className="text-[11px] text-muted-foreground">
+            atualizado {fmtDate(item.lastActivityAt)}
+          </span>
+        </span>
+      );
+      metaText = undefined;
+    } else {
+      const status = pmReviewStatusBadge(item.status);
+      badge = (
+        <span className="flex shrink-0 items-center gap-1">
+          <AppFileBadge tone={status.tone}>{status.label}</AppFileBadge>
+        </span>
+      );
+      metaText = item.scheduledFor ? fmtDate(item.scheduledFor) : undefined;
+    }
+
     return (
       <AppFileRow
         key={`${item.kind}-${item.id}`}
@@ -260,12 +305,8 @@ export function RituaisFileView({
         tileClassName={meta.tile}
         title={item.title}
         subtitle={subtitle}
-        badge={
-          <span className="flex shrink-0 items-center gap-1">
-            <AppFileBadge tone={status.tone}>{status.label}</AppFileBadge>
-          </span>
-        }
-        meta={item.scheduledFor ? fmtDate(item.scheduledFor) : undefined}
+        badge={badge}
+        meta={metaText}
         onOpen={() => router.push(item.href)}
         actions={
           <button

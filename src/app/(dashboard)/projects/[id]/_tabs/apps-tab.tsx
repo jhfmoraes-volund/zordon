@@ -3,11 +3,11 @@
 /**
  * Zordon Apps — desktop do projeto.
  *
- * Dock lateral estilo activity bar (apps instalados) + canvas. No desktop,
- * clicar num app abre a superfície como "janela" dentro do canvas (live
- * canvas — nunca sai do tab); no mobile mantém o ResponsiveSheet, que já
- * resolve bem. Catálogo vem do registry code-first (src/lib/apps/registry.ts);
- * instalação por projeto (ProjectApp) é fase 2.
+ * Dock lateral estilo activity bar (apps instalados) + canvas. Clicar num app
+ * abre a superfície como "janela" dentro do canvas (live canvas — nunca sai do
+ * tab), com a MESMA UX no desktop e no mobile (sem ResponsiveSheet auto-abrindo;
+ * o X volta pro catálogo). Catálogo vem do registry code-first
+ * (src/lib/apps/registry.ts); instalação por projeto (ProjectApp) é fase 2.
  *
  * Linguagem visual: console de operação, mesma família do HUD da Forge —
  * superfícies flat com hairline, radius md, ícones monocromáticos, mono pra
@@ -23,13 +23,6 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Database, Plus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import {
-  ResponsiveSheet,
-  ResponsiveSheetBody,
-  ResponsiveSheetContent,
-  ResponsiveSheetHeader,
-  ResponsiveSheetTitle,
-} from "@/components/ui/responsive-sheet";
 import { ProjectDriveTab } from "@/components/project-drive/drive-tab";
 import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { CreateAppDialog } from "@/components/apps/create-app-dialog";
@@ -140,10 +133,10 @@ export function AppsTab({
   }
 
   /**
-   * Superfície mobile (dentro do ResponsiveSheet). Rituais agora usa a mesma
-   * file view do desktop (RituaisFileView, via renderDesktopSurface) — superfície
-   * única, sem o componente antigo de duas colunas. Sessions ainda re-hospeda a
-   * superfície original; file view dele é o próximo incremento.
+   * Superfície mobile (inline no canvas, mesma janela do desktop). Rituais usa a
+   * mesma file view do desktop (RituaisFileView, via renderDesktopSurface) —
+   * superfície única, sem o componente antigo de duas colunas. Sessions ainda
+   * re-hospeda a superfície original; file view dele é o próximo incremento.
    */
   function renderMobileSurface(app: AppDef) {
     if (app.key === "sessions") {
@@ -159,9 +152,9 @@ export function AppsTab({
   }
 
   return (
-    <div className="flex gap-3">
-      {/* ─── Dock (activity bar) ──────────────────────────────────────── */}
-      <aside className="flex w-16 shrink-0 flex-col items-center gap-1 self-start rounded-md border p-1.5">
+    <div className="flex flex-col gap-3 md:flex-row">
+      {/* ─── Dock (activity bar) — barra horizontal no mobile, coluna no desktop ── */}
+      <aside className="flex w-full shrink-0 flex-row items-center gap-1 self-start rounded-md border p-1.5 md:w-16 md:flex-col">
         {installedApps.map((app) => {
           const active = openAppKey === app.key;
           return (
@@ -172,14 +165,14 @@ export function AppsTab({
               title={`${app.name} — ${app.tagline}`}
               aria-label={app.name}
               className={cn(
-                "relative flex w-full flex-col items-center gap-1 rounded-md px-1 py-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "relative flex flex-1 flex-col items-center gap-1 rounded-md px-1 py-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-full md:flex-none",
                 active && "bg-muted text-foreground",
               )}
             >
               {active && (
                 <span
                   aria-hidden
-                  className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
+                  className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-primary md:bottom-auto md:left-0 md:top-1/2 md:h-5 md:w-0.5 md:translate-x-0 md:-translate-y-1/2"
                 />
               )}
               <app.icon className="size-[22px]" />
@@ -189,13 +182,13 @@ export function AppsTab({
             </button>
           );
         })}
-        <div className="my-0.5 h-px w-8 bg-border" />
+        <div className="mx-0.5 h-8 w-px shrink-0 self-center bg-border md:mx-0 md:my-0.5 md:h-px md:w-8" />
         <button
           type="button"
           onClick={() => setCreateAppOpen(true)}
           title="Criar app com Volund OS"
           aria-label="Criar app"
-          className="flex w-full flex-col items-center gap-1 rounded-md border border-dashed px-1 py-1.5 text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex flex-1 flex-col items-center gap-1 rounded-md border border-dashed px-1 py-1.5 text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-full md:flex-none"
         >
           <Plus className="size-[22px]" />
           <span className="text-center text-[10px] leading-tight">Novo</span>
@@ -229,8 +222,10 @@ export function AppsTab({
           )}
         </div>
 
-        {openApp && !isMobile ? (
-          /* Janela do app — live canvas, sem sair do tab */
+        {openApp ? (
+          /* Janela do app — live canvas (desktop e mobile, mesma UX), sem sair
+             do tab. No mobile a superfície usa renderMobileSurface (sessions
+             ainda re-hospeda a tab original); o X volta pro catálogo. */
           <div className="overflow-hidden rounded-md border">
             <div className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2">
               <span
@@ -254,7 +249,11 @@ export function AppsTab({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="p-4">{renderDesktopSurface(openApp)}</div>
+            <div className="p-4">
+              {isMobile
+                ? renderMobileSurface(openApp)
+                : renderDesktopSurface(openApp)}
+            </div>
           </div>
         ) : (
           /* Catálogo — registry rows, gramática de arquivos */
@@ -340,35 +339,6 @@ export function AppsTab({
       </div>
 
       <CreateAppDialog open={createAppOpen} onOpenChange={setCreateAppOpen} />
-
-      {/* ─── Sheet host (só mobile) ───────────────────────────────────── */}
-      {isMobile && (
-        <ResponsiveSheet
-          open={!!openApp}
-          onOpenChange={(open) => {
-            if (!open) onOpenAppKeyChange(null);
-          }}
-        >
-          {openApp && (
-            <ResponsiveSheetContent size={openApp.window}>
-              <ResponsiveSheetHeader>
-                <ResponsiveSheetTitle className="flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className={cn("size-1.5 rounded-full", openApp.dot)}
-                  />
-                  <openApp.icon className="size-4 text-muted-foreground" />
-                  {openApp.name}
-                  <span className="font-normal text-muted-foreground">
-                    · {projectName}
-                  </span>
-                </ResponsiveSheetTitle>
-              </ResponsiveSheetHeader>
-              <ResponsiveSheetBody>{renderMobileSurface(openApp)}</ResponsiveSheetBody>
-            </ResponsiveSheetContent>
-          )}
-        </ResponsiveSheet>
-      )}
     </div>
   );
 }

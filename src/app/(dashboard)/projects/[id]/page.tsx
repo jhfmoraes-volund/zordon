@@ -8,6 +8,7 @@ import {
   BookOpen,
   FileText,
   LayoutGrid,
+  MoreVertical,
   Pencil,
   Settings as SettingsIcon,
   Shield,
@@ -19,6 +20,12 @@ import {
   ConfirmDialog,
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageTitle } from "@/components/app-shell";
 import { ProjectAccessSheet } from "@/components/project-access-sheet";
 import { ProjectEditSheet } from "@/components/projects/project-edit-sheet";
@@ -137,9 +144,11 @@ export default function ProjectDetailPage({
         : sprintParam ?? null;
   const [sprintView, setSprintView] = useState<NavValue | null>(initialSprintView);
   // App aberto dentro do tab Apps (?app=<key>). Init: ?app= explícito; senão
-  // o deep-link legacy de ex-tab (?tab=sessions → app sessions, etc).
+  // o deep-link legacy de ex-tab (?tab=sessions → app sessions, etc); senão o
+  // Drive como app default (entra direto na superfície, não no catálogo — o X
+  // volta pro catálogo dentro da sessão).
   const [openAppKey, setOpenAppKey] = useState<string | null>(
-    searchParams.get("app") ?? legacyAppKey,
+    searchParams.get("app") ?? legacyAppKey ?? "drive",
   );
 
   // ─── Data hooks ────────────────────────────────────────────────────────────
@@ -447,7 +456,8 @@ export default function ProjectDetailPage({
 
   return (
     <div className="space-y-6">
-      {/* Hero */}
+      {/* Hero — título à esquerda, ações à direita na mesma row. No mobile as
+          ações colapsam num kebab (⋮); no desktop (md+) viram 3 botões com label. */}
       <div className="relative flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <Link href="/projects">
@@ -475,14 +485,15 @@ export default function ProjectDetailPage({
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        {/* Desktop (md+): 3 botões com label. */}
+        <div className="hidden shrink-0 items-center gap-2 md:flex">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setWikiOpen(true)}
           >
             <FileText className="size-4" />
-            <span className="hidden sm:inline">Wiki</span>
+            <span>Wiki</span>
           </Button>
           <Button
             variant="outline"
@@ -490,7 +501,7 @@ export default function ProjectDetailPage({
             onClick={() => setEditOpen(true)}
           >
             <Pencil className="size-4" />
-            <span className="hidden sm:inline">Editar projeto</span>
+            <span>Editar projeto</span>
           </Button>
           <Button
             variant="outline"
@@ -498,9 +509,39 @@ export default function ProjectDetailPage({
             onClick={() => setAccessOpen(true)}
           >
             <Shield className="size-4" />
-            <span className="hidden sm:inline">Access</span>
+            <span>Access</span>
           </Button>
         </div>
+
+        {/* Mobile: as mesmas ações colapsadas num kebab (overflow menu). */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Ações do projeto"
+                className="size-8 shrink-0 md:hidden"
+              >
+                <MoreVertical className="size-4" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="min-w-[180px]">
+            <DropdownMenuItem onClick={() => setWikiOpen(true)}>
+              <FileText className="size-4" />
+              Wiki
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <Pencil className="size-4" />
+              Editar projeto
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setAccessOpen(true)}>
+              <Shield className="size-4" />
+              Access
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* O sentinel (renderizado por PageTitle) ancora no rodapé do hero: o
             título no header sticky só aparece quando o hero (nome + cliente)
