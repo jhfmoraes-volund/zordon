@@ -33,6 +33,19 @@ export function fmtDateLong(d: DateInput): string {
   });
 }
 
+/** "27 mai 2026, 14:30" — data longa + hora. Para timelines com vários eventos/dia. */
+export function fmtDateTime(d: DateInput): string {
+  const date = toDate(d);
+  if (!date) return EMPTY;
+  return date.toLocaleString(LOCALE, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** "quarta-feira, 27 de maio de 2026" — por extenso. Header de detalhe. */
 export function fmtDateFull(d: DateInput): string {
   const date = toDate(d);

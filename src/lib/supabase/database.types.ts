@@ -5251,6 +5251,134 @@ export type Database = {
           },
         ]
       }
+      PlanningEvent: {
+        Row: {
+          appliedCount: number
+          briefingMarkdown: string | null
+          chatMessageId: string | null
+          createdAt: string
+          createdById: string | null
+          failedCount: number
+          id: string
+          planningSessionId: string
+          skippedCount: number
+        }
+        Insert: {
+          appliedCount?: number
+          briefingMarkdown?: string | null
+          chatMessageId?: string | null
+          createdAt?: string
+          createdById?: string | null
+          failedCount?: number
+          id?: string
+          planningSessionId: string
+          skippedCount?: number
+        }
+        Update: {
+          appliedCount?: number
+          briefingMarkdown?: string | null
+          chatMessageId?: string | null
+          createdAt?: string
+          createdById?: string | null
+          failedCount?: number
+          id?: string
+          planningSessionId?: string
+          skippedCount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PlanningEvent_chatMessageId_fkey"
+            columns: ["chatMessageId"]
+            isOneToOne: false
+            referencedRelation: "ChatMessage"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningEvent_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningEvent_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningEvent_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningEvent_createdById_fkey"
+            columns: ["createdById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningEvent_planningSessionId_fkey"
+            columns: ["planningSessionId"]
+            isOneToOne: false
+            referencedRelation: "PlanningSession"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      PlanningEventSprint: {
+        Row: {
+          fpTotal: number
+          id: string
+          planningEventId: string
+          sprintId: string | null
+          sprintLabel: string
+          taskCount: number
+        }
+        Insert: {
+          fpTotal?: number
+          id?: string
+          planningEventId: string
+          sprintId?: string | null
+          sprintLabel: string
+          taskCount?: number
+        }
+        Update: {
+          fpTotal?: number
+          id?: string
+          planningEventId?: string
+          sprintId?: string | null
+          sprintLabel?: string
+          taskCount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PlanningEventSprint_planningEventId_fkey"
+            columns: ["planningEventId"]
+            isOneToOne: false
+            referencedRelation: "PlanningEvent"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningEventSprint_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "Sprint"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "PlanningEventSprint_sprintId_fkey"
+            columns: ["sprintId"]
+            isOneToOne: false
+            referencedRelation: "sprint_outcome_digest"
+            referencedColumns: ["sprintId"]
+          },
+        ]
+      }
       PlanningSession: {
         Row: {
           agentOutputsJsonb: Json | null

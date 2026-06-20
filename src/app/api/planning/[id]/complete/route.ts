@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireProjectEditTasksApi, getCurrentMember } from "@/lib/dal";
 import { getPlanningById, concludePlanning } from "@/lib/dal/planning";
+import { recordPlanningEventFromCeremony } from "@/lib/dal/planning-event";
 
 export async function POST(
   _req: NextRequest,
@@ -39,6 +40,29 @@ export async function POST(
 
   try {
     const result = await concludePlanning(id, me.id);
+
+    // Planning Vivo Versionado — Fase 1 (Log): grava o PlanningEvent (snapshot +
+    // briefing) pra o canvas mostrar histórico em vez de "Plano vazio". Keyed por
+    // PlanningSession (a companion ceremony é reciclada a cada apply). Best-effort:
+    // o apply (mutação que importa) já foi commitado — uma falha aqui NÃO derruba
+    // a request. No-op se a ceremony for uma Sprint Planning (não Release Planning).
+    //
+    // INVARIANTE: o snapshot INFORMA versões futuras, nunca vira estado a restaurar.
+    try {
+      await recordPlanningEventFromCeremony({
+        planningCeremonyId: id,
+        createdById: me.id,
+        appliedCount: result.applied.applied,
+        failedCount: result.applied.failed,
+        skippedCount: result.applied.skipped,
+      });
+    } catch (logErr) {
+      console.error(
+        `[planning/complete] PlanningEvent log falhou (ceremony=${id}); apply OK, seguindo:`,
+        logErr,
+      );
+    }
+
     return NextResponse.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -285,12 +285,14 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
       .get_project_indicators,
 };
 
-// ── Alpha (ops) — subset read-only GLOBAL pro daemon ──────────────────────
-// Reusa assembleAlphaTools sem rota (contexto global = sem routeProjectId) e
-// sem writeTools (só leitura). As tools route-scoped (list_modules,
-// get_project_capacity…), as de escrita (create_task, manage_allocation…) e
-// Composio (GitHub/Calendar, token per-user) ficam FORA do daemon — seguem no
-// path OpenRouter. Ver memory feedback_agent_chat_daemon_only.
+// ── Alpha (ops) — reads pro daemon ────────────────────────────────────────
+// Reusa assembleAlphaTools threadando routeProjectId/routeSprintId do ctx
+// (resolvidos de ChatTurn.routePath): numa página de projeto/sprint, get_tasks /
+// get_backlog / get_sprint_overview / list_sprints / get_alerts filtram pelo
+// escopo da rota; sem rota (ex.: header tab global), caem em global e o modelo
+// escapa passando projectName (get_tasks/get_backlog). As tools route-scoped
+// (list_modules, get_project_capacity…) e Composio (GitHub/Calendar, token
+// per-user) ficam FORA daqui. Ver memory feedback_agent_chat_daemon_only.
 const ALPHA_READ_TOOL_NAMES = [
   "get_sprint_overview",
   "get_tasks",
@@ -309,11 +311,22 @@ const ALPHA_READ_TOOL_NAMES = [
   "ask_meeting",
 ] as const;
 
-function alphaReadTool(name: string): ToolFactory {
+// Alpha write tools habilitados no daemon. update_task casa por taskReference
+// (lookup global — não precisa de projeto na rota), então funciona mesmo do
+// header tab global, desde que o modelo enxergue a task (get_tasks projectName).
+// create_task/bulk_update_tasks ficam fora: dependem de projeto resolvido
+// (sprint ativo / routeProjectId) e não são confiáveis sem rota.
+const ALPHA_WRITE_TOOL_NAMES = ["update_task"] as const;
+
+function alphaTool(name: string, writeTools: boolean): ToolFactory {
   return (ctx) => {
     const tools = assembleAlphaTools(
-      { maxSteps: 30, writeTools: false, readTools: true },
-      { currentMemberId: ctx.memberId ?? undefined },
+      { maxSteps: 30, writeTools, readTools: true },
+      {
+        currentMemberId: ctx.memberId ?? undefined,
+        routeProjectId: ctx.routeProjectId,
+        routeSprintId: ctx.routeSprintId,
+      },
     );
     const t = tools[name] as Tool | undefined;
     if (!t) throw new Error(`alpha tool "${name}" not assembled`);
@@ -322,7 +335,11 @@ function alphaReadTool(name: string): ToolFactory {
 }
 
 for (const name of ALPHA_READ_TOOL_NAMES) {
-  TOOL_REGISTRY[name] = alphaReadTool(name);
+  TOOL_REGISTRY[name] = alphaTool(name, false);
+}
+
+for (const name of ALPHA_WRITE_TOOL_NAMES) {
+  TOOL_REGISTRY[name] = alphaTool(name, true);
 }
 
 // ── Alpha route-scoped reads (Fase 2) — exigem um projeto resolvido da rota
@@ -459,6 +476,7 @@ const VITORIA_PLANNING_TOOLS = new Set<string>([
 
 const ALPHA_TOOLS = new Set<string>([
   ...ALPHA_READ_TOOL_NAMES,
+  ...ALPHA_WRITE_TOOL_NAMES,
   ...ALPHA_ROUTE_TOOL_NAMES,
   "describe_structured_source",
   "query_structured_source",

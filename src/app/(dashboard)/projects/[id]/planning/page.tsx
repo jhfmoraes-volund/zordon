@@ -25,6 +25,7 @@ import { ReleasePlanningRibbon } from "@/components/planning-session/release-pla
 import { ReleasePlanningSheet } from "@/components/planning-session/release-planning-sheet";
 import { ReleasePlanningContextSheet } from "@/components/planning-session/context-sheet";
 import { ReleasePlanningProposals } from "@/components/planning-session/release-planning-proposals";
+import { PlanningEventLog } from "@/components/planning-session/planning-event-log";
 import type {
   PlanningSessionRow,
   PlanningSessionPRDWithSource,
@@ -61,7 +62,11 @@ export default function PlanningSessionPage({
   // mostrar o empty-state. PRD↔sprint board saiu (2026-06-19): a planning lê
   // fontes (insumos + PRDs) e produz tasks/stories.
   const [planState, setPlanState] = useState({ pendingCount: 0, doneCount: 0 });
-  const hasPlan = planState.pendingCount > 0 || planState.doneCount > 0;
+  // Planning Vivo Versionado — Fase 1: nº de versões aplicadas (PlanningEvent).
+  // O canvas só fica "Plano vazio" se NÃO houver staging, entregue, NEM histórico.
+  const [eventCount, setEventCount] = useState(0);
+  const hasPlan =
+    planState.pendingCount > 0 || planState.doneCount > 0 || eventCount > 0;
 
   const threadIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -380,6 +385,13 @@ export default function PlanningSessionPage({
               void loadSession();
               setActionsRefresh((n) => n + 1);
             }}
+          />
+          {/* Histórico (Log) das versões aplicadas — substitui o "Plano vazio".
+              refreshKey reusa o bump do apply pra refetchar após cada "Aplicar". */}
+          <PlanningEventLog
+            sessionId={session.id}
+            refreshKey={actionsRefresh}
+            onCountChange={setEventCount}
           />
           {!hasPlan && (
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
