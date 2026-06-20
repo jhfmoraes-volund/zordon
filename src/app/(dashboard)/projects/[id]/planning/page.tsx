@@ -234,6 +234,13 @@ export default function PlanningSessionPage({
     }
   }, [status, loadSession]);
 
+  // Abrir/refresh REIDRATA a conversa em andamento — NÃO zera. O chat de uma
+  // versão do plano persiste enquanto ela está sendo montada: dar refresh ou
+  // reabrir continua de onde parou (papo + propostas em staging). O reset pra um
+  // "agente limpo" acontece só ao APLICAR um batch (handleApplied → POST
+  // /chat/new): aí a thread anterior vira histórico e a próxima versão começa
+  // limpa. Um simples refresh nunca reseta. O canvas (board vivo/AS-IS) é
+  // independente da thread.
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
@@ -581,6 +588,7 @@ export default function PlanningSessionPage({
                 projectId={projectId}
                 refreshKey={actionsRefresh}
                 readOnly={isApproved}
+                agentBusy={busy}
                 onStateChange={setPlanState}
                 onApplied={handleApplied}
               />

@@ -134,6 +134,7 @@ function TaskSheetByRefInner({
       sprintsRes,
       tagsRes,
       membersRes,
+      projectSquadRes,
     ] = await Promise.all([
       supabase
         .from("Project")
@@ -179,6 +180,7 @@ function TaskSheetByRefInner({
         .from("ProjectMember")
         .select("member:Member!ProjectMember_memberId_fkey(id, name, role, position)")
         .eq("projectId", projectId),
+      supabase.from("ProjectSquad").select("squadId").eq("projectId", projectId),
     ]);
 
     if (!tasksRes.data) return null;
@@ -199,9 +201,12 @@ function TaskSheetByRefInner({
 
     const project = projectRes.data;
 
-    // União de Project.pmId ∪ ProjectMember. PM ganha precedência — costuma
-    // não ter linha em ProjectMember (caso comum no banco), então adicionamos
-    // explicitamente. Mesma cascata usada em /api/projects/[id]/members.
+    // União das TRÊS fontes que coexistem no schema (dedup por id, PM precede):
+    // Project.pmId ∪ ProjectMember ∪ (ProjectSquad → SquadMember). Espelha o
+    // loadProjectMembers canônico (src/lib/agent/agents/vitoria/tools.ts) e a
+    // rota /api/projects/[id]/members. Sem o branch do squad, um membro que está
+    // só no squad linkado (sem ProjectMember e não-PM) some da sheet embora
+    // apareça atribuído no board — caso SILFAE/Eduarda.
     type MemberLite = { id: string; name: string; role: string | null };
     const byId = new Map<string, MemberLite>();
 
@@ -213,6 +218,20 @@ function TaskSheetByRefInner({
       const row = Array.isArray(m) ? m[0] ?? null : m;
       if (row && !byId.has(row.id)) byId.set(row.id, row);
     }
+
+    const squadIds = (projectSquadRes.data ?? []).map((r) => r.squadId);
+    if (squadIds.length > 0) {
+      const { data: smRows } = await supabase
+        .from("SquadMember")
+        .select("member:Member(id, name, role)")
+        .in("squadId", squadIds);
+      for (const smRow of smRows ?? []) {
+        const m = smRow.member as MemberLite | MemberLite[] | null;
+        const row = Array.isArray(m) ? m[0] ?? null : m;
+        if (row && !byId.has(row.id)) byId.set(row.id, row);
+      }
+    }
+
     const members = Array.from(byId.values()).map((m) => adaptMember(m));
 
     const definitionOfDone = Array.isArray(project?.definitionOfDone)

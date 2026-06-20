@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -27,6 +27,8 @@ type BoardTask = {
   status: string;
   sprintId: string | null;
   sprintName: string | null;
+  sprintStartDate: string | null;
+  sprintEndDate: string | null;
   functionPoints: number | null;
   assignees: string[];
 };
@@ -35,6 +37,8 @@ type BoardTask = {
 type SprintGroup = {
   sprintId: string | null;
   sprintName: string | null;
+  sprintStartDate: string | null;
+  sprintEndDate: string | null;
   proposals: ProposalRow[];
   tasks: BoardTask[];
 };
@@ -49,8 +53,19 @@ const TYPE_LABEL: Record<string, string> = {
 
 const NONE_KEY = "__none__";
 
-/** Quantas tasks do board mostrar por sprint antes de colapsar em "+N mais". */
-const BOARD_PREVIEW = 8;
+/** "16–22 jun" (mesmo mês) ou "30 jun – 6 jul" — janela seg→dom da sprint. */
+function formatSprintWeek(start: string | null, end: string | null): string | null {
+  if (!start || !end) return null;
+  // Parse local (T00:00:00) pra evitar o drift de UTC do `new Date("YYYY-MM-DD")`.
+  const s = new Date(`${start}T00:00:00`);
+  const e = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return null;
+  const mon = (d: Date) =>
+    d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+  return s.getMonth() === e.getMonth()
+    ? `${s.getDate()}–${e.getDate()} ${mon(e)}`
+    : `${s.getDate()} ${mon(s)} – ${e.getDate()} ${mon(e)}`;
+}
 
 /** Descritor de status com fallback pra valor desconhecido. */
 function statusChip(status: string): { label: string; tone: Parameters<typeof StatusChip>[0]["tone"] } {
@@ -79,6 +94,7 @@ export function ReleasePlanningProposals({
   onApplied,
   onStateChange,
   readOnly = false,
+  agentBusy = false,
 }: {
   planningCeremonyId: string | null;
   projectId: string;
@@ -92,6 +108,10 @@ export function ReleasePlanningProposals({
     doneCount: number;
   }) => void;
   readOnly?: boolean;
+  /** Vitoria ainda gerando no background (turno em vôo). Enquanto isso, o
+   *  staging pode estar meio-escrito (tool propose_* no meio do lote) — trava o
+   *  "Aplicar" pra não commitar um batch incompleto. */
+  agentBusy?: boolean;
 }) {
   const [actions, setActions] = useState<ProposalRow[]>([]);
   const [boardTasks, setBoardTasks] = useState<BoardTask[]>([]);
@@ -99,6 +119,17 @@ export function ReleasePlanningProposals({
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [openAction, setOpenAction] = useState<ProposalRow | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  // Sprints colapsadas (por sprintId / NONE_KEY). Vazio = tudo expandido.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const toggleCollapse = useCallback((key: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   const loadAll = useCallback(async () => {
     if (!planningCeremonyId) {
@@ -130,7 +161,7 @@ export function ReleasePlanningProposals({
         status: string;
         sprintId: string | null;
         functionPoints: number | null;
-        sprint?: { name: string } | null;
+        sprint?: { name: string; startDate?: string; endDate?: string } | null;
         assignments?: Array<{ member?: { name: string } | null }> | null;
       }>;
       setBoardTasks(
@@ -141,6 +172,8 @@ export function ReleasePlanningProposals({
           status: t.status,
           sprintId: t.sprintId,
           sprintName: t.sprint?.name ?? null,
+          sprintStartDate: t.sprint?.startDate ?? null,
+          sprintEndDate: t.sprint?.endDate ?? null,
           functionPoints: t.functionPoints,
           assignees: (t.assignments ?? [])
             .map((a) => a.member?.name)
@@ -199,14 +232,29 @@ export function ReleasePlanningProposals({
   // ── Agrupa propostas + tasks do board por sprint ────────────────────────
   const groups = useMemo<SprintGroup[]>(() => {
     const map = new Map<string, SprintGroup>();
-    const ensure = (id: string | null, name: string | null) => {
+    const ensure = (
+      id: string | null,
+      name: string | null,
+      start?: string | null,
+      end?: string | null,
+    ) => {
       const key = id ?? NONE_KEY;
       let g = map.get(key);
       if (!g) {
-        g = { sprintId: id, sprintName: name, proposals: [], tasks: [] };
+        g = {
+          sprintId: id,
+          sprintName: name,
+          sprintStartDate: start ?? null,
+          sprintEndDate: end ?? null,
+          proposals: [],
+          tasks: [],
+        };
         map.set(key, g);
-      } else if (!g.sprintName && name) {
-        g.sprintName = name;
+      } else {
+        // Propostas vêm sem datas; a primeira task do board preenche a janela.
+        if (!g.sprintName && name) g.sprintName = name;
+        if (!g.sprintStartDate && start) g.sprintStartDate = start;
+        if (!g.sprintEndDate && end) g.sprintEndDate = end;
       }
       return g;
     };
@@ -215,7 +263,7 @@ export function ReleasePlanningProposals({
       ensure(id, a.targetSprint?.name ?? null).proposals.push(a);
     }
     for (const t of boardTasks) {
-      ensure(t.sprintId, t.sprintName).tasks.push(t);
+      ensure(t.sprintId, t.sprintName, t.sprintStartDate, t.sprintEndDate).tasks.push(t);
     }
     const arr = Array.from(map.values());
     arr.sort((a, b) => {
@@ -229,7 +277,7 @@ export function ReleasePlanningProposals({
   }, [actions, boardTasks]);
 
   const handleApply = useCallback(() => {
-    if (!planningCeremonyId || pendingCount === 0) return;
+    if (!planningCeremonyId || pendingCount === 0 || agentBusy) return;
     setConfirmState({
       title: `Aplicar ${pendingCount} proposta${pendingCount === 1 ? "" : "s"}?`,
       description:
@@ -264,7 +312,7 @@ export function ReleasePlanningProposals({
         }
       },
     });
-  }, [planningCeremonyId, pendingCount, onApplied]);
+  }, [planningCeremonyId, pendingCount, onApplied, agentBusy]);
 
   if (actions.length === 0 && boardTasks.length === 0) return null;
 
@@ -280,19 +328,31 @@ export function ReleasePlanningProposals({
           <Badge variant="secondary">{isStaging ? pendingCount : planCount}</Badge>
         </div>
         {!readOnly && isStaging && (
-          <Button size="sm" onClick={handleApply} disabled={applying}>
-            {applying ? (
+          <Button
+            size="sm"
+            onClick={handleApply}
+            disabled={applying || agentBusy}
+            title={
+              agentBusy
+                ? "Aguarde a Vitoria terminar de montar o plano"
+                : undefined
+            }
+          >
+            {applying || agentBusy ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Check className="size-4" />
             )}
-            Aplicar {pendingCount}
+            {agentBusy ? "Vitoria montando…" : `Aplicar ${pendingCount}`}
           </Button>
         )}
       </div>
 
-      <div className="divide-y">
+      <div>
         {groups.map((g) => {
+          const key = g.sprintId ?? NONE_KEY;
+          const isCollapsed = collapsed.has(key);
+          const week = formatSprintWeek(g.sprintStartDate, g.sprintEndDate);
           const propCount = g.proposals.filter((p) => p.decision !== "rejected").length;
           const fpTotal = g.tasks.reduce((sum, t) => sum + (t.functionPoints ?? 0), 0);
           const summary = [
@@ -304,15 +364,34 @@ export function ReleasePlanningProposals({
             .filter(Boolean)
             .join(" · ");
           return (
-            <section key={g.sprintId ?? NONE_KEY}>
-              <header className="flex items-center gap-2 bg-muted/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <span>{g.sprintName ?? "Sem sprint"}</span>
-                <span className="font-mono normal-case tracking-normal">{summary}</span>
-              </header>
+            <section key={key} className="border-t first:border-t-0">
+              <button
+                type="button"
+                onClick={() => toggleCollapse(key)}
+                aria-expanded={!isCollapsed}
+                className="flex w-full items-center gap-2 border-b bg-muted px-3 py-2 text-left hover:bg-muted/70"
+              >
+                <ChevronDown
+                  className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+                />
+                <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  {g.sprintName ?? "Sem sprint"}
+                </span>
+                {week && (
+                  <Badge variant="outline" className="font-normal">
+                    {week}
+                  </Badge>
+                )}
+                {summary && (
+                  <span className="ml-auto font-mono text-xs text-muted-foreground">
+                    {summary}
+                  </span>
+                )}
+              </button>
 
-              {/* Board VIVO desta sprint (qualquer status). Cap de preview —
-                  sprint cheia não vira parede de linhas. */}
-              {g.tasks.slice(0, BOARD_PREVIEW).map((t) => {
+              {/* Board VIVO desta sprint (qualquer status). Sem cap — espelha o
+                  canvas histórico, que renderiza todas as tasks. */}
+              {!isCollapsed && g.tasks.map((t) => {
                 const chip = statusChip(t.status);
                 return (
                   <button
@@ -336,15 +415,9 @@ export function ReleasePlanningProposals({
                   </button>
                 );
               })}
-              {g.tasks.length > BOARD_PREVIEW && (
-                <div className="px-3 py-1.5 text-xs text-muted-foreground">
-                  +{g.tasks.length - BOARD_PREVIEW} task
-                  {g.tasks.length - BOARD_PREVIEW === 1 ? "" : "s"} nesta sprint (veja no board da sprint)
-                </div>
-              )}
 
               {/* Propostas em staging (click → sheet rico) */}
-              {g.proposals.map((a) => {
+              {!isCollapsed && g.proposals.map((a) => {
                 const payload = a.payload ?? {};
                 const title =
                   (typeof payload.title === "string" && payload.title) ||

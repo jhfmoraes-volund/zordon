@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     .select(`
       *,
       project:Project(name),
-      sprint:Sprint(name),
+      sprint:Sprint(name, startDate, endDate),
       assignments:TaskAssignment(*, member:Member(id, name))
     `)
     .neq("status", "draft")
