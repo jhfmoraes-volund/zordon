@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Loader2, Pencil, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Radio, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { ChipTone } from "@/lib/status-chips";
@@ -26,9 +26,13 @@ type Props = {
   busy: boolean;
   /** Sessão legada aprovada (read-only). */
   readOnly: boolean;
+  /** Navegando uma versão antiga no cronograma → canvas/chat congelados. */
+  historyMode: boolean;
   onMontar: () => void;
   onOpenContext: () => void;
   onEdit: () => void;
+  /** Sai do modo histórico → volta ao plano vivo. */
+  onExitHistory: () => void;
 };
 
 /**
@@ -50,9 +54,11 @@ export function ReleasePlanningRibbon({
   backHref,
   busy,
   readOnly,
+  historyMode,
   onMontar,
   onOpenContext,
   onEdit,
+  onExitHistory,
 }: Props) {
   const stats = [
     `${sprintCount} sprint${sprintCount === 1 ? "" : "s"}`,
@@ -77,36 +83,55 @@ export function ReleasePlanningRibbon({
           )}
         </div>
 
-        <StatusChip tone={phaseTone} label={phaseLabel} dot />
-
-        {!readOnly && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onEdit}
-            className="h-8 w-8 p-0"
-            title="Editar Release Planning"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-        )}
-
-        <InsumosButton
-          count={insumoCount}
-          onClick={onOpenContext}
-          variant="outline"
-          className="h-8"
+        <StatusChip
+          tone={historyMode ? "amber" : phaseTone}
+          label={historyMode ? "Histórico" : phaseLabel}
+          dot
         />
 
-        {!readOnly && (
-          <Button size="sm" disabled={busy} onClick={onMontar} title="Vitoria lê as fontes (insumos + PRDs) e propõe as tasks">
-            {busy ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Montar plano
+        {historyMode ? (
+          // Modo histórico: única ação é voltar ao plano vivo. Edit/Montar somem
+          // (canvas + chat estão congelados).
+          <Button
+            size="sm"
+            onClick={onExitHistory}
+            title="Sair do histórico e voltar ao plano vivo"
+          >
+            <Radio className="mr-1.5 h-3.5 w-3.5" />
+            Ao vivo
           </Button>
+        ) : (
+          <>
+            {!readOnly && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onEdit}
+                className="h-8 w-8 p-0"
+                title="Editar Release Planning"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
+
+            <InsumosButton
+              count={insumoCount}
+              onClick={onOpenContext}
+              variant="outline"
+              className="h-8"
+            />
+
+            {!readOnly && (
+              <Button size="sm" disabled={busy} onClick={onMontar} title="Vitoria lê as fontes (insumos + PRDs) e propõe as tasks">
+                {busy ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Montar plano
+              </Button>
+            )}
+          </>
         )}
       </div>
 

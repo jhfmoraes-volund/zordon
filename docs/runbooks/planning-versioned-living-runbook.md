@@ -123,7 +123,7 @@ A capability nova que o modelo vivo exige (Fase ≥ 2): **batch reconcile**.
 | Fase | Entrega | Estado |
 |---|---|---|
 | **1 — Log** | `PlanningEvent` + `PlanningEventSprint`; gancho no apply; `GET /events`; **timeline visível** no canvas (substitui "Plano vazio"). Para o sangramento. | ✅ **Implementada (2026-06-19, Rev. 1)** |
-| **2 — Versionado vivo** | **2.0 ✅ board vivo · 2.1 ✅ guard D4 + anti-duplicador (Rev. 3-4, 2026-06-20)** · chat por-versão (D5, 2.2); strip de versões via `Regua` (D9, 2.3). | 2.0+2.1 done · 2.2-2.3 desenho fechado |
+| **2 — Versionado vivo** | **2.0 ✅ board vivo · 2.1 ✅ guard D4 + anti-duplicador · 2.3 ✅ cronograma + canvas histórico (Rev. 3-5, 2026-06-20)** · chat por-versão (D5, 2.2) pendente. | 2.0+2.1+2.3 done · 2.2 + apply atômico pendentes |
 | **3 — Memória + aprendizado** | Memória destilada por versão (D6); outcome planned-vs-delivered por-sprint (D7) → Metrics Registry. | Desenho fechado |
 | **4 — Merge Sprint Planning** | Absorver `PlanningCeremony` per-sprint como filtro da Planning viva. Taxonomia cai de 3 → 2 rituais (PM Review + Planning). | Adiado (D10) |
 
@@ -231,3 +231,13 @@ Fecha o §7 ("batch reconcile") na prática. Descoberta que encurtou o slice: **
 **Decisão fixada:** dedup = título-exato, AI-only, **skip** (não fuzzy, não convert-to-update). Tradeoff aceito: 2 tasks legítimas de mesmo título → a 2ª é pulada (PM renomeia). Em troca: re-rodar a planning vira idempotente.
 
 **🐛 Bug PRÉ-EXISTENTE descoberto (fora do escopo 2.1, NÃO regressão):** após um `create` aplicado, `MeetingTaskAction.taskId` NÃO é linkado (fica null) — o código de link no fim de `applyCreate` (intocado por mim) não persiste. Repro: aplicar um create da IA → action fica `applied` mas `taskId=null`. Impacto: trilha de auditoria/telemetria (`AgentProposalOutcome` não aponta pra task criada), NÃO afeta dedup/reconcile (que usam `Task.id` direto). Candidato a fix separado. Também notado: companions órfãs acumulam do recycling (detrito pré-existente, harmless).
+
+## 16. Rev. 5 — Fase 2.3 (cronograma + canvas histórico) + fix do taskId-link (2026-06-20)
+
+Dois trabalhos em paralelo, commitados juntos (local-as-SSOT sweep).
+
+**Fix do bug do taskId-link (Rev. 4):** root-causado — o CHECK `MeetingTaskAction_taskId_consistency` exigia `type='create' → taskId IS NULL` SEMPRE, então o link no fim de `applyCreate` sempre violava o CHECK e falhava silencioso (erro engolido). Fix: migration `20260620b` relaxa o CHECK (`execution='applied' OR (create AND taskId NULL) OR (≠create AND taskId NOT NULL)` — seguro p/ dados existentes, relaxar nunca quebra) + executor agora seta `taskId` **junto com** `execution='applied'` na mesma update (transição atômica satisfaz o CHECK) e `markExecuted` para de engolir erro. **Verificado e2e:** probe mostra `taskId linked: YES`.
+
+**Fase 2.3 — cronograma + histórico navegável:** ribbon ganhou **mini-régua** (`PlanningCronograma`, 1 bloco/sprint, cor = atividade de planning) sempre visível como glance+entrada; click → **modo histórico** (canvas + chat congelam read-only, ribbon mostra "Ao vivo") + `PlanningHistorySheet` (`ResponsiveSheet` = week-picker com cronograma `full` + lista de versões da semana). Selecionar versão → `PlanningHistoricalCanvas` (board congelado: tasks por sprint com status/FP/assignees imutáveis + briefing). **Snapshot completo:** tabela `PlanningEventTask` (migration `20260620`, denormalizada/sem-FK-viva, RLS via join); `snapshotPlan()` faz 1 query de Task e deriva agregado-por-sprint + linha-por-task; `getPlanningEventSnapshot` + `GET /events/[eventId]` (lazy). Binagem dos logs por janela da sprint que contém `createdAt` (D1). `PlanningEventLog` self-fetching virou `PlanningEventRow` presentacional. Detalhe completo na memory `project_planning_versioned_living`.
+
+**Frontier (o que ainda falta):** 2.2 chat por-versão (hoje a thread inteira congela, não há corte por-versão) · apply atômico via RPC · "restaurar versão" (snapshot = pré-req atendido) · Fase 3 (memória destilada + outcome). Papercuts: snapshot grava board inteiro/apply (cresce com applies×tasks); binagem por data UTC na fronteira de semana; mini-régua aparece com 0 versões; cronograma é réplica LOCAL do `Regua` (extrair como shared, D9).

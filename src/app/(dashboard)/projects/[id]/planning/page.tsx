@@ -25,7 +25,13 @@ import { ReleasePlanningRibbon } from "@/components/planning-session/release-pla
 import { ReleasePlanningSheet } from "@/components/planning-session/release-planning-sheet";
 import { ReleasePlanningContextSheet } from "@/components/planning-session/context-sheet";
 import { ReleasePlanningProposals } from "@/components/planning-session/release-planning-proposals";
-import { PlanningEventLog } from "@/components/planning-session/planning-event-log";
+import {
+  PlanningCronograma,
+  type CronogramaBlock,
+} from "@/components/planning-session/planning-cronograma";
+import { PlanningHistorySheet } from "@/components/planning-session/planning-history-sheet";
+import { PlanningHistoricalCanvas } from "@/components/planning-session/planning-historical-canvas";
+import type { PlanningEvent } from "@/components/planning-session/planning-event-log";
 import type {
   PlanningSessionRow,
   PlanningSessionPRDWithSource,
@@ -35,6 +41,9 @@ type SessionWithPrds = PlanningSessionRow & {
   projectName: string | null;
   prds: PlanningSessionPRDWithSource[];
 };
+
+/** Key do bloco "Sem sprint" (logs fora de qualquer janela de sprint). */
+const NONE_KEY = "__none__";
 
 export default function PlanningSessionPage({
   params,
@@ -65,11 +74,27 @@ export default function PlanningSessionPage({
     planCount: 0,
     doneCount: 0,
   });
-  // Planning Vivo Versionado — Fase 1: nº de versões aplicadas (PlanningEvent).
-  // O canvas só fica "Plano vazio" se NÃO houver board, staging, NEM histórico.
-  const [eventCount, setEventCount] = useState(0);
+  // Planning Vivo Versionado: versões aplicadas (PlanningEvent) + sprints do
+  // projeto alimentam o cronograma de blocos. O canvas só fica "Plano vazio" se
+  // NÃO houver board, staging, NEM histórico.
+  const [events, setEvents] = useState<PlanningEvent[]>([]);
+  const [sprints, setSprints] = useState<
+    Array<{ id: string; name: string; startDate: string; endDate: string }>
+  >([]);
   const hasPlan =
-    planState.pendingCount > 0 || planState.planCount > 0 || eventCount > 0;
+    planState.pendingCount > 0 || planState.planCount > 0 || events.length > 0;
+
+  // ─── Modo histórico (navegação no cronograma) ──────────────────────────
+  // `historyBlockKey` = bloco/semana selecionada (sprintId ou "__none__");
+  // `historyEventId` = versão aberta no canvas. Em modo histórico, canvas + chat
+  // ficam read-only.
+  const [historyBlockKey, setHistoryBlockKey] = useState<string | null>(null);
+  const [historyEventId, setHistoryEventId] = useState<string | null>(null);
+  // Sheet do navegador de versões. Separado do historyMode: fechar o sheet NÃO
+  // sai do histórico (o canvas segue congelado pra você vê-lo); reabrir = clicar
+  // um bloco na mini-régua. Sair de vez é o "Ao vivo".
+  const [historySheetOpen, setHistorySheetOpen] = useState(false);
+  const historyMode = historyBlockKey !== null;
 
   const threadIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -116,6 +141,38 @@ export default function PlanningSessionPage({
       cancelled = true;
     };
   }, [loadSession]);
+
+  // Sprints do projeto → blocos do cronograma. status=all inclui as futuras.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/sprints?projectId=${projectId}&status=all`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(
+        (rows: Array<{ id: string; name: string; startDate: string; endDate: string }>) => {
+          if (!cancelled) setSprints(rows ?? []);
+        },
+      )
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  // Versões aplicadas (PlanningEvent) — alimentam o cronograma + a drawer.
+  // Refetcha após cada "Aplicar" (actionsRefresh bump).
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    fetch(`/api/planning-sessions/${sessionId}/events`)
+      .then((r) => (r.ok ? r.json() : { events: [] }))
+      .then((data: { events: PlanningEvent[] }) => {
+        if (!cancelled) setEvents(data.events ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, actionsRefresh]);
 
   // ─── Chat ─────────────────────────────────────────────────────────────
 
@@ -208,18 +265,82 @@ export default function PlanningSessionPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
+  // ─── Cronograma: blocos por sprint + binagem dos logs por janela de data ──
+  const { blocks, eventsByBlock } = useMemo(() => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const sorted = [...sprints].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+    // Bina cada versão na sprint cuja janela [startDate, endDate] contém o
+    // createdAt (D1). Fora de qualquer janela → bucket NONE.
+    const byBlock = new Map<string, PlanningEvent[]>();
+    for (const ev of events) {
+      const d = ev.createdAt.slice(0, 10);
+      const sprint = sorted.find((s) => s.startDate <= d && d <= s.endDate);
+      const key = sprint?.id ?? NONE_KEY;
+      const arr = byBlock.get(key);
+      if (arr) arr.push(ev);
+      else byBlock.set(key, [ev]);
+    }
+
+    const list: CronogramaBlock[] = sorted.map((s) => ({
+      sprintId: s.id,
+      sprintName: s.name,
+      dateLabel: `${s.startDate.slice(8, 10)}/${s.startDate.slice(5, 7)}`,
+      kind: today < s.startDate ? "future" : today > s.endDate ? "past" : "current",
+      logCount: byBlock.get(s.id)?.length ?? 0,
+    }));
+    // Bloco trailing pros logs fora de qualquer janela (raro).
+    const orphan = byBlock.get(NONE_KEY)?.length ?? 0;
+    if (orphan > 0) {
+      list.push({
+        sprintId: null,
+        sprintName: "Sem sprint",
+        dateLabel: "—",
+        kind: "past",
+        logCount: orphan,
+      });
+    }
+    return { blocks: list, eventsByBlock: byBlock };
+  }, [sprints, events]);
+
+  const exitHistory = useCallback(() => {
+    setHistoryBlockKey(null);
+    setHistoryEventId(null);
+    setHistorySheetOpen(false);
+  }, []);
+
+  // Click num bloco (mini-régua OU cronograma do sheet): seleciona a semana,
+  // auto-abre a versão mais recente dela (API ordena desc) e abre o navegador.
+  // Sair do histórico é só pelo "Ao vivo".
+  const handleSelectBlock = useCallback(
+    (sprintId: string | null) => {
+      const key = sprintId ?? NONE_KEY;
+      setHistoryBlockKey(key);
+      const bucket = eventsByBlock.get(key) ?? [];
+      setHistoryEventId(bucket[0]?.id ?? null);
+      setHistorySheetOpen(true);
+    },
+    [eventsByBlock],
+  );
+
+  // Eventos + rótulo do bloco selecionado (alimentam o sheet).
+  const drawerEvents = historyBlockKey ? eventsByBlock.get(historyBlockKey) ?? [] : [];
+  const selectedBlockLabel =
+    blocks.find((b) => (b.sprintId ?? NONE_KEY) === historyBlockKey)?.sprintName ?? null;
+
   const handleSubmit = useCallback(() => {
     const text = input.trim();
-    if (!text || status === "streaming" || status === "submitted") return;
+    if (!text || historyMode || status === "streaming" || status === "submitted") return;
     sendMessage({ text });
     setInput("");
-  }, [input, status, sendMessage]);
+  }, [input, historyMode, status, sendMessage]);
 
   // "Montar plano": pede pra Vitoria ler as FONTES (insumos + PRDs) e propor
   // as tasks/stories distribuídas nas sprints. É o atalho de 1 clique do kickoff/
   // backfill — depois o PM revisa no painel e aplica.
   const handleKickoff = useCallback(() => {
-    if (status === "streaming" || status === "submitted") return;
+    if (historyMode || status === "streaming" || status === "submitted") return;
     sendMessage({
       text:
         "Monta o plano: lê as fontes do projeto (insumos linkados + PRDs disponíveis) e " +
@@ -230,7 +351,7 @@ export default function PlanningSessionPage({
         "(não recrie — duplicata é pulada no Aplicar).",
     });
     if (isMobile) setMobileOpen(true);
-  }, [status, sendMessage, isMobile]);
+  }, [historyMode, status, sendMessage, isMobile]);
 
   // ─── Actions ────────────────────────────────────────────────────────────
 
@@ -333,6 +454,9 @@ export default function PlanningSessionPage({
               ? { label: "Com plano", tone: "green" }
               : { label: "Rascunho", tone: "blue" };
 
+  // Em modo histórico a conversa é a thread inteira, mas o composer trava — não
+  // dá pra interagir com a Vitoria "no passado" (mesmo padrão do isApproved).
+  const chatReadOnly = isApproved || historyMode;
   const chatPanel = (
     <ConversationPanel
       agent="vitoria"
@@ -349,9 +473,13 @@ export default function PlanningSessionPage({
       onClose={isMobile ? () => setMobileOpen(false) : undefined}
       planMode={planMode}
       onPlanModeChange={setPlanMode}
-      composerSubmitDisabled={isApproved}
+      composerSubmitDisabled={chatReadOnly}
       placeholder={
-        isApproved ? "Release planning aprovado — read-only" : undefined
+        historyMode
+          ? "Histórico — read-only (não dá pra interagir com a Vitoria)"
+          : isApproved
+            ? "Release planning aprovado — read-only"
+            : undefined
       }
       className="h-full"
     />
@@ -379,49 +507,74 @@ export default function PlanningSessionPage({
         backHref={backHref}
         busy={busy}
         readOnly={isApproved}
+        historyMode={historyMode}
         onMontar={handleKickoff}
         onOpenContext={() => setContextOpen(true)}
         onEdit={() => setEditOpen(true)}
+        onExitHistory={exitHistory}
       />
+
+      {/* Mini-régua sempre visível no ribbon — glance + entrada. Click num bloco
+          abre o side-sheet (PlanningHistorySheet) e entra no modo histórico. */}
+      {blocks.length > 0 && (
+        <div className="shrink-0 border-b bg-background px-6 py-2 flex items-center gap-3">
+          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Histórico
+          </span>
+          <PlanningCronograma
+            variant="mini"
+            blocks={blocks}
+            selectedKey={historyBlockKey}
+            onSelect={handleSelectBlock}
+          />
+        </div>
+      )}
 
       {/* Canvas: plano (tasks/stories por sprint) à esquerda + chat Vitoria à direita.
           PRD↔sprint board saiu (2026-06-19) — a planning lê fontes e produz tasks. */}
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] gap-4 p-4">
         <div className="surface overflow-y-auto min-h-0 p-4 space-y-4">
-          <ReleasePlanningProposals
-            planningCeremonyId={session.planningCeremonyId}
-            projectId={projectId}
-            refreshKey={actionsRefresh}
-            readOnly={isApproved}
-            onStateChange={setPlanState}
-            onApplied={() => {
-              void loadSession();
-              setActionsRefresh((n) => n + 1);
-            }}
-          />
-          {/* Histórico (Log) das versões aplicadas — substitui o "Plano vazio".
-              refreshKey reusa o bump do apply pra refetchar após cada "Aplicar". */}
-          <PlanningEventLog
-            sessionId={session.id}
-            refreshKey={actionsRefresh}
-            onCountChange={setEventCount}
-          />
-          {!hasPlan && (
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              <p className="mb-4">
-                Plano vazio. Peça pra Vitoria montar a partir das fontes (insumos +
-                PRDs) — ela propõe as tasks por sprint, você revisa e aplica.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleKickoff}
-                disabled={isApproved || busy}
-              >
-                <Sparkles className="size-4" />
-                Montar plano
-              </Button>
-            </div>
+          {historyMode ? (
+            // Canvas HISTÓRICO (read-only) da versão selecionada. Sem versão na
+            // semana → estado vazio (bloco passado sem atividade).
+            historyEventId ? (
+              <PlanningHistoricalCanvas sessionId={session.id} eventId={historyEventId} />
+            ) : (
+              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                Nenhuma versão do plano nesta semana.
+              </div>
+            )
+          ) : (
+            <>
+              <ReleasePlanningProposals
+                planningCeremonyId={session.planningCeremonyId}
+                projectId={projectId}
+                refreshKey={actionsRefresh}
+                readOnly={isApproved}
+                onStateChange={setPlanState}
+                onApplied={() => {
+                  void loadSession();
+                  setActionsRefresh((n) => n + 1);
+                }}
+              />
+              {!hasPlan && (
+                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  <p className="mb-4">
+                    Plano vazio. Peça pra Vitoria montar a partir das fontes (insumos +
+                    PRDs) — ela propõe as tasks por sprint, você revisa e aplica.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleKickoff}
+                    disabled={isApproved || busy}
+                  >
+                    <Sparkles className="size-4" />
+                    Montar plano
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -438,6 +591,20 @@ export default function PlanningSessionPage({
           {chatPanel}
         </>
       )}
+
+      {/* Navegador de versões (side-sheet). Fechar NÃO sai do histórico — o
+          canvas segue congelado; reabrir = clicar um bloco na mini-régua. */}
+      <PlanningHistorySheet
+        open={historySheetOpen}
+        onOpenChange={setHistorySheetOpen}
+        blocks={blocks}
+        selectedKey={historyBlockKey}
+        onSelectBlock={handleSelectBlock}
+        weekLabel={selectedBlockLabel}
+        events={drawerEvents}
+        selectedEventId={historyEventId}
+        onSelectEvent={setHistoryEventId}
+      />
 
       <ReleasePlanningContextSheet
         sessionId={session.id}

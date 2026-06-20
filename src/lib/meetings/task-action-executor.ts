@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/database.types";
 
 type Supabase = SupabaseClient<Database>;
 type ActionRow = Database["public"]["Tables"]["MeetingTaskAction"]["Row"];
+type TaskActionUpdate = Database["public"]["Tables"]["MeetingTaskAction"]["Update"];
 type TaskUpdate = Database["public"]["Tables"]["Task"]["Update"];
 
 type ApplyResult = {
@@ -179,9 +180,11 @@ async function applyActions(
 
   for (const action of sorted) {
     try {
+      // create devolve o id da task criada pra linkar no action (rastreamento).
+      let createdTaskId: string | null = null;
       switch (action.type) {
         case "create":
-          await applyCreate(supabase, action, fallbackSprintId);
+          createdTaskId = await applyCreate(supabase, action, fallbackSprintId);
           break;
         case "update":
           await applyUpdate(supabase, action);
@@ -199,7 +202,9 @@ async function applyActions(
           result.details.push({ id: action.id, type: action.type, status: "skipped" });
           continue;
       }
-      await markExecuted(supabase, action.id, "applied");
+      // Seta execution='applied' + taskId (do create) na MESMA update — a
+      // transição atômica satisfaz o CHECK que só admite create+taskId aplicado.
+      await markExecuted(supabase, action.id, "applied", createdTaskId);
       await recordProposalOutcome(supabase, action);
       result.applied++;
       result.details.push({ id: action.id, type: action.type, status: "applied" });
@@ -277,7 +282,7 @@ async function applyCreate(
   supabase: Supabase,
   action: ActionRow,
   fallbackSprintId: string | null = null,
-) {
+): Promise<string> {
   const p = (action.payload ?? {}) as Record<string, unknown>;
 
   // Anti-duplicador ANTES de queimar uma reference (next_task_reference
@@ -395,11 +400,10 @@ async function applyCreate(
     }
   }
 
-  // Linka taskId no action pra rastreamento
-  await supabase
-    .from("MeetingTaskAction")
-    .update({ taskId })
-    .eq("id", action.id);
+  // taskId NÃO é linkado aqui: o CHECK MeetingTaskAction_taskId_consistency só
+  // admite create+taskId quando execution='applied'. Quem seta os dois JUNTOS
+  // (transição atômica que satisfaz o CHECK) é markExecuted. Devolve o taskId.
+  return taskId;
 }
 
 async function applyUpdate(supabase: Supabase, action: ActionRow) {
@@ -541,16 +545,23 @@ async function applyMove(supabase: Supabase, action: ActionRow) {
 async function markExecuted(
   supabase: Supabase,
   id: string,
-  execution: "applied" | "skipped"
+  execution: "applied" | "skipped",
+  taskId?: string | null,
 ) {
-  await supabase
+  const patch: TaskActionUpdate = {
+    execution,
+    appliedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  // Linka a task criada (só faz sentido em create aplicado). Setar junto com
+  // execution='applied' é o que satisfaz o CHECK MeetingTaskAction_taskId_consistency.
+  if (taskId) patch.taskId = taskId;
+  const { error } = await supabase
     .from("MeetingTaskAction")
-    .update({
-      execution,
-      appliedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    })
+    .update(patch)
     .eq("id", id);
+  // Não engole: o link de taskId já falhou silencioso por anos por causa disso.
+  if (error) console.error(`[markExecuted] update falhou (action=${id}):`, error.message);
 }
 
 async function markFailed(supabase: Supabase, id: string, errorMessage: string) {

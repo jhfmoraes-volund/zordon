@@ -5379,6 +5379,53 @@ export type Database = {
           },
         ]
       }
+      PlanningEventTask: {
+        Row: {
+          assignees: string[]
+          functionPoints: number | null
+          id: string
+          planningEventId: string
+          reference: string | null
+          sprintId: string | null
+          sprintLabel: string
+          status: string
+          taskId: string | null
+          title: string
+        }
+        Insert: {
+          assignees?: string[]
+          functionPoints?: number | null
+          id?: string
+          planningEventId: string
+          reference?: string | null
+          sprintId?: string | null
+          sprintLabel: string
+          status: string
+          taskId?: string | null
+          title: string
+        }
+        Update: {
+          assignees?: string[]
+          functionPoints?: number | null
+          id?: string
+          planningEventId?: string
+          reference?: string | null
+          sprintId?: string | null
+          sprintLabel?: string
+          status?: string
+          taskId?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "PlanningEventTask_planningEventId_fkey"
+            columns: ["planningEventId"]
+            isOneToOne: false
+            referencedRelation: "PlanningEvent"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       PlanningSession: {
         Row: {
           agentOutputsJsonb: Json | null

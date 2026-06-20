@@ -22,11 +22,17 @@ type Tables = Database["public"]["Tables"];
 
 export type PlanningEventRow = Tables["PlanningEvent"]["Row"];
 export type PlanningEventSprintRow = Tables["PlanningEventSprint"]["Row"];
+export type PlanningEventTaskRow = Tables["PlanningEventTask"]["Row"];
 
 /** Evento + child rows de FP por sprint + nome de quem aplicou — shape pra UI. */
 export type PlanningEventWithSprints = PlanningEventRow & {
   sprints: PlanningEventSprintRow[];
   createdByName: string | null;
+};
+
+/** Evento + snapshot COMPLETO (FP por sprint + lista de tasks) — pro canvas histórico. */
+export type PlanningEventSnapshot = PlanningEventWithSprints & {
+  tasks: PlanningEventTaskRow[];
 };
 
 /** Label do bucket de tasks sem sprint (backlog/não-agendado). */
@@ -67,8 +73,9 @@ export async function recordPlanningEventFromCeremony(input: {
   // 2. Briefing = CÓPIA do último turn assistant do thread (auto-contido).
   const { briefingMarkdown, chatMessageId } = await loadLatestBriefing(session.id);
 
-  // 3. Snapshot CUMULATIVO de FP por sprint (estado do plano nesse instante).
-  const sprintRows = await snapshotFpBySprint(session.projectId);
+  // 3. Snapshot CUMULATIVO do plano nesse instante: agregado de FP por sprint +
+  //    a lista COMPLETA de tasks (o board exato daquela versão).
+  const { sprints: sprintRows, tasks: taskRows } = await snapshotPlan(session.projectId);
 
   // 4. Insere o evento (counts vêm do executor via concludePlanning).
   const { data: event, error: eErr } = await supabase
@@ -86,7 +93,7 @@ export async function recordPlanningEventFromCeremony(input: {
     .single();
   if (eErr) throw eErr;
 
-  // 5. Child rows denormalizadas (sem jsonb, D8).
+  // 5. Child rows denormalizadas (sem jsonb, D8): agregado por sprint…
   if (sprintRows.length > 0) {
     const { error: psErr } = await supabase.from("PlanningEventSprint").insert(
       sprintRows.map((s) => ({
@@ -98,6 +105,25 @@ export async function recordPlanningEventFromCeremony(input: {
       })),
     );
     if (psErr) throw psErr;
+  }
+
+  // 6. …e a lista COMPLETA de tasks (o board exato daquela versão, pro canvas
+  //    histórico). Tudo denormalizado/imutável — sobrevive a delete/rename.
+  if (taskRows.length > 0) {
+    const { error: ptErr } = await supabase.from("PlanningEventTask").insert(
+      taskRows.map((t) => ({
+        planningEventId: event.id,
+        taskId: t.taskId,
+        reference: t.reference,
+        title: t.title,
+        status: t.status,
+        sprintId: t.sprintId,
+        sprintLabel: t.sprintLabel,
+        functionPoints: t.functionPoints,
+        assignees: t.assignees,
+      })),
+    );
+    if (ptErr) throw ptErr;
   }
 
   return event;
@@ -131,39 +157,55 @@ async function loadLatestBriefing(sessionId: string): Promise<{
   return { briefingMarkdown: msg.content ?? null, chatMessageId: msg.id };
 }
 
+/** Agregado de FP por sprint (chip do briefing/timeline). */
+type SprintAgg = {
+  sprintId: string | null;
+  sprintLabel: string;
+  fpTotal: number;
+  taskCount: number;
+};
+
+/** Uma task do snapshot (espelha as colunas de PlanningEventTask, sem ids do evento). */
+type TaskSnap = {
+  taskId: string | null;
+  reference: string | null;
+  title: string;
+  status: string;
+  sprintId: string | null;
+  sprintLabel: string;
+  functionPoints: number | null;
+  assignees: string[];
+};
+
 /**
- * Agrupa as Task do projeto por sprint e soma FP — o "Sprint 1 ~87 FP" que o
- * briefing mostra. Cumulativo (não delta): inclui tasks de todas as fases/status.
- * Exclui dismissed E draft — mesmo recorte do board vivo (`/api/tasks`), pra o FP
- * do snapshot bater com o que o canvas mostra. sprintId NULL = bucket backlog.
+ * Snapshot CUMULATIVO do plano num instante: lê as Task do projeto UMA vez e
+ * deriva dois recortes — o agregado de FP por sprint (briefing) e a lista
+ * completa de tasks (o board exato, pro canvas histórico). Não é delta: inclui
+ * tasks de todas as fases/status. Exclui dismissed E draft — mesmo recorte do
+ * board vivo (`/api/tasks`), pra bater com o que o canvas mostra. sprintId
+ * NULL = bucket backlog ("Sem sprint").
  */
-async function snapshotFpBySprint(projectId: string): Promise<
-  Array<{
-    sprintId: string | null;
-    sprintLabel: string;
-    fpTotal: number;
-    taskCount: number;
-  }>
-> {
+async function snapshotPlan(
+  projectId: string,
+): Promise<{ sprints: SprintAgg[]; tasks: TaskSnap[] }> {
   const supabase = db();
   const { data, error } = await supabase
     .from("Task")
-    .select("sprintId, functionPoints, sprint:Sprint(name)")
+    .select(
+      "id, reference, title, status, sprintId, functionPoints, sprint:Sprint(name), assignments:TaskAssignment(member:Member(name))",
+    )
     .eq("projectId", projectId)
     .neq("status", "draft")
     .is("dismissedAt", null);
   if (error) throw error;
 
-  type Agg = {
-    sprintId: string | null;
-    sprintLabel: string;
-    fpTotal: number;
-    taskCount: number;
-  };
-  const map = new Map<string, Agg>();
+  const map = new Map<string, SprintAgg>();
+  const tasks: TaskSnap[] = [];
   for (const t of data ?? []) {
-    const key = t.sprintId ?? "__backlog__";
     const label = (t.sprint as { name: string } | null)?.name ?? BACKLOG_LABEL;
+    const key = t.sprintId ?? "__backlog__";
+
+    // Agregado por sprint.
     let g = map.get(key);
     if (!g) {
       g = { sprintId: t.sprintId ?? null, sprintLabel: label, fpTotal: 0, taskCount: 0 };
@@ -173,8 +215,24 @@ async function snapshotFpBySprint(projectId: string): Promise<
     }
     g.fpTotal += t.functionPoints ?? 0;
     g.taskCount += 1;
+
+    // Linha por task (board exato).
+    const assignees = ((t.assignments ?? []) as Array<{ member: { name: string | null } | null }>)
+      .map((a) => a.member?.name)
+      .filter((n): n is string => !!n);
+    tasks.push({
+      taskId: t.id,
+      reference: t.reference,
+      title: t.title,
+      status: t.status,
+      sprintId: t.sprintId ?? null,
+      sprintLabel: label,
+      functionPoints: t.functionPoints,
+      assignees,
+    });
   }
-  return Array.from(map.values());
+
+  return { sprints: Array.from(map.values()), tasks };
 }
 
 // ─── Read ─────────────────────────────────────────────────────────────────
@@ -219,4 +277,49 @@ export async function listPlanningEventsForSession(
       createdByName: createdBy?.name ?? null,
     };
   });
+}
+
+/**
+ * Um PlanningEvent + snapshot COMPLETO (FP por sprint + lista de tasks) — o
+ * "canvas histórico" de uma versão. Retorna null se o evento não existe. O
+ * caller valida acesso ao projeto (db() bypassa RLS).
+ */
+export async function getPlanningEventSnapshot(
+  eventId: string,
+): Promise<PlanningEventSnapshot | null> {
+  const supabase = db();
+  const { data, error } = await supabase
+    .from("PlanningEvent")
+    .select(
+      `
+      *,
+      sprints:PlanningEventSprint(*),
+      tasks:PlanningEventTask(*),
+      createdBy:Member!PlanningEvent_createdById_fkey(name)
+      `,
+    )
+    .eq("id", eventId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const { createdBy, sprints, tasks, ...rest } = data as PlanningEventRow & {
+    createdBy: { name: string | null } | null;
+    sprints: PlanningEventSprintRow[];
+    tasks: PlanningEventTaskRow[];
+  };
+
+  // Ordena chips de sprint por label numérico (Sprint 1, 2, …); backlog por último.
+  const sortedSprints = (sprints ?? []).slice().sort((a, b) => {
+    if (a.sprintId === null) return 1;
+    if (b.sprintId === null) return -1;
+    return a.sprintLabel.localeCompare(b.sprintLabel, undefined, { numeric: true });
+  });
+
+  return {
+    ...rest,
+    sprints: sortedSprints,
+    tasks: tasks ?? [],
+    createdByName: createdBy?.name ?? null,
+  };
 }
