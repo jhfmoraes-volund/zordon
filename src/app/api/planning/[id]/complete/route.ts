@@ -13,9 +13,11 @@ import { getPlanningById, concludePlanning } from "@/lib/dal/planning";
 import { recordPlanningEventFromCeremony } from "@/lib/dal/planning-event";
 
 // Aplica o plano inteiro em cascata (pode ser dezenas de tasks). Com o executor
-// em lote roda em ~2-3s, mas damos folga ao budget da plataforma pra um backfill
-// grande não ser cortado no meio.
-export const maxDuration = 60;
+// em lote roda em ~2-3s. maxDuration >= o timeout do cliente (90s em
+// proposals.tsx) de propósito: o server precisa ser o teto, senão ele é cortado
+// aos 60s e o cliente espera por algo que já morreu (estado parcial, achado #8).
+// Backfill patológico (centenas de tasks) que estoure 120s → tornar async (202+job).
+export const maxDuration = 120;
 
 export async function POST(
   _req: NextRequest,

@@ -99,7 +99,9 @@ export function ReleasePlanningProposals({
   planningCeremonyId: string | null;
   projectId: string;
   refreshKey: number;
-  onApplied: () => void;
+  /** Resultado do apply — a página decide o que fazer (ex: só reseta o chat se
+   *  algo foi aplicado de fato). */
+  onApplied: (result: { applied: number; failed: number; skipped: number }) => void;
   /** Reporta os counts — a página deriva a fase do header e o empty-state.
    *  `planCount` = tasks no board vivo; `doneCount` = quantas dessas done. */
   onStateChange?: (s: {
@@ -296,15 +298,21 @@ export function ReleasePlanningProposals({
             { timeoutMs: 90_000 },
           );
           const result = (await res.json()) as {
-            applied?: { applied?: number; failed?: number };
+            applied?: { applied?: number; failed?: number; skipped?: number };
           };
           const applied = result.applied?.applied ?? 0;
           const failed = result.applied?.failed ?? 0;
-          toast.success(
-            `${applied} aplicada${applied === 1 ? "" : "s"}` +
-              (failed ? ` · ${failed} falhou` : ""),
-          );
-          onApplied();
+          const skipped = result.applied?.skipped ?? 0;
+          // Mostra TODAS as contagens — sem isto, propostas puladas (D4/duplicata)
+          // somem da tela sem explicação e o PM acha que bugou (achado #1).
+          const parts = [`${applied} aplicada${applied === 1 ? "" : "s"}`];
+          if (skipped) parts.push(`${skipped} pulada${skipped === 1 ? "" : "s"} (trabalho em curso ou duplicata)`);
+          if (failed) parts.push(`${failed} falhou`);
+          const msg = parts.join(" · ");
+          if (failed && !applied) toast.error(msg);
+          else if (skipped || failed) toast.warning(msg);
+          else toast.success(msg);
+          onApplied({ applied, failed, skipped });
         } catch (err) {
           showErrorToast(err, { label: "Falha ao aplicar propostas" });
         } finally {

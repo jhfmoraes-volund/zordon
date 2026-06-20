@@ -104,7 +104,21 @@ export async function applyPendingActionsForPlanning(
     decidedById,
   }));
 
-  return applyActions(supabase, refreshed, planning.sprintId);
+  const result = await applyActions(supabase, refreshed, planning.sprintId);
+
+  // Consome as DESCARTADAS (decision=rejected, execution=pending). Sem isto elas
+  // ficam execution=pending e o loadAll (filtra pending) as re-exibe riscadas em
+  // todo ciclo futuro — dívida de staging que só cresce (achado #5). Marca como
+  // skipped pra saírem do lote; NÃO entram no result.skipped (que conta os guards
+  // do apply, não descartes intencionais do PM).
+  await supabase
+    .from("MeetingTaskAction")
+    .update({ execution: "skipped", appliedAt: nowIso, updatedAt: nowIso })
+    .eq("planningCeremonyId", planningCeremonyId)
+    .eq("decision", "rejected")
+    .eq("execution", "pending");
+
+  return result;
 }
 
 // ─── Orquestração: plan → allocate → write ───────────────────

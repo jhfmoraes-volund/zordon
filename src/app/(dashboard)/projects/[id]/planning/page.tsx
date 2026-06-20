@@ -328,25 +328,31 @@ export default function PlanningSessionPage({
   // commitada → (1) volta pro "ao vivo", (2) abre um CHAT NOVO com a Vitoria pra
   // a próxima iteração (o anterior vira histórico), (3) recarrega o canvas no
   // estado vivo (staging consumido → tasks reais no board, ao lado do chat novo).
-  const handleApplied = useCallback(async () => {
-    exitHistory();
-    if (sessionId) {
-      try {
-        const res = await fetchOrThrow(
-          `/api/planning-sessions/${sessionId}/chat/new`,
-          { method: "POST" },
-        );
-        const { threadId: fresh } = (await res.json()) as { threadId: string };
-        setMessages([]);
-        setThreadId(fresh);
-      } catch {
-        // Best-effort: se o chat novo falhar, o anterior segue e o board ainda
-        // atualiza — não trava o fluxo de aplicar.
+  const handleApplied = useCallback(
+    async (result: { applied: number; failed: number; skipped: number }) => {
+      exitHistory();
+      // Só vira pro chat novo (próxima versão) se ALGO foi aplicado. Apply que não
+      // aplicou nada (tudo falhou/pulado) PRESERVA o papo — é exatamente aí que o
+      // PM precisa do contexto pra pedir "Vitoria, conserta isso" (achado #2).
+      if (sessionId && result.applied > 0) {
+        try {
+          const res = await fetchOrThrow(
+            `/api/planning-sessions/${sessionId}/chat/new`,
+            { method: "POST" },
+          );
+          const { threadId: fresh } = (await res.json()) as { threadId: string };
+          setMessages([]);
+          setThreadId(fresh);
+        } catch {
+          // Best-effort: se o chat novo falhar, o anterior segue e o board ainda
+          // atualiza — não trava o fluxo de aplicar.
+        }
       }
-    }
-    void loadSession();
-    setActionsRefresh((n) => n + 1);
-  }, [sessionId, exitHistory, loadSession, setMessages]);
+      void loadSession();
+      setActionsRefresh((n) => n + 1);
+    },
+    [sessionId, exitHistory, loadSession, setMessages],
+  );
 
   // Click num bloco (mini-régua OU cronograma do sheet): seleciona a semana,
   // auto-abre a versão mais recente dela (API ordena desc) e abre o navegador.
@@ -377,7 +383,7 @@ export default function PlanningSessionPage({
   // "Montar plano": pede pra Vitoria ler as FONTES (insumos + PRDs) e propor
   // as tasks/stories distribuídas nas sprints. É o atalho de 1 clique do kickoff/
   // backfill — depois o PM revisa no painel e aplica.
-  const handleKickoff = useCallback(() => {
+  const runKickoff = useCallback(() => {
     if (historyMode || status === "streaming" || status === "submitted") return;
     sendMessage({
       text:
@@ -390,6 +396,33 @@ export default function PlanningSessionPage({
     });
     if (isMobile) setMobileOpen(true);
   }, [historyMode, status, sendMessage, isMobile]);
+
+  // Guards do "Montar plano": (#7) sem fontes linkadas a Vitoria parte do zero e
+  // pode inventar tasks; (#6) com staging pendente, montar de novo empilha por
+  // cima em vez de aplicar primeiro. Confirma antes em vez de bloquear.
+  const handleKickoff = useCallback(() => {
+    if (historyMode || status === "streaming" || status === "submitted") return;
+    const noSources = insumoCount === 0 && (session?.prds.length ?? 0) === 0;
+    const hasStaging = planState.pendingCount > 0;
+    if (noSources || hasStaging) {
+      const reasons = [
+        noSources &&
+          "Não há fonte linkada (insumo ou PRD) — a Vitoria parte do zero e pode inventar tasks.",
+        hasStaging &&
+          `Já há ${planState.pendingCount} proposta${planState.pendingCount === 1 ? "" : "s"} em staging — montar de novo adiciona mais por cima (considere aplicar primeiro).`,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      setConfirmState({
+        title: "Montar o plano mesmo assim?",
+        description: reasons,
+        confirmLabel: "Montar mesmo assim",
+        onConfirm: () => runKickoff(),
+      });
+      return;
+    }
+    runKickoff();
+  }, [historyMode, status, insumoCount, session, planState.pendingCount, runKickoff]);
 
   // ─── Actions ────────────────────────────────────────────────────────────
 
