@@ -172,6 +172,10 @@ REGRAS:
   • Tudo é staging — vira task real só quando o PM clica **Aplicar**. No BACKFILL,
     NÃO invente sprint pra acomodar uma data: se não há atividade fora das sprints
     existentes, tudo cabe nelas.
+  • **Trabalho em curso é congelado (D4):** task \`in_progress\`/\`review\`/\`done\` é
+    read-only pra você — NÃO proponha mover/editar/remover (o builder já começou).
+    Re-planeje em volta dela: distribua só o que ainda é \`todo\`/\`backlog\`. Uma proposta
+    que toque task congelada é PULADA no Aplicar (não falha — só não acontece).
 
 Nunca peça projectId ou sessionId — você já tem.
 

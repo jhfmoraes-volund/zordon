@@ -20,6 +20,45 @@ const ORDER: Record<ActionRow["type"], number> = {
   delete: 4,
 };
 
+/**
+ * D4 (Planning Vivo Versionado) — "trabalho em curso é congelado ao re-planning".
+ * Status que representam trabalho que o builder JÁ COMEÇOU: o agente não pode
+ * mover/editar/remover via re-plano sem atropelar o builder. Mais amplo que o
+ * literal "in_progress/done" do D4 de propósito — `review` também é trabalho
+ * começado. O PM ainda muta direto na TaskSheet (não passa por este executor).
+ */
+const FROZEN_STATUSES = new Set(["in_progress", "review", "done"]);
+
+/** Sinaliza "pula esta action" (vs falhar) quando bate no guard de status D4. */
+class FrozenTaskSkip extends Error {
+  constructor(taskStatus: string) {
+    super(
+      `task '${taskStatus}' — congelada (trabalho em curso); não tocada pra não atropelar o builder (D4)`,
+    );
+    this.name = "FrozenTaskSkip";
+  }
+}
+
+/**
+ * Guard D4: se a action é da IA e a task-alvo está em status congelado, lança
+ * FrozenTaskSkip → applyActions marca `skipped` (não `failed`). A realidade do
+ * board é INPUT, não erro. Actions de origem humana passam direto (intenção do PM).
+ */
+async function guardFrozenForAi(
+  supabase: Supabase,
+  action: ActionRow,
+): Promise<void> {
+  if (action.source !== "ai" || !action.taskId) return;
+  const { data: task } = await supabase
+    .from("Task")
+    .select("status")
+    .eq("id", action.taskId)
+    .maybeSingle();
+  if (task && FROZEN_STATUSES.has(task.status)) {
+    throw new FrozenTaskSkip(task.status);
+  }
+}
+
 export async function applyApprovedActions(
   supabase: Supabase,
   meetingId: string
@@ -125,10 +164,17 @@ async function applyActions(
       result.applied++;
       result.details.push({ id: action.id, type: action.type, status: "applied" });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      await markFailed(supabase, action.id, msg);
-      result.failed++;
-      result.details.push({ id: action.id, type: action.type, status: "failed", error: msg });
+      if (e instanceof FrozenTaskSkip) {
+        // D4: trabalho em curso é congelado ao agente — skip, NÃO fail.
+        await markExecuted(supabase, action.id, "skipped");
+        result.skipped++;
+        result.details.push({ id: action.id, type: action.type, status: "skipped", error: e.message });
+      } else {
+        const msg = e instanceof Error ? e.message : String(e);
+        await markFailed(supabase, action.id, msg);
+        result.failed++;
+        result.details.push({ id: action.id, type: action.type, status: "failed", error: msg });
+      }
     }
   }
 
@@ -314,6 +360,7 @@ async function applyCreate(
 
 async function applyUpdate(supabase: Supabase, action: ActionRow) {
   if (!action.taskId) throw new Error("update requires taskId");
+  await guardFrozenForAi(supabase, action); // D4
   const taskId = action.taskId;
   const p = (action.payload ?? {}) as Record<string, unknown>;
 
@@ -426,6 +473,7 @@ async function applyUpdate(supabase: Supabase, action: ActionRow) {
 
 async function applyDelete(supabase: Supabase, action: ActionRow) {
   if (!action.taskId) throw new Error("delete requires taskId");
+  await guardFrozenForAi(supabase, action); // D4
   const { error } = await supabase
     .from("Task")
     .update({ sprintId: null, status: "backlog", updatedAt: new Date().toISOString() })
@@ -436,6 +484,7 @@ async function applyDelete(supabase: Supabase, action: ActionRow) {
 async function applyMove(supabase: Supabase, action: ActionRow) {
   if (!action.taskId) throw new Error("move requires taskId");
   if (!action.targetSprintId) throw new Error("move requires targetSprintId");
+  await guardFrozenForAi(supabase, action); // D4
   const { error } = await supabase
     .from("Task")
     .update({ sprintId: action.targetSprintId, updatedAt: new Date().toISOString() })
