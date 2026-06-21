@@ -47,6 +47,8 @@ const WINDOW_DAYS = 14;
 const TRANSCRIPT_TRUNCATE = 3000;
 const SOURCE_TEXT_TRUNCATE = 8000;
 const SOURCES_TOTAL_BUDGET = 80_000;
+/** Descrição da task no contexto de highlights — curta (não é a fonte primária). */
+const TASK_DESC_TRUNCATE = 400;
 
 /** head+tail — preserva começo e fim quando corta. */
 function truncateMid(text: string, max: number): string {
@@ -75,7 +77,7 @@ export async function loadWikiContext(
       .maybeSingle(),
     supabase
       .from("Task")
-      .select("id, title, doneAt, functionPoints")
+      .select("id, title, description, doneAt, functionPoints")
       .eq("projectId", projectId)
       .eq("status", "done")
       .gte("doneAt", windowStart)
@@ -111,7 +113,8 @@ export async function loadWikiContext(
   const completedTasks = (tasksRes.data ?? []).map((t) => ({
     ref: { type: "task" as const, id: t.id },
     label: `Task concluída "${t.title}" (${t.doneAt?.slice(0, 10) ?? "?"}${t.functionPoints ? `, ${t.functionPoints} PFV` : ""})`,
-    body: "",
+    // Descrição curta dá substância ao highlight (antes era só o título).
+    body: t.description ? truncateMid(t.description, TASK_DESC_TRUNCATE) : "",
   }));
 
   const pmReviews = (pmRes.data ?? []).map((r) => ({
@@ -215,9 +218,9 @@ const SECTIONS: SectionSpec[] = [
 Shape exato da resposta:
 {"problem":{"text":"...","source":{"type":"...","id":"..."}},"vision":{"text":"...","source":{"type":"...","id":"..."}},"success_signals":[{"text":"...","source":{"type":"...","id":"..."}}]}
 
-- "problem": o problema que o projeto resolve.
-- "vision": a visão/solução em uma frase.
-- "success_signals": até 5 sinais de sucesso evidenciados.
+- "problem": o problema concreto e específico que o projeto resolve (não abstrato, não genérico).
+- "vision": a visão/solução em UMA frase — o que o produto é/faz.
+- "success_signals": até 5 sinais de sucesso evidenciados; prefira os mensuráveis/verificáveis.
 
 Insumos:
 
@@ -252,7 +255,13 @@ ${renderItems(items)}`,
     ],
     userPrompt: (items) => `Extraia os HIGHLIGHTS recentes do projeto (entregas, marcos, avanços concretos das últimas 2 semanas).
 
-Shape exato da resposta (máx 5 bullets):
+Critérios (leitura executiva — escolha com curadoria, não liste tudo):
+- PRIORIZE por impacto: entregas/marcos que movem o projeto à frente. Ignore tarefas triviais ou rotineiras.
+- ORDENE do mais significativo para o menos.
+- Quando o insumo evidenciar, inclua dado concreto (data, PFV, "em produção", número).
+- DEDUPLICAR: se a mesma entrega aparece em mais de um insumo (ex: task + PM review), faça UM bullet só.
+
+Shape exato da resposta (máx 5 bullets, os mais relevantes):
 {"bullets":[{"text":"...","source":{"type":"...","id":"..."}}]}
 
 Insumos:
