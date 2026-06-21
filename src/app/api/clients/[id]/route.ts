@@ -1,13 +1,13 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser } from "@/lib/dal";
+import { requireMinAccessLevelApi } from "@/lib/dal";
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const denied = await requireMinAccessLevelApi("manager");
+  if (denied) return denied;
 
   const { id } = await params;
   const body = await req.json();
@@ -25,8 +25,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const denied = await requireMinAccessLevelApi("manager");
+  if (denied) return denied;
 
   const { id } = await params;
   const { error } = await db().from("Client").delete().eq("id", id);

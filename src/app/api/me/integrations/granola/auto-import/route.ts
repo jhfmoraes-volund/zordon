@@ -196,8 +196,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Best-effort drain kick — same pattern as the insights rerun routes.
+  // Reusa o secret do PM Review (ver run-granola-import/route.ts): o import do
+  // Granola alimenta o PM Review, então compartilham um único secret de cron.
   const cronUrl = new URL("/api/cron/run-granola-import", req.url);
-  const token = process.env.GRANOLA_IMPORT_AUTH_TOKEN;
+  const token = process.env.PM_REVIEW_REFRESH_AUTH_TOKEN;
   if (token && jobId) {
     fetch(cronUrl.toString(), {
       method: "POST",

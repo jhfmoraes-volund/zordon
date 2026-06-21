@@ -32,10 +32,15 @@ export const dynamic = "force-dynamic";
 const MAX_JOBS_PER_INVOCATION = 5;
 
 export async function POST(req: Request) {
-  const token = process.env.GRANOLA_IMPORT_AUTH_TOKEN;
+  // Reusa o secret do PM Review (já provisionado no env de prod + Vault como
+  // pm_review_refresh_auth_token). O import do Granola alimenta o PM Review —
+  // mesmo domínio de automação interna da Vitoria — então um único secret de
+  // cron evita um 2º par env+Vault só pra este endpoint. (Era
+  // GRANOLA_IMPORT_AUTH_TOKEN, que nunca foi setado no Cloud Run.)
+  const token = process.env.PM_REVIEW_REFRESH_AUTH_TOKEN;
   if (!token) {
     return new Response(
-      "Server misconfigured: GRANOLA_IMPORT_AUTH_TOKEN missing",
+      "Server misconfigured: PM_REVIEW_REFRESH_AUTH_TOKEN missing",
       { status: 500 },
     );
   }

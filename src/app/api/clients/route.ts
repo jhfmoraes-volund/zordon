@@ -1,10 +1,11 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser } from "@/lib/dal";
+import { requireMinAccessLevelApi } from "@/lib/dal";
 
 export async function GET() {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  // Carteira de clientes é dado executivo → só manager (PM) ou admin.
+  const denied = await requireMinAccessLevelApi("manager");
+  if (denied) return denied;
 
   const { data: clients, error } = await db()
     .from("client_summary")
@@ -15,8 +16,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const denied = await requireMinAccessLevelApi("manager");
+  if (denied) return denied;
 
   const body = await req.json();
   const { data: client, error } = await db()

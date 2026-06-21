@@ -28,7 +28,7 @@ steps:
           --region=southamerica-east1 \
           --project=$PROJECT_ID \
           --min-instances=0 \
-          --set-env-vars='^@^NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}@NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}@SUPABASE_SERVICE_ROLE_KEY=${_SUPABASE_SERVICE_ROLE_KEY}@RESEND_API_KEY=${_RESEND_API_KEY}@TAVILY_API_KEY=${_TAVILY_API_KEY}@OPENROUTER_API_KEY=${_OPENROUTER_API_KEY}@COMPOSIO_API_KEY=${_COMPOSIO_API_KEY}@COMPOSIO_GDRIVE_AUTH_CONFIG_ID=${_COMPOSIO_GDRIVE_AUTH_CONFIG_ID}@COMPOSIO_GITHUB_AUTH_CONFIG_ID=${_COMPOSIO_GITHUB_AUTH_CONFIG_ID}@COMPOSIO_GSHEETS_AUTH_CONFIG_ID=${_COMPOSIO_GSHEETS_AUTH_CONFIG_ID}@COMPOSIO_NOTION_AUTH_CONFIG_ID=${_COMPOSIO_NOTION_AUTH_CONFIG_ID}@CRON_SECRET=${_CRON_SECRET}@PM_REVIEW_REFRESH_AUTH_TOKEN=${_PM_REVIEW_REFRESH_AUTH_TOKEN}@GRANOLA_IMPORT_AUTH_TOKEN=${_GRANOLA_IMPORT_AUTH_TOKEN}@APP_URL=${_APP_URL}'
+          --set-env-vars='^@^NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}@NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}@SUPABASE_SERVICE_ROLE_KEY=${_SUPABASE_SERVICE_ROLE_KEY}@RESEND_API_KEY=${_RESEND_API_KEY}@TAVILY_API_KEY=${_TAVILY_API_KEY}@OPENROUTER_API_KEY=${_OPENROUTER_API_KEY}@COMPOSIO_API_KEY=${_COMPOSIO_API_KEY}@COMPOSIO_GDRIVE_AUTH_CONFIG_ID=${_COMPOSIO_GDRIVE_AUTH_CONFIG_ID}@COMPOSIO_GITHUB_AUTH_CONFIG_ID=${_COMPOSIO_GITHUB_AUTH_CONFIG_ID}@COMPOSIO_GSHEETS_AUTH_CONFIG_ID=${_COMPOSIO_GSHEETS_AUTH_CONFIG_ID}@COMPOSIO_NOTION_AUTH_CONFIG_ID=${_COMPOSIO_NOTION_AUTH_CONFIG_ID}@CRON_SECRET=${_CRON_SECRET}@PM_REVIEW_REFRESH_AUTH_TOKEN=${_PM_REVIEW_REFRESH_AUTH_TOKEN}@APP_URL=${_APP_URL}'
         gcloud run services update-traffic zordon \
           --to-latest \
           --region=southamerica-east1 \
@@ -59,12 +59,9 @@ substitutions:
   # Bearer do cron do PM Review (Authorization: Bearer) — valor real no trigger,
   # MESMO valor seedado no Vault como pm_review_refresh_auth_token (64 chars).
   # Sem isso a rota /api/cron/pm-review-refresh dá 500 "token missing".
+  # NOTA: a rota /api/cron/run-granola-import REUSA este mesmo token (o import do
+  # Granola alimenta o PM Review) — não precisa de secret próprio.
   _PM_REVIEW_REFRESH_AUTH_TOKEN: ""
-  # Bearer do cron de import do Granola (Authorization: Bearer) — valor real no
-  # trigger, MESMO valor seedado no Vault como granola_import_auth_token. Sem isso
-  # a rota /api/cron/run-granola-import dá 500 "GRANOLA_IMPORT_AUTH_TOKEN missing"
-  # → o drain (cron horário + "Varrer agora") nunca roda e o import não alimenta.
-  _GRANOLA_IMPORT_AUTH_TOKEN: ""
   # URL pública do app (não-secreta). Usada por APP_URL nos adapters de
   # context-source (Composio OAuth callbacks etc.) — sem ela caíam em
   # http://localhost:3000 em prod. Default = prod; trigger override p/ staging.
