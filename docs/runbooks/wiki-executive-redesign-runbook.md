@@ -5,7 +5,7 @@
 > **Commit:** ao final de cada story que passa os checks, `bash scripts/sync-main.sh -m "ZRD-JM-NN: wiki — <resumo>"`.
 > **Mockup de referência:** `scratchpad/wiki-redesign-mockup.html` (artifact publicado) — fiel aos tokens charcoal.
 >
-> **Status (2026-06-21):** WER-001..006 implementadas. `tsc` + `eslint` limpos. Falta verificação no browser (DoD §8) e commit.
+> **Status (2026-06-21):** WER-001..006 implementadas e commitadas (ZRD-JM-183). `tsc` + `eslint` limpos; rotas compilam no bundler do Next (metrics → 401 auth, página → 302, sem erro de build). Falta apenas o walkthrough autenticado no browser (DoD §8).
 
 ## 1. Problema
 

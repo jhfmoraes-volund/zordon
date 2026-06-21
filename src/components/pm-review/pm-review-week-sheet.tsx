@@ -12,6 +12,10 @@ import {
 } from "@/components/ui/responsive-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  PlanningCronograma,
+  type CronogramaBlock,
+} from "@/components/planning-session/planning-cronograma";
 import { fmtWeek, fmtDate } from "@/lib/date-utils";
 import type { PMReviewDetail, PMReviewSummary } from "@/lib/dal/pm-review";
 
@@ -30,16 +34,19 @@ const KIND_LABEL: Record<string, string> = {
 type LogEntry = { at: string; label: string; detail?: string | null };
 
 /**
- * Side-sheet ao clicar num bloco da régua: log da semana + entrada na review.
- * Espelha o `PlanningHistorySheet` (navegador no overlay), adaptado ao PM Review:
- * o "log de updates" é DERIVADO (D17 — não há histórico de versões) do que já
- * existe — cada note (por quem + quando) + report sintetizado + publicada, em
- * ordem cronológica desc. Célula vazia ≤ hoje → "Fazer PM Review" (back-dated).
+ * Side-sheet "PM Review por semana" — navegador de semanas, espelha o
+ * `PlanningHistorySheet`: o cronograma EXPANDIDO (variant `full`) funciona como
+ * week-picker e, abaixo, o **log da semana selecionada** (derivado — D17 — de
+ * cada note + report sintetizado + publicação). Selecionar uma semana troca o
+ * foco; "Abrir esta review" carrega no workspace. Célula vazia ≤ hoje →
+ * "Fazer PM Review" (back-dated).
  */
 export function PMReviewWeekSheet({
   open,
   onOpenChange,
+  blocks,
   week,
+  onSelectWeek,
   review,
   canAuthor,
   creating,
@@ -48,8 +55,13 @@ export function PMReviewWeekSheet({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  /** Régua completa (week-picker). */
+  blocks: CronogramaBlock[];
+  /** Semana em foco (YYYY-MM-DD) ou null. */
   week: string | null;
-  /** Resumo da review da semana (null = semana vazia). */
+  /** Clicar numa célula do cronograma troca o foco. */
+  onSelectWeek: (key: string) => void;
+  /** Resumo da review da semana em foco (null = vazia). */
   review: PMReviewSummary | null;
   canAuthor: boolean;
   creating: boolean;
@@ -107,82 +119,98 @@ export function PMReviewWeekSheet({
 
   return (
     <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
-      <ResponsiveSheetContent size="sm">
+      <ResponsiveSheetContent size="md">
         <ResponsiveSheetHeader>
-          <ResponsiveSheetTitle className="flex items-center gap-2">
-            {week ? fmtWeek(week) : "Semana"}
-            {statusLabel && (
-              <Badge variant={review?.status === "published" ? "default" : "secondary"}>
-                {statusLabel}
-              </Badge>
-            )}
-          </ResponsiveSheetTitle>
+          <ResponsiveSheetTitle>PM Review por semana</ResponsiveSheetTitle>
           <ResponsiveSheetDescription>
-            {review
-              ? "O que aconteceu nesta semana — notas, síntese e publicação."
-              : "Nenhuma PM Review nesta semana ainda."}
+            Navegue as semanas no cronograma. Abrir carrega a review no workspace.
           </ResponsiveSheetDescription>
         </ResponsiveSheetHeader>
 
-        <ResponsiveSheetBody className="space-y-4">
-          {review ? (
-            <>
-              {loadingLog ? (
-                <p className="py-2 text-sm text-muted-foreground">Carregando log…</p>
-              ) : entries && entries.length > 0 ? (
-                <ol className="space-y-2.5">
-                  {entries.map((e, i) => (
-                    <li key={i} className="flex gap-3 text-sm">
-                      <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary/60" />
-                      <div className="min-w-0">
-                        <div className="flex items-baseline gap-2">
-                          <span className="font-medium">{e.label}</span>
-                          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                            {fmtDate(e.at)}
-                          </span>
-                        </div>
-                        {e.detail && (
-                          <p className="truncate text-xs text-muted-foreground">
-                            {e.detail}
-                          </p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="py-2 text-sm text-muted-foreground">
-                  Sem atividade registrada nesta semana ainda.
-                </p>
-              )}
+        <ResponsiveSheetBody className="space-y-5">
+          {/* Cronograma expandido = week-picker dentro do sheet. */}
+          <div className="space-y-2">
+            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Cronograma
+            </div>
+            <PlanningCronograma
+              variant="full"
+              blocks={blocks}
+              selectedKey={week}
+              onSelect={onSelectWeek}
+            />
+          </div>
 
-              <Button
-                className="w-full"
-                onClick={() => week && onOpen(week)}
-                disabled={!week}
-              >
-                Abrir esta review →
-              </Button>
-            </>
-          ) : (
-            <div className="space-y-3 py-2 text-center">
-              <p className="text-sm text-muted-foreground">
-                {canAuthor
-                  ? "Crie a review desta semana — depois peça a síntese à Vitoria."
-                  : "Selecione uma semana com review na régua."}
-              </p>
-              {canAuthor && week && (
-                <Button
-                  className="w-full"
-                  onClick={() => onCreate(week)}
-                  disabled={creating}
-                >
-                  <Sparkles className="size-4" />
-                  Fazer PM Review desta semana
-                </Button>
+          {/* Log da semana selecionada. */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              {week ? fmtWeek(week) : "Semana"}
+              {statusLabel && (
+                <Badge variant={review?.status === "published" ? "default" : "secondary"}>
+                  {statusLabel}
+                </Badge>
               )}
             </div>
-          )}
+
+            {review ? (
+              <>
+                {loadingLog ? (
+                  <p className="py-2 text-sm text-muted-foreground">Carregando log…</p>
+                ) : entries && entries.length > 0 ? (
+                  <ol className="space-y-2.5">
+                    {entries.map((e, i) => (
+                      <li key={i} className="flex gap-3 text-sm">
+                        <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary/60" />
+                        <div className="min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-medium">{e.label}</span>
+                            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                              {fmtDate(e.at)}
+                            </span>
+                          </div>
+                          {e.detail && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {e.detail}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    Sem atividade registrada nesta semana ainda.
+                  </p>
+                )}
+
+                <Button
+                  className="w-full"
+                  onClick={() => week && onOpen(week)}
+                  disabled={!week}
+                >
+                  Abrir esta review →
+                </Button>
+              </>
+            ) : (
+              <div className="space-y-3 py-2">
+                <p className="text-sm text-muted-foreground">
+                  {canAuthor
+                    ? "Nenhuma review nesta semana. Crie — depois peça a síntese à Vitoria."
+                    : "Nenhuma review nesta semana."}
+                </p>
+                {canAuthor && week && (
+                  <Button
+                    className="w-full"
+                    onClick={() => onCreate(week)}
+                    disabled={creating}
+                  >
+                    <Sparkles className="size-4" />
+                    Fazer PM Review desta semana
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </ResponsiveSheetBody>
       </ResponsiveSheetContent>
     </ResponsiveSheet>

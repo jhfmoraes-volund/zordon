@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
@@ -43,11 +43,14 @@ const SYNTHESIZE_PROMPT =
 export function PMReviewWorkspace({
   pmReviewId,
   withTitle = false,
+  topSlot,
   onProjectResolved,
   onChanged,
 }: {
   pmReviewId: string;
   withTitle?: boolean;
+  /** Renderizado logo abaixo da ribbon (a régua/cronograma vem aqui, como Planning). */
+  topSlot?: ReactNode;
   onProjectResolved?: (info: {
     projectId: string;
     projectName: string | null;
@@ -345,6 +348,8 @@ export function PMReviewWorkspace({
         onPublish={handlePublish}
         onOpenContext={() => setContextSheetOpen(true)}
       />
+
+      {topSlot}
 
       {isBackdated && (
         <div className="shrink-0 border-b bg-muted/40 px-6 py-1.5 text-[11px] text-muted-foreground">

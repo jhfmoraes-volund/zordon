@@ -166,38 +166,41 @@ export default function ProjectPMReviewPage({
 
   // ─── Render ────────────────────────────────────────────────────────────
 
+  // Régua grade-semanal (mini). Renderizada ABAIXO da ribbon (via topSlot do
+  // workspace) quando há review aberta — mesma ordem do Planning; e no topo do
+  // estado vazio pra navegação seguir disponível. Clicar abre o side-sheet.
+  const cronogramaStrip =
+    blocks.length > 0 ? (
+      <div className="flex shrink-0 items-center gap-3 border-b bg-background px-6 py-2">
+        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          Semanas
+        </span>
+        <PlanningCronograma
+          variant="mini"
+          blocks={blocks}
+          selectedKey={sheetOpen ? sheetWeek : selectedWeek}
+          onSelect={(w) => {
+            setSheetWeek(w);
+            setSheetOpen(true);
+          }}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-7 text-xs"
+          onClick={() => setSelectedWeek(currentMonday)}
+        >
+          Semana atual
+        </Button>
+      </div>
+    ) : null;
+
   return (
     <div className="-mx-3 -my-4 flex h-[calc(100svh-3rem)] flex-col overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
       <PageTitle
         title="PM Review"
         subtitle={selectedWeek ? fmtWeek(selectedWeek) : undefined}
       />
-
-      {/* Régua sempre visível — grade-semanal, navegação por célula. */}
-      {blocks.length > 0 && (
-        <div className="flex shrink-0 items-center gap-3 border-b bg-background px-6 py-2">
-          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Semanas
-          </span>
-          <PlanningCronograma
-            variant="mini"
-            blocks={blocks}
-            selectedKey={sheetOpen ? sheetWeek : selectedWeek}
-            onSelect={(w) => {
-              setSheetWeek(w);
-              setSheetOpen(true);
-            }}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto h-7 text-xs"
-            onClick={() => setSelectedWeek(currentMonday)}
-          >
-            Semana atual
-          </Button>
-        </div>
-      )}
 
       <div className="min-h-0 flex-1">
         {loading ? (
@@ -206,25 +209,30 @@ export default function ProjectPMReviewPage({
           <PMReviewWorkspace
             key={selectedReview.id}
             pmReviewId={selectedReview.id}
+            topSlot={cronogramaStrip}
             onChanged={loadReviews}
           />
         ) : (
-          <div className="grid h-full place-items-center p-6">
-            <div className="max-w-md rounded-lg border border-dashed p-10 text-center">
-              <p className="mb-1 font-medium">
-                Nenhuma PM Review{selectedWeek ? ` na semana de ${fmtWeek(selectedWeek)}` : ""}
-              </p>
-              <p className="mb-4 text-sm text-muted-foreground">
-                {canAuthor
-                  ? "Crie a review desta semana — depois peça a síntese à Vitoria, que lê os insumos linkados."
-                  : "Selecione uma semana com review na régua acima."}
-              </p>
-              {canAuthor && selectedWeek && (
-                <Button onClick={() => handleCreate(selectedWeek)} disabled={creating}>
-                  <Sparkles className="size-4" />
-                  Fazer PM Review desta semana
-                </Button>
-              )}
+          <div className="flex h-full min-h-0 flex-col">
+            {cronogramaStrip}
+            <div className="grid flex-1 place-items-center p-6">
+              <div className="max-w-md rounded-lg border border-dashed p-10 text-center">
+                <p className="mb-1 font-medium">
+                  Nenhuma PM Review
+                  {selectedWeek ? ` na semana de ${fmtWeek(selectedWeek)}` : ""}
+                </p>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  {canAuthor
+                    ? "Crie a review desta semana — depois peça a síntese à Vitoria, que lê os insumos linkados."
+                    : "Selecione uma semana com review na régua acima."}
+                </p>
+                {canAuthor && selectedWeek && (
+                  <Button onClick={() => handleCreate(selectedWeek)} disabled={creating}>
+                    <Sparkles className="size-4" />
+                    Fazer PM Review desta semana
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -233,7 +241,9 @@ export default function ProjectPMReviewPage({
       <PMReviewWeekSheet
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+        blocks={blocks}
         week={sheetWeek}
+        onSelectWeek={setSheetWeek}
         review={sheetWeek ? reviewByWeek.get(sheetWeek) ?? null : null}
         canAuthor={!!sheetWeek && sheetWeek <= currentMonday}
         creating={creating}

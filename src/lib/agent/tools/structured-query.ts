@@ -6,7 +6,15 @@
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
+// IMPORTANTE: import TYPE-ONLY. @duckdb/node-api é binding NATIVO (.node) e está
+// em serverExternalPackages (next.config) → resolvido como require puro do Node.
+// Se a importação rodar no escopo do MÓDULO e o binding da plataforma faltar
+// (ex.: binding linux ausente no runtime de prod), o throw derruba TODO o
+// import-tree do tools-registry → a rota /api/agents/tools/* inteira 500a (todas
+// as tools de todos os agentes morrem). Por isso o carregamento do valor é LAZY
+// (loadDuckDb, abaixo): importar este arquivo nunca toca o binding; só o uso real
+// das structured-source tools o carrega, e uma falha degrada só elas.
+import type { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 import type { StructuredFormat } from "./structured-detect";
 
 // ─── Orçamento (guardrails do runbook §9) ───────────────────────────────────
@@ -16,10 +24,22 @@ const MEMORY_LIMIT = "512MB"; // teto de RAM do DuckDB (cappável; derrama p/ di
 const QUERY_TIMEOUT_MS = 15_000; // soft-timeout (não cancela a query, libera o await)
 const STRUCTURED_DIR = join(tmpdir(), "zordon-structured");
 
+// ─── DuckDB native binding: carregado LAZY (só no 1º uso real) ───────────────
+// Importar este módulo NÃO toca o .node; o require do binding nativo só acontece
+// quando uma structured-source tool de fato executa. Mantém o tools-registry
+// (e a rota /api/agents/tools/*) importável mesmo se o binding faltar no runtime.
+let _ddb: Promise<typeof import("@duckdb/node-api")> | null = null;
+function loadDuckDb(): Promise<typeof import("@duckdb/node-api")> {
+  if (!_ddb) _ddb = import("@duckdb/node-api");
+  return _ddb;
+}
+
 // ─── DuckDB :memory: singleton (custo fixo de init pago 1×) ──────────────────
 let _instance: Promise<DuckDBInstance> | null = null;
 function instance(): Promise<DuckDBInstance> {
-  if (!_instance) _instance = DuckDBInstance.create(":memory:");
+  if (!_instance) {
+    _instance = loadDuckDb().then((m) => m.DuckDBInstance.create(":memory:"));
+  }
   return _instance;
 }
 
