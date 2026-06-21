@@ -211,8 +211,13 @@ export async function runGranolaImportJob(
       result.cursorTo = notes[0].created_at;
     }
 
-    // 5. Persist outcomes.
-    await admin
+    // 5. Persist outcomes. Guard em status='running': se o reaper (migration
+    //    20260621) já falhou este job — worker zumbi que sobreviveu ao
+    //    maxDuration da rota — NÃO o revertemos pra 'done' nem avançamos o
+    //    cursor (senão pularíamos notas que o reaper assumiu que seriam
+    //    re-escaneadas). Invariante: maxDuration (300s) << TTL do reaper
+    //    (15min), então hoje o guard sempre casa; é defesa pra futuro.
+    const { data: finalized } = await admin
       .from("GranolaImportJob")
       .update({
         status: "done",
@@ -229,9 +234,15 @@ export async function runGranolaImportJob(
             ? `All ${result.noteErrors.length} notes failed: ${result.noteErrors[0].error}`
             : null,
       })
-      .eq("id", job.id);
+      .eq("id", job.id)
+      .eq("status", "running")
+      .select("id");
 
-    await advanceMemberCursor(admin, job.memberId, result.cursorTo);
+    // Só avança o cursor se ESTE worker de fato finalizou o job (não um reap
+    // no meio do caminho). advanceMemberCursor only-on-clean-job continua valendo.
+    if (finalized && finalized.length > 0) {
+      await advanceMemberCursor(admin, job.memberId, result.cursorTo);
+    }
 
     // Notify in-app feed only when we actually created something. A tick
     // that found nothing stays silent — 23h/day of "0 new" would be noise.
@@ -259,7 +270,9 @@ export async function runGranolaImportJob(
         meetingsCreated: result.meetingsCreated,
         meetingsSkipped: result.meetingsSkipped,
       })
-      .eq("id", job.id);
+      .eq("id", job.id)
+      // Mesmo guard do done: não sobrescreve um job que o reaper já falhou.
+      .eq("status", "running");
     // Best-effort lastRunAt bump even on failure, so UI shows "tried at HH:MM".
     await admin
       .from("MemberIntegration")
