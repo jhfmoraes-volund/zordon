@@ -1,0 +1,285 @@
+{
+  "feature": "vitoria-agentic-planning",
+  "branchName": "main",
+  "prdPath": "docs/prd/backlog/prd-vitoria-agentic-planning.md",
+  "phase": 1,
+  "phaseGoal": "Fechar a lacuna de ação da Vitoria em planning: sprint create/update (live), bulk-update de tasks (staged), comentário em task (live, reusa TaskComment), AC opcional no propose_tasks, e Granola curado (read_transcript_content) na surface release_planning — dentro do modelo staging-proposal, espelhado nos dois repos.",
+  "userStories": [
+    {
+      "id": "VAP-001",
+      "title": "AC opcional no propose_tasks (batch)",
+      "description": "Adiciona acceptanceCriteria?: string[] em cada linha do array tasks do schema de propose_tasks (app). O executor já lê payload.acceptanceCriteria via coerceAcTexts — só passa o campo pro payload da row. Espelha o stub no daemon.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "Schema Zod de tasks[] em src/lib/agent/agents/vitoria/tools.ts aceita acceptanceCriteria opcional (z.array(z.string()).optional())",
+        "execute de propose_tasks inclui acceptanceCriteria no payload da row quando presente",
+        "Stub do daemon (zordon-daemon/src/lib/agent/agents/vitoria/tools.ts) tem o mesmo campo opcional",
+        "tsc passa nos dois repos"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'acceptanceCriteria' src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'acceptanceCriteria' /Users/joaomoraes/projetos-ai-dev/Perke/perke/zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'vitoria/tools' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts",
+        "../zordon-daemon/src/lib/agent/agents/vitoria/tools.ts"
+      ]
+    },
+    {
+      "id": "VAP-002",
+      "title": "read_transcript_content na surface release_planning",
+      "description": "Rebind de read_transcript_content pra funcionar sem pmReviewId (resolve pmReviewId ?? planningId/projectId) e adiciona-a ao set VITORIA_RELEASE_PLANNING_TOOLS nos DOIS tools-registry.ts. Não pode remover a tool do PM Review.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "read_transcript_content aparece em VITORIA_RELEASE_PLANNING_TOOLS em src/lib/agent/tools-registry.ts",
+        "Continua presente em VITORIA_PMREVIEW_TOOLS (não removida)",
+        "A factory do registry resolve a tool sem exigir pmReviewId quando surface=release_planning (usa planningId/projectId)",
+        "Mesma adição no set do zordon-daemon/src/lib/agent/tools-registry.ts",
+        "tsc passa nos dois repos"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "awk '/VITORIA_RELEASE_PLANNING_TOOLS = new Set/,/\\]\\)/' src/lib/agent/tools-registry.ts | grep -c read_transcript_content",
+          "expected": ">=1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "awk '/VITORIA_PMREVIEW_TOOLS = new Set/,/\\]\\)/' src/lib/agent/tools-registry.ts | grep -c read_transcript_content",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'tools-registry' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/tools-registry.ts",
+        "src/lib/agent/agents/vitoria/pm-review.ts",
+        "../zordon-daemon/src/lib/agent/tools-registry.ts"
+      ]
+    },
+    {
+      "id": "VAP-003",
+      "title": "add_task_comment (TaskComment, write direto)",
+      "description": "Tool nova em buildVitoriaTools: INSERT em TaskComment (taskId, body, authorMemberId=ctx.memberId, mentionedMemberIds default []). Valida que a task pertence ao projeto. Write direto (D7). Stub espelhado no daemon. Registrada nos sets de planning + release_planning dos dois registries. memberId precisa ser threadado pro closure (buildVitoriaTools ganha memberId opcional).",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildVitoriaTools expõe add_task_comment que insere em TaskComment",
+        "Valida task.projectId === projectId antes de inserir (rejeita cross-project)",
+        "add_task_comment está em VITORIA_PLANNING_TOOLS e VITORIA_RELEASE_PLANNING_TOOLS nos dois registries",
+        "Stub correspondente existe no daemon",
+        "tsc passa nos dois repos"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'add_task_comment' src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'add_task_comment' src/lib/agent/tools-registry.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'add_task_comment' /Users/joaomoraes/projetos-ai-dev/Perke/perke/zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'vitoria/tools|tools-registry' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts",
+        "src/lib/agent/tools-registry.ts",
+        "../zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+        "../zordon-daemon/src/lib/agent/tools-registry.ts"
+      ]
+    },
+    {
+      "id": "VAP-004",
+      "title": "propose_task_bulk_update (N×MeetingTaskAction type=update)",
+      "description": "Tool nova: recebe updates:[{taskId, patch}], reasoning, sourceNoteIds(>=1), aiConfidence. Valida cada linha (taskId existe no projeto, patch não-vazio) e insere N MeetingTaskAction(type='update', decision/execution=pending, source=ai) numa inserção. Devolve {created, errors:[{index,msg}]}. Reusa o caminho de apply existente (D9). Stub no daemon. Registrada nos sets de planning + release_planning.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildVitoriaTools expõe propose_task_bulk_update",
+        "Insere uma MeetingTaskAction(type=update) por linha de updates[] com payload=patch",
+        "Exige sourceNoteIds >=1 (espelha propose_task_action) e reasoning",
+        "Retorna {created, errors} com validação por-index (taskId inexistente vira erro na linha)",
+        "Presente em VITORIA_PLANNING_TOOLS + VITORIA_RELEASE_PLANNING_TOOLS nos dois registries; stub no daemon",
+        "tsc passa nos dois repos"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'propose_task_bulk_update' src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'propose_task_bulk_update' src/lib/agent/tools-registry.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'propose_task_bulk_update' /Users/joaomoraes/projetos-ai-dev/Perke/perke/zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'vitoria/tools|tools-registry' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts",
+        "src/lib/agent/tools-registry.ts",
+        "../zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+        "../zordon-daemon/src/lib/agent/tools-registry.ts"
+      ]
+    },
+    {
+      "id": "VAP-005",
+      "title": "propose_sprint (INSERT Sprint live)",
+      "description": "Tool nova: cria Sprint (live, D6). Args {name?, startDate?, endDate?, goal?}. Se datas omitidas, deriva via src/lib/sprint-dates.ts getNextSprintDefaults (seg->dom). Se name omitido, auto-numera 'Sprint N' (D11). status default 'planned'. Retorna {sprintId, name}. Grava procedência no goal quando relevante (D12). Stub no daemon. Registrada nos sets de planning + release_planning.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildVitoriaTools expõe propose_sprint que faz INSERT em Sprint",
+        "Datas omitidas são derivadas via getNextSprintDefaults (não viola CHECK seg->dom)",
+        "name omitido auto-numera 'Sprint N'",
+        "Retorna {sprintId, name}; write é live (não cria MeetingTaskAction)",
+        "Presente nos dois sets dos dois registries; stub no daemon",
+        "tsc passa nos dois repos"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'propose_sprint|getNextSprintDefaults' src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'propose_sprint' /Users/joaomoraes/projetos-ai-dev/Perke/perke/zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'vitoria/tools|tools-registry' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 30,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts",
+        "src/lib/agent/tools-registry.ts",
+        "../zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+        "../zordon-daemon/src/lib/agent/tools-registry.ts"
+      ]
+    },
+    {
+      "id": "VAP-006",
+      "title": "update_sprint (UPDATE Sprint live)",
+      "description": "Tool nova: edita Sprint existente (live, D6). Args {sprintId, name?, startDate?, endDate?, goal?, status?}. Valida sprint.projectId === projectId. Merge shallow: só campos passados. Retorna {sprintId, fieldsUpdated}. Stub no daemon. Registrada nos sets de planning + release_planning dos dois registries.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildVitoriaTools expõe update_sprint que faz UPDATE em Sprint",
+        "Valida sprint pertence ao projeto (rejeita cross-project)",
+        "Atualiza só os campos passados (merge shallow), seta updatedAt",
+        "Presente nos dois sets dos dois registries; stub no daemon",
+        "tsc passa nos dois repos"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'update_sprint' src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'update_sprint' src/lib/agent/tools-registry.ts",
+          "expected": ">=2"
+        },
+        {
+          "kind": "lint",
+          "command_or_query": "grep -c 'update_sprint' /Users/joaomoraes/projetos-ai-dev/Perke/perke/zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+          "expected": ">=1"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'vitoria/tools|tools-registry' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [
+        "VAP-005"
+      ],
+      "estimateMinutes": 25,
+      "touches": [
+        "src/lib/agent/agents/vitoria/tools.ts",
+        "src/lib/agent/tools-registry.ts",
+        "../zordon-daemon/src/lib/agent/agents/vitoria/tools.ts",
+        "../zordon-daemon/src/lib/agent/tools-registry.ts"
+      ]
+    },
+    {
+      "id": "VAP-007",
+      "title": "Convenção de naming + novas tools no prompt de release_planning",
+      "description": "Atualiza buildReleasePlanningPrompt (src/lib/agent/agents/vitoria/release-planning.ts) instruindo: (a) sprints nomeadas 'Sprint N' via propose_sprint (D11); (b) ler Granola curado via read_transcript_content antes de propor (D4); (c) gravar procedência (nota/transcript) em writes live de sprint/comentário (D12); (d) preferir propose_task_bulk_update a N× propose_task_action. O prompt é build app-side (prepare-turn proxia pro daemon), então NÃO há cópia no daemon — só este arquivo muda.",
+      "passes": false,
+      "acceptanceCriteria": [
+        "buildReleasePlanningPrompt menciona a convenção 'Sprint N' e propose_sprint",
+        "Menciona read_transcript_content como insumo de planning",
+        "Menciona propose_task_bulk_update pra edição em escala e gravar procedência",
+        "tsc/build passa"
+      ],
+      "verifiable": [
+        {
+          "kind": "lint",
+          "command_or_query": "grep -cE 'Sprint N|propose_sprint|read_transcript_content|propose_task_bulk_update' src/lib/agent/agents/vitoria/release-planning.ts",
+          "expected": ">=3"
+        },
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit -p tsconfig.json 2>&1 | grep -E 'agents/vitoria/release-planning' || echo no-errors",
+          "expected": "no-errors"
+        }
+      ],
+      "dependsOn": [
+        "VAP-002",
+        "VAP-004",
+        "VAP-005"
+      ],
+      "estimateMinutes": 20,
+      "touches": [
+        "src/lib/agent/agents/vitoria/release-planning.ts"
+      ]
+    }
+  ]
+}
