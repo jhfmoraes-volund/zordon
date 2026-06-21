@@ -265,7 +265,7 @@ export function RituaisFileView({
     if (item.kind === "release_planning") {
       const terminal = releaseTerminalBadge(item.status);
       badge = (
-        <span className="flex shrink-0 items-center gap-1.5">
+        <span className="flex shrink-0 flex-col items-end gap-0.5">
           {terminal ? (
             <AppFileBadge tone={terminal.tone}>{terminal.label}</AppFileBadge>
           ) : (
@@ -284,7 +284,7 @@ export function RituaisFileView({
       // PM Review é contínuo por projeto (como Planning): "ativo" + última
       // atividade. As semanas (inclusive antigas) viram navegação na régua da app.
       badge = (
-        <span className="flex shrink-0 items-center gap-1.5">
+        <span className="flex shrink-0 flex-col items-end gap-0.5">
           <AppFileBadge tone="green">
             <span className="size-1.5 rounded-full bg-current" />
             ativo

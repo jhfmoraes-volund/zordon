@@ -1,0 +1,151 @@
+{
+  "feature": "vitoria-story-vision",
+  "title": "Vitoria Story Vision (planning) — Module→Story→Task na surface de planning",
+  "prd_path": "docs/prd/backlog/prd-vitoria-story-vision.md",
+  "userStories": [
+    {
+      "id": "STORY-001",
+      "title": "read: list_project_stories (monorepo)",
+      "description": "Adiciona a tool list_project_stories em buildVitoriaTools (src/lib/agent/agents/vitoria/tools.ts). Lê stories do projeto (não-dismissed por default) com moduleName, taskCount, acCount, refinementStatus. Query enxuta sobre UserStory + Module(name) + AcceptanceCriterion(count) + Task(count); NÃO traz description/AC text (isso é get_story_detail). projectId vem do closure, nunca arg do modelo.",
+      "acceptanceCriteria": [
+        "buildVitoriaTools exporta list_project_stories com inputSchema { moduleName?, refinementStatus?, includeDismissed? }",
+        "Retorna { ok:true, stories:[{ id, reference, title, moduleName, want, taskCount, acCount, refinementStatus }] }",
+        "Query filtra projectId do closure e dismissedAt IS NULL salvo includeDismissed=true",
+        "Nenhum .min()/.max() em z.array() do schema (D11)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "pnpm tsc --noEmit", "expected": "exit 0, sem erros novos" },
+        { "kind": "lint", "command_or_query": "grep -c 'list_project_stories' src/lib/agent/agents/vitoria/tools.ts", "expected": ">=1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/agents/vitoria/tools.ts"]
+    },
+    {
+      "id": "STORY-002",
+      "title": "read: get_story_detail (monorepo)",
+      "description": "Adiciona get_story_detail que aceita refOrId (reference VLD-NNN OU uuid) e devolve a story completa: want/soThat/moduleName/refinementStatus + acceptanceCriteria[{id,text}] + tasks[{id,reference,title,status}]. Reusa getStoryByReference (ref) ou query por id; valida que a story é do projectId do closure.",
+      "acceptanceCriteria": [
+        "Tool get_story_detail com inputSchema { refOrId: string }",
+        "Resolve por reference se casar ^[A-Z]+-\\d+$, senão por id (uuid)",
+        "Retorna AC ordenados por order e tasks penduradas (Task.userStoryId=story.id, dismissedAt IS NULL)",
+        "Devolve { ok:false, error } se a story for de outro projeto ou não existir"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "pnpm tsc --noEmit", "expected": "exit 0" },
+        { "kind": "lint", "command_or_query": "grep -c 'get_story_detail' src/lib/agent/agents/vitoria/tools.ts", "expected": ">=1" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/agents/vitoria/tools.ts"]
+    },
+    {
+      "id": "STORY-003",
+      "title": "write: propose_story ganha acceptanceCriteria + anti-dup (monorepo)",
+      "description": "Estende propose_story (tools.ts:573): adiciona acceptanceCriteria: z.array(z.string()).optional() (sem min/max — D11) e, no execute, (a) checa título duplicado no projeto (case-insensitive, dismissedAt IS NULL) devolvendo o storyId existente + deduped:true em vez de criar 2a (D9); (b) após o insert da story, grava cada AC não-vazio (>=3 chars) via AcceptanceCriterion.insert({ userStoryId, text, order }). Retorna { ok, storyId, reference, title, acCreated, deduped? }.",
+      "acceptanceCriteria": [
+        "propose_story aceita acceptanceCriteria?: string[]; AC com >=3 chars gravados em AcceptanceCriterion com userStoryId e order sequencial",
+        "Título já existente (case-insensitive, não-dismissed) no projeto retorna o id existente com deduped:true, sem inserir nova UserStory",
+        "Retorno inclui acCreated (int) e deduped? (bool)",
+        "Nenhum .min()/.max() em z.array() (D11)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "pnpm tsc --noEmit", "expected": "exit 0" },
+        { "kind": "sql", "command_or_query": "psql \"$DIRECT_URL\" -tAc \"SELECT count(*) FROM \\\"UserStory\\\" us JOIN \\\"AcceptanceCriterion\\\" ac ON ac.\\\"userStoryId\\\"=us.id;\"", "expected": "query roda sem erro (FK userStoryId existe)" }
+      ],
+      "dependsOn": ["STORY-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/agent/agents/vitoria/tools.ts"]
+    },
+    {
+      "id": "STORY-004",
+      "title": "write: update_story (monorepo)",
+      "description": "Adiciona update_story que edita uma story existente: { storyId, title?, want?, soThat?, proposedModuleName?, refinementStatus? }. Reusa updateStory da DAL. refinementStatus aceita só 'draft'|'refined' do agente (rejeita 'committed' com erro claro — D5). Valida que a story é do projectId do closure antes de mutar.",
+      "acceptanceCriteria": [
+        "Tool update_story com os campos opcionais; pelo menos 1 campo obrigatório (erro se patch vazio)",
+        "refinementStatus='committed' retorna { ok:false, error } (território da cascata da DS)",
+        "Story de outro projeto retorna erro, não muta",
+        "Retorna { ok, storyId, fieldsUpdated: string[] }"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "pnpm tsc --noEmit", "expected": "exit 0" },
+        { "kind": "lint", "command_or_query": "grep -c 'update_story' src/lib/agent/agents/vitoria/tools.ts", "expected": ">=1" }
+      ],
+      "dependsOn": ["STORY-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/agents/vitoria/tools.ts"]
+    },
+    {
+      "id": "STORY-005",
+      "title": "read+guidance: decompose_story (monorepo)",
+      "description": "Adiciona decompose_story({ refOrId }) que lê a story (reusa lógica de get_story_detail), devolve { ok, storyId, want, soThat, acceptanceCriteria[], existingTasks[], hint } onde hint instrui o modelo a chamar propose_task_action(create) com payload.userStoryId=storyId pra cada AC ainda sem task. NÃO escreve task — leitura + orientação; a escrita é do propose_task_action, mantendo o staging como único caminho de task (D3).",
+      "acceptanceCriteria": [
+        "Tool decompose_story com inputSchema { refOrId: string }",
+        "Retorna AC da story + tasks já penduradas + hint textual citando propose_task_action e userStoryId",
+        "Erro claro se a story não existir/for de outro projeto (reforça ordem D3: story antes de decompor)",
+        "Não faz nenhum INSERT/UPDATE em Task nem MeetingTaskAction"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "pnpm tsc --noEmit", "expected": "exit 0" },
+        { "kind": "lint", "command_or_query": "grep -c 'decompose_story' src/lib/agent/agents/vitoria/tools.ts", "expected": ">=1" }
+      ],
+      "dependsOn": ["STORY-002"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/agents/vitoria/tools.ts"]
+    },
+    {
+      "id": "STORY-006",
+      "title": "read: get_planning_state ganha bloco stories (monorepo)",
+      "description": "Estende get_planning_state (tools.ts:1103) adicionando stories:[{ id, reference, title, moduleName, taskCount, acCount, refinementStatus }] ao retorno (campo novo, retrocompatível — não remove nada). Query project-scoped sobre UserStory (não-dismissed) + contagens. Resolve o problema #2 (estado da árvore visível no fluxo).",
+      "acceptanceCriteria": [
+        "get_planning_state retorna o objeto existente + chave stories (array)",
+        "Campos: id, reference, title, moduleName, taskCount, acCount, refinementStatus",
+        "Stories dismissedAt IS NULL, project-scoped pelo closure",
+        "Nenhum campo pré-existente do retorno foi removido/renomeado (retrocompatível)"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "pnpm tsc --noEmit", "expected": "exit 0" },
+        { "kind": "lint", "command_or_query": "grep -c 'stories:' src/lib/agent/agents/vitoria/tools.ts", "expected": ">=1 (bloco stories presente)" }
+      ],
+      "dependsOn": ["STORY-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/lib/agent/agents/vitoria/tools.ts"]
+    },
+    {
+      "id": "STORY-007",
+      "title": "espelho daemon: schemas das tools novas (zordon-daemon)",
+      "description": "Espelha no daemon (zordon-daemon/src/lib/agent/agents/vitoria/tools.ts) os SCHEMAS (advertise only, sem execute — o daemon proxia a execução pro monorepo, D7) das tools list_project_stories, get_story_detail, update_story, decompose_story, e atualiza o schema/descrição de propose_story pra incluir acceptanceCriteria. get_planning_state não muda de schema (mesmo input {}).",
+      "acceptanceCriteria": [
+        "Daemon tools.ts tem entradas (schema-only) pra list_project_stories, get_story_detail, update_story, decompose_story",
+        "Daemon propose_story inclui acceptanceCriteria no inputSchema",
+        "Nenhuma das entradas novas no daemon tem execute (mantém o padrão de advertisement)",
+        "tsc do daemon passa"
+      ],
+      "verifiable": [
+        { "kind": "lint", "command_or_query": "for t in list_project_stories get_story_detail update_story decompose_story; do grep -c \"$t\" /Users/joaomoraes/projetos-ai-dev/Perke/perke/zordon-daemon/src/lib/agent/agents/vitoria/tools.ts; done", "expected": "cada um >=1" },
+        { "kind": "typecheck", "command_or_query": "cd /Users/joaomoraes/projetos-ai-dev/Perke/perke/zordon-daemon && pnpm tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["STORY-003", "STORY-004", "STORY-005"],
+      "estimateMinutes": 30,
+      "touches": ["../zordon-daemon/src/lib/agent/agents/vitoria/tools.ts"]
+    },
+    {
+      "id": "STORY-008",
+      "title": "registry: tools novas em VITORIA_PLANNING_PROJECT_NAMES nos dois repos",
+      "description": "Registra as 4 tools novas de leitura/escrita de story em VITORIA_PLANNING_PROJECT_NAMES (projectId-only, planningId opcional — D8) nos DOIS tools-registry.ts (monorepo tools-registry.ts:399 e daemon). propose_story e get_planning_state já estão registrados (alterações in-place). Confirma que VITORIA_PLANNING_TOOLS e VITORIA_RELEASE_PLANNING_TOOLS herdam por spread.",
+      "acceptanceCriteria": [
+        "VITORIA_PLANNING_PROJECT_NAMES no monorepo inclui list_project_stories, get_story_detail, update_story, decompose_story",
+        "Mesmo array no daemon tools-registry.ts inclui os 4 nomes",
+        "As 4 tools aparecem em getToolNamesForAgent('vitoria','planning') (herdadas via VITORIA_PLANNING_TOOLS)",
+        "tsc passa nos dois repos"
+      ],
+      "verifiable": [
+        { "kind": "lint", "command_or_query": "for t in list_project_stories get_story_detail update_story decompose_story; do grep -c \"$t\" src/lib/agent/tools-registry.ts /Users/joaomoraes/projetos-ai-dev/Perke/perke/zordon-daemon/src/lib/agent/tools-registry.ts; done", "expected": "cada arquivo >=1 por tool" },
+        { "kind": "typecheck", "command_or_query": "pnpm tsc --noEmit", "expected": "exit 0" }
+      ],
+      "dependsOn": ["STORY-007"],
+      "estimateMinutes": 20,
+      "touches": ["src/lib/agent/tools-registry.ts", "../zordon-daemon/src/lib/agent/tools-registry.ts"]
+    }
+  ]
+}

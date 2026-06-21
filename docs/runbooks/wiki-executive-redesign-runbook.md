@@ -36,7 +36,7 @@ A Wiki abre com uma **introdução executiva determinística** (cliente · proje
 | D4 | Ordem do sheet: Identidade → Pulso → Atividade → Objetivos → Highlights → Equipe → footer | Leitura executiva primeiro; narrativa LLM secundária |
 | D5 | Objetivo one-liner na Identidade = bullet **`vision`** da seção `objectives` (já carregada pelo sheet), com `↳ fonte` clicável. Sem `vision` → linha muted "objetivo aparece ao aprovar DS de Inception" | Reusa o que o composer já extrai; não puxa DS pra DAL de métricas |
 | D6 | Para evitar repetição, a narrativa "Objetivos" passa a renderizar só **Problema + Sinais** (vision sobe pro header) | Não mostrar a mesma frase 2×. `data.vision` continua persistido, só não re-renderiza abaixo |
-| D7 | Linha do tempo = **cronograma de blocos reusando `PlanningCronograma` (variant `mini`)**: 1 bloco por sprint, cor por atividade (entregue/corrente/futura), igual Planning/PM Review. Labels `Início · {startDate}` / `Entrega prevista · {endDate}` abaixo. Sem sprints → ribbon some (componente retorna null); datas nulas degradam gracioso (sem inventar) | Reuso do componente canônico (parity via prop, não cópia); grounded |
+| D7 | Linha do tempo = **cronograma de blocos reusando `Cronograma` (variant `mini`)**: 1 bloco por sprint, cor por atividade (entregue/corrente/futura), igual Planning/PM Review. Labels `Início · {startDate}` / `Entrega prevista · {endDate}` abaixo. Sem sprints → ribbon some (componente retorna null); datas nulas degradam gracioso (sem inventar) | Reuso do componente canônico (parity via prop, não cópia); grounded |
 | D8 | Atividade = união de 5 fontes, ordenada por data desc, **top 6**. Cada evento: `kind` (ícone), título, data relativa, `href?` best-effort | Minimalista ("nothing too much"); kind dá ícone tonal |
 | D9 | Cliente: **reusar componente `ClientLogo`** (clients/[id]/_components/client-logo.tsx) — já resolve public URL do bucket `client-logos` + fallback monograma. DAL devolve `clientName/clientLogoPath/clientLogoUpdatedAt` crus | Reuso > recriar; monograma embutido evita buraco visual |
 | D10 | PFV no Pulso continua escondido pra guest (`useCanSeeFunctionPoints`), igual hoje | Sem mudança de modelo de acesso (D9 do PRD original) |
@@ -55,7 +55,7 @@ A Wiki abre com uma **introdução executiva determinística** (cliente · proje
 
 Tabelas-fonte para Atividade: `Sprint` (startDate, status), `PlanningEvent` (createdAt, appliedCount) via `PlanningSession.projectId`, `DesignSession` (completedAt, title), `ProjectPhaseEvent` (changedAt, from/toPhase), `PMReview` (publishedAt, referenceWeek).
 
-Cronograma de blocos (reuso): [src/components/planning-session/planning-cronograma.tsx](../../src/components/planning-session/planning-cronograma.tsx) — `PlanningCronograma` + `CronogramaBlock`. Montagem de blocos por sprint (sort + bin) já feita em [planning/page.tsx](../../src/app/(dashboard)/projects/[id]/planning/page.tsx) ~L284-321 — espelhar essa lógica no WikiIdentity.
+Cronograma de blocos (reuso): [src/components/timeline/cronograma.tsx](../../src/components/timeline/cronograma.tsx) — `Cronograma` + `CronogramaBlock`. Montagem de blocos por sprint (sort + bin) já feita em [planning/page.tsx](../../src/app/(dashboard)/projects/[id]/planning/page.tsx) ~L284-321 — espelhar essa lógica no WikiIdentity.
 
 ## 6. Stories
 
@@ -118,13 +118,13 @@ Cronograma de blocos (reuso): [src/components/planning-session/planning-cronogra
     Novo src/components/project-wiki/wiki-identity.tsx: logo (ou monograma) +
     "Cliente · {nome}" + nome do projeto + StatusChip + chip de fase + objetivo
     one-liner (vision bullet, passado por prop) com ↳ fonte. Linha do tempo
-    reusa `PlanningCronograma` variant="mini": montar CronogramaBlock[] das
+    reusa `Cronograma` variant="mini": montar CronogramaBlock[] das
     sprints (espelhar useMemo de planning/page.tsx L284-321 — sort por
     startDate, kind por today vs janela, logCount = doneTaskCount). selectedKey
     = sprint corrente; onSelect no-op (read-first v1). Labels de data
     `Início`/`Entrega prevista` abaixo do ribbon. Trata os 3 casos de data (D7).
   acceptanceCriteria:
-    - "Reusa PlanningCronograma (não recria o componente de blocos)"
+    - "Reusa Cronograma (não recria o componente de blocos)"
     - "Sem vision bullet, mostra hint muted (não vazio)"
     - "Sem sprints, ribbon some; sem startDate, omite labels de data"
     - "Logo cai pro monograma quando clientLogoUrl é null"

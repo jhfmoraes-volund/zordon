@@ -28,24 +28,27 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       </div>
 
       <div className="grid gap-6 md:grid-cols-[200px_1fr]">
+        {/* Mobile: só ícones, distribuídos, sem scroll (padrão da nav do projeto).
+            Desktop: sidebar vertical com ícone + label. */}
         <nav className="md:sticky md:top-4 md:self-start">
-          <ul className="flex gap-1 overflow-x-auto md:flex-col md:gap-0.5 md:overflow-visible">
+          <ul className="flex gap-1 md:flex-col md:gap-0.5">
             {sections.map((s) => {
               const isActive = pathname === s.href || pathname.startsWith(`${s.href}/`);
               const Icon = s.icon;
               return (
-                <li key={s.href} className="shrink-0">
+                <li key={s.href} className="flex-1 md:flex-none">
                   <Link
                     href={s.href}
+                    aria-label={s.label}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors whitespace-nowrap md:flex md:w-full",
+                      "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm transition-colors whitespace-nowrap md:w-full md:justify-start",
                       isActive
                         ? "bg-muted font-medium text-foreground"
                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
                   >
-                    <Icon className="h-4 w-4" />
-                    {s.label}
+                    <Icon className="size-5 md:size-4" />
+                    <span className="hidden md:inline">{s.label}</span>
                   </Link>
                 </li>
               );

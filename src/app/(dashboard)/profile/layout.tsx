@@ -70,31 +70,32 @@ export default function ProfileLayout({
           )}
         </div>
 
+        {/* Tabs — mobile: só ícones, distribuídos, sem scroll. Desktop: ícone + label.
+            Mesmo padrão da nav do projeto (projects/[id]/page.tsx). */}
         {!isGuest && (
-          <nav className="overflow-x-auto border-b border-border">
-            <div className="-mb-px flex gap-1">
-              {TABS.map((tab) => {
-                const isActive = tab.exact
-                  ? pathname === tab.href
-                  : pathname.startsWith(tab.href);
-                const Icon = tab.icon;
-                return (
-                  <Link
-                    key={tab.href}
-                    href={tab.href}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors",
-                      isActive
-                        ? "border-primary font-medium text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {tab.label}
-                  </Link>
-                );
-              })}
-            </div>
+          <nav className="-mx-3 flex border-b px-3 md:mx-0 md:gap-1 md:px-0">
+            {TABS.map((tab) => {
+              const isActive = tab.exact
+                ? pathname === tab.href
+                : pathname.startsWith(tab.href);
+              const Icon = tab.icon;
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  aria-label={tab.label}
+                  className={cn(
+                    "flex flex-1 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm font-medium transition-colors md:flex-none md:justify-start md:px-4 md:py-2",
+                    isActive
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-5 md:size-4" />
+                  <span className="hidden md:inline">{tab.label}</span>
+                </Link>
+              );
+            })}
           </nav>
         )}
 

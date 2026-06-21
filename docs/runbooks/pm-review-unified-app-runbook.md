@@ -189,7 +189,7 @@ Contraste deliberado com o Planning, que precisou de 3 tabelas novas. Aqui o mot
 7. **Disclosure de review retroativa** (D15) — nota/banner minimalista no report quando o contexto é aproximado.
 
 ### Reusar (generalizar por prop)
-- [planning-cronograma.tsx](../../src/components/planning-session/planning-cronograma.tsx) — **regeneralizar** `CronogramaBlock` (`sprintId` → `weekStart` + N células órfãs; `kind` por estado, não por hoje-vs-sprint). **Toca o Planning em prod → exige teste de regressão da mini-régua** (D6).
+- [cronograma.tsx](../../src/components/timeline/cronograma.tsx) — **regeneralizar** `CronogramaBlock` (`sprintId` → `weekStart` + N células órfãs; `kind` por estado, não por hoje-vs-sprint). **Toca o Planning em prod → exige teste de regressão da mini-régua** (D6).
 - [planning-history-sheet.tsx](../../src/components/planning-session/planning-history-sheet.tsx) — picker; eventos viram "reviews da semana".
 - **Canvas:** renderizar [pm-review-report.tsx](../../src/components/pm-review/pm-review-report.tsx) (já existe), **sempre editável** (D4/D5) — sem modo read-only.
 - **NÃO reusar** [live-history-toggle.tsx](../../src/components/planning-session/live-history-toggle.tsx). PM Review não tem live↔history nem read-only (D5); a navegação é a grade + botão "Semana atual" (pular-pra-hoje). Sem `composerSubmitDisabled`.
@@ -213,7 +213,7 @@ Fase 1 entrega ≥ o que existe hoje (a lista vira navegação interna + ganha t
 ## §9 — Referências de código (vivo)
 
 - **Template:** [planning-versioned-living-runbook.md](planning-versioned-living-runbook.md) · [planning/page.tsx](../../src/app/(dashboard)/projects/[id]/planning/page.tsx)
-- **Chassi a reusar:** [planning-cronograma.tsx](../../src/components/planning-session/planning-cronograma.tsx) · [live-history-toggle.tsx](../../src/components/planning-session/live-history-toggle.tsx) · [planning-history-sheet.tsx](../../src/components/planning-session/planning-history-sheet.tsx)
+- **Chassi a reusar:** [cronograma.tsx](../../src/components/timeline/cronograma.tsx) · [live-history-toggle.tsx](../../src/components/planning-session/live-history-toggle.tsx) · [planning-history-sheet.tsx](../../src/components/planning-session/planning-history-sheet.tsx)
 - **PM Review hoje:** [pm-reviews/[id]/page.tsx](../../src/app/(dashboard)/pm-reviews/[id]/page.tsx) · [components/pm-review/](../../src/components/pm-review/) · [dal/pm-review.ts](../../src/lib/dal/pm-review.ts)
 - **Backend pronto:** [refresh.ts](../../src/lib/pm-review/refresh.ts) (get-or-create + brtMonday) · [context.ts:228](../../src/lib/agent/context.ts#L228) (thread por semana)
 - **Downstream:** [project-overview.ts](../../src/lib/dal/project-overview.ts) · [wiki/composer.ts](../../src/lib/wiki/composer.ts)
@@ -266,7 +266,7 @@ Um subagente revisou a Rev. 3 **verificando cada premissa no código** (e re-rod
 | "Published congela" | ❌ **editável de propósito** | `publish/route.ts` (comentário) | D4 reescrito (sem freeze) |
 | "Back-dated não toca o agente" | ❌ só na fidelidade aproximada | `vitoria/pm-review.ts:87-103` (`todayISO`) | D14 reescrito; point-in-time → Fase 2 |
 | "reabrir = natural" | ❌ não existe na state machine | `pm-review/status.ts` | irrelevante agora (D4 não congela) |
-| Reuso `weeks[]`/`CronogramaBlock` | ❌ otimista | `project-overview.ts:153,187`; `planning-cronograma.tsx:6` | grade do zero (D1); +teste de regressão (D6) |
+| Reuso `weeks[]`/`CronogramaBlock` | ❌ otimista | `project-overview.ts:153,187`; `cronograma.tsx:6` | grade do zero (D1); +teste de regressão (D6) |
 | Janela de fontes por `createdAt` | ⚠️ bug p/ back-dated | `refresh.ts:135` | D14: filtrar `capturedAt` |
 | 3 funções de "segunda da semana" | ⚠️ divergem | `refresh.ts:62`, `pm-review.ts:157`, `project-overview.ts:189` | +D16 (usar `brtMonday`) |
 
