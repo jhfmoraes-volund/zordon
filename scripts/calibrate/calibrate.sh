@@ -56,13 +56,14 @@ ${YELLOW}Agentes:${NC}
   alpha     agente Ops [sem driver — placeholder]
 
 ${YELLOW}Subcommands:${NC}
-  run       proxy pro CLI driver — args repassados
-  capture   flow guiado de captura de evidência [F3]
-  list      lista captures abertas no banco
-  status    metadata do agente
-  score     roda fixture canônica + populates scoreboard [F5]
-  reset     reseta fixture de eval [SQL do runbook]
-  help      esta ajuda
+  run         proxy pro CLI driver in-process (OpenRouter) — args repassados
+  daemon-run  ${GREEN}RUNBOOK AUTOMATIZADO da surface VIVA (daemon)${NC} — [smoke|all|DVn]
+  capture     flow guiado de captura de evidência [F3]
+  list        lista captures abertas no banco
+  status      metadata do agente
+  score       roda fixture canônica + populates scoreboard [F5]
+  reset       reseta fixture de eval [SQL do runbook]
+  help        esta ajuda
 
 ${YELLOW}Loop completo:${NC}
   1) ${DIM}\$ bash scripts/calibrate/calibrate.sh vitoria capture${NC}     # PM observou bug, captura
@@ -253,6 +254,19 @@ EOF
   esac
 }
 
+# ── daemon-run: runbook automatizado da surface viva (padrão 2026-06-21) ────
+cmd_daemon_run() {
+  local agent="$1"; shift || true
+  local rb
+  case "$agent" in
+    vitoria) rb="$PROJECT_ROOT/scripts/calibrate/runbooks/vitoria-planning-daemon.sh" ;;
+    *) echo -e "${RED}Sem runbook daemon pra '$agent' ainda.${NC} Veja scripts/calibrate/runbooks/." >&2; exit 2 ;;
+  esac
+  [[ -f "$rb" ]] || { echo -e "${RED}Runbook não encontrado:${NC} $rb" >&2; exit 2; }
+  echo -e "${CYAN}→ runbook daemon:${NC} $rb $*"
+  bash "$rb" "$@"
+}
+
 # ── Main dispatch ─────────────────────────────────────────────────────────
 case "${AGENT}" in
   ""|help|-h|--help)
@@ -264,6 +278,9 @@ esac
 case "${CMD}" in
   run)
     cmd_run "$AGENT" "$@"
+    ;;
+  daemon-run)
+    cmd_daemon_run "$AGENT" "$@"
     ;;
   capture)
     cmd_capture "$AGENT"

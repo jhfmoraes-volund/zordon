@@ -26,9 +26,9 @@ import { ReleasePlanningSheet } from "@/components/planning-session/release-plan
 import { ReleasePlanningContextSheet } from "@/components/planning-session/context-sheet";
 import { ReleasePlanningProposals } from "@/components/planning-session/release-planning-proposals";
 import {
-  PlanningCronograma,
+  CronogramaRail,
   type CronogramaBlock,
-} from "@/components/planning-session/planning-cronograma";
+} from "@/components/timeline/cronograma";
 import { PlanningHistorySheet } from "@/components/planning-session/planning-history-sheet";
 import { PlanningHistoricalCanvas } from "@/components/planning-session/planning-historical-canvas";
 import type { PlanningEvent } from "@/components/planning-session/planning-event-log";
@@ -588,19 +588,12 @@ export default function PlanningSessionPage({
 
       {/* Mini-régua sempre visível no ribbon — glance + entrada. Click num bloco
           abre o side-sheet (PlanningHistorySheet) e entra no modo histórico. */}
-      {blocks.length > 0 && (
-        <div className="shrink-0 border-b bg-background px-6 py-2 flex items-center gap-3">
-          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Histórico
-          </span>
-          <PlanningCronograma
-            variant="mini"
-            blocks={blocks}
-            selectedKey={historyBlockKey}
-            onSelect={handleSelectBlock}
-          />
-        </div>
-      )}
+      <CronogramaRail
+        label="Histórico"
+        blocks={blocks}
+        selectedKey={historyBlockKey}
+        onSelect={handleSelectBlock}
+      />
 
       {/* Canvas: plano (tasks/stories por sprint) à esquerda + chat Vitoria à direita.
           PRD↔sprint board saiu (2026-06-19) — a planning lê fontes e produz tasks. */}

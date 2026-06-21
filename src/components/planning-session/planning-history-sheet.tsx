@@ -9,10 +9,7 @@ import {
   ResponsiveSheetHeader,
   ResponsiveSheetTitle,
 } from "@/components/ui/responsive-sheet";
-import {
-  PlanningCronograma,
-  type CronogramaBlock,
-} from "@/components/planning-session/planning-cronograma";
+import { Cronograma, type CronogramaBlock } from "@/components/timeline/cronograma";
 import {
   PlanningEventRow,
   type PlanningEvent,
@@ -67,7 +64,7 @@ export function PlanningHistorySheet({
             <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Cronograma
             </div>
-            <PlanningCronograma
+            <Cronograma
               variant="full"
               blocks={blocks}
               selectedKey={selectedKey}

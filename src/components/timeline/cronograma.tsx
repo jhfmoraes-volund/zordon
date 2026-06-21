@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /** Bloco do cronograma = uma célula da régua (sprint no Planning, semana no PM Review). */
@@ -46,13 +47,16 @@ function blockTitle(b: CronogramaBlock): string {
 /**
  * Cronograma de blocos — réplica do estilo da régua/timeline (uma célula por
  * sprint/semana). Cor da barra = atividade. Clicar num bloco navega pra aquela
- * janela. **Compartilhado** entre Planning (régua de sprint) e PM Review (grade
- * semanal): a identidade da célula vem em `block.key` (parity via prop, não cópia).
+ * janela. **Compartilhado** entre Planning (régua de sprint), PM Review (grade
+ * semanal) e Wiki (timeline de sprints): a identidade da célula vem em
+ * `block.key` (parity via prop, não cópia).
  *
  *  • `mini`  — fileira fina (sem datas/labels) pro ribbon: glance + entrada.
  *  • `full`  — grid com data + nº de itens (vive no side-sheet, week-picker).
+ *
+ * Pra a régua-no-topo-da-página (strip com label + ação), prefira `CronogramaRail`.
  */
-export function PlanningCronograma({
+export function Cronograma({
   blocks,
   selectedKey,
   onSelect,
@@ -121,6 +125,46 @@ export function PlanningCronograma({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Régua-strip no topo da página: faixa com borda inferior, `label` curto à
+ * esquerda, o `Cronograma` (mini) na sequência e uma `action` opcional empurrada
+ * pra direita. É a casca reutilizada por Planning ("Histórico") e PM Review
+ * ("Semanas") — a experiência da régua é a MESMA; só mudam label/blocos/ação.
+ *
+ * Retorna `null` quando não há blocos (sem régua = sem strip).
+ */
+export function CronogramaRail({
+  label,
+  blocks,
+  selectedKey,
+  onSelect,
+  action,
+}: {
+  /** Rótulo curto à esquerda (ex.: "Histórico", "Semanas"). */
+  label: string;
+  blocks: CronogramaBlock[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+  /** Ação opcional alinhada à direita (ex.: botão "Semana atual"). */
+  action?: ReactNode;
+}) {
+  if (blocks.length === 0) return null;
+  return (
+    <div className="flex shrink-0 items-center gap-3 border-b bg-background px-6 py-2">
+      <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <Cronograma
+        variant="mini"
+        blocks={blocks}
+        selectedKey={selectedKey}
+        onSelect={onSelect}
+      />
+      {action && <div className="ml-auto">{action}</div>}
     </div>
   );
 }

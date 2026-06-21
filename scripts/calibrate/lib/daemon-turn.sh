@@ -22,11 +22,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ENQUEUE_SQL="$REPO_ROOT/scripts/calibrate/lib/enqueue-daemon-turn.sql"
 
 # DIRECT_URL do .env do monorepo (DB compartilhado com o daemon).
-# Extração direta (sem source/eval/process-substitution — este último tem race
-# no bash do macOS): pega tudo após o 1º '=' da linha DIRECT_URL.
+# Source via arquivo temp (NÃO process-substitution — `<()` tem race no bash do
+# macOS) pra o shell tirar as aspas do valor (.env usa DIRECT_URL="postgres://…").
 if [[ -z "${DIRECT_URL:-}" ]]; then
-  DIRECT_URL="$(grep '^DIRECT_URL=' "$REPO_ROOT/.env" | head -1 | cut -d= -f2-)"
-  export DIRECT_URL
+  _envtmp="$(mktemp)"
+  grep '^DIRECT_URL=' "$REPO_ROOT/.env" | head -1 | sed 's/^/export /' > "$_envtmp"
+  # shellcheck disable=SC1090
+  source "$_envtmp"; rm -f "$_envtmp"
 fi
 [[ -n "${DIRECT_URL:-}" ]] || { echo "FATAL: DIRECT_URL não setado (.env)"; exit 1; }
 

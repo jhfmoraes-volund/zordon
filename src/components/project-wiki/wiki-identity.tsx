@@ -4,16 +4,13 @@ import { useMemo } from "react";
 import { CornerDownRight } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ClientLogo } from "@/app/(dashboard)/clients/[id]/_components/client-logo";
-import {
-  PlanningCronograma,
-  type CronogramaBlock,
-} from "@/components/planning-session/planning-cronograma";
+import { Cronograma, type CronogramaBlock } from "@/components/timeline/cronograma";
 import type { WikiMetrics } from "@/lib/dal/wiki-metrics";
 
 /**
  * Introdução executiva da Wiki (WER-003): cliente + projeto + status/fase +
  * objetivo (vision da DS, com fonte) + cronograma de blocos reusando
- * PlanningCronograma (1 bloco por sprint, cor = atividade). Determinístico:
+ * Cronograma (1 bloco por sprint, cor = atividade). Determinístico:
  * renderiza antes de qualquer "Gerar Wiki".
  */
 
@@ -154,7 +151,7 @@ export function WikiIdentity({
       {/* Cronograma de blocos + linha do tempo */}
       {blocks.length > 0 && (
         <div className="mt-3">
-          <PlanningCronograma
+          <Cronograma
             blocks={blocks}
             selectedKey={currentKey}
             onSelect={() => {}}

@@ -12,10 +12,7 @@ import {
 } from "@/components/ui/responsive-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  PlanningCronograma,
-  type CronogramaBlock,
-} from "@/components/planning-session/planning-cronograma";
+import { Cronograma, type CronogramaBlock } from "@/components/timeline/cronograma";
 import { fmtWeek, fmtDate } from "@/lib/date-utils";
 import type { PMReviewDetail, PMReviewSummary } from "@/lib/dal/pm-review";
 
@@ -133,7 +130,7 @@ export function PMReviewWeekSheet({
             <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Cronograma
             </div>
-            <PlanningCronograma
+            <Cronograma
               variant="full"
               blocks={blocks}
               selectedKey={week}

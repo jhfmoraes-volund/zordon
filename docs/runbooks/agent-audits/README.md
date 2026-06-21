@@ -16,6 +16,26 @@ Toda calibração de agente no Volund usa esta **mesma taxonomia**. Categorias, 
 
 Entrada do loop: skill `/calibrate <agent>` (ver [.claude/skills/calibrate/SKILL.md](../../../.claude/skills/calibrate/SKILL.md)).
 
+## PADRÃO (2026-06-21): calibração da surface viva = runbook automatizado
+
+Calibrar a superfície **viva** de um agente (o que roda no **daemon**, em prod) é
+**runbook automatizado re-rodável** — não SQL ad-hoc, não clicar na UI. Cada
+cenário enfileira um `ChatTurn`+`ForgeJob` (igual `streamViaClaudeDaemon`), faz
+poll, e imprime `✓/✗` por assert. Dá pra acompanhar a execução ao vivo (Claude
+Code/VSCode) e plugar em CI (exit≠0 se algum FAIL).
+
+```bash
+bash scripts/calibrate/calibrate.sh <agent> daemon-run [smoke|all|DVn]
+```
+
+- **Motor:** [`scripts/calibrate/lib/daemon-turn.sh`](../../../scripts/calibrate/lib/daemon-turn.sh) (enqueue/poll/asserts).
+- **Runbooks:** [`scripts/calibrate/runbooks/`](../../../scripts/calibrate/runbooks/) (1 `.sh` por agente×surface).
+- **Cleanup:** [`scripts/calibrate/runbooks/cleanup-runbook.sh`](../../../scripts/calibrate/runbooks/cleanup-runbook.sh).
+- 1º runbook: [vitoria-planning-daemon-runbook.md](vitoria-planning-daemon-runbook.md).
+
+O driver `*-cli.ts` (`run`) continua válido pra reproduzir o **engine in-process**
+(OpenRouter); `daemon-run` é pra validar a **superfície de PROD**.
+
 ## Categorias canônicas (CHECK constraint em AgentCalibrationCapture)
 
 | Categoria | Significado | Implicação prática |
@@ -80,7 +100,8 @@ Storage bucket: `calibration-evidence` (screenshots binários, 10MB limit, manag
 
 | Agente | Runbook | Driver CLI | Status |
 |--------|---------|-----------|--------|
-| **vitoria** | [vitoria-audit-v1.md](vitoria-audit-v1.md) | [scripts/calibrate/drivers/vitoria-cli.ts](../../../scripts/calibrate/drivers/vitoria-cli.ts) | v1 (cobertura D1-D7 parcial) |
+| **vitoria** (daemon) | **[vitoria-planning-daemon-runbook.md](vitoria-planning-daemon-runbook.md)** | `runbooks/vitoria-planning-daemon.sh` (`daemon-run`) | ✅ surface VIVA — DV1/DV2 non-mut, DV3 opt-in |
+| **vitoria** (engine) | [vitoria-audit-v1.md](vitoria-audit-v1.md) | [scripts/calibrate/drivers/vitoria-cli.ts](../../../scripts/calibrate/drivers/vitoria-cli.ts) | v1 OpenRouter in-process (legacy) |
 | **vitor** | [../../agents/vitor/vitor-audit-v2.md](../../agents/vitor/vitor-audit-v2.md) | [scripts/calibrate/drivers/vitor-cli.ts](../../../scripts/calibrate/drivers/vitor-cli.ts) | v2 (cobertura completa pós-normalização) |
 | **alpha** | [../../agents/alpha/alpha-audit.md](../../agents/alpha/alpha-audit.md) | _(criar)_ | runbook v1, driver não existe ainda |
 

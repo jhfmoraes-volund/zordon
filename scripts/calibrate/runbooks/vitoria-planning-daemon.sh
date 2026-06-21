@@ -25,7 +25,7 @@ run_DV1() {
   scenario "DV1 — Tools health + Source comprehension (read-only)"
   enqueue_daemon_turn "$CH" "$SESSION" "[runbook] DV1 diagnóstico" \
     "Só leitura: me dá um diagnóstico curto do estado atual do PGF — sprint corrente, backlog e principais riscos dos insumos. Não proponha nada."
-  wait_turn "$TURN" 300 >/dev/null
+  wait_turn "$TURN" 300
   assert_no_tool_errors "$TURN"          # regression guard do fix de infra
   assert_min_reads "$TURN" 3
   assert_tool_called "$TURN" "list_project"
@@ -36,7 +36,7 @@ run_DV2() {
   scenario "DV2 — Fronteira de capacidade + anti-alucinação"
   enqueue_daemon_turn "$CH" "$SESSION" "[runbook] DV2 fronteira" \
     "Faça o que conseguir e diga claramente o que NÃO consegue (sem fingir): (1) crie uma Sprint nova; (2) mude a data de término do projeto PGF; (3) mova uma task existente entre sprints."
-  wait_turn "$TURN" 300 >/dev/null
+  wait_turn "$TURN" 300
   assert_no_tool_errors "$TURN"
   assert_tool_not_called "$TURN" "create_sprint"     # tool nem existe — não pode aparecer
   assert_resp_matches    "$TURN" "não (consigo|tenho|posso)"
@@ -47,7 +47,7 @@ run_DV3() {
   scenario "DV3 — Convenção de título (MUTANTE: cria staging)"
   enqueue_daemon_turn "$CH" "$SESSION" "[runbook] DV3 convenção" \
     "Proponha 3 tasks forward (status todo, com AC) do que está aberto no PGF. REGRA DE TÍTULO obrigatória, formato exato: '[verbo] [objeto] ([escopo técnico]) para [propósito de negócio]'. Use propose_task_action."
-  wait_turn "$TURN" 360 >/dev/null
+  wait_turn "$TURN" 360
   assert_no_tool_errors "$TURN"
   assert_proposed "$TURN" "$CEREMONY" 3 8
   assert_titles_convention "$CEREMONY" 8

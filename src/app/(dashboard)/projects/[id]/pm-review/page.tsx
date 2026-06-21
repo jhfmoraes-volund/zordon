@@ -8,13 +8,14 @@ import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { toast } from "sonner";
 import { fmtWeek } from "@/lib/date-utils";
 import {
-  PlanningCronograma,
+  CronogramaRail,
   type CronogramaBlock,
-} from "@/components/planning-session/planning-cronograma";
+} from "@/components/timeline/cronograma";
 import { PMReviewWorkspace } from "@/components/pm-review/pm-review-workspace";
 import { PMReviewWeekSheet } from "@/components/pm-review/pm-review-week-sheet";
 import type { PMReviewSummary } from "@/lib/dal/pm-review";
 import { brtMonday, weeksBetween, ddmm } from "@/lib/pm-review/week";
+import { useProjectMeta } from "../_hooks/use-project-meta";
 
 type Sprint = { id: string; name: string; startDate: string; endDate: string };
 
@@ -31,6 +32,7 @@ export default function ProjectPMReviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: projectId } = use(params);
+  const { project } = useProjectMeta(projectId);
 
   const [reviews, setReviews] = useState<PMReviewSummary[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
@@ -112,22 +114,25 @@ export default function ProjectPMReviewPage({
 
   const blocks = useMemo<CronogramaBlock[]>(() => {
     const sprintByWeek = new Map(sprints.map((s) => [s.startDate.slice(0, 10), s]));
-    // Limite esquerdo: a mais antiga entre (semanas com review, segundas de
-    // sprint, semana corrente). Direito: a semana corrente (futuro é inerte, D13).
+    // Régua = cronograma INTEIRO do projeto (mesma experiência do Planning): da
+    // semana mais antiga (review/sprint/corrente) até a mais à frente entre a
+    // última sprint e a corrente. Semanas depois de hoje entram inertes
+    // (kind "future"); D13 mantém autoria só em células ≤ hoje (ver canAuthor).
     const candidates = [
       ...sprints.map((s) => s.startDate.slice(0, 10)),
       ...activeReviews.map((r) => r.referenceWeek),
       currentMonday,
     ];
     const left = candidates.reduce((m, w) => (w < m ? w : m), currentMonday);
-    return weeksBetween(left, currentMonday).map<CronogramaBlock>((w) => {
+    const right = candidates.reduce((m, w) => (w > m ? w : m), currentMonday);
+    return weeksBetween(left, right).map<CronogramaBlock>((w) => {
       const review = reviewByWeek.get(w);
       const sprint = sprintByWeek.get(w);
       return {
         key: w,
         dateLabel: ddmm(w),
         label: sprint?.name ?? null,
-        kind: w === currentMonday ? "current" : "past",
+        kind: w === currentMonday ? "current" : w > currentMonday ? "future" : "past",
         // logCount>0 = "tem review" (célula acesa); 0 = vazia (tracejada).
         logCount: review ? Math.max(review.noteTotal, 1) : 0,
       };
@@ -169,37 +174,35 @@ export default function ProjectPMReviewPage({
   // Régua grade-semanal (mini). Renderizada ABAIXO da ribbon (via topSlot do
   // workspace) quando há review aberta — mesma ordem do Planning; e no topo do
   // estado vazio pra navegação seguir disponível. Clicar abre o side-sheet.
-  const cronogramaStrip =
-    blocks.length > 0 ? (
-      <div className="flex shrink-0 items-center gap-3 border-b bg-background px-6 py-2">
-        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Semanas
-        </span>
-        <PlanningCronograma
-          variant="mini"
-          blocks={blocks}
-          selectedKey={sheetOpen ? sheetWeek : selectedWeek}
-          onSelect={(w) => {
-            setSheetWeek(w);
-            setSheetOpen(true);
-          }}
-        />
+  const cronogramaStrip = (
+    <CronogramaRail
+      label="Semanas"
+      blocks={blocks}
+      selectedKey={sheetOpen ? sheetWeek : selectedWeek}
+      onSelect={(w) => {
+        setSheetWeek(w);
+        setSheetOpen(true);
+      }}
+      action={
         <Button
           variant="ghost"
           size="sm"
-          className="ml-auto h-7 text-xs"
+          className="h-7 text-xs"
           onClick={() => setSelectedWeek(currentMonday)}
         >
           Semana atual
         </Button>
-      </div>
-    ) : null;
+      }
+    />
+  );
 
   return (
     <div className="-mx-3 -my-4 flex h-[calc(100svh-3rem)] flex-col overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
       <PageTitle
-        title="PM Review"
-        subtitle={selectedWeek ? fmtWeek(selectedWeek) : undefined}
+        title={project?.name ?? "PM Review"}
+        subtitle={
+          selectedWeek ? `PM Review · ${fmtWeek(selectedWeek)}` : "PM Review"
+        }
       />
 
       <div className="min-h-0 flex-1">
