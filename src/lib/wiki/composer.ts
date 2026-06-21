@@ -9,7 +9,6 @@ import { recordSubAgentUsage } from "@/lib/agent/usage";
 import {
   RawObjectivesSchema,
   RawHighlightsSchema,
-  RawDecisionsSchema,
   type NarrativeSectionKey,
   type RawBullet,
   type SourceRef,
@@ -39,7 +38,6 @@ type ContextItem = {
 
 type WikiContext = {
   inceptionDS: ContextItem | null;
-  meetings: ContextItem[];
   completedTasks: ContextItem[];
   pmReviews: ContextItem[];
   contextSources: ContextItem[];
@@ -65,7 +63,7 @@ export async function loadWikiContext(
     Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  const [dsRes, linksRes, tasksRes, pmRes, sourcesRes] = await Promise.all([
+  const [dsRes, tasksRes, pmRes, sourcesRes] = await Promise.all([
     supabase
       .from("DesignSession")
       .select("id, title, description, memoryMd, completedAt")
@@ -75,10 +73,6 @@ export async function loadWikiContext(
       .order("completedAt", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from("MeetingProjectLink")
-      .select("meetingId")
-      .eq("projectId", projectId),
     supabase
       .from("Task")
       .select("id, title, doneAt, functionPoints")
@@ -100,25 +94,6 @@ export async function loadWikiContext(
       .eq("projectId", projectId)
       .order("capturedAt", { ascending: false, nullsFirst: false }),
   ]);
-
-  // Meetings da janela, excluindo 'private' (D7 do PRD — owner-only não entra).
-  let meetings: ContextItem[] = [];
-  const meetingIds = (linksRes.data ?? []).map((l) => l.meetingId);
-  if (meetingIds.length > 0) {
-    const { data: meetingRows } = await supabase
-      .from("Meeting")
-      .select("id, title, type, date, notes")
-      .in("id", meetingIds)
-      .neq("type", "private")
-      .gte("date", windowStart)
-      .order("date", { ascending: false })
-      .limit(20);
-    meetings = (meetingRows ?? []).map((m) => ({
-      ref: { type: "meeting" as const, id: m.id },
-      label: `Meeting "${m.title ?? m.type}" (${m.date?.slice(0, 10) ?? "sem data"})`,
-      body: truncateMid(m.notes ?? "(sem notas)", TRANSCRIPT_TRUNCATE),
-    }));
-  }
 
   const ds = dsRes.data;
   const inceptionDS: ContextItem | null = ds
@@ -172,7 +147,7 @@ export async function loadWikiContext(
     );
   }
 
-  return { inceptionDS, meetings, completedTasks, pmReviews, contextSources };
+  return { inceptionDS, completedTasks, pmReviews, contextSources };
 }
 
 // ── Hash guard (D11) ────────────────────────────────────────
@@ -291,27 +266,7 @@ ${renderItems(items)}`,
       return { ok: true, bullets: parsed.data.bullets, data: parsed.data };
     },
   },
-  {
-    key: "decisions",
-    title: "Decisões recentes",
-    order: 9,
-    inputs: (ctx) => [...ctx.meetings, ...ctx.contextSources],
-    userPrompt: (items) => `Extraia as DECISÕES tomadas no projeto registradas nos insumos (reuniões e documentos).
-
-Shape exato da resposta (máx 10 bullets; "date" = data ISO YYYY-MM-DD quando o insumo evidencia, senão null):
-{"bullets":[{"text":"...","date":"2026-06-01","source":{"type":"...","id":"..."}}]}
-
-Insumos:
-
-${renderItems(items)}`,
-    parse: (raw) => {
-      const r = raw as Record<string, unknown>;
-      const clamped = { bullets: clampArray(r?.bullets, 10) };
-      const parsed = RawDecisionsSchema.safeParse(clamped);
-      if (!parsed.success) return { ok: false, error: parsed.error.message };
-      return { ok: true, bullets: parsed.data.bullets, data: parsed.data };
-    },
-  },
+  // 'decisions' saiu (WER-006): decisões viram evento no log de Atividade.
 ];
 
 // ── LLM ─────────────────────────────────────────────────────

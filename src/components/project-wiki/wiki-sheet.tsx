@@ -18,16 +18,20 @@ import { useIsGuest } from "@/hooks/use-is-guest";
 import { fetchOrThrow } from "@/lib/optimistic/toast";
 import type { WikiMetrics } from "@/lib/dal/wiki-metrics";
 import { WikiHero } from "./wiki-hero";
+import { WikiIdentity, type WikiObjective } from "./wiki-identity";
+import { WikiActivity } from "./wiki-activity";
 import {
   WikiNarrativeSection,
   type WikiSectionView,
 } from "./wiki-narrative-section";
 
 /**
- * Wiki executiva auto-gerada (PRD project-wiki Fase 1): Hero (SQL live) +
- * narrativa (objectives/highlights/decisions, cacheada do composer) + equipe +
- * footer com "Gerar Wiki" (202 + poll em WikiJob). Sem edição manual — a
- * única intervenção humana é suprimir bullet (D2).
+ * Wiki executiva auto-gerada (PRD project-wiki + WER-006). Leitura executiva
+ * determinística no topo (SQL live): Identidade (cliente/projeto/objetivo/
+ * cronograma) + Pulso + Atividade recente. Abaixo, narrativa cacheada do
+ * composer (objectives/highlights) + equipe + footer "Gerar Wiki" (202 + poll
+ * em WikiJob). Sem edição manual — a única intervenção humana é suprimir
+ * bullet (D2).
  */
 
 type Props = {
@@ -62,16 +66,25 @@ const SECTION_HINTS: Record<string, string> = {
   objectives:
     "Sem objetivos gerados — aprove uma DS de Inception ou importe documentos pro contexto e clique em Gerar Wiki.",
   highlights: "Sem highlights no período.",
-  decisions: "Sem decisões registradas no período.",
 };
 
 const SECTION_TITLES: Record<string, string> = {
   objectives: "Objetivos",
   highlights: "Highlights da semana",
-  decisions: "Decisões recentes",
 };
 
-const SECTION_KEYS = ["objectives", "highlights", "decisions"] as const;
+// 'decisions' saiu (WER-006): decisões viram evento no log de Atividade.
+const SECTION_KEYS = ["objectives", "highlights"] as const;
+
+/** Label legível da fonte de um bullet (espelha SOURCE_TYPE_LABELS). */
+const SOURCE_LABELS: Record<string, string> = {
+  meeting: "meeting",
+  design_session: "DS",
+  task: "task",
+  sprint: "sprint",
+  pm_review: "PM review",
+  context_source: "doc",
+};
 
 function agoLabel(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -231,6 +244,26 @@ function WikiSheetContent({ projectId }: { projectId: string }) {
   }
 
   const sectionByKey = new Map(sections.map((s) => [s.sectionKey, s]));
+
+  // Objetivo do header (D6): vision bullet da seção objectives + sua fonte.
+  const objectivesSection = sectionByKey.get("objectives");
+  const visionBullet = (
+    objectivesSection?.data as { vision?: { text?: string; bulletHash?: string } }
+  )?.vision;
+  let objective: WikiObjective = null;
+  if (visionBullet?.text && visionBullet.bulletHash) {
+    const src = objectivesSection?.sources.find(
+      (s) => s.bulletHash === visionBullet.bulletHash
+    );
+    objective = {
+      text: visionBullet.text,
+      sourceLabel: src
+        ? (src.title ?? SOURCE_LABELS[src.sourceType] ?? src.sourceType)
+        : null,
+      sourceUrl: src?.url ?? null,
+    };
+  }
+
   const lastGeneratedAt = sections.reduce<string | null>(
     (max, s) =>
       s.generatedAt && (max === null || s.generatedAt > max)
@@ -244,7 +277,17 @@ function WikiSheetContent({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-3">
+      {metrics && (
+        <WikiIdentity
+          identity={metrics.identity}
+          sprints={metrics.sprints}
+          objective={objective}
+        />
+      )}
+
       {metrics && <WikiHero hero={metrics.hero} />}
+
+      {metrics && <WikiActivity activity={metrics.activity} />}
 
       {composing ? (
         <div className="space-y-3">

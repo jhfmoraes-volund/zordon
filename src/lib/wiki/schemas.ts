@@ -68,30 +68,8 @@ export const HighlightsSchema = z.object({
 });
 export type Highlights = z.infer<typeof HighlightsSchema>;
 
-// ── decisions — máx 10 bullets, fonte: meetings na janela ──
-
-const RawDecisionSchema = RawBulletSchema.extend({
-  /** ISO date (YYYY-MM-DD) da decisão, quando o insumo evidencia. */
-  date: z.string().nullable().optional(),
-});
-export const RawDecisionsSchema = z.object({
-  bullets: z.array(RawDecisionSchema).max(10),
-});
-export type RawDecisions = z.infer<typeof RawDecisionsSchema>;
-
-const DecisionSchema = RawDecisionSchema.extend({
-  bulletHash: z.string().min(1),
-});
-export const DecisionsSchema = z.object({
-  bullets: z.array(DecisionSchema).max(10),
-});
-export type Decisions = z.infer<typeof DecisionsSchema>;
-
 // ── chaves narrativas (sectionKey em ProjectWikiSection) ──
+// 'decisions' saiu (WER-006): decisões aparecem no log de Atividade recente.
 
-export const NARRATIVE_SECTION_KEYS = [
-  "objectives",
-  "highlights",
-  "decisions",
-] as const;
+export const NARRATIVE_SECTION_KEYS = ["objectives", "highlights"] as const;
 export type NarrativeSectionKey = (typeof NARRATIVE_SECTION_KEYS)[number];

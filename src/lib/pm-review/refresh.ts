@@ -14,6 +14,9 @@ import {
 } from "@/lib/dal/ritual-playbook";
 import { ensurePMReviewThread } from "@/lib/agent/context";
 import { createChatTurn, enqueueChatJob } from "@/lib/dal/chat-turn";
+// Fonte única da "segunda da semana em BRT" (D16) — compartilhada com a régua
+// do cronograma (week.ts é puro/client-safe; importável aqui no server).
+import { brtMonday } from "@/lib/pm-review/week";
 
 // Núcleo do refresh do PM Review de UM projeto. Compartilhado pelo cron diário
 // (loop sobre projetos) e pelo trigger por-projeto (bootstrap ao ligar a
@@ -52,19 +55,6 @@ function addDays(isoDate: string, days: number): string {
   const d = new Date(`${isoDate}T00:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
-}
-
-/**
- * Segunda-feira da semana corrente em BRT (Brasil sem DST desde 2019 → UTC-3),
- * como YYYY-MM-DD. referenceWeek + a janela do PM Review ficam ancorados em BRT
- * pra não jogar reunião de domingo-à-noite na semana errada.
- */
-export function brtMonday(now: Date): string {
-  const brt = new Date(now.getTime() - 3 * 60 * 60 * 1000); // wall-clock BRT em campos UTC
-  const dow = brt.getUTCDay(); // 0=Dom..6=Sáb
-  const sinceMonday = (dow + 6) % 7; // dias desde segunda
-  brt.setUTCDate(brt.getUTCDate() - sinceMonday);
-  return brt.toISOString().slice(0, 10);
 }
 
 /**

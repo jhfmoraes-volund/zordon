@@ -16,6 +16,7 @@ import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { toast } from "sonner";
 import { fmtWeek } from "@/lib/date-utils";
+import { brtMonday } from "@/lib/pm-review/week";
 import type { PMReviewDetail } from "@/lib/dal/pm-review";
 import { PMReviewReport } from "@/components/pm-review/pm-review-report";
 import { PMReviewRibbon } from "@/components/pm-review/pm-review-ribbon";
@@ -281,6 +282,9 @@ export function PMReviewWorkspace({
   const backHref = `/projects/${pmReview.projectId}?tab=apps&app=ceremonies`;
   const hasReport = pmReview.reportMarkdown !== null;
   const refreshing = status === "streaming" || status === "submitted";
+  // Review de semana passada (D15): a síntese da Vitoria usa o contexto de
+  // projeto de hoje (sprint/tasks), não o da semana — declarado honestamente.
+  const isBackdated = pmReview.referenceWeek < brtMonday(new Date());
 
   const wizard = (
     <PMReviewWizard
@@ -341,6 +345,13 @@ export function PMReviewWorkspace({
         onPublish={handlePublish}
         onOpenContext={() => setContextSheetOpen(true)}
       />
+
+      {isBackdated && (
+        <div className="shrink-0 border-b bg-muted/40 px-6 py-1.5 text-[11px] text-muted-foreground">
+          Review retroativa (semana de {fmtWeek(pmReview.referenceWeek)}) — a síntese
+          reflete o contexto de projeto de hoje, não o da semana de referência.
+        </div>
+      )}
 
       {/* Main panel: wizard (sem report) OU report + collapsible curar (com report) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] gap-4 p-4">

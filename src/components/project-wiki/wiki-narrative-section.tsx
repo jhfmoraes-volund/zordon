@@ -48,11 +48,10 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
 function extractBullets(section: WikiSectionView): LabeledBullet[] {
   const data = (section.data ?? {}) as Record<string, unknown>;
   if (section.sectionKey === "objectives") {
+    // 'vision' sobe pro header (WikiIdentity, D6) — aqui só problema + sinais.
     const out: LabeledBullet[] = [];
     const problem = data.problem as WikiBullet | null;
-    const vision = data.vision as WikiBullet | null;
     if (problem?.bulletHash) out.push({ ...problem, label: "Problema" });
-    if (vision?.bulletHash) out.push({ ...vision, label: "Visão" });
     for (const s of (data.success_signals as WikiBullet[]) ?? []) {
       if (s?.bulletHash) out.push({ ...s, label: "Sinal de sucesso" });
     }
