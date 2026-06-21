@@ -409,7 +409,7 @@ export function ReleasePlanningProposals({
                     className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/40"
                   >
                     <StatusChip tone={chip.tone} label={chip.label} dot />
-                    <span className="truncate text-sm">{t.title}</span>
+                    <span className="line-clamp-2 text-sm sm:line-clamp-1">{t.title}</span>
                     {t.functionPoints !== null && (
                       <Badge variant="secondary" className="shrink-0">
                         {t.functionPoints} PFV

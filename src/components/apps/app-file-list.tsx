@@ -99,7 +99,7 @@ export function AppFileRow({
         <Icon className={cn("h-5 w-5 shrink-0 text-muted-foreground", iconClassName)} />
       )}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{title}</p>
+        <p className="line-clamp-2 text-sm font-medium sm:line-clamp-1">{title}</p>
         {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
       </div>
       {badge}
