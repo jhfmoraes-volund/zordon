@@ -65,7 +65,8 @@ export function PlanningHistorySheet({
               Cronograma
             </div>
             <Cronograma
-              variant="full"
+              shape="chip"
+              layout="wrap"
               blocks={blocks}
               selectedKey={selectedKey}
               onSelect={onSelectBlock}

@@ -594,7 +594,8 @@ function mapContract(r: Record<string, unknown>): Contract {
     effectiveTo: (r.effective_to as string | null) ?? null,
     billingType: r.billing_type === "fixed_scope" ? "fixed_scope" : "squad",
     monthlyFeeCents: num(r.monthly_fee_cents),
-    pricePerFpCents: num(r.price_per_fp_cents),
+    totalValueCents: num(r.total_value_cents),
+    pricePerFpCents: num(r.price_per_fp_cents), // derivado (coluna GENERATED)
     contractedFp: num(r.contracted_fp),
     contractedSprints: num(r.contracted_sprints),
     note: (r.note as string | null) ?? null,
@@ -642,7 +643,7 @@ function toContractRow(input: ContractInput) {
     effective_to: input.effectiveTo ?? null,
     billing_type: input.billingType,
     monthly_fee_cents: input.monthlyFeeCents ?? null,
-    price_per_fp_cents: input.pricePerFpCents ?? null,
+    total_value_cents: input.totalValueCents ?? null, // preço/FP é derivado (GENERATED) — não gravar
     contracted_fp: input.contractedFp ?? null,
     contracted_sprints: input.contractedSprints ?? null,
     note: input.note ?? null,

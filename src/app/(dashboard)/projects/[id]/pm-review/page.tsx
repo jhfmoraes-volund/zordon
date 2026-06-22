@@ -6,7 +6,7 @@ import { PageTitle } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { toast } from "sonner";
-import { fmtWeek } from "@/lib/date-utils";
+import { fmtDayMonth, fmtWeek } from "@/lib/date-utils";
 import {
   CronogramaRail,
   type CronogramaBlock,
@@ -14,10 +14,16 @@ import {
 import { PMReviewWorkspace } from "@/components/pm-review/pm-review-workspace";
 import { PMReviewWeekSheet } from "@/components/pm-review/pm-review-week-sheet";
 import type { PMReviewSummary } from "@/lib/dal/pm-review";
-import { brtMonday, weeksBetween, ddmm } from "@/lib/pm-review/week";
+import { brtMonday, weeksBetween } from "@/lib/pm-review/week";
 import { useProjectMeta } from "../_hooks/use-project-meta";
 
 type Sprint = { id: string; name: string; startDate: string; endDate: string };
+
+/** "Sprint 12" → "12" (indicador curto do chip); resto inalterado. */
+function shortName(name: string): string {
+  const m = /^Sprint\s+(.+)$/i.exec(name);
+  return m ? m[1] : name;
+}
 
 /**
  * App única do PM Review por projeto (espelha `/projects/[id]/planning`).
@@ -130,11 +136,14 @@ export default function ProjectPMReviewPage({
       const sprint = sprintByWeek.get(w);
       return {
         key: w,
-        dateLabel: ddmm(w),
+        indicator: sprint ? shortName(sprint.name) : undefined,
+        dateLabel: fmtDayMonth(w),
         label: sprint?.name ?? null,
         kind: w === currentMonday ? "current" : w > currentMonday ? "future" : "past",
         // logCount>0 = "tem review" (célula acesa); 0 = vazia (tracejada).
         logCount: review ? Math.max(review.noteTotal, 1) : 0,
+        // value explícito = "N notes" (sobrescreve o default "N logs" do normalize).
+        value: review ? `${review.noteTotal} note${review.noteTotal === 1 ? "" : "s"}` : undefined,
       };
     });
   }, [sprints, activeReviews, reviewByWeek, currentMonday]);

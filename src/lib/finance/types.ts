@@ -118,8 +118,9 @@ export type Contract = {
   effectiveFrom: string; // YYYY-MM-DD
   effectiveTo: string | null; // null = vigente
   billingType: BillingType;
-  monthlyFeeCents: number | null; // informativo (mensalidade squad); receita real = entries
-  pricePerFpCents: number | null; // encomenda: R$/FP
+  monthlyFeeCents: number | null; // mensalidade squad (gera receita via v_contract_revenue_month)
+  totalValueCents: number | null; // encomenda: VALOR GLOBAL do contrato (campo aberto)
+  pricePerFpCents: number | null; // DERIVADO (read-only): total_value ÷ contracted_fp (coluna GENERATED)
   contractedFp: number | null;
   contractedSprints: number | null;
   note: string | null;
@@ -130,7 +131,7 @@ export type ContractInput = {
   effectiveTo?: string | null;
   billingType: BillingType;
   monthlyFeeCents?: number | null;
-  pricePerFpCents?: number | null;
+  totalValueCents?: number | null; // encomenda: valor global (preço/FP é derivado, não entra no input)
   contractedFp?: number | null;
   contractedSprints?: number | null;
   note?: string | null;

@@ -95,6 +95,22 @@ export function fmtWeek(yyyyMmDd: string): string {
   }
 }
 
+/**
+ * "14 jun" — dia + mês curto a partir de um YYYY-MM-DD (date-only).
+ * UTC-safe de propósito (igual `fmtWeek`): o `fmtDate` comum parseia no fuso
+ * local e renderiza o dia −1 em fusos a oeste de UTC para datas date-only.
+ * Usado pelos chips do Cronograma (sprint/semana têm data date-only).
+ */
+export function fmtDayMonth(yyyyMmDd: string): string {
+  try {
+    const d = new Date(yyyyMmDd.slice(0, 10) + "T00:00:00Z");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${day} ${MONTHS_SHORT[d.getUTCMonth()]}`;
+  } catch {
+    return yyyyMmDd;
+  }
+}
+
 /** "qua, 27 mai 2026" — weekday curto + data média. Lista de reuniões. */
 export function fmtWeekdayShort(d: DateInput): string {
   const date = toDate(d);

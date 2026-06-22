@@ -5,6 +5,7 @@ import { CornerDownRight } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ClientLogo } from "@/app/(dashboard)/clients/[id]/_components/client-logo";
 import { Cronograma, type CronogramaBlock } from "@/components/timeline/cronograma";
+import { fmtDayMonth } from "@/lib/date-utils";
 import type { WikiMetrics } from "@/lib/dal/wiki-metrics";
 
 /**
@@ -58,17 +59,19 @@ export function WikiIdentity({
     const sorted = [...sprints].sort((a, b) =>
       a.startDate.localeCompare(b.startDate)
     );
-    const list: CronogramaBlock[] = sorted.map((s) => {
+    const list: CronogramaBlock[] = sorted.map((s, i) => {
       const start = s.startDate.slice(0, 10);
       const end = s.endDate.slice(0, 10);
       const kind =
         today < start ? "future" : today > end ? "past" : "current";
       return {
         key: s.id,
-        label: s.name,
-        dateLabel: `${start.slice(8, 10)}/${start.slice(5, 7)}`,
+        indicator: String(i + 1),
+        dateLabel: fmtDayMonth(start),
         kind,
         logCount: s.doneTaskCount,
+        value: s.doneTaskCount > 0 ? String(s.doneTaskCount) : undefined,
+        title: `${s.name} · ${s.doneTaskCount} entregue${s.doneTaskCount === 1 ? "" : "s"}`,
       };
     });
     return {
@@ -152,10 +155,11 @@ export function WikiIdentity({
       {blocks.length > 0 && (
         <div className="mt-3">
           <Cronograma
+            shape="chip"
+            layout="wrap"
+            collapsible={{ previewCount: 8 }}
             blocks={blocks}
             selectedKey={currentKey}
-            onSelect={() => {}}
-            variant="mini"
           />
           {(startLabel || endLabel) && (
             <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">

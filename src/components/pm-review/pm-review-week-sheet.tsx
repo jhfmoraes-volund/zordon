@@ -131,7 +131,8 @@ export function PMReviewWeekSheet({
               Cronograma
             </div>
             <Cronograma
-              variant="full"
+              shape="chip"
+              layout="wrap"
               blocks={blocks}
               selectedKey={week}
               onSelect={onSelectWeek}

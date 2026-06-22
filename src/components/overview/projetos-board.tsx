@@ -54,8 +54,9 @@ import {
   PROJECT_ENGAGEMENT,
   type ChipTone,
 } from "@/lib/status-chips";
-import { fmtDate } from "@/lib/date-utils";
+import { fmtDate, fmtDayMonth } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
+import { Cronograma, deliveryTone, type CronogramaBlock } from "@/components/timeline/cronograma";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast } from "@/lib/optimistic/toast";
 import {
@@ -345,14 +346,6 @@ function fmtAvg(v: number | null): string {
 
 // ─── Régua ────────────────────────────────────────────────
 
-/** Cor do segmento fechado pela entrega da sprint (sem PFV = cinza neutro). */
-function segmentColor(deliveryPct: number | null): string {
-  if (deliveryPct === null) return "bg-muted-foreground/40";
-  if (deliveryPct >= 85) return "bg-emerald-500/70";
-  if (deliveryPct >= 50) return "bg-yellow-500/60";
-  return "bg-red-400/70";
-}
-
 function segmentTitle(g: ProjectStats["segments"][number]): string {
   const sprint = `Sprint de ${fmtDate(new Date(`${g.monday}T00:00:00Z`))}`;
   if (g.kind === "hole") return `${sprint} — desligada: contrato queimou sem produção`;
@@ -365,16 +358,33 @@ function segmentTitle(g: ProjectStats["segments"][number]): string {
 }
 
 /**
- * Estado visual da célula — semana é unidade atômica: produziu / desligada /
- * corrente / futura. Corrente é SEMPRE o bloco primary (vermelho) — marcador
- * "estamos aqui" uniforme em todas as linhas; ter ou não sprint ativa fica no
- * tooltip (segmentTitle), não na cor.
+ * `ReguaSegment` → `CronogramaBlock` (idioma chip unificado). O estado/silent
+ * vêm do `kind` (closed→past · hole→past+silent · current · future); o tom (band
+ * da barra + cor do texto) vem dos helpers de delivery; ⚑ no índice do marco. O
+ * Cronograma renderiza barra+valor+data a partir disso — sem `cellClass` nem 3º
+ * enum: "delivery" é só tom explícito.
  */
-function cellClass(g: ProjectStats["segments"][number]): string {
-  if (g.kind === "closed") return segmentColor(g.deliveryPct);
-  if (g.kind === "hole") return "border border-dashed border-muted-foreground/30 bg-transparent";
-  if (g.kind === "current") return "bg-primary/30 ring-1 ring-inset ring-primary/70";
-  return "bg-muted/50"; // future
+function segToBlock(
+  g: ReguaSegment,
+  i: number,
+  milestoneIndex: number | null,
+): CronogramaBlock {
+  const state: "past" | "current" | "future" =
+    g.kind === "current" ? "current" : g.kind === "future" ? "future" : "past";
+  return {
+    key: g.monday,
+    state,
+    silent: g.kind === "hole",
+    dateLabel: fmtDayMonth(g.monday),
+    value: segmentValueLabel(g) || undefined,
+    tone: {
+      band: deliveryTone(g.deliveryPct).band,
+      text: segmentValueTone(g),
+      border: "border-border/60",
+    },
+    title: segmentTitle(g),
+    flagged: milestoneIndex === i,
+  };
 }
 
 /**
@@ -395,35 +405,15 @@ function Regua({
   legend?: boolean;
 }) {
   if (stats.segments.length === 0) return null;
-  const lg = size === "lg";
-  // ⚑ só no drawer: na linha do board ele variaria a altura entre rows
-  // (jitter de ritmo vertical) e o chip do marco já vive na própria linha.
-  const milestoneIdx = lg ? stats.milestoneIndex : null;
+  // ⚑ só no lg (tooltip/drawer): na linha do board ele variaria a altura entre rows.
+  const milestoneIndex = size === "lg" ? stats.milestoneIndex : null;
   return (
-    <div
-      title={legend ? "1 bloco = 1 sprint do contrato · cor = entrega real" : undefined}
-      className={cn(
-        "flex flex-wrap items-center",
-        lg ? "gap-1" : "gap-[3px]",
-        milestoneIdx !== null && "mt-3",
-      )}
-    >
-      {stats.segments.map((g, i) => (
-        <span
-          key={g.monday}
-          title={segmentTitle(g)}
-          className={cn("relative rounded-[3px]", lg ? "h-3 w-5" : "h-2 w-3", cellClass(g))}
-        >
-          {milestoneIdx === i && (
-            <span
-              title="Marco (PM Review)"
-              className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[9px] leading-none text-muted-foreground"
-            >
-              ⚑
-            </span>
-          )}
-        </span>
-      ))}
+    <div title={legend ? "1 bloco = 1 sprint do contrato · cor = entrega real" : undefined}>
+      <Cronograma
+        shape="ribbon"
+        size={size}
+        blocks={stats.segments.map((g, i) => segToBlock(g, i, milestoneIndex))}
+      />
     </div>
   );
 }
@@ -488,7 +478,7 @@ function segmentValueLabel(g: ReguaSegment): string {
   return ""; // futura — a data abaixo já diz tudo
 }
 
-/** Tom do texto da célula — ecoa segmentColor (mesmos cortes 85/50). */
+/** Tom do texto da célula — ecoa deliveryTone (mesmos cortes 85/50). */
 function segmentValueTone(g: ReguaSegment): string {
   if (g.kind === "closed") {
     if (g.deliveryPct === null) return "text-muted-foreground";
@@ -511,37 +501,10 @@ function SprintTimeline({ stats }: { stats: ProjectStats }) {
   if (stats.segments.length === 0) return null;
   return (
     <div>
-      <div
-        className={cn(
-          "grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-x-2 gap-y-5",
-          stats.milestoneIndex !== null && "mt-3",
-        )}
-      >
-        {stats.segments.map((g, i) => (
-          <div key={g.monday} title={segmentTitle(g)} className="relative min-w-0 cursor-help">
-            {stats.milestoneIndex === i && (
-              <span
-                title="Marco (PM Review)"
-                className="absolute -top-3.5 left-0 text-[9px] leading-none text-muted-foreground"
-              >
-                ⚑
-              </span>
-            )}
-            <div className={cn("h-2.5 rounded-[3px]", cellClass(g))} />
-            <div
-              className={cn(
-                "mt-1.5 h-[11px] truncate text-[11px] font-medium leading-none tabular-nums",
-                segmentValueTone(g),
-              )}
-            >
-              {segmentValueLabel(g)}
-            </div>
-            <div className="mt-1 text-[10px] leading-none tabular-nums text-muted-foreground/70">
-              {g.monday.slice(8, 10)}/{g.monday.slice(5, 7)}
-            </div>
-          </div>
-        ))}
-      </div>
+      <Cronograma
+        shape="grid"
+        blocks={stats.segments.map((g, i) => segToBlock(g, i, stats.milestoneIndex))}
+      />
       <div className="mt-4 text-[11px] text-muted-foreground">
         <ReguaSummaryLine stats={stats} />
       </div>

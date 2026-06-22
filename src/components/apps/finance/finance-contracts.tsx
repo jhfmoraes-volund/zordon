@@ -28,8 +28,9 @@ import {
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { brlFromCents } from "@/lib/format-currency";
-import { fmtDate } from "@/lib/date-utils";
+import { fmtDate, fmtDayMonth } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
+import { Cronograma } from "@/components/timeline/cronograma";
 import type {
   BillingType,
   Contract,
@@ -284,25 +285,20 @@ export function FinanceContracts({
                   </div>
                 </div>
 
-                {/* Cronograma de blocos deste contrato — faixa de 1 linha, rola na horizontal */}
+                {/* Cronograma de blocos deste contrato — chip unificado, faixa que rola */}
                 {covered.length > 0 && (
                   <div className="px-3 pb-2.5">
-                    <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {covered.map((s) => (
-                        <span
-                          key={s.id}
-                          title={`${s.name} · ${fmtDate(s.startDate)} → ${fmtDate(s.endDate)}`}
-                          className={cn(
-                            "flex size-6 shrink-0 items-center justify-center rounded-sm border font-mono text-[10px] font-medium tabular-nums",
-                            pal.border,
-                            pal.band,
-                            pal.text,
-                          )}
-                        >
-                          {shortName(s.name)}
-                        </span>
-                      ))}
-                    </div>
+                    <Cronograma
+                      shape="chip"
+                      layout="scroll"
+                      blocks={covered.map((s) => ({
+                        key: s.id,
+                        indicator: shortName(s.name),
+                        dateLabel: fmtDayMonth(s.startDate),
+                        tone: { border: pal.border, band: pal.band, text: pal.text },
+                        title: `${s.name} · ${fmtDate(s.startDate)} → ${fmtDate(s.endDate)}`,
+                      }))}
+                    />
                   </div>
                 )}
               </div>

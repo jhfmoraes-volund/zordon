@@ -31,6 +31,7 @@ import {
 } from "@/components/timeline/cronograma";
 import { PlanningHistorySheet } from "@/components/planning-session/planning-history-sheet";
 import { PlanningHistoricalCanvas } from "@/components/planning-session/planning-historical-canvas";
+import { fmtDayMonth } from "@/lib/date-utils";
 import type { PlanningEvent } from "@/components/planning-session/planning-event-log";
 import type {
   PlanningSessionRow,
@@ -44,6 +45,12 @@ type SessionWithPrds = PlanningSessionRow & {
 
 /** Key do bloco "Sem sprint" (logs fora de qualquer janela de sprint). */
 const NONE_KEY = "__none__";
+
+/** "Sprint 12" → "12" (indicador curto do chip); resto inalterado. */
+function shortName(name: string): string {
+  const m = /^Sprint\s+(.+)$/i.exec(name);
+  return m ? m[1] : name;
+}
 
 export default function PlanningSessionPage({
   params,
@@ -302,7 +309,8 @@ export default function PlanningSessionPage({
     const list: CronogramaBlock[] = sorted.map((s) => ({
       key: s.id,
       label: s.name,
-      dateLabel: `${s.startDate.slice(8, 10)}/${s.startDate.slice(5, 7)}`,
+      indicator: shortName(s.name),
+      dateLabel: fmtDayMonth(s.startDate),
       kind: today < s.startDate ? "future" : today > s.endDate ? "past" : "current",
       logCount: byBlock.get(s.id)?.length ?? 0,
     }));
