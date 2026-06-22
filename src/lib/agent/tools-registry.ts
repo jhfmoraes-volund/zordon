@@ -81,6 +81,7 @@ import {
   createRestoreWikiBulletTool,
   createRecomposeWikiTool,
 } from "./tools/wiki";
+import type { Surface, ToolClass, ToolDescriptor } from "./tool-descriptor";
 
 /**
  * Context passed pelo router pra cada factory. Campos opcionais — cada tool
@@ -110,6 +111,9 @@ export type ToolContext = {
   routeSprintId?: string;
 };
 
+// ── require* — guardas que DÃO THROW (mensagens hand-tuned). Ficam DENTRO do
+//    bind. O descriptor.needs apenas DECLARA quais campos cada bind guarda; a
+//    consistência needs↔bind é provada por teste (scripts/agent-surface.test.ts).
 function requireSessionId(ctx: ToolContext): string {
   if (!ctx.sessionId) throw new Error("sessionId required for this tool");
   return ctx.sessionId;
@@ -146,6 +150,7 @@ function requireReleasePlanningId(ctx: ToolContext): string {
  * Projeto pras tools de Wiki: Vitoria surface 'wiki' resolve por ctx.projectId
  * (thread do projeto); Alpha global resolve por ctx.routeProjectId (a página
  * onde o PM está). Sem nenhum → erro que ensina (abra a página do projeto).
+ * É um OR-requirement → descriptor.needs: [["routeProjectId", "projectId"]].
  */
 function requireWikiProjectId(ctx: ToolContext): string {
   const pid = ctx.routeProjectId || ctx.projectId;
@@ -158,203 +163,55 @@ function requireWikiProjectId(ctx: ToolContext): string {
   return pid;
 }
 
-type ToolFactory = (ctx: ToolContext) => Tool;
+// ── Grupos de superfície (legibilidade do pertencimento) ───────────────────
+/** Núcleo de leitura situacional da Vitoria — serve TODAS as 4 superfícies. */
+const VITORIA_READ_SURFACES: Surface[] = [
+  "vitoria:pm_review",
+  "vitoria:planning",
+  "vitoria:release_planning",
+  "vitoria:wiki",
+];
+/** Escrita/staging da Vitoria — Planning + Release Planning. */
+const VITORIA_PLANNING_SURFACES: Surface[] = [
+  "vitoria:planning",
+  "vitoria:release_planning",
+];
 
-/**
- * TOOL_REGISTRY — mapa nome → factory pra MCP server e tool router HTTP.
- *
- * Cada entrada reusa as factories existentes em src/lib/agent/tools/* sem
- * alterações. Pra adicionar tool nova ao agente via daemon, só registrar
- * aqui — sem duplicar lógica.
- *
- * Scope inicial (MVP DS Inception happy path): ~20 tools cobrindo entidades
- * de design (vision/scope/persona/brainstorm/etc.) + memória + decisões +
- * open questions. Story 13 do PRD chat-via-claude-local.
- *
- * Expansão futura: alpha-hierarchy, planning, propose_modules etc. virão em
- * stories seguintes ou quando outros agentes (Vitoria, Alpha) também usarem
- * claude-daemon (PRD Fase 3 do _future).
- */
-export const TOOL_REGISTRY: Record<string, ToolFactory> = {
-  // ── DS entities — READ ────────────────────────────────────────────────
-  read_product_vision: (ctx) => createReadProductVisionTool(requireSessionId(ctx)),
-  read_scope: (ctx) => createReadScopeTool(requireSessionId(ctx)),
-  read_persona: (ctx) => createReadPersonaTool(requireSessionId(ctx)),
-  read_brainstorm: (ctx) => createReadBrainstormTool(requireSessionId(ctx)),
-  read_priority: (ctx) => createReadPriorityTool(requireSessionId(ctx)),
-  read_risk: (ctx) => createReadRiskTool(requireSessionId(ctx)),
-  read_gap: (ctx) => createReadGapTool(requireSessionId(ctx)),
-  read_tech_specs: (ctx) => createReadTechSpecsTool(requireSessionId(ctx)),
-  read_hypothesis: (ctx) => createReadHypothesisTool(requireSessionId(ctx)),
-
-  // ── DS entities — WRITE ───────────────────────────────────────────────
-  write_product_vision: (ctx) => createWriteProductVisionTool(requireSessionId(ctx)),
-  write_scope_item: (ctx) => createWriteScopeItemTool(requireSessionId(ctx)),
-  write_persona: (ctx) => createWritePersonaTool(requireSessionId(ctx)),
-  write_brainstorm: (ctx) => createWriteBrainstormTool(requireSessionId(ctx)),
-  write_priority: (ctx) => createWritePriorityTool(requireSessionId(ctx)),
-  write_risk: (ctx) => createWriteRiskTool(requireSessionId(ctx)),
-  write_gap: (ctx) => createWriteGapTool(requireSessionId(ctx)),
-  write_tech_specs: (ctx) => createWriteTechSpecsTool(requireSessionId(ctx)),
-  write_hypothesis: (ctx) => createWriteHypothesisTool(requireSessionId(ctx)),
-
-  // ── Memória + Contexto ────────────────────────────────────────────────
-  read_business_context: (ctx) =>
-    createReadBusinessContextTool(requireSessionId(ctx), ctx.projectId),
-  read_session_memory: (ctx) =>
-    createReadSessionMemoryTool(requireSessionId(ctx), ctx.projectId),
-  update_session_memory: (ctx) =>
-    createUpdateSessionMemoryTool(requireSessionId(ctx), ctx.projectId),
-  read_project_memory: (ctx) =>
-    createReadProjectMemoryTool(requireSessionId(ctx), ctx.projectId),
-  update_project_memory: (ctx) =>
-    createUpdateProjectMemoryTool(requireSessionId(ctx), ctx.projectId),
-
-  // ── Decisões ──────────────────────────────────────────────────────────
-  record_decision: (ctx) =>
-    createRecordDecisionTool(requireSessionId(ctx), ctx.projectId),
-  revise_decision: (ctx) =>
-    createReviseDecisionTool(requireSessionId(ctx), ctx.projectId),
-  list_decisions: (ctx) =>
-    createListDecisionsTool(requireSessionId(ctx), ctx.projectId),
-
-  // ── Open questions ────────────────────────────────────────────────────
-  add_open_question: (ctx) =>
-    createAddOpenQuestionTool(requireSessionId(ctx), ctx.projectId),
-  resolve_open_question: (ctx) =>
-    createResolveOpenQuestionTool(requireSessionId(ctx), ctx.projectId),
-  list_open_questions: (ctx) =>
-    createListOpenQuestionsTool(requireSessionId(ctx), ctx.projectId),
-
-  // ── Anexos / ContextSource ────────────────────────────────────────────
-  read_context_source: (ctx) =>
-    createReadContextSourceTool({
-      sessionId: ctx.sessionId,
-      pmReviewId: ctx.pmReviewId ?? null,
-      planningId: ctx.planningId ?? null,
-      releasePlanningId: ctx.releasePlanningId ?? null,
-    }),
-
-  // INSUMOS estritos do ritual (EntityLink): só o que o PM linkou a ESTE
-  // review/planning. É a fonte do PM Review (sem pool aberto → sem vazamento).
-  // Re-consulta ao vivo, resolvendo o freeze do prompt em resume.
-  list_linked_sources: (ctx) =>
-    createListLinkedSourcesTool({
-      sessionId: ctx.sessionId,
-      pmReviewId: ctx.pmReviewId ?? null,
-      planningId: ctx.planningId ?? null,
-      releasePlanningId: ctx.releasePlanningId ?? null,
-    }),
-
-  // Pool ABERTO do projeto (curadoria) — Release Planning descobre fontes além
-  // das linkadas e cura com link_context_source. Marca `linked` e exclui o
-  // design_system. NÃO exposto ao PM Review (lá a fonte é só o linkado).
-  list_context_sources: (ctx) =>
-    createListContextSourcesTool(ctx.projectId, {
-      sessionId: ctx.sessionId,
-      pmReviewId: ctx.pmReviewId ?? null,
-      planningId: ctx.planningId ?? null,
-      releasePlanningId: ctx.releasePlanningId ?? null,
-    }),
-
-  // ── Insumos estruturados (JSON/CSV) — querying via SQL (DuckDB) ────────
-  // Execução roda AQUI (processo do app); o daemon só expõe o schema e proxia.
-  describe_structured_source: () => createDescribeStructuredSourceTool(),
-  query_structured_source: () => createQueryStructuredSourceTool(),
-
-  // ── Vitoria Release Planning — curadoria de insumos ────────────────────
-  // Surface 'release_planning'. PRD↔sprint saiu (decisão 2026-06-19): a planning
-  // LÊ fontes (insumos + PRDs via list_prds/read_prd) e produz tasks/stories.
-  // O staging (propose_task_action…) usa ctx.planningId (companion ceremony);
-  // link_context_source usa releasePlanningId (id da PlanningSession).
-  link_context_source: (ctx) =>
-    buildReleasePlanningBoardTools(
-      requireReleasePlanningId(ctx),
-      ctx.projectId,
-      ctx.memberId ?? null,
-    ).link_context_source,
-
-  // ── Workspace sandboxed (lê apenas dentro do workspace do projeto) ───
-  read_workspace_file: (ctx) =>
-    createReadWorkspaceFileTool({ workspacePath: ctx.workspacePath ?? null }),
-  glob_workspace: (ctx) =>
-    createGlobWorkspaceTool({ workspacePath: ctx.workspacePath ?? null }),
-  grep_workspace: (ctx) =>
-    createGrepWorkspaceTool({ workspacePath: ctx.workspacePath ?? null }),
-
-  // ── PRDs (Vitor — sub-fase PRD_DRAFTING / PRD_REVIEW) ────────────────
-  propose_prd: (ctx) =>
-    createProposePrdTool(requireSessionId(ctx), ctx.projectId, ctx.memberId ?? null),
-  read_prd: () => createReadPrdTool(),
-  update_prd: (ctx) => createUpdatePrdTool(ctx.memberId ?? null),
-  approve_prd: (ctx) => createApprovePrdTool(ctx.memberId ?? null),
-  link_prd_dependency: (ctx) => createLinkPrdDependencyTool(ctx.memberId ?? null),
-  list_prds: (ctx) => createListPrdsTool(ctx.projectId),
-
-  // ── Vitoria PM Review tools ───────────────────────────────────────────
-  // buildPMReviewTools retorna bundle de 4 tools; cada entrada aqui resolve
-  // pra mesma instância da bundle (cheap re-build — só zod schemas).
-  read_transcript_content: (ctx) =>
-    buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
-      .read_transcript_content,
-  add_pm_review_note: (ctx) =>
-    buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
-      .add_pm_review_note,
-  update_pm_review_report: (ctx) =>
-    buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
-      .update_pm_review_report,
-  get_project_indicators: (ctx) =>
-    buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
-      .get_project_indicators,
-
-  // ── Wiki copiloto (afina grounded) — Vitoria surface 'wiki' OU Alpha global.
-  // Projeto resolvido por requireWikiProjectId (ctx.projectId p/ Vitoria;
-  // ctx.routeProjectId p/ Alpha na página do projeto).
-  read_wiki: (ctx) => createReadWikiTool(requireWikiProjectId(ctx)),
-  set_wiki_emphasis: (ctx) =>
-    createSetWikiEmphasisTool(requireWikiProjectId(ctx), ctx.memberId ?? null),
-  suppress_wiki_bullet: (ctx) =>
-    createSuppressWikiBulletTool(requireWikiProjectId(ctx), ctx.memberId ?? null),
-  restore_wiki_bullet: (ctx) =>
-    createRestoreWikiBulletTool(requireWikiProjectId(ctx)),
-  recompose_wiki: (ctx) => createRecomposeWikiTool(requireWikiProjectId(ctx)),
+// ── Classe da tool (doutrina §2). Heurística por prefixo + overrides ────────
+const CLASS_OVERRIDES: Record<string, ToolClass> = {
+  read_session_memory: "remember",
+  update_session_memory: "remember",
+  read_project_memory: "remember",
+  update_project_memory: "remember",
+  append_project_memory: "remember",
 };
+function classOf(name: string): ToolClass {
+  if (CLASS_OVERRIDES[name]) return CLASS_OVERRIDES[name];
+  if (/^(read|list|get|query|describe|verify|ask|load)_/.test(name)) return "sense";
+  return "act";
+}
 
-// ── Alpha (ops) — reads pro daemon ────────────────────────────────────────
-// Reusa assembleAlphaTools threadando routeProjectId/routeSprintId do ctx
-// (resolvidos de ChatTurn.routePath): numa página de projeto/sprint, get_tasks /
-// get_backlog / get_sprint_overview / list_sprints / get_alerts filtram pelo
-// escopo da rota; sem rota (ex.: header tab global), caem em global e o modelo
-// escapa passando projectName (get_tasks/get_backlog). As tools route-scoped
-// (list_modules, get_project_capacity…) e Composio (GitHub/Calendar, token
-// per-user) ficam FORA daqui. Ver memory feedback_agent_chat_daemon_only.
-const ALPHA_READ_TOOL_NAMES = [
-  "get_sprint_overview",
-  "get_tasks",
-  "get_alerts",
-  "list_sprints",
-  "get_backlog",
-  "get_allocated_project_members",
-  "load_heuristic",
-  "get_pending_actions",
-  // Reuniões — get_recent_meetings lista Meetings internos (service_role, OK no
-  // daemon); get_meeting_transcript/ask_meeting tocam Roam/Granola (token
-  // per-user) → sem token degradam in-band (retornam {error}, não throw). O
-  // Composio (GitHub/Calendar) continua FORA do daemon (daemon v2).
-  "get_recent_meetings",
-  "get_meeting_transcript",
-  "ask_meeting",
-] as const;
+// ── Binds reutilizados (bundle-pick) ────────────────────────────────────────
+type BindFn = (ctx: ToolContext) => Tool;
+type VitoriaToolName = keyof ReturnType<typeof buildVitoriaTools>;
 
-// Alpha write tools habilitados no daemon. update_task casa por taskReference
-// (lookup global — não precisa de projeto na rota), então funciona mesmo do
-// header tab global, desde que o modelo enxergue a task (get_tasks projectName).
-// create_task/bulk_update_tasks ficam fora: dependem de projeto resolvido
-// (sprint ativo / routeProjectId) e não são confiáveis sem rota.
-const ALPHA_WRITE_TOOL_NAMES = ["update_task"] as const;
+/** Vitoria reads/planning-project: planningId OPCIONAL (passa "" se ausente —
+ *  PM Review chama os reads sem planningId). projectId é invariante (não é need). */
+const vitoriaBind =
+  (name: VitoriaToolName): BindFn =>
+  (ctx) =>
+    buildVitoriaTools(ctx.planningId ?? "", ctx.projectId)[name] as Tool;
 
-function alphaTool(name: string, writeTools: boolean): ToolFactory {
-  return (ctx) => {
+/** Vitoria ceremony: planningId OBRIGATÓRIO (staging/estado da ceremony). */
+const vitoriaCeremonyBind =
+  (name: VitoriaToolName): BindFn =>
+  (ctx) =>
+    buildVitoriaTools(requirePlanningId(ctx), ctx.projectId)[name] as Tool;
+
+/** Alpha (ops) — bundle assemblado threadando routeProjectId/routeSprintId. */
+const alphaBind =
+  (name: string, writeTools: boolean): BindFn =>
+  (ctx) => {
     const tools = assembleAlphaTools(
       { maxSteps: 30, writeTools, readTools: true },
       {
@@ -367,31 +224,57 @@ function alphaTool(name: string, writeTools: boolean): ToolFactory {
     if (!t) throw new Error(`alpha tool "${name}" not assembled`);
     return t;
   };
-}
 
-for (const name of ALPHA_READ_TOOL_NAMES) {
-  TOOL_REGISTRY[name] = alphaTool(name, false);
-}
+/** Alpha route-scoped — exige projeto resolvido da rota. */
+const alphaRouteBind =
+  (factory: (projectId: string) => Tool): BindFn =>
+  (ctx) =>
+    factory(requireRouteProjectId(ctx));
 
-for (const name of ALPHA_WRITE_TOOL_NAMES) {
-  TOOL_REGISTRY[name] = alphaTool(name, true);
-}
-
-// ── Alpha route-scoped reads (Fase 2) — exigem um projeto resolvido da rota
-// (ChatTurn.routePath → ctx.routeProjectId). Sem rota de projeto,
-// requireRouteProjectId devolve uma mensagem amigável pro modelo. Estas
-// factories são alpha-only (só entram no set ALPHA_TOOLS) — não colidem com as
-// factories session-bound do Vitor/Vitoria.
-const ALPHA_ROUTE_TOOL_NAMES = [
-  "list_modules",
-  "list_personas",
-  "list_stories",
-  "get_story",
-  "get_project_capacity",
-  "list_unplanned_tasks",
-  "verify_sprint_distribution",
-] as const;
-
+// ── Listas de build dos grupos patternizados ────────────────────────────────
+const VITORIA_SHARED_READ_NAMES: VitoriaToolName[] = [
+  "list_project_sprints",
+  "list_project_tasks",
+  "list_project_members",
+  "get_sprint_capacity",
+  "get_task_detail",
+  "get_dependency_graph",
+  "list_active_design_sessions",
+  "read_design_session_memory",
+  "read_design_session_step",
+];
+const VITORIA_PLANNING_PROJECT_NAMES: VitoriaToolName[] = [
+  "propose_story",
+  "append_project_memory",
+];
+const VITORIA_PLANNING_CEREMONY_NAMES: VitoriaToolName[] = [
+  "add_context_note",
+  "propose_task_action",
+  "propose_tasks",
+  "update_proposed_action",
+  "delete_proposed_action",
+  "get_planning_state",
+];
+// Alpha reads GLOBAIS no daemon (route-aware no app). Composio (GitHub/Calendar)
+// fica FORA (token per-user, daemon v2). get_meeting_transcript/ask_meeting tocam
+// Roam/Granola e degradam in-band sem token. Ver memory feedback_agent_chat_daemon_only.
+const ALPHA_READ_TOOL_NAMES = [
+  "get_sprint_overview",
+  "get_tasks",
+  "get_alerts",
+  "list_sprints",
+  "get_backlog",
+  "get_allocated_project_members",
+  "load_heuristic",
+  "get_pending_actions",
+  "get_recent_meetings",
+  "get_meeting_transcript",
+  "ask_meeting",
+];
+// update_task casa por taskReference (lookup global). create_task/bulk_update
+// ficam fora (dependem de projeto resolvido da rota).
+const ALPHA_WRITE_TOOL_NAMES = ["update_task"];
+// Alpha route-scoped reads (exigem ctx.routeProjectId).
 const ALPHA_ROUTE_FACTORIES: Record<string, (projectId: string) => Tool> = {
   list_modules: listModulesForOpsTool,
   list_personas: listPersonasForOpsTool,
@@ -402,181 +285,215 @@ const ALPHA_ROUTE_FACTORIES: Record<string, (projectId: string) => Tool> = {
   verify_sprint_distribution: verifySprintDistributionForOpsTool,
 };
 
-for (const name of ALPHA_ROUTE_TOOL_NAMES) {
-  TOOL_REGISTRY[name] = (ctx) =>
-    ALPHA_ROUTE_FACTORIES[name](requireRouteProjectId(ctx));
+/**
+ * RAW — descriptors sem `name`/`class` (injetados em buildRegistry). Cada
+ * entrada é a ÚNICA fonte do seu pertencimento (`surfaces`) e escopo (`needs`).
+ * Compartilhar uma tool = adicionar 1 surface ao array. O `bind` é a factory
+ * existente (require* fica dentro). Ver runbook agent-capability-unification.
+ */
+type RawDescriptor = Omit<ToolDescriptor, "name" | "class"> & {
+  class?: ToolClass;
+};
+
+const RAW: Record<string, RawDescriptor> = {
+  // ── DS entities — READ (Vitor) ────────────────────────────────────────
+  read_product_vision: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadProductVisionTool(requireSessionId(ctx)) },
+  read_scope: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadScopeTool(requireSessionId(ctx)) },
+  read_persona: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadPersonaTool(requireSessionId(ctx)) },
+  read_brainstorm: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadBrainstormTool(requireSessionId(ctx)) },
+  read_priority: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadPriorityTool(requireSessionId(ctx)) },
+  read_risk: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadRiskTool(requireSessionId(ctx)) },
+  read_gap: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadGapTool(requireSessionId(ctx)) },
+  read_tech_specs: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadTechSpecsTool(requireSessionId(ctx)) },
+  read_hypothesis: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadHypothesisTool(requireSessionId(ctx)) },
+
+  // ── DS entities — WRITE (Vitor) ───────────────────────────────────────
+  write_product_vision: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWriteProductVisionTool(requireSessionId(ctx)) },
+  write_scope_item: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWriteScopeItemTool(requireSessionId(ctx)) },
+  write_persona: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWritePersonaTool(requireSessionId(ctx)) },
+  write_brainstorm: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWriteBrainstormTool(requireSessionId(ctx)) },
+  write_priority: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWritePriorityTool(requireSessionId(ctx)) },
+  write_risk: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWriteRiskTool(requireSessionId(ctx)) },
+  write_gap: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWriteGapTool(requireSessionId(ctx)) },
+  write_tech_specs: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWriteTechSpecsTool(requireSessionId(ctx)) },
+  write_hypothesis: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createWriteHypothesisTool(requireSessionId(ctx)) },
+
+  // ── Memória + Contexto (Vitor) ────────────────────────────────────────
+  read_business_context: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadBusinessContextTool(requireSessionId(ctx), ctx.projectId) },
+  read_session_memory: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadSessionMemoryTool(requireSessionId(ctx), ctx.projectId) },
+  update_session_memory: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createUpdateSessionMemoryTool(requireSessionId(ctx), ctx.projectId) },
+  read_project_memory: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReadProjectMemoryTool(requireSessionId(ctx), ctx.projectId) },
+  update_project_memory: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createUpdateProjectMemoryTool(requireSessionId(ctx), ctx.projectId) },
+
+  // ── Decisões (Vitor) ──────────────────────────────────────────────────
+  record_decision: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createRecordDecisionTool(requireSessionId(ctx), ctx.projectId) },
+  revise_decision: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createReviseDecisionTool(requireSessionId(ctx), ctx.projectId) },
+  list_decisions: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createListDecisionsTool(requireSessionId(ctx), ctx.projectId) },
+
+  // ── Open questions (Vitor) ────────────────────────────────────────────
+  add_open_question: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createAddOpenQuestionTool(requireSessionId(ctx), ctx.projectId) },
+  resolve_open_question: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createResolveOpenQuestionTool(requireSessionId(ctx), ctx.projectId) },
+  list_open_questions: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createListOpenQuestionsTool(requireSessionId(ctx), ctx.projectId) },
+
+  // ── Anexos / ContextSource ────────────────────────────────────────────
+  // read_context_source: scope-objeto (todos opcionais; o tool auto-resolve).
+  // Compartilhado por Vitor + as 4 superfícies da Vitoria (não Alpha).
+  read_context_source: {
+    surfaces: ["vitor", "vitoria:pm_review", "vitoria:planning", "vitoria:release_planning", "vitoria:wiki"],
+    needs: [],
+    optional: ["sessionId", "pmReviewId", "planningId", "releasePlanningId"],
+    bind: (ctx) =>
+      createReadContextSourceTool({
+        sessionId: ctx.sessionId,
+        pmReviewId: ctx.pmReviewId ?? null,
+        planningId: ctx.planningId ?? null,
+        releasePlanningId: ctx.releasePlanningId ?? null,
+      }),
+  },
+  // INSUMOS estritos do ritual (só o que o PM linkou a ESTE review). Só PM Review.
+  list_linked_sources: {
+    surfaces: ["vitoria:pm_review"],
+    needs: [],
+    optional: ["sessionId", "pmReviewId", "planningId", "releasePlanningId"],
+    bind: (ctx) =>
+      createListLinkedSourcesTool({
+        sessionId: ctx.sessionId,
+        pmReviewId: ctx.pmReviewId ?? null,
+        planningId: ctx.planningId ?? null,
+        releasePlanningId: ctx.releasePlanningId ?? null,
+      }),
+  },
+  // Pool ABERTO do projeto (curadoria) — Planning + Release Planning. NÃO PM Review.
+  list_context_sources: {
+    surfaces: ["vitoria:planning", "vitoria:release_planning"],
+    needs: [],
+    optional: ["sessionId", "pmReviewId", "planningId", "releasePlanningId"],
+    bind: (ctx) =>
+      createListContextSourcesTool(ctx.projectId, {
+        sessionId: ctx.sessionId,
+        pmReviewId: ctx.pmReviewId ?? null,
+        planningId: ctx.planningId ?? null,
+        releasePlanningId: ctx.releasePlanningId ?? null,
+      }),
+  },
+
+  // ── Insumos estruturados (JSON/CSV) — SQL via DuckDB. Execução no app; o
+  //    daemon expõe schema e proxia. Vitor + Vitoria(pm/planning/release) + Alpha.
+  describe_structured_source: {
+    surfaces: ["vitor", "vitoria:pm_review", "vitoria:planning", "vitoria:release_planning", "alpha"],
+    needs: [],
+    bind: () => createDescribeStructuredSourceTool(),
+  },
+  query_structured_source: {
+    surfaces: ["vitor", "vitoria:pm_review", "vitoria:planning", "vitoria:release_planning", "alpha"],
+    needs: [],
+    bind: () => createQueryStructuredSourceTool(),
+  },
+
+  // ── Release Planning — curadoria de insumos (board PRD↔sprint saiu 2026-06-19).
+  link_context_source: {
+    surfaces: ["vitoria:release_planning"],
+    needs: ["releasePlanningId"],
+    bind: (ctx) =>
+      buildReleasePlanningBoardTools(
+        requireReleasePlanningId(ctx),
+        ctx.projectId,
+        ctx.memberId ?? null,
+      ).link_context_source,
+  },
+
+  // ── Workspace sandboxed (Vitor) — valida path contra ctx.workspacePath ──
+  read_workspace_file: { surfaces: ["vitor"], needs: [], optional: ["workspacePath"], bind: (ctx) => createReadWorkspaceFileTool({ workspacePath: ctx.workspacePath ?? null }) },
+  glob_workspace: { surfaces: ["vitor"], needs: [], optional: ["workspacePath"], bind: (ctx) => createGlobWorkspaceTool({ workspacePath: ctx.workspacePath ?? null }) },
+  grep_workspace: { surfaces: ["vitor"], needs: [], optional: ["workspacePath"], bind: (ctx) => createGrepWorkspaceTool({ workspacePath: ctx.workspacePath ?? null }) },
+
+  // ── PRDs (Vitor; read_prd/list_prds também no Release Planning) ─────────
+  propose_prd: { surfaces: ["vitor"], needs: ["sessionId"], bind: (ctx) => createProposePrdTool(requireSessionId(ctx), ctx.projectId, ctx.memberId ?? null) },
+  read_prd: { surfaces: ["vitor", "vitoria:release_planning"], needs: [], bind: () => createReadPrdTool() },
+  update_prd: { surfaces: ["vitor"], needs: [], bind: (ctx) => createUpdatePrdTool(ctx.memberId ?? null) },
+  approve_prd: { surfaces: ["vitor"], needs: [], bind: (ctx) => createApprovePrdTool(ctx.memberId ?? null) },
+  link_prd_dependency: { surfaces: ["vitor"], needs: [], bind: (ctx) => createLinkPrdDependencyTool(ctx.memberId ?? null) },
+  list_prds: { surfaces: ["vitor", "vitoria:release_planning"], needs: [], bind: (ctx) => createListPrdsTool(ctx.projectId) },
+
+  // ── Vitoria PM Review (bundle buildPMReviewTools; precisa pmReviewId) ───
+  read_transcript_content: { surfaces: ["vitoria:pm_review"], needs: ["pmReviewId"], bind: (ctx) => buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId).read_transcript_content },
+  add_pm_review_note: { surfaces: ["vitoria:pm_review"], needs: ["pmReviewId"], bind: (ctx) => buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId).add_pm_review_note },
+  update_pm_review_report: { surfaces: ["vitoria:pm_review"], needs: ["pmReviewId"], bind: (ctx) => buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId).update_pm_review_report },
+  get_project_indicators: { surfaces: ["vitoria:pm_review"], needs: ["pmReviewId"], bind: (ctx) => buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId).get_project_indicators },
+
+  // ── Wiki copiloto — Vitoria surface 'wiki' OU Alpha global. OR-requirement
+  //    (routeProjectId OU projectId). Definidas 1×, compartilhadas (não duplicadas).
+  read_wiki: { surfaces: ["vitoria:wiki", "alpha"], needs: [["routeProjectId", "projectId"]], bind: (ctx) => createReadWikiTool(requireWikiProjectId(ctx)) },
+  set_wiki_emphasis: { surfaces: ["vitoria:wiki", "alpha"], needs: [["routeProjectId", "projectId"]], bind: (ctx) => createSetWikiEmphasisTool(requireWikiProjectId(ctx), ctx.memberId ?? null) },
+  suppress_wiki_bullet: { surfaces: ["vitoria:wiki", "alpha"], needs: [["routeProjectId", "projectId"]], bind: (ctx) => createSuppressWikiBulletTool(requireWikiProjectId(ctx), ctx.memberId ?? null) },
+  restore_wiki_bullet: { surfaces: ["vitoria:wiki", "alpha"], needs: [["routeProjectId", "projectId"]], bind: (ctx) => createRestoreWikiBulletTool(requireWikiProjectId(ctx)) },
+  recompose_wiki: { surfaces: ["vitoria:wiki", "alpha"], needs: [["routeProjectId", "projectId"]], bind: (ctx) => createRecomposeWikiTool(requireWikiProjectId(ctx)) },
+};
+
+// ── Grupos patternizados (bind compartilhado; surfaces co-localizadas) ──────
+// Vitoria núcleo de leitura: serve as 4 superfícies (situational awareness).
+for (const name of VITORIA_SHARED_READ_NAMES) {
+  RAW[name] = { surfaces: VITORIA_READ_SURFACES, needs: [], bind: vitoriaBind(name) };
 }
-
-// ── Vitoria — tools reusadas de buildVitoriaTools (mesmas do path OpenRouter).
-// Cada factory rebuilda o bundle (barato — só zod schemas) e devolve a tool
-// nomeada. Split por dependência de ctx pra a Vitoria ser UMA só com
-// awareness compartilhado entre PM Review e Planning:
-//
-//   SHARED_READ        — só projectId; situational awareness (sprint/tasks/
-//                        capacidade/deps/DS). Servem PM Review E Planning.
-//   PLANNING_PROJECT   — só projectId, mas exclusivas da Planning (escrita).
-//   PLANNING_CEREMONY  — exigem planningId (staging/estado da ceremony).
-//
-// read_context_source NÃO entra aqui — reusa a entrada genérica acima (lê por
-// id e recebe planningId no scope).
-const VITORIA_SHARED_READ_NAMES = [
-  "list_project_sprints",
-  "list_project_tasks",
-  "list_project_members",
-  "get_sprint_capacity",
-  "get_task_detail",
-  "get_dependency_graph",
-  "list_active_design_sessions",
-  "read_design_session_memory",
-  "read_design_session_step",
-] as const;
-
-const VITORIA_PLANNING_PROJECT_NAMES = [
-  "propose_story",
-  "append_project_memory",
-] as const;
-
-const VITORIA_PLANNING_CEREMONY_NAMES = [
-  "add_context_note",
-  "propose_task_action",
-  "propose_tasks",
-  "update_proposed_action",
-  "delete_proposed_action",
-  "get_planning_state",
-] as const;
-
-// projectId-only → planningId opcional (passa "" quando ausente; essas tools
-// não o usam). PM Review (sem planningId) consegue chamar os reads.
-for (const name of [
-  ...VITORIA_SHARED_READ_NAMES,
-  ...VITORIA_PLANNING_PROJECT_NAMES,
-]) {
-  TOOL_REGISTRY[name] = (ctx) =>
-    buildVitoriaTools(ctx.planningId ?? "", ctx.projectId)[
-      name as keyof ReturnType<typeof buildVitoriaTools>
-    ] as Tool;
+// Vitoria escrita project-scoped (planningId opcional): Planning + Release.
+for (const name of VITORIA_PLANNING_PROJECT_NAMES) {
+  RAW[name] = { surfaces: VITORIA_PLANNING_SURFACES, needs: [], bind: vitoriaBind(name) };
 }
-
-// planningId obrigatório (staging/estado da PlanningCeremony).
+// Vitoria ceremony (planningId obrigatório): Planning + Release.
 for (const name of VITORIA_PLANNING_CEREMONY_NAMES) {
-  TOOL_REGISTRY[name] = (ctx) =>
-    buildVitoriaTools(requirePlanningId(ctx), ctx.projectId)[
-      name as keyof ReturnType<typeof buildVitoriaTools>
-    ] as Tool;
+  RAW[name] = { surfaces: VITORIA_PLANNING_SURFACES, needs: ["planningId"], bind: vitoriaCeremonyBind(name) };
 }
-
-const VITOR_TOOLS = new Set([
-  "read_product_vision", "read_scope", "read_persona", "read_brainstorm",
-  "read_priority", "read_risk", "read_gap", "read_tech_specs", "read_hypothesis",
-  "write_product_vision", "write_scope_item", "write_persona", "write_brainstorm",
-  "write_priority", "write_risk", "write_gap", "write_tech_specs", "write_hypothesis",
-  "read_business_context", "read_session_memory", "update_session_memory",
-  "read_project_memory", "update_project_memory",
-  "record_decision", "revise_decision", "list_decisions",
-  "add_open_question", "resolve_open_question", "list_open_questions",
-  "propose_prd", "read_prd", "update_prd", "approve_prd", "link_prd_dependency", "list_prds",
-  "read_context_source",
-  "describe_structured_source", "query_structured_source",
-  "read_workspace_file", "glob_workspace", "grep_workspace",
-]);
-
-// Vitoria tem DUAS superfícies no daemon, com toolsets distintos:
-//   pm_review → notas/report/indicadores (precisa pmReviewId)
-//   planning  → staging de tasks/stories (precisa planningId)
-const VITORIA_PMREVIEW_TOOLS = new Set<string>([
-  "read_transcript_content",
-  "read_context_source",
-  // PM Review lê SÓ os insumos linkados (aba INSUMOS) — list_linked_sources, não
-  // o pool aberto. Sem pool = sem vazamento de fonte não-curada pelo PM.
-  "list_linked_sources",
-  "describe_structured_source",
-  "query_structured_source",
-  "add_pm_review_note",
-  "update_pm_review_report",
-  "get_project_indicators",
-  // Núcleo compartilhado: PM Review enxerga sprint/tasks/capacidade/deps/DS —
-  // não fica cego do estado de sprint. Writes ficam só na Planning.
-  ...VITORIA_SHARED_READ_NAMES,
-]);
-
-const VITORIA_PLANNING_TOOLS = new Set<string>([
-  ...VITORIA_SHARED_READ_NAMES,
-  ...VITORIA_PLANNING_PROJECT_NAMES,
-  ...VITORIA_PLANNING_CEREMONY_NAMES,
-  "read_context_source",
-  "list_context_sources",
-  "describe_structured_source",
-  "query_structured_source",
-]);
-
-const ALPHA_TOOLS = new Set<string>([
-  ...ALPHA_READ_TOOL_NAMES,
-  ...ALPHA_WRITE_TOOL_NAMES,
-  ...ALPHA_ROUTE_TOOL_NAMES,
-  "describe_structured_source",
-  "query_structured_source",
-  // Wiki copiloto: afinar a Wiki do projeto da rota direto do chat global do
-  // Alpha (route-scoped via requireWikiProjectId). Mesmas tools da surface
-  // 'wiki' da Vitoria — definidas 1×, compartilhadas (não duplicadas).
-  "read_wiki",
-  "set_wiki_emphasis",
-  "suppress_wiki_bullet",
-  "restore_wiki_bullet",
-  "recompose_wiki",
-]);
-
-// Release Planning (surface 'release_planning'): board (PRD↔sprint) + staging
-// (reusa as ceremony tools, ligadas à companion via ctx.planningId) + leitura
-// (PRD/insumos) + structured querying. read_prd/read_context_source reusam as
-// entradas genéricas. NÃO inclui as notas/report de PM Review.
-// Wiki copiloto (surface 'wiki'): tools de Wiki (read/emphasis/suppress/
-// recompose) + núcleo de leitura compartilhado (sprint/tasks/DS — pra a Vitoria
-// conversar com contexto) + read_context_source. Grounded-only: nenhuma escrita
-// livre. Reusa VITORIA_SHARED_READ (não cria reader novo — doutrina §1).
-const VITORIA_WIKI_TOOLS = new Set<string>([
-  "read_wiki",
-  "set_wiki_emphasis",
-  "suppress_wiki_bullet",
-  "restore_wiki_bullet",
-  "recompose_wiki",
-  "read_context_source",
-  ...VITORIA_SHARED_READ_NAMES,
-]);
-
-const VITORIA_RELEASE_PLANNING_TOOLS = new Set<string>([
-  // curadoria de insumos (PRD↔sprint board saiu — decisão 2026-06-19)
-  "list_context_sources",
-  "link_context_source",
-  // leitura de FONTES: PRD (list/read) + insumos + structured query
-  "read_prd",
-  "list_prds",
-  "read_context_source",
-  "describe_structured_source",
-  "query_structured_source",
-  // núcleo compartilhado (sprint/tasks/capacidade/deps/DS)
-  ...VITORIA_SHARED_READ_NAMES,
-  // staging de tasks/stories (companion ceremony via ctx.planningId)
-  ...VITORIA_PLANNING_PROJECT_NAMES,
-  ...VITORIA_PLANNING_CEREMONY_NAMES,
-]);
+// Alpha reads globais.
+for (const name of ALPHA_READ_TOOL_NAMES) {
+  RAW[name] = { surfaces: ["alpha"], needs: [], bind: alphaBind(name, false) };
+}
+// Alpha write.
+for (const name of ALPHA_WRITE_TOOL_NAMES) {
+  RAW[name] = { surfaces: ["alpha"], needs: [], bind: alphaBind(name, true) };
+}
+// Alpha route-scoped reads (exigem routeProjectId).
+for (const name of Object.keys(ALPHA_ROUTE_FACTORIES)) {
+  RAW[name] = { surfaces: ["alpha"], needs: ["routeProjectId"], bind: alphaRouteBind(ALPHA_ROUTE_FACTORIES[name]) };
+}
 
 /**
- * Quais tools cada agente expõe via MCP. Filtra o registry global por slug +
- * superfície. Vitoria dispatcha por `surface` (vem do thread.channel):
- * 'planning' → staging; 'release_planning' → fontes (insumos+PRD) + staging; senão → PM Review.
+ * TOOL_REGISTRY — SSOT das capacidades. `name`+`class` injetados; tudo o mais
+ * vem do RAW. O pertencimento (surfaces) vive AQUI, não num Set à parte:
+ * getToolNamesForAgent + a matriz + o guard de drift derivam disto.
+ */
+export const TOOL_REGISTRY: Record<string, ToolDescriptor> = Object.fromEntries(
+  Object.entries(RAW).map(([name, d]) => [
+    name,
+    { ...d, name, class: d.class ?? classOf(name) } satisfies ToolDescriptor,
+  ]),
+);
+
+/** slug(+surface) → chave de Surface. Vitoria default = pm_review. */
+function surfaceKey(agentSlug: string, surface?: string | null): Surface | null {
+  if (agentSlug === "vitor") return "vitor";
+  if (agentSlug === "alpha") return "alpha";
+  if (agentSlug === "vitoria") {
+    if (surface === "planning") return "vitoria:planning";
+    if (surface === "release_planning") return "vitoria:release_planning";
+    if (surface === "wiki") return "vitoria:wiki";
+    return "vitoria:pm_review";
+  }
+  return null;
+}
+
+/**
+ * Quais tools cada agente expõe via MCP. DERIVADO do descriptor.surfaces —
+ * sem Set hand-maintained. Vitoria dispatcha por `surface` (vem do thread.channel):
+ * 'planning' → staging; 'release_planning' → fontes (insumos+PRD) + staging;
+ * 'wiki' → copiloto da Wiki; senão → PM Review.
  */
 export function getToolNamesForAgent(
   agentSlug: string,
   surface?: string | null,
 ): string[] {
-  if (agentSlug === "vitor") return [...VITOR_TOOLS];
-  if (agentSlug === "vitoria") {
-    if (surface === "planning") return [...VITORIA_PLANNING_TOOLS];
-    if (surface === "release_planning")
-      return [...VITORIA_RELEASE_PLANNING_TOOLS];
-    if (surface === "wiki") return [...VITORIA_WIKI_TOOLS];
-    return [...VITORIA_PMREVIEW_TOOLS];
-  }
-  if (agentSlug === "alpha") return [...ALPHA_TOOLS];
-  return [];
+  const key = surfaceKey(agentSlug, surface);
+  if (!key) return [];
+  return Object.values(TOOL_REGISTRY)
+    .filter((d) => d.surfaces.includes(key))
+    .map((d) => d.name);
 }

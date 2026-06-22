@@ -39,8 +39,8 @@ export async function POST(
 ): Promise<NextResponse> {
   const { toolName } = await params;
 
-  const factory = TOOL_REGISTRY[toolName];
-  if (!factory) {
+  const descriptor = TOOL_REGISTRY[toolName];
+  if (!descriptor) {
     return NextResponse.json(
       { ok: false, error: "unknown_tool", toolName },
       { status: 404 },
@@ -214,7 +214,7 @@ export async function POST(
   };
 
   try {
-    const tool = factory(ctx);
+    const tool = descriptor.bind(ctx);
     // AI SDK Tool.execute signature aceita (input, options). Options vazio aqui.
     const execute = tool.execute as
       | ((args: Record<string, unknown>, options?: unknown) => Promise<unknown>)
