@@ -44,6 +44,8 @@ import { positionLabel } from "@/lib/roles";
 import type { AllocationItem, MemberRef, ProjectDetail } from "@/lib/finance/types";
 import { FinanceAssumptionsForm } from "./finance-assumptions-form";
 import { FinanceFpBilling } from "./finance-fp-billing";
+import { FinanceContracts } from "./finance-contracts";
+import { FinanceSprintTimeline } from "./finance-sprint-timeline";
 
 function monthLabel(iso: string): string {
   return new Date(iso)
@@ -79,12 +81,36 @@ export function FinanceProjectSheet({
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+  // Escopo da DRE: null = ano inteiro (Global); senão a vigência de um contrato.
+  const [scope, setScope] = useState<{ id: string | null; from: string; to: string }>({
+    id: null,
+    from: `${year}-01`,
+    to: `${year}-12`,
+  });
 
   const reload = useCallback(async () => {
-    const res = await fetch(`/api/finance/projects/${projectId}?from=${year}-01&to=${year}-12`);
+    const res = await fetch(`/api/finance/projects/${projectId}?from=${scope.from}&to=${scope.to}`);
     const json = res.ok ? ((await res.json()) as ProjectDetail) : null;
     setDetail(json);
-  }, [projectId, year]);
+  }, [projectId, scope.from, scope.to]);
+
+  // Escopa a DRE a um contrato (sua vigência) ou volta pro ano (Global).
+  const selectScope = useCallback(
+    (contractId: string | null) => {
+      if (!contractId) {
+        setScope({ id: null, from: `${year}-01`, to: `${year}-12` });
+        return;
+      }
+      const c = detail?.contracts.find((x) => x.id === contractId);
+      if (!c) return;
+      setScope({
+        id: contractId,
+        from: c.effectiveFrom.slice(0, 7),
+        to: (c.effectiveTo ?? `${year}-12-31`).slice(0, 7),
+      });
+    },
+    [detail?.contracts, year],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +245,43 @@ export function FinanceProjectSheet({
                 </button>
               </div>
 
+              {/* Escopo da DRE: ano inteiro ou a vigência de um contrato */}
+              {detail.contracts.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 px-1 font-mono text-[11px] text-muted-foreground">
+                  <span>DRE:</span>
+                  <Select
+                    value={scope.id ?? "global"}
+                    onValueChange={(v) => selectScope(!v || v === "global" ? null : v)}
+                  >
+                    <SelectTrigger className="h-7 w-auto gap-1 text-xs">
+                      <SelectValue>
+                        {(v: string | null) =>
+                          v && v !== "global"
+                            ? (detail.contracts.find((c) => c.id === v)?.label ?? "Global")
+                            : "Global (ano)"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="global">Global (ano)</SelectItem>
+                      {detail.contracts.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {(() => {
+                    const c = scope.id ? detail.contracts.find((x) => x.id === scope.id) : null;
+                    return c ? (
+                      <span>
+                        {fmtDate(c.effectiveFrom)} → {c.effectiveTo ? fmtDate(c.effectiveTo) : "atual"}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+
               {/* DRE — folha de cálculo da margem (padrão planilha P&L) */}
               <div className="surface overflow-hidden rounded-md border">
                 <DreLine label="Faturamento" cents={detail.dre.faturamentoCents} strong />
@@ -240,11 +303,34 @@ export function FinanceProjectSheet({
                 />
               </div>
 
-              {/* Faturamento por FP (só encomenda / fixed_scope) */}
-              {detail.engagementType === "fixed_scope" && (
+              {/* Contratos do projeto (vigência temporal) */}
+              <FinanceContracts
+                projectId={projectId}
+                contracts={detail.contracts}
+                sprints={detail.sprints}
+                engagementType={detail.engagementType}
+                selectedContractId={scope.id}
+                onSelectContract={selectScope}
+                onChanged={() => {
+                  void reload();
+                  onChanged();
+                }}
+              />
+
+              {/* Cronograma de blocos (sprints bandeadas por contrato) */}
+              <FinanceSprintTimeline
+                sprints={detail.sprints}
+                contracts={detail.contracts}
+                selectedContractId={scope.id}
+                onSelectContract={selectScope}
+              />
+
+              {/* Entregas de FP (encomenda) */}
+              {(detail.engagementType === "fixed_scope" ||
+                detail.contracts.some((c) => c.billingType === "fixed_scope")) && (
                 <FinanceFpBilling
                   projectId={projectId}
-                  contract={detail.contract}
+                  contracts={detail.contracts}
                   onChanged={() => {
                     void reload();
                     onChanged();

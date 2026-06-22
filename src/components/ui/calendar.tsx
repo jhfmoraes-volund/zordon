@@ -62,8 +62,8 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
-/** "18 de jun de 2026" */
-function dayLabel(iso: string): string {
+/** "18 de jun de 2026" — parse local-safe (sem drift de fuso). */
+export function dayLabel(iso: string): string {
   const d = parseISO(iso);
   return `${d.getDate()} de ${MONTHS_SHORT[d.getMonth()]} de ${d.getFullYear()}`;
 }
@@ -152,12 +152,19 @@ export function CalendarField({
     return { year: base.getFullYear(), month: base.getMonth() };
   });
 
-  React.useEffect(() => {
-    if (!open) return;
-    const base = value ? parseISO(value) : new Date();
-    const anchor = isWeek ? mondayOf(base) : base;
-    setView({ year: anchor.getFullYear(), month: anchor.getMonth() });
-  }, [open, value, isWeek]);
+  // Re-âncora o mês visível quando o popover abre ou o valor muda — sem
+  // setState-em-effect (sync na fase de render; react.dev "you might not need
+  // an effect"). Entre re-âncoras, `shiftMonth` mexe em `view` livremente.
+  const anchorSig = open ? `open|${value}|${isWeek}` : "closed";
+  const [prevAnchorSig, setPrevAnchorSig] = React.useState(anchorSig);
+  if (anchorSig !== prevAnchorSig) {
+    setPrevAnchorSig(anchorSig);
+    if (open) {
+      const base = value ? parseISO(value) : new Date();
+      const anchor = isWeek ? mondayOf(base) : base;
+      setView({ year: anchor.getFullYear(), month: anchor.getMonth() });
+    }
+  }
 
   const weeks = React.useMemo(
     () => buildWeeks(view.year, view.month),

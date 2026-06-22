@@ -38,6 +38,7 @@ type SprintLite = {
   id: string;
   name: string;
   status?: string;
+  endDate?: string;
 };
 
 type Ctx = {
@@ -168,7 +169,7 @@ function TaskSheetByRefInner({
         .single(),
       supabase
         .from("Sprint")
-        .select("id, name, status")
+        .select("id, name, status, endDate")
         .eq("projectId", projectId)
         .order("startDate"),
       supabase

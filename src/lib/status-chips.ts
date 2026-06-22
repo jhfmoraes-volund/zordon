@@ -83,8 +83,8 @@ export const PROJECT_PHASE = defineRegistry({
 });
 
 export const PROJECT_ENGAGEMENT = defineRegistry({
-  fixed_scope: { label: "Com fim",  tone: "slate" },
-  continuous:  { label: "Contínuo", tone: "brand" },
+  fixed_scope: { label: "Por encomenda",      tone: "slate" },
+  continuous:  { label: "Squad as a Service", tone: "brand" },
 });
 
 // ─── Task ────────────────────────────────────────────────

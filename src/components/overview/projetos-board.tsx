@@ -203,10 +203,13 @@ function milestoneChip(p: ProjectOverview): { label: string; tone: ChipTone } | 
   return { label: fmtDate(new Date(`${p.milestone.dueAt}T00:00:00`)), tone };
 }
 
-/** "Contínuo" ou "Fim ~ DD/MM" — leitura de horizonte do projeto. */
+/** "Renova ~ DD/MM" (squad) · "Fim ~ DD/MM" (encomenda) · "Contínuo" — horizonte. */
 function horizonLabel(p: ProjectOverview): string {
-  if (p.engagementType === "continuous") return "Contínuo";
-  return p.endDate ? `Fim ~ ${fmtDate(new Date(p.endDate))}` : "Sem prazo definido";
+  if (p.endDate) {
+    const verb = p.engagementType === "continuous" ? "Renova" : "Fim";
+    return `${verb} ~ ${fmtDate(new Date(p.endDate))}`;
+  }
+  return p.engagementType === "continuous" ? "Contínuo" : "Sem prazo definido";
 }
 
 // ─── Freshness de ritual ("contexto vivo") ────────────────
@@ -1837,7 +1840,7 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
         </div>
         <StatColDetail col={displayData} open={activeData !== null} />
 
-        {s.mode === "contract" && (
+        {s.mode === "contract" && p.engagementType === "fixed_scope" && (
           <p className="mt-3 text-[11px] tabular-nums text-muted-foreground">
             {paceIsMature(s) && s.paceGapPp !== null ? (
               <>

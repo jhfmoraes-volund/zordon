@@ -148,7 +148,6 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
     setSaving(true);
     try {
       const supabase = createClient();
-      const isContinuous = form.engagementType === "continuous";
 
       // Drive: aceita URL ou ID; persiste só o folder ID. driveLinkedBy = quem
       // configurou (o connected account dele executa o sync — ver runbook D3).
@@ -165,8 +164,8 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
       const projectData = {
         name: form.name,
         repoUrl: form.repoUrl || null,
-        startDate: isContinuous || !form.startDate ? null : new Date(form.startDate).toISOString(),
-        endDate: isContinuous || !form.endDate ? null : new Date(form.endDate).toISOString(),
+        startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
+        endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
         status: form.status,
         category: form.category,
         phase: form.phase,
@@ -411,44 +410,37 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                     variant="input"
                     value={form.engagementType}
                     options={PROJECT_ENGAGEMENT}
-                    onValueChange={(v) =>
-                      setForm({
-                        ...form,
-                        engagementType: v,
-                        startDate: v === "continuous" ? "" : form.startDate,
-                        endDate: v === "continuous" ? "" : form.endDate,
-                      })
-                    }
+                    onValueChange={(v) => setForm({ ...form, engagementType: v })}
                   />
                 </Field.Control>
-                <Field.Hint>Contínuo = sem fim previsto; com fim = tem data estimada de encerramento.</Field.Hint>
+                <Field.Hint>Squad as a Service = faturamento recorrente (data de fim = renovação); Por encomenda = faturado por PFV entregue.</Field.Hint>
               </Field>
-              {form.engagementType !== "continuous" && (
-                <Field.Row cols={2}>
-                  <Field name="project-start">
-                    <Field.Label>Data Início</Field.Label>
-                    <Field.Control>
-                      <DatePicker
-                        data-slot="button"
-                        clearable
-                        value={form.startDate}
-                        onChange={(iso) => setForm({ ...form, startDate: iso })}
-                      />
-                    </Field.Control>
-                  </Field>
-                  <Field name="project-end">
-                    <Field.Label>Estimativa de fim</Field.Label>
-                    <Field.Control>
-                      <DatePicker
-                        data-slot="button"
-                        clearable
-                        value={form.endDate}
-                        onChange={(iso) => setForm({ ...form, endDate: iso })}
-                      />
-                    </Field.Control>
-                  </Field>
-                </Field.Row>
-              )}
+              <Field.Row cols={2}>
+                <Field name="project-start">
+                  <Field.Label>Data Início</Field.Label>
+                  <Field.Control>
+                    <DatePicker
+                      data-slot="button"
+                      clearable
+                      value={form.startDate}
+                      onChange={(iso) => setForm({ ...form, startDate: iso })}
+                    />
+                  </Field.Control>
+                </Field>
+                <Field name="project-end">
+                  <Field.Label>
+                    {form.engagementType === "continuous" ? "Renovação" : "Estimativa de fim"}
+                  </Field.Label>
+                  <Field.Control>
+                    <DatePicker
+                      data-slot="button"
+                      clearable
+                      value={form.endDate}
+                      onChange={(iso) => setForm({ ...form, endDate: iso })}
+                    />
+                  </Field.Control>
+                </Field>
+              </Field.Row>
             </div>
 
             <Field.Row cols={3}>

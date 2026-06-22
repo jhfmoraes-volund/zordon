@@ -61,8 +61,10 @@ export type PaceVerdict = "ahead" | "on_track" | "behind" | "critical";
 
 export type ProjectStats = {
   /**
-   * contract — fixed_scope com datas: régua finita + prazo + projeção
-   * rolling  — sem prazo (contínuo ou sem datas), com sprints: janela das últimas
+   * contract — tem janela (start+end): régua finita por semana-calendário + prazo.
+   *            Vale p/ encomenda E squad com janela de renovação. Pace/escopo só
+   *            fazem sentido p/ encomenda — a UI gate por engagementType.
+   * rolling  — sem datas, com sprints: janela das últimas N sprints.
    * none     — sem sprint nenhuma
    */
   mode: "contract" | "rolling" | "none";
@@ -116,7 +118,8 @@ export type ProjectOverview = {
   phase: ProjectPhase;
   engagementType: ProjectEngagement;
   startDate: string | null;
-  /** Estimativa de fim — só para `fixed_scope`; `null` em contínuos. */
+  /** Fim da janela — estimativa de entrega (encomenda) ou data de renovação
+   *  (squad/contínuo). `null` quando não há janela definida. */
   endDate: string | null;
   status: string;
   /** Criação do projeto — alimenta o big-number "novos no mês". */
@@ -290,7 +293,6 @@ function countByProject(rows: { projectId: string | null }[]): Map<string, numbe
  * docs/features/overview/stats-dictionary.md
  */
 function computeStats(args: {
-  engagementType: ProjectEngagement;
   startDate: string | null;
   endDate: string | null;
   /** Todas as sprints do projeto, asc por startDate. */
@@ -304,7 +306,6 @@ function computeStats(args: {
   now: Date;
 }): ProjectStats {
   const {
-    engagementType,
     startDate,
     endDate,
     sprints,
@@ -362,7 +363,11 @@ function computeStats(args: {
     return Math.round((Number(d.done) / Number(d.planned)) * 100);
   };
 
-  const isContract = engagementType === "fixed_scope" && !!startDate && !!endDate;
+  // Régua de calendário sempre que há janela (start+end) — independe da forma de
+  // faturamento. Squad (continuous) com data de renovação também ganha régua
+  // finita; o que muda é só o enquadramento de pace/escopo, gated na UI por
+  // engagementType (squad não tem escopo contratado fechado).
+  const isContract = !!startDate && !!endDate;
 
   if (isContract) {
     const startMonday = mondayOf(new Date(startDate));
@@ -579,7 +584,6 @@ export async function getProjectStats(projectId: string): Promise<ProjectStats |
   }
 
   return computeStats({
-    engagementType: (project.engagementType ?? "fixed_scope") as ProjectEngagement,
     startDate: project.startDate,
     endDate: project.endDate,
     sprints,
@@ -871,7 +875,6 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
 
     const fp = fpByProject.get(p.id) ?? { done: 0, total: 0 };
     const stats = computeStats({
-      engagementType: (p.engagementType ?? "fixed_scope") as ProjectEngagement,
       startDate: p.startDate,
       endDate: p.endDate,
       sprints: sprintsByProject.get(p.id) ?? [],

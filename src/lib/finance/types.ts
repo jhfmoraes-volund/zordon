@@ -100,23 +100,57 @@ export type ProjectFinanceRow = {
   engagementType: string | null; // continuous=squad · fixed_scope=encomenda
 };
 
-// ─── Billing por encomenda (FP de faturamento ≠ PFV Volund) ─────────────────
+// ─── Contrato TEMPORAL (N por projeto, com vigência) ────────────────────────
 
-/** Contrato por projeto. Preço/FP é POR PROJETO (cada cliente o seu). */
+export type BillingType = "squad" | "fixed_scope";
+
+/**
+ * Contrato por projeto, com vigência. N por projeto: sprints diferentes podem
+ * rodar sob contratos diferentes (HITz: 1-3 contrato A, 4+ contrato B). Termos
+ * (preço/FP, mensalidade, escopo, tipo) são POR CONTRATO. A fronteira é autorada
+ * por sprint na UI mas guardada por data (`effectiveFrom`/`effectiveTo`).
+ */
 export type Contract = {
+  id: string;
   projectId: string;
-  pricePerFpCents: number | null;
+  label: string;
+  seq: number;
+  effectiveFrom: string; // YYYY-MM-DD
+  effectiveTo: string | null; // null = vigente
+  billingType: BillingType;
+  monthlyFeeCents: number | null; // informativo (mensalidade squad); receita real = entries
+  pricePerFpCents: number | null; // encomenda: R$/FP
   contractedFp: number | null;
   contractedSprints: number | null;
   note: string | null;
 };
 export type ContractInput = {
-  pricePerFpCents: number | null;
-  contractedFp: number | null;
-  contractedSprints: number | null;
+  label: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  billingType: BillingType;
+  monthlyFeeCents?: number | null;
+  pricePerFpCents?: number | null;
+  contractedFp?: number | null;
+  contractedSprints?: number | null;
   note?: string | null;
 };
-export type ContractResponse = { contract: Contract | null };
+export type ContractsResponse = { contracts: Contract[] };
+
+/** Override de valor de um mês específico (substitui a mensalidade base só naquele mês). */
+export type ContractMonthOverride = {
+  id: string;
+  contractId: string;
+  month: string; // YYYY-MM-DD (1º dia)
+  amountCents: number;
+  note: string | null;
+};
+export type ContractMonthOverrideInput = {
+  month: string;
+  amountCents: number;
+  note?: string | null;
+};
+export type ContractOverridesResponse = { overrides: ContractMonthOverride[] };
 
 export type FpDelivery = {
   id: string;
@@ -217,6 +251,15 @@ export type LaborByMember = {
   laborCents: number; // custo no período
 };
 
+/** Sprint enxuta pro cronograma de blocos + autoria da vigência por sprint. */
+export type SprintLite = {
+  id: string;
+  name: string;
+  startDate: string; // YYYY-MM-DD…
+  endDate: string;
+  status: string;
+};
+
 export type ProjectDetail = {
   projectId: string;
   name: string;
@@ -231,9 +274,10 @@ export type ProjectDetail = {
   laborByMember: LaborByMember[];
   allocations: AllocationItem[];
   squadMemberIds: string[];
+  sprints: SprintLite[]; // ordenadas por início (cronograma de blocos)
   sprintCount: number;
   engagementType: string | null;
-  contract: Contract | null;
+  contracts: Contract[]; // todos os contratos do projeto, por vigência
   fpDeliveredTotal: number; // FP entregues no período
   fpRevenueCents: number; // receita de FP no período
   overheadCents: number; // custos indiretos por pessoa (premissas) no período

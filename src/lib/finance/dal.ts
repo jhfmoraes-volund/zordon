@@ -15,6 +15,8 @@ import type {
   CategoryTotal,
   Contract,
   ContractInput,
+  ContractMonthOverride,
+  ContractMonthOverrideInput,
   Entry,
   Dre,
   EntryInput,
@@ -29,6 +31,7 @@ import type {
   ProjectMonthPoint,
   ProjectMonthRow,
   ProjectsResponse,
+  SprintLite,
 } from "./types";
 
 /**
@@ -583,7 +586,14 @@ export function computeDre(
 function mapContract(r: Record<string, unknown>): Contract {
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return {
+    id: String(r.id),
     projectId: String(r.project_id),
+    label: String(r.label),
+    seq: Number(r.seq),
+    effectiveFrom: String(r.effective_from),
+    effectiveTo: (r.effective_to as string | null) ?? null,
+    billingType: r.billing_type === "fixed_scope" ? "fixed_scope" : "squad",
+    monthlyFeeCents: num(r.monthly_fee_cents),
     pricePerFpCents: num(r.price_per_fp_cents),
     contractedFp: num(r.contracted_fp),
     contractedSprints: num(r.contracted_sprints),
@@ -591,42 +601,159 @@ function mapContract(r: Record<string, unknown>): Contract {
   };
 }
 
-export async function getContract(projectId: string): Promise<Contract | null> {
+/** Contratos do projeto, ordenados por vigência (seq crescente). */
+export async function listContracts(projectId: string): Promise<Contract[]> {
   const { fin } = await finance();
-  const res = await fin.from("contract").select("*").eq("project_id", projectId).maybeSingle();
+  const res = await fin
+    .from("contract")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("seq", { ascending: true });
   if (res.error) throw new Error(res.error.message);
-  return res.data ? mapContract(res.data) : null;
+  return ((res.data ?? []) as Record<string, unknown>[]).map(mapContract);
 }
 
-export async function upsertContract(
+/** Vigências não podem se sobrepor no mesmo projeto (1 contrato por período). */
+async function validateContract(
+  projectId: string,
+  input: ContractInput,
+  excludeId?: string,
+): Promise<Contract[]> {
+  if (!input.label?.trim()) throw new Error("Contrato precisa de um rótulo");
+  if (!input.effectiveFrom) throw new Error("Contrato precisa de início de vigência");
+  if (input.effectiveTo && input.effectiveTo < input.effectiveFrom)
+    throw new Error("Fim da vigência é anterior ao início");
+  const existing = await listContracts(projectId);
+  const others = existing.filter((c) => c.id !== excludeId);
+  const clash = others.find((c) =>
+    periodsOverlap(input.effectiveFrom, input.effectiveTo ?? null, c.effectiveFrom, c.effectiveTo),
+  );
+  if (clash)
+    throw new Error(
+      `Vigência sobrepõe o contrato "${clash.label}" (${clash.effectiveFrom} → ${clash.effectiveTo ?? "atual"})`,
+    );
+  return existing;
+}
+
+function toContractRow(input: ContractInput) {
+  return {
+    label: input.label.trim(),
+    effective_from: input.effectiveFrom,
+    effective_to: input.effectiveTo ?? null,
+    billing_type: input.billingType,
+    monthly_fee_cents: input.monthlyFeeCents ?? null,
+    price_per_fp_cents: input.pricePerFpCents ?? null,
+    contracted_fp: input.contractedFp ?? null,
+    contracted_sprints: input.contractedSprints ?? null,
+    note: input.note ?? null,
+  };
+}
+
+export async function createContract(
   projectId: string,
   input: ContractInput,
 ): Promise<Contract> {
+  const existing = await validateContract(projectId, input);
+  const seq = existing.reduce((mx, c) => Math.max(mx, c.seq), 0) + 1;
   const { fin } = await finance();
-  const row = {
-    price_per_fp_cents: input.pricePerFpCents,
-    contracted_fp: input.contractedFp,
-    contracted_sprints: input.contractedSprints,
-    note: input.note ?? null,
+  const res = await fin
+    .from("contract")
+    .insert({
+      ...toContractRow(input),
+      project_id: projectId,
+      seq,
+      created_by: await currentMemberId(),
+    })
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return mapContract(res.data);
+}
+
+export async function updateContract(id: string, input: ContractInput): Promise<Contract> {
+  const { fin } = await finance();
+  const cur = await fin.from("contract").select("project_id").eq("id", id).maybeSingle();
+  if (cur.error) throw new Error(cur.error.message);
+  if (!cur.data) throw new Error("Contrato não encontrado");
+  await validateContract(String((cur.data as { project_id: string }).project_id), input, id);
+  const res = await fin
+    .from("contract")
+    .update({ ...toContractRow(input), updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return mapContract(res.data);
+}
+
+export async function deleteContract(id: string): Promise<void> {
+  const { fin } = await finance();
+  const res = await fin.from("contract").delete().eq("id", id);
+  if (res.error) throw new Error(res.error.message);
+}
+
+// ─── Override de mês do contrato (valor especial de 1 mês) ──────────────────
+
+function mapOverride(r: Record<string, unknown>): ContractMonthOverride {
+  return {
+    id: String(r.id),
+    contractId: String(r.contract_id),
+    month: String(r.month),
+    amountCents: Number(r.amount_cents),
+    note: (r.note as string | null) ?? null,
   };
-  const lookup = await fin.from("contract").select("id").eq("project_id", projectId).maybeSingle();
+}
+
+export async function listContractOverrides(contractId: string): Promise<ContractMonthOverride[]> {
+  const { fin } = await finance();
+  const res = await fin
+    .from("contract_month_override")
+    .select("*")
+    .eq("contract_id", contractId)
+    .order("month", { ascending: true });
+  if (res.error) throw new Error(res.error.message);
+  return ((res.data ?? []) as Record<string, unknown>[]).map(mapOverride);
+}
+
+/** Upsert por (contrato, mês): adicionar um mês que já tem override substitui o valor. */
+export async function upsertContractOverride(
+  contractId: string,
+  input: ContractMonthOverrideInput,
+): Promise<ContractMonthOverride> {
+  if (!(input.amountCents >= 0)) throw new Error("Valor do override não pode ser negativo");
+  if (!input.month) throw new Error("Mês do override é obrigatório");
+  const month = `${input.month.slice(0, 7)}-01`;
+  const { fin } = await finance();
+  const lookup = await fin
+    .from("contract_month_override")
+    .select("id")
+    .eq("contract_id", contractId)
+    .eq("month", month)
+    .maybeSingle();
+  const row = { amount_cents: input.amountCents, note: input.note ?? null };
   if (lookup.data) {
     const res = await fin
-      .from("contract")
+      .from("contract_month_override")
       .update({ ...row, updated_at: new Date().toISOString() })
       .eq("id", (lookup.data as { id: string }).id)
       .select("*")
       .single();
     if (res.error) throw new Error(res.error.message);
-    return mapContract(res.data);
+    return mapOverride(res.data);
   }
   const res = await fin
-    .from("contract")
-    .insert({ ...row, project_id: projectId, created_by: await currentMemberId() })
+    .from("contract_month_override")
+    .insert({ ...row, contract_id: contractId, month, created_by: await currentMemberId() })
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
-  return mapContract(res.data);
+  return mapOverride(res.data);
+}
+
+export async function deleteContractOverride(id: string): Promise<void> {
+  const { fin } = await finance();
+  const res = await fin.from("contract_month_override").delete().eq("id", id);
+  if (res.error) throw new Error(res.error.message);
 }
 
 export async function listFpDeliveries(projectId: string): Promise<FpDelivery[]> {
@@ -691,7 +818,7 @@ export async function getProjectDetail(
   const { sb, fin } = await finance();
   const { from, to } = monthBounds(fromMonth, toMonth);
 
-  const [monthsRes, laborRes, nameRes, allocations, squad, eff, sprintRes, contract, fpRes] =
+  const [monthsRes, laborRes, nameRes, allocations, squad, eff, sprintRes, contracts, fpRes] =
     await Promise.all([
     fin
       .from("v_project_month")
@@ -710,8 +837,12 @@ export async function getProjectDetail(
     listAllocations({ projectId }),
     squadMemberIds(sb, projectId),
     getEffectiveAssumptions(projectId),
-    sb.from("Sprint").select("id", { count: "exact", head: true }).eq("projectId", projectId),
-    getContract(projectId),
+    sb
+      .from("Sprint")
+      .select("id, name, startDate, endDate, status")
+      .eq("projectId", projectId)
+      .order("startDate", { ascending: true }),
+    listContracts(projectId),
     fin
       .from("v_fp_delivery_month")
       .select("fp_delivered, revenue_cents")
@@ -787,6 +918,7 @@ export async function getProjectDetail(
   );
 
   const fpRows = (fpRes.data ?? []) as { fp_delivered: number; revenue_cents: number }[];
+  const sprints = (sprintRes.data ?? []) as SprintLite[];
 
   return {
     projectId,
@@ -796,9 +928,10 @@ export async function getProjectDetail(
     laborByMember,
     allocations,
     squadMemberIds: squad,
-    sprintCount: sprintRes.count ?? 0,
+    sprints,
+    sprintCount: sprints.length,
     engagementType: (nameRes.data?.engagementType as string | null) ?? null,
-    contract,
+    contracts,
     fpDeliveredTotal: fpRows.reduce((s, r) => s + Number(r.fp_delivered), 0),
     fpRevenueCents: fpRows.reduce((s, r) => s + Number(r.revenue_cents), 0),
     overheadCents,
