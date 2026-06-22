@@ -12,6 +12,7 @@ import {
   buildReleasePlanningPrompt,
   buildReleasePlanningTools,
 } from "./release-planning";
+import { loadWikiCopilotContext, buildWikiCopilotPrompt } from "./wiki-copilot";
 import { getConnectionStatus, getUserTools } from "@/lib/composio/client";
 import { getSprintOutcomes } from "@/lib/dal/sprint-outcomes";
 
@@ -51,6 +52,10 @@ export const vitoriaAgent: AgentDefinition = {
     if (surface === "release_planning") {
       const sessionId = req.params.sessionId as string;
       return loadReleasePlanningContext(sessionId, req.memberId ?? null);
+    }
+    if (surface === "wiki") {
+      const projectId = req.params.projectId as string;
+      return loadWikiCopilotContext(projectId, req.memberId ?? null);
     }
 
     const planningId = req.params.planningId as string;
@@ -220,6 +225,9 @@ export const vitoriaAgent: AgentDefinition = {
     }
     if (surface === "release_planning") {
       return buildReleasePlanningPrompt(ctx);
+    }
+    if (surface === "wiki") {
+      return buildWikiCopilotPrompt(ctx);
     }
     return buildVitoriaPrompt(ctx);
   },

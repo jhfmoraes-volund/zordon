@@ -4,6 +4,9 @@
 > **Toca DOIS repos:** `zordon` (SSOT) e `zordon-daemon` (espelho + executor). Tool nova = registrar + espelhar + restart do daemon.
 > **Depende de:** composer da Wiki (em prod). Roda independente do B2, mas combina: pós-B2 o recompose roda no seat OAuth.
 > **Doutrina:** segue [agent-construction-doctrine.md](../platform/agent-construction-doctrine.md) — poucas tools afiadas, SENSE rico, model orquestra, disciplina na escrita.
+>
+> **Status (2026-06-21):** Backend completo e em main (ZRD-JM-185). Feito: WCP-001 (migration `ProjectWikiEmphasis` rodada em prod + DAL), WCP-002 (composer aplica ênfase + entra no inputsHash), WCP-003 (tools/wiki.ts: read/emphasis/suppress/restore/recompose + registro), WCP-004 (surface `wiki` da Vitoria: registry + prepare-turn + prompt `wiki-copilot.ts` + `ensureWikiThread`). `recompose_wiki` desacoplado do composer do daemon: dispara `/api/internal/wiki-composer` via HTTP (`ZORDON_URL` + `CRON_SECRET`) — daemon NÃO precisa do composer (não depende do B2). `tsc`/`eslint` limpos; backend é INERTE até existir um thread `channel='wiki'`.
+> **Falta (WCP-005):** (a) chat UI — rota `/api/projects/[id]/wiki/chat` + `/resume` + painel no sheet (molde: pm-review-workspace); (b) espelhar no daemon SÓ as tools (tools-registry + tools/wiki.ts + suppressed + wiki-emphasis + types) — o prompt roda no monorepo via prepare-turn, não espelha; (c) `CRON_SECRET` no `.env` do daemon (pro recompose); (d) restart do daemon + verify no browser.
 
 ## 1. Problema
 

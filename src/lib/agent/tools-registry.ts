@@ -74,6 +74,13 @@ import {
   listUnplannedTasksForOpsTool,
   verifySprintDistributionForOpsTool,
 } from "./tools/alpha-planner";
+import {
+  createReadWikiTool,
+  createSetWikiEmphasisTool,
+  createSuppressWikiBulletTool,
+  createRestoreWikiBulletTool,
+  createRecomposeWikiTool,
+} from "./tools/wiki";
 
 /**
  * Context passed pelo router pra cada factory. Campos opcionais — cada tool
@@ -283,6 +290,15 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
   get_project_indicators: (ctx) =>
     buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
       .get_project_indicators,
+
+  // ── Vitoria Wiki copiloto (surface 'wiki') — afina grounded ───────────
+  read_wiki: (ctx) => createReadWikiTool(ctx.projectId),
+  set_wiki_emphasis: (ctx) =>
+    createSetWikiEmphasisTool(ctx.projectId, ctx.memberId ?? null),
+  suppress_wiki_bullet: (ctx) =>
+    createSuppressWikiBulletTool(ctx.projectId, ctx.memberId ?? null),
+  restore_wiki_bullet: (ctx) => createRestoreWikiBulletTool(ctx.projectId),
+  recompose_wiki: (ctx) => createRecomposeWikiTool(ctx.projectId),
 };
 
 // ── Alpha (ops) — reads pro daemon ────────────────────────────────────────
@@ -486,6 +502,20 @@ const ALPHA_TOOLS = new Set<string>([
 // (reusa as ceremony tools, ligadas à companion via ctx.planningId) + leitura
 // (PRD/insumos) + structured querying. read_prd/read_context_source reusam as
 // entradas genéricas. NÃO inclui as notas/report de PM Review.
+// Wiki copiloto (surface 'wiki'): tools de Wiki (read/emphasis/suppress/
+// recompose) + núcleo de leitura compartilhado (sprint/tasks/DS — pra a Vitoria
+// conversar com contexto) + read_context_source. Grounded-only: nenhuma escrita
+// livre. Reusa VITORIA_SHARED_READ (não cria reader novo — doutrina §1).
+const VITORIA_WIKI_TOOLS = new Set<string>([
+  "read_wiki",
+  "set_wiki_emphasis",
+  "suppress_wiki_bullet",
+  "restore_wiki_bullet",
+  "recompose_wiki",
+  "read_context_source",
+  ...VITORIA_SHARED_READ_NAMES,
+]);
+
 const VITORIA_RELEASE_PLANNING_TOOLS = new Set<string>([
   // curadoria de insumos (PRD↔sprint board saiu — decisão 2026-06-19)
   "list_context_sources",
@@ -517,6 +547,7 @@ export function getToolNamesForAgent(
     if (surface === "planning") return [...VITORIA_PLANNING_TOOLS];
     if (surface === "release_planning")
       return [...VITORIA_RELEASE_PLANNING_TOOLS];
+    if (surface === "wiki") return [...VITORIA_WIKI_TOOLS];
     return [...VITORIA_PMREVIEW_TOOLS];
   }
   if (agentSlug === "alpha") return [...ALPHA_TOOLS];

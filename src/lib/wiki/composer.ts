@@ -14,6 +14,7 @@ import {
   type SourceRef,
 } from "@/lib/wiki/schemas";
 import { computeBulletHash } from "@/lib/wiki/suppressed";
+import { getWikiEmphasis } from "@/lib/dal/wiki-emphasis";
 
 /**
  * WikiComposer (PRD project-wiki WIKI-009..012, emendas do runbook
@@ -155,15 +156,30 @@ export async function loadWikiContext(
 
 // ── Hash guard (D11) ────────────────────────────────────────
 
-function computeInputsHash(items: ContextItem[]): string {
+function computeInputsHash(items: ContextItem[], emphasis: string): string {
   // Sem label (carrega data do snapshot) e sem linhas "Capturado em:" do
   // corpo (gsheets/notion embedam timestamp) — senão o refresh noturno do
   // cron muda o hash toda noite e paga LLM sem mudança real de conteúdo.
+  // A ênfase do PM (WCP-002) ENTRA no hash: setar nova ênfase + recompose
+  // não pode ser pulado por "insumos iguais".
   const canonical = items.map((i) => ({
     ref: i.ref,
     body: i.body.replace(/^\*\*Capturado em:\*\*.*$/gm, ""),
   }));
-  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+  return createHash("sha256")
+    .update(JSON.stringify({ items: canonical, emphasis }))
+    .digest("hex");
+}
+
+/** Bloco de orientação (não-fonte) anexado ao prompt quando há ênfase do PM. */
+function emphasisBlock(emphasis: string): string {
+  const trimmed = emphasis.trim();
+  if (!trimmed) return "";
+  return `\n\nÊnfase do PM (orientação, NÃO é fonte):
+${trimmed}
+Aplique a ênfase ao PRIORIZAR/destacar o que extrai, mas NÃO invente: todo
+bullet continua ancorado a um insumo real da lista. Se a ênfase pede algo que
+nenhum insumo evidencia, ignore-a.`;
 }
 
 // ── Prompts ─────────────────────────────────────────────────
@@ -342,7 +358,8 @@ function dryRunOutput(spec: SectionSpec, items: ContextItem[]): unknown {
 async function callSectionLLM(
   projectId: string,
   spec: SectionSpec,
-  items: ContextItem[]
+  items: ContextItem[],
+  emphasis: string
 ): Promise<unknown | { llmError: string }> {
   if (process.env.WIKI_DRY_RUN === "1") return dryRunOutput(spec, items);
 
@@ -351,7 +368,7 @@ async function callSectionLLM(
     const result = await generateText({
       model: getModel(DEFAULT_MODEL),
       system: SYSTEM_PROMPT,
-      prompt: spec.userPrompt(items),
+      prompt: spec.userPrompt(items) + emphasisBlock(emphasis),
     });
     void recordSubAgentUsage({
       agentName: `wiki-composer-${spec.key}`,
@@ -542,6 +559,8 @@ export async function composeWiki(
 
   try {
     const ctx = await loadWikiContext(supabase, projectId);
+    // Ênfase do PM (WCP-002): orienta a priorização e entra no inputsHash.
+    const emphasis = await getWikiEmphasis(supabase, projectId);
 
     const { data: existingSections } = await supabase
       .from("ProjectWikiSection")
@@ -560,7 +579,7 @@ export async function composeWiki(
         continue;
       }
 
-      const inputsHash = computeInputsHash(items);
+      const inputsHash = computeInputsHash(items, emphasis);
       if (hashByKey.get(spec.key) === inputsHash) {
         console.log(
           `[wiki-composer] hash guard: seção ${spec.key} sem mudança de insumos — skip (projeto ${projectId})`
@@ -569,7 +588,7 @@ export async function composeWiki(
         continue;
       }
 
-      const raw = await callSectionLLM(projectId, spec, items);
+      const raw = await callSectionLLM(projectId, spec, items, emphasis);
       if (raw && typeof raw === "object" && "llmError" in raw) {
         result.sections[spec.key] = "error";
         result.errors.push(`${spec.key}: ${(raw as { llmError: string }).llmError}`);

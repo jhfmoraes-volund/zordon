@@ -260,6 +260,44 @@ export async function ensurePMReviewThread(
 }
 
 /**
+ * Ensures a thread exists for the Wiki copiloto de um projeto.
+ * channel = 'wiki', agentName = projectId — 1 thread por projeto (contínuo).
+ */
+export async function ensureWikiThread(
+  projectId: string,
+  createdBy?: string,
+): Promise<string> {
+  const { data: existing } = await db()
+    .from("ChatThread")
+    .select("id")
+    .eq("agentName", projectId)
+    .eq("channel", "wiki")
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  const { data: created, error } = await db()
+    .from("ChatThread")
+    .insert({
+      sessionId: null,
+      agentName: projectId,
+      channel: "wiki",
+      createdBy: createdBy || null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[ensureWikiThread] insert failed:", error.message);
+    throw new Error(`Failed to create wiki thread: ${error.message}`);
+  }
+
+  return created!.id;
+}
+
+/**
  * Cria SEMPRE um thread NOVO de Release Planning (channel='release_planning',
  * agentName=sessionId). Como o GET do chat pega o thread mais recente, o novo
  * vira o ativo e o anterior vira histórico — é o mecanismo do "chat fresco por

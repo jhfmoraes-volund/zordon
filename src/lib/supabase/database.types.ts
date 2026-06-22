@@ -6970,6 +6970,63 @@ export type Database = {
           },
         ]
       }
+      ProjectWikiEmphasis: {
+        Row: {
+          emphasis: string
+          projectId: string
+          updatedAt: string
+          updatedBy: string | null
+        }
+        Insert: {
+          emphasis?: string
+          projectId: string
+          updatedAt?: string
+          updatedBy?: string | null
+        }
+        Update: {
+          emphasis?: string
+          projectId?: string
+          updatedAt?: string
+          updatedBy?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ProjectWikiEmphasis_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: true
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectWikiEmphasis_updatedBy_fkey"
+            columns: ["updatedBy"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectWikiEmphasis_updatedBy_fkey"
+            columns: ["updatedBy"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectWikiEmphasis_updatedBy_fkey"
+            columns: ["updatedBy"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ProjectWikiEmphasis_updatedBy_fkey"
+            columns: ["updatedBy"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ProjectWikiSection: {
         Row: {
           createdAt: string
@@ -8886,6 +8943,7 @@ export type Database = {
         Args: { p: Database["public"]["Tables"]["ProductRequirement"]["Row"] }
         Returns: string
       }
+      reap_stale_granola_jobs: { Args: never; Returns: number }
       refresh_agent_usage_hourly_mv: { Args: never; Returns: undefined }
       renumber_sprints_chronologically: {
         Args: { p_project_id: string }

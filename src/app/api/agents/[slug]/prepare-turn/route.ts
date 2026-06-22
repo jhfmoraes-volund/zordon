@@ -228,6 +228,15 @@ async function resolveAgentParams(
         projectId: ps?.projectId ?? null,
       };
     }
+    if (thread.channel === "wiki" && thread.agentName) {
+      // Wiki copiloto — agentName carrega o projectId (1 thread por projeto).
+      const projectId = thread.agentName;
+      return {
+        params: { surface: "wiki", projectId },
+        sessionId: null,
+        projectId,
+      };
+    }
     // Fallback: surface padrão (sem contexto resolvível)
     return {
       params: { surface: "planning" },
