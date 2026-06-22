@@ -406,19 +406,25 @@ export function ReleasePlanningProposals({
                     key={t.id}
                     type="button"
                     onClick={() => setOpenTaskId(t.id)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/40"
+                    className="flex w-full flex-col gap-1 px-3 py-2 text-left hover:bg-accent/40"
                   >
-                    <StatusChip tone={chip.tone} label={chip.label} dot />
-                    <span className="line-clamp-2 text-sm sm:line-clamp-1">{t.title}</span>
-                    {t.functionPoints !== null && (
-                      <Badge variant="secondary" className="shrink-0">
-                        {t.functionPoints} PFV
-                      </Badge>
-                    )}
-                    {t.assignees.length > 0 && (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        @{t.assignees.join(", ")}
-                      </span>
+                    <div className="flex w-full items-start gap-2">
+                      <StatusChip tone={chip.tone} label={chip.label} dot />
+                      <span className="line-clamp-2 text-sm">{t.title}</span>
+                    </div>
+                    {(t.functionPoints !== null || t.assignees.length > 0) && (
+                      <div className="flex items-center gap-2">
+                        {t.functionPoints !== null && (
+                          <Badge variant="secondary" className="shrink-0">
+                            {t.functionPoints} PFV
+                          </Badge>
+                        )}
+                        {t.assignees.length > 0 && (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            @{t.assignees.join(", ")}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </button>
                 );
