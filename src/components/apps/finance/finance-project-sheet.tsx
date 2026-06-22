@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { positionLabel } from "@/lib/roles";
 import type { AllocationItem, MemberRef, ProjectDetail } from "@/lib/finance/types";
 import { FinanceAssumptionsForm } from "./finance-assumptions-form";
+import { FinanceFpBilling } from "./finance-fp-billing";
 
 function monthLabel(iso: string): string {
   return new Date(iso)
@@ -238,6 +239,18 @@ export function FinanceProjectSheet({
                   sub={`${pct(detail.dre.margemLiquidaPct)} da receita`}
                 />
               </div>
+
+              {/* Faturamento por FP (só encomenda / fixed_scope) */}
+              {detail.engagementType === "fixed_scope" && (
+                <FinanceFpBilling
+                  projectId={projectId}
+                  contract={detail.contract}
+                  onChanged={() => {
+                    void reload();
+                    onChanged();
+                  }}
+                />
+              )}
 
               {/* Série mensal */}
               {chartData.length > 0 && (

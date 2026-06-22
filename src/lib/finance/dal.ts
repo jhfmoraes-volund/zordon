@@ -13,10 +13,14 @@ import type {
   Category,
   CategoryMonthRow,
   CategoryTotal,
+  Contract,
+  ContractInput,
   Entry,
   Dre,
   EntryInput,
   EntryListItem,
+  FpDelivery,
+  FpDeliveryInput,
   LaborByMember,
   OrgMonthRow,
   OverviewResponse,
@@ -147,19 +151,28 @@ export async function getProjects(
       cur.marginDirectCents += add.marginDirectCents;
       cur.marginTeamCents += add.marginTeamCents;
     } else {
-      agg.set(r.project_id, { projectId: r.project_id, name: r.project_id, sprintCount: 0, ...add });
+      agg.set(r.project_id, {
+        projectId: r.project_id,
+        name: r.project_id,
+        sprintCount: 0,
+        engagementType: null,
+        ...add,
+      });
     }
   }
 
   const ids = [...agg.keys()];
   if (ids.length > 0) {
     const [nameRes, sprintRes] = await Promise.all([
-      sb.from("Project").select("id, name").in("id", ids),
+      sb.from("Project").select("id, name, engagementType").in("id", ids),
       sb.from("Sprint").select("projectId").in("projectId", ids),
     ]);
     for (const p of nameRes.data ?? []) {
       const row = agg.get(p.id);
-      if (row) row.name = p.name;
+      if (row) {
+        row.name = p.name;
+        row.engagementType = p.engagementType ?? null;
+      }
     }
     for (const s of sprintRes.data ?? []) {
       const row = agg.get(s.projectId);
@@ -565,6 +578,98 @@ export function computeDre(
   };
 }
 
+// ─── Contrato (billing por encomenda) + entregas de FP ──────────────────────
+
+function mapContract(r: Record<string, unknown>): Contract {
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  return {
+    projectId: String(r.project_id),
+    pricePerFpCents: num(r.price_per_fp_cents),
+    contractedFp: num(r.contracted_fp),
+    contractedSprints: num(r.contracted_sprints),
+    note: (r.note as string | null) ?? null,
+  };
+}
+
+export async function getContract(projectId: string): Promise<Contract | null> {
+  const { fin } = await finance();
+  const res = await fin.from("contract").select("*").eq("project_id", projectId).maybeSingle();
+  if (res.error) throw new Error(res.error.message);
+  return res.data ? mapContract(res.data) : null;
+}
+
+export async function upsertContract(
+  projectId: string,
+  input: ContractInput,
+): Promise<Contract> {
+  const { fin } = await finance();
+  const row = {
+    price_per_fp_cents: input.pricePerFpCents,
+    contracted_fp: input.contractedFp,
+    contracted_sprints: input.contractedSprints,
+    note: input.note ?? null,
+  };
+  const lookup = await fin.from("contract").select("id").eq("project_id", projectId).maybeSingle();
+  if (lookup.data) {
+    const res = await fin
+      .from("contract")
+      .update({ ...row, updated_at: new Date().toISOString() })
+      .eq("id", (lookup.data as { id: string }).id)
+      .select("*")
+      .single();
+    if (res.error) throw new Error(res.error.message);
+    return mapContract(res.data);
+  }
+  const res = await fin
+    .from("contract")
+    .insert({ ...row, project_id: projectId, created_by: await currentMemberId() })
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return mapContract(res.data);
+}
+
+export async function listFpDeliveries(projectId: string): Promise<FpDelivery[]> {
+  const { fin } = await finance();
+  const res = await fin
+    .from("fp_delivery")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("month", { ascending: false });
+  if (res.error) throw new Error(res.error.message);
+  return ((res.data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id),
+    project_id: String(r.project_id),
+    month: String(r.month),
+    fp_delivered: Number(r.fp_delivered),
+    note: (r.note as string | null) ?? null,
+    created_at: String(r.created_at),
+  }));
+}
+
+export async function createFpDelivery(
+  projectId: string,
+  input: FpDeliveryInput,
+): Promise<void> {
+  if (!(input.fpDelivered > 0)) throw new Error("FP entregue deve ser maior que zero");
+  if (!input.month) throw new Error("Mês da entrega é obrigatório");
+  const { fin } = await finance();
+  const res = await fin.from("fp_delivery").insert({
+    project_id: projectId,
+    month: input.month,
+    fp_delivered: input.fpDelivered,
+    note: input.note ?? null,
+    created_by: await currentMemberId(),
+  });
+  if (res.error) throw new Error(res.error.message);
+}
+
+export async function deleteFpDelivery(id: string): Promise<void> {
+  const { fin } = await finance();
+  const res = await fin.from("fp_delivery").delete().eq("id", id);
+  if (res.error) throw new Error(res.error.message);
+}
+
 // ─── Detalhe por projeto (drill de análise) ─────────────────────────────────
 
 async function squadMemberIds(
@@ -586,7 +691,8 @@ export async function getProjectDetail(
   const { sb, fin } = await finance();
   const { from, to } = monthBounds(fromMonth, toMonth);
 
-  const [monthsRes, laborRes, nameRes, allocations, squad, eff, sprintRes] = await Promise.all([
+  const [monthsRes, laborRes, nameRes, allocations, squad, eff, sprintRes, contract, fpRes] =
+    await Promise.all([
     fin
       .from("v_project_month")
       .select("*")
@@ -600,11 +706,18 @@ export async function getProjectDetail(
       .eq("project_id", projectId)
       .gte("month", from)
       .lte("month", to),
-    sb.from("Project").select("name").eq("id", projectId).maybeSingle(),
+    sb.from("Project").select("name, engagementType").eq("id", projectId).maybeSingle(),
     listAllocations({ projectId }),
     squadMemberIds(sb, projectId),
     getEffectiveAssumptions(projectId),
     sb.from("Sprint").select("id", { count: "exact", head: true }).eq("projectId", projectId),
+    getContract(projectId),
+    fin
+      .from("v_fp_delivery_month")
+      .select("fp_delivered, revenue_cents")
+      .eq("project_id", projectId)
+      .gte("month", from)
+      .lte("month", to),
   ]);
   if (monthsRes.error) throw new Error(monthsRes.error.message);
   if (laborRes.error) throw new Error(laborRes.error.message);
@@ -673,6 +786,8 @@ export async function getProjectDetail(
     a,
   );
 
+  const fpRows = (fpRes.data ?? []) as { fp_delivered: number; revenue_cents: number }[];
+
   return {
     projectId,
     name: (nameRes.data?.name as string) ?? projectId,
@@ -682,6 +797,10 @@ export async function getProjectDetail(
     allocations,
     squadMemberIds: squad,
     sprintCount: sprintRes.count ?? 0,
+    engagementType: (nameRes.data?.engagementType as string | null) ?? null,
+    contract,
+    fpDeliveredTotal: fpRows.reduce((s, r) => s + Number(r.fp_delivered), 0),
+    fpRevenueCents: fpRows.reduce((s, r) => s + Number(r.revenue_cents), 0),
     overheadCents,
     dre,
     assumptions: a,

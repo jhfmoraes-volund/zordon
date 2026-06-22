@@ -346,7 +346,7 @@ export function FinanceApp() {
                     positive ? "bg-emerald-500/15 text-emerald-500" : "bg-rose-500/15 text-rose-500"
                   }
                   title={p.name}
-                  subtitle={`${p.sprintCount} ${p.sprintCount === 1 ? "sprint" : "sprints"} · ${brlFromCents(p.revenueCents)} receita · ${brlFromCents(p.laborCents)} equipe`}
+                  subtitle={`${p.engagementType === "fixed_scope" ? "encomenda" : "squad"} · ${p.sprintCount} ${p.sprintCount === 1 ? "sprint" : "sprints"} · ${brlFromCents(p.revenueCents)} receita · ${brlFromCents(p.laborCents)} equipe`}
                   badge={
                     <span className="flex shrink-0 items-center gap-1">
                       <AppFileBadge tone="muted">direta {pct(directPct)}</AppFileBadge>

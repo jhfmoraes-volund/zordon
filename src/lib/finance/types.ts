@@ -97,7 +97,41 @@ export type ProjectFinanceRow = {
   marginDirectCents: number;
   marginTeamCents: number;
   sprintCount: number;
+  engagementType: string | null; // continuous=squad · fixed_scope=encomenda
 };
+
+// ─── Billing por encomenda (FP de faturamento ≠ PFV Volund) ─────────────────
+
+/** Contrato por projeto. Preço/FP é POR PROJETO (cada cliente o seu). */
+export type Contract = {
+  projectId: string;
+  pricePerFpCents: number | null;
+  contractedFp: number | null;
+  contractedSprints: number | null;
+  note: string | null;
+};
+export type ContractInput = {
+  pricePerFpCents: number | null;
+  contractedFp: number | null;
+  contractedSprints: number | null;
+  note?: string | null;
+};
+export type ContractResponse = { contract: Contract | null };
+
+export type FpDelivery = {
+  id: string;
+  project_id: string;
+  month: string;
+  fp_delivered: number;
+  note: string | null;
+  created_at: string;
+};
+export type FpDeliveryInput = {
+  month: string;
+  fpDelivered: number;
+  note?: string | null;
+};
+export type FpDeliveriesResponse = { deliveries: FpDelivery[] };
 
 export type ProjectsResponse = { projects: ProjectFinanceRow[] };
 
@@ -198,6 +232,10 @@ export type ProjectDetail = {
   allocations: AllocationItem[];
   squadMemberIds: string[];
   sprintCount: number;
+  engagementType: string | null;
+  contract: Contract | null;
+  fpDeliveredTotal: number; // FP entregues no período
+  fpRevenueCents: number; // receita de FP no período
   overheadCents: number; // custos indiretos por pessoa (premissas) no período
   dre: Dre;
   assumptions: Assumptions;
