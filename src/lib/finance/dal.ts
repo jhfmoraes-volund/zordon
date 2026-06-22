@@ -5,15 +5,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentMember } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import type {
+  Allocation,
+  AllocationInput,
+  AllocationItem,
   Category,
   CategoryMonthRow,
   CategoryTotal,
   Entry,
   EntryInput,
   EntryListItem,
+  LaborByMember,
   OrgMonthRow,
   OverviewResponse,
+  ProjectDetail,
   ProjectFinanceRow,
+  ProjectMonthPoint,
   ProjectMonthRow,
   ProjectsResponse,
 } from "./types";
@@ -47,7 +53,7 @@ export async function getOverview(
   const { fin } = await finance();
   const { from, to } = monthBounds(fromMonth, toMonth);
 
-  const [orgRes, catRes] = await Promise.all([
+  const [orgRes, catRes, compRes, laborRes] = await Promise.all([
     fin
       .from("v_org_month")
       .select("*")
@@ -55,12 +61,24 @@ export async function getOverview(
       .lte("month", to)
       .order("month", { ascending: true }),
     fin.from("v_category_month").select("*").gte("month", from).lte("month", to),
+    fin.from("v_member_comp_month").select("comp_cents").gte("month", from).lte("month", to),
+    fin.from("v_project_labor_month").select("labor_cents").gte("month", from).lte("month", to),
   ]);
   if (orgRes.error) throw new Error(orgRes.error.message);
   if (catRes.error) throw new Error(catRes.error.message);
+  if (compRes.error) throw new Error(compRes.error.message);
+  if (laborRes.error) throw new Error(laborRes.error.message);
 
   const months = (orgRes.data ?? []) as OrgMonthRow[];
   const catRows = (catRes.data ?? []) as CategoryMonthRow[];
+  const compCents = ((compRes.data ?? []) as { comp_cents: number }[]).reduce(
+    (s, r) => s + Number(r.comp_cents),
+    0,
+  );
+  const allocatedCents = ((laborRes.data ?? []) as { labor_cents: number }[]).reduce(
+    (s, r) => s + Number(r.labor_cents),
+    0,
+  );
 
   const byCat = new Map<string, CategoryTotal>();
   for (const r of catRows) {
@@ -83,6 +101,11 @@ export async function getOverview(
       revenueCents: months.reduce((s, m) => s + Number(m.revenue_cents), 0),
       expenseCents: months.reduce((s, m) => s + Number(m.expense_cents), 0),
       netCents: months.reduce((s, m) => s + Number(m.net_cents), 0),
+    },
+    teamCost: {
+      compCents,
+      allocatedCents,
+      overheadCents: Math.max(0, compCents - allocatedCents),
     },
   };
 }
@@ -260,4 +283,215 @@ export async function deleteEntry(id: string): Promise<void> {
   const { fin } = await finance();
   const res = await fin.from("entry").delete().eq("id", id);
   if (res.error) throw new Error(res.error.message);
+}
+
+// ─── Alocação financeira (D12) ──────────────────────────────────────────────
+
+const FAR_FUTURE = "9999-12-31";
+
+function periodsOverlap(
+  aFrom: string,
+  aTo: string | null,
+  bFrom: string,
+  bTo: string | null,
+): boolean {
+  return aFrom <= (bTo ?? FAR_FUTURE) && bFrom <= (aTo ?? FAR_FUTURE);
+}
+
+async function attachAllocationNames(
+  sb: Awaited<ReturnType<typeof finance>>["sb"],
+  rows: Allocation[],
+): Promise<AllocationItem[]> {
+  const memIds = [...new Set(rows.map((r) => r.member_id))];
+  const projIds = [...new Set(rows.map((r) => r.project_id))];
+  const memMap = new Map<string, string>();
+  const projMap = new Map<string, string>();
+  if (memIds.length) {
+    const { data } = await sb.from("Member").select("id, name").in("id", memIds);
+    for (const m of data ?? []) memMap.set(m.id, m.name);
+  }
+  if (projIds.length) {
+    const { data } = await sb.from("Project").select("id, name").in("id", projIds);
+    for (const p of data ?? []) projMap.set(p.id, p.name);
+  }
+  return rows.map((r) => ({
+    ...r,
+    memberName: memMap.get(r.member_id) ?? "—",
+    projectName: projMap.get(r.project_id) ?? "—",
+  }));
+}
+
+export async function listAllocations(filter: {
+  projectId?: string;
+  memberId?: string;
+}): Promise<AllocationItem[]> {
+  const { sb, fin } = await finance();
+  let q = fin
+    .from("labor_allocation")
+    .select("*")
+    .order("effective_from", { ascending: false });
+  if (filter.projectId) q = q.eq("project_id", filter.projectId);
+  if (filter.memberId) q = q.eq("member_id", filter.memberId);
+  const res = await q;
+  if (res.error) throw new Error(res.error.message);
+  return attachAllocationNames(sb, (res.data ?? []) as Allocation[]);
+}
+
+/** Σ% do membro em períodos que sobrepõem o novo ≤ 100 (resto = overhead). */
+async function validateAllocation(input: AllocationInput, excludeId?: string) {
+  if (!(input.percent > 0 && input.percent <= 100))
+    throw new Error("Percentual deve estar entre 0 e 100");
+  const { fin } = await finance();
+  const res = await fin
+    .from("labor_allocation")
+    .select("id, percent, effective_from, effective_to")
+    .eq("member_id", input.memberId);
+  if (res.error) throw new Error(res.error.message);
+  const others = ((res.data ?? []) as Allocation[]).filter((a) => a.id !== excludeId);
+  const overlapping = others.filter((a) =>
+    periodsOverlap(
+      input.effectiveFrom,
+      input.effectiveTo ?? null,
+      a.effective_from,
+      a.effective_to,
+    ),
+  );
+  const sum = overlapping.reduce((s, a) => s + Number(a.percent), 0) + input.percent;
+  if (sum > 100)
+    throw new Error(
+      `Alocação excede 100% no período (membro já tem ${sum - input.percent}% sobreposto)`,
+    );
+}
+
+function allocRow(input: AllocationInput, createdBy: string | null) {
+  return {
+    member_id: input.memberId,
+    project_id: input.projectId,
+    percent: input.percent,
+    effective_from: input.effectiveFrom,
+    effective_to: input.effectiveTo ?? null,
+    note: input.note ?? null,
+    created_by: createdBy,
+  };
+}
+
+export async function createAllocation(input: AllocationInput): Promise<Allocation> {
+  await validateAllocation(input);
+  const { fin } = await finance();
+  const res = await fin
+    .from("labor_allocation")
+    .insert(allocRow(input, await currentMemberId()))
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return res.data as Allocation;
+}
+
+export async function updateAllocation(
+  id: string,
+  input: AllocationInput,
+): Promise<Allocation> {
+  await validateAllocation(input, id);
+  const { fin } = await finance();
+  const { created_by: _drop, ...patch } = allocRow(input, null);
+  void _drop;
+  const res = await fin
+    .from("labor_allocation")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return res.data as Allocation;
+}
+
+export async function deleteAllocation(id: string): Promise<void> {
+  const { fin } = await finance();
+  const res = await fin.from("labor_allocation").delete().eq("id", id);
+  if (res.error) throw new Error(res.error.message);
+}
+
+// ─── Detalhe por projeto (drill de análise) ─────────────────────────────────
+
+async function squadMemberIds(
+  sb: Awaited<ReturnType<typeof finance>>["sb"],
+  projectId: string,
+): Promise<string[]> {
+  const sq = await sb.from("ProjectSquad").select("squadId").eq("projectId", projectId);
+  const squadIds = (sq.data ?? []).map((r: { squadId: string }) => r.squadId);
+  if (!squadIds.length) return [];
+  const sm = await sb.from("SquadMember").select("memberId").in("squadId", squadIds);
+  return [...new Set((sm.data ?? []).map((r: { memberId: string }) => r.memberId))];
+}
+
+export async function getProjectDetail(
+  projectId: string,
+  fromMonth: string,
+  toMonth: string,
+): Promise<ProjectDetail> {
+  const { sb, fin } = await finance();
+  const { from, to } = monthBounds(fromMonth, toMonth);
+
+  const [monthsRes, laborRes, nameRes, allocations, squad] = await Promise.all([
+    fin
+      .from("v_project_month")
+      .select("*")
+      .eq("project_id", projectId)
+      .gte("month", from)
+      .lte("month", to)
+      .order("month", { ascending: true }),
+    fin
+      .from("v_project_member_labor_month")
+      .select("member_id, labor_cents")
+      .eq("project_id", projectId)
+      .gte("month", from)
+      .lte("month", to),
+    sb.from("Project").select("name").eq("id", projectId).maybeSingle(),
+    listAllocations({ projectId }),
+    squadMemberIds(sb, projectId),
+  ]);
+  if (monthsRes.error) throw new Error(monthsRes.error.message);
+  if (laborRes.error) throw new Error(laborRes.error.message);
+
+  const months = (monthsRes.data ?? []) as ProjectMonthPoint[];
+  const totals = months.reduce(
+    (acc, m) => ({
+      revenueCents: acc.revenueCents + Number(m.revenue_cents),
+      expenseCents: acc.expenseCents + Number(m.expense_cents),
+      laborCents: acc.laborCents + Number(m.labor_cents),
+      marginDirectCents: acc.marginDirectCents + Number(m.margin_direct_cents),
+      marginTeamCents: acc.marginTeamCents + Number(m.margin_team_cents),
+    }),
+    { revenueCents: 0, expenseCents: 0, laborCents: 0, marginDirectCents: 0, marginTeamCents: 0 },
+  );
+
+  // Labor por membro = Σ no período; % vigente vem da alocação sem effective_to.
+  const laborRows = (laborRes.data ?? []) as { member_id: string; labor_cents: number }[];
+  const laborByMemberMap = new Map<string, number>();
+  for (const r of laborRows)
+    laborByMemberMap.set(r.member_id, (laborByMemberMap.get(r.member_id) ?? 0) + Number(r.labor_cents));
+
+  const currentPctByMember = new Map<string, number>();
+  for (const a of allocations)
+    if (a.effective_to === null) currentPctByMember.set(a.member_id, Number(a.percent));
+  const nameByMember = new Map(allocations.map((a) => [a.member_id, a.memberName]));
+
+  const laborByMember: LaborByMember[] = [...laborByMemberMap.entries()]
+    .map(([memberId, laborCents]) => ({
+      memberId,
+      memberName: nameByMember.get(memberId) ?? "—",
+      percent: currentPctByMember.get(memberId) ?? null,
+      laborCents,
+    }))
+    .sort((a, b) => b.laborCents - a.laborCents);
+
+  return {
+    projectId,
+    name: (nameRes.data?.name as string) ?? projectId,
+    months,
+    totals,
+    laborByMember,
+    allocations,
+    squadMemberIds: squad,
+  };
 }

@@ -75,10 +75,17 @@ export type CategoryTotal = {
   amountCents: number;
 };
 
+export type TeamCost = {
+  compCents: number; // total comp no período
+  allocatedCents: number; // alocado a projetos
+  overheadCents: number; // não-alocado (overhead da operação)
+};
+
 export type OverviewResponse = {
   months: OrgMonthRow[];
   categories: CategoryTotal[];
   totals: { revenueCents: number; expenseCents: number; netCents: number };
+  teamCost: TeamCost;
 };
 
 export type ProjectFinanceRow = {
@@ -118,3 +125,67 @@ export type EntryInput = {
 
 export type CategoriesResponse = { categories: Category[] };
 export type EntriesResponse = { entries: EntryListItem[] };
+
+// ─── Alocação financeira de mão-de-obra (D12) ───────────────────────────────
+
+export type Allocation = {
+  id: string;
+  member_id: string;
+  project_id: string;
+  percent: number;
+  effective_from: string;
+  effective_to: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AllocationItem = Allocation & {
+  memberName: string;
+  projectName: string;
+};
+
+export type AllocationInput = {
+  memberId: string;
+  projectId: string;
+  percent: number;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  note?: string | null;
+};
+
+export type AllocationsResponse = { allocations: AllocationItem[] };
+
+// ─── Detalhe por projeto (drill de análise) ─────────────────────────────────
+
+export type ProjectMonthPoint = {
+  month: string;
+  revenue_cents: number;
+  expense_cents: number;
+  labor_cents: number;
+  margin_direct_cents: number;
+  margin_team_cents: number;
+};
+
+export type LaborByMember = {
+  memberId: string;
+  memberName: string;
+  percent: number | null; // % vigente neste projeto (null se sem alocação ativa)
+  laborCents: number; // custo no período
+};
+
+export type ProjectDetail = {
+  projectId: string;
+  name: string;
+  months: ProjectMonthPoint[];
+  totals: {
+    revenueCents: number;
+    expenseCents: number;
+    laborCents: number;
+    marginDirectCents: number;
+    marginTeamCents: number;
+  };
+  laborByMember: LaborByMember[];
+  allocations: AllocationItem[];
+  squadMemberIds: string[];
+};

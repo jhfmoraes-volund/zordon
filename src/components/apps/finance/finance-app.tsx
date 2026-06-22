@@ -20,7 +20,7 @@ import {
   Tooltip,
   XAxis,
 } from "recharts";
-import { Banknote, Receipt, TrendingUp, Wallet } from "lucide-react";
+import { Banknote, Receipt, TrendingUp, Users, Wallet } from "lucide-react";
 
 import { AppFileList, AppFileRow, AppFileBadge } from "@/components/apps/app-file-list";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import type {
 import { cn } from "@/lib/utils";
 import { FinanceCategorySheet } from "./finance-category-sheet";
 import { FinanceEntryForm } from "./finance-entry-form";
+import { FinanceProjectSheet } from "./finance-project-sheet";
 
 type NamedRef = { id: string; name: string };
 
@@ -45,6 +46,7 @@ type FinanceData = {
   months: OrgMonthRow[];
   categories: CategoryTotal[];
   totals: OverviewResponse["totals"];
+  teamCost: OverviewResponse["teamCost"];
   projects: ProjectFinanceRow[];
 };
 
@@ -53,6 +55,7 @@ const EMPTY: FinanceData = {
   months: [],
   categories: [],
   totals: { revenueCents: 0, expenseCents: 0, netCents: 0 },
+  teamCost: { compCents: 0, allocatedCents: 0, overheadCents: 0 },
   projects: [],
 };
 
@@ -79,6 +82,7 @@ async function fetchFinance(yr: number): Promise<FinanceData> {
     months: ov?.months ?? [],
     categories: ov?.categories ?? [],
     totals: ov?.totals ?? EMPTY.totals,
+    teamCost: ov?.teamCost ?? EMPTY.teamCost,
     projects: pr?.projects ?? [],
   };
 }
@@ -94,6 +98,7 @@ export function FinanceApp() {
   const [members, setMembers] = useState<NamedRef[]>([]);
 
   const [drill, setDrill] = useState<CategoryTotal | null>(null);
+  const [projectDrill, setProjectDrill] = useState<ProjectFinanceRow | null>(null);
   const [appForm, setAppForm] = useState<{ kind: FinanceKind; key: number } | null>(null);
 
   useEffect(() => {
@@ -267,6 +272,28 @@ export function FinanceApp() {
         )}
       </div>
 
+      {/* ─── Custo de equipe: alocado vs overhead ────────────────────── */}
+      {data && data.teamCost.compCents > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 not-italic">
+            <Users className="size-3" aria-hidden /> equipe
+          </span>
+          <span className="tabular-nums">
+            comp <span className="text-foreground">{brlFromCents(data.teamCost.compCents)}</span>
+          </span>
+          <span className="tabular-nums">
+            alocado <span className="text-foreground">{brlFromCents(data.teamCost.allocatedCents)}</span>
+          </span>
+          <span className="tabular-nums">
+            overhead{" "}
+            <span className="text-amber-600 dark:text-amber-400">
+              {brlFromCents(data.teamCost.overheadCents)}
+            </span>{" "}
+            ({pct(data.teamCost.compCents > 0 ? data.teamCost.overheadCents / data.teamCost.compCents : null)})
+          </span>
+        </div>
+      )}
+
       {/* ─── Margem por projeto ──────────────────────────────────────── */}
       <div>
         <p className="px-1 pb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -294,7 +321,7 @@ export function FinanceApp() {
                     </span>
                   }
                   meta={brlFromCents(p.marginTeamCents)}
-                  onOpen={() => {}}
+                  onOpen={() => setProjectDrill(p)}
                 />
               );
             })}
@@ -341,6 +368,20 @@ export function FinanceApp() {
           projects={projects}
           members={members}
           onSaved={reload}
+        />
+      )}
+      {projectDrill && (
+        <FinanceProjectSheet
+          key={projectDrill.projectId}
+          open
+          onOpenChange={(o) => {
+            if (!o) setProjectDrill(null);
+          }}
+          projectId={projectDrill.projectId}
+          projectName={projectDrill.name}
+          year={year}
+          members={members}
+          onChanged={reload}
         />
       )}
     </div>
