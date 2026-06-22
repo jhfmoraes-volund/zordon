@@ -147,16 +147,23 @@ export async function getProjects(
       cur.marginDirectCents += add.marginDirectCents;
       cur.marginTeamCents += add.marginTeamCents;
     } else {
-      agg.set(r.project_id, { projectId: r.project_id, name: r.project_id, ...add });
+      agg.set(r.project_id, { projectId: r.project_id, name: r.project_id, sprintCount: 0, ...add });
     }
   }
 
   const ids = [...agg.keys()];
   if (ids.length > 0) {
-    const nameRes = await sb.from("Project").select("id, name").in("id", ids);
+    const [nameRes, sprintRes] = await Promise.all([
+      sb.from("Project").select("id, name").in("id", ids),
+      sb.from("Sprint").select("projectId").in("projectId", ids),
+    ]);
     for (const p of nameRes.data ?? []) {
       const row = agg.get(p.id);
       if (row) row.name = p.name;
+    }
+    for (const s of sprintRes.data ?? []) {
+      const row = agg.get(s.projectId);
+      if (row) row.sprintCount += 1;
     }
   }
 
@@ -579,7 +586,7 @@ export async function getProjectDetail(
   const { sb, fin } = await finance();
   const { from, to } = monthBounds(fromMonth, toMonth);
 
-  const [monthsRes, laborRes, nameRes, allocations, squad, eff] = await Promise.all([
+  const [monthsRes, laborRes, nameRes, allocations, squad, eff, sprintRes] = await Promise.all([
     fin
       .from("v_project_month")
       .select("*")
@@ -597,6 +604,7 @@ export async function getProjectDetail(
     listAllocations({ projectId }),
     squadMemberIds(sb, projectId),
     getEffectiveAssumptions(projectId),
+    sb.from("Sprint").select("id", { count: "exact", head: true }).eq("projectId", projectId),
   ]);
   if (monthsRes.error) throw new Error(monthsRes.error.message);
   if (laborRes.error) throw new Error(laborRes.error.message);
@@ -673,6 +681,7 @@ export async function getProjectDetail(
     laborByMember,
     allocations,
     squadMemberIds: squad,
+    sprintCount: sprintRes.count ?? 0,
     overheadCents,
     dre,
     assumptions: a,

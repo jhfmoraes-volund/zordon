@@ -187,6 +187,11 @@ export function FinanceProjectSheet({
       <ResponsiveSheetContent size="lg">
         <ResponsiveSheetHeader>
           <ResponsiveSheetTitle>{detail?.name ?? projectName}</ResponsiveSheetTitle>
+          {detail && (
+            <p className="font-mono text-[11px] text-muted-foreground">
+              {detail.sprintCount} {detail.sprintCount === 1 ? "sprint" : "sprints"} · {year}
+            </p>
+          )}
         </ResponsiveSheetHeader>
 
         <ResponsiveSheetBody>

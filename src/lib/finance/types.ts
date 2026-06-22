@@ -96,6 +96,7 @@ export type ProjectFinanceRow = {
   laborCents: number;
   marginDirectCents: number;
   marginTeamCents: number;
+  sprintCount: number;
 };
 
 export type ProjectsResponse = { projects: ProjectFinanceRow[] };
@@ -196,6 +197,7 @@ export type ProjectDetail = {
   laborByMember: LaborByMember[];
   allocations: AllocationItem[];
   squadMemberIds: string[];
+  sprintCount: number;
   overheadCents: number; // custos indiretos por pessoa (premissas) no período
   dre: Dre;
   assumptions: Assumptions;
