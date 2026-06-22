@@ -1,10 +1,21 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-/** Paleta explícita de um bloco (contrato, delivery, …). O fill do passado. */
-export type CronogramaTone = { border: string; band: string; text: string };
+/**
+ * Paleta explícita de um bloco (contrato, delivery, …). O fill do passado.
+ * `band` = fundo leve do chip (.10); `bar` = fill forte da barra ribbon/grid
+ * (.60–.70). Omitir `bar` ⇒ barra cai em `band` (ok p/ quem só usa chip).
+ */
+export type CronogramaTone = { border: string; band: string; text: string; bar?: string };
 
 /**
  * Bloco do cronograma = uma célula da régua (sprint no Planning/Finanças, semana
@@ -102,7 +113,7 @@ function barClass(nb: NormBlock): string {
   if (nb.state === "current") return "bg-primary/40 ring-1 ring-inset ring-primary/70";
   if (nb.state === "future") return "bg-muted/50";
   if (nb.silent) return "border border-dashed border-muted-foreground/30 bg-transparent";
-  return nb.tone?.band ?? "bg-emerald-500/70";
+  return nb.tone?.bar ?? nb.tone?.band ?? "bg-emerald-500/70";
 }
 
 /** Tom do TEXTO do value (grid/chip): `tone.text` quando explícito, senão atividade. */
@@ -163,6 +174,15 @@ export function Cronograma({
     shape ?? (variant === "mini" ? "ribbon" : variant === "full" ? "grid" : "chip");
 
   const [expanded, setExpanded] = useState(false);
+
+  // Régua que rola (layout="scroll"): centraliza o bloco selecionado quando a
+  // seleção muda — em contrato longo o corrente cai fora da viewport. (espelha
+  // o auto-scroll do DSRibbon).
+  const selectedChipRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (layout !== "scroll" || !selectedKey) return;
+    selectedChipRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [layout, selectedKey]);
 
   if (blocks.length === 0) return null;
 
@@ -289,7 +309,11 @@ export function Cronograma({
           const isSelected = selectedKey === nb.key;
           const tone = nb.tone ?? activityTone(nb.state);
           return (
-            <span key={nb.key} className={cn("relative shrink-0", nb.flagged && "mt-3")}>
+            <span
+              key={nb.key}
+              ref={isSelected ? selectedChipRef : undefined}
+              className={cn("relative shrink-0", nb.flagged && "mt-3")}
+            >
               {nb.flagged && <Flag />}
               <Cell
                 {...(interactive
@@ -362,18 +386,30 @@ function CollapseToggle({
  *  Agnóstico de domínio (só pct→tom): o caller (régua) calcula e passa via `tone`. */
 export function deliveryTone(pct: number | null): CronogramaTone {
   if (pct === null)
-    return { band: "bg-muted-foreground/40", text: "text-muted-foreground", border: "border-border/60" };
+    return { band: "bg-muted-foreground/10", bar: "bg-muted-foreground/40", text: "text-muted-foreground", border: "border-border/60" };
   if (pct >= 85)
-    return { band: "bg-emerald-500/70", text: "text-emerald-500", border: "border-emerald-500/40" };
+    return { band: "bg-emerald-500/10", bar: "bg-emerald-500/70", text: "text-emerald-500", border: "border-emerald-500/40" };
   if (pct >= 50)
-    return { band: "bg-yellow-500/60", text: "text-yellow-500", border: "border-yellow-500/40" };
-  return { band: "bg-red-400/70", text: "text-red-400", border: "border-red-400/40" };
+    return { band: "bg-yellow-500/10", bar: "bg-yellow-500/60", text: "text-yellow-500", border: "border-yellow-500/40" };
+  return { band: "bg-red-400/10", bar: "bg-red-400/70", text: "text-red-400", border: "border-red-400/40" };
+}
+
+/** Cor do pontinho de status no dropdown mobile da régua (idioma de atividade). */
+function railDotClass(nb: NormBlock): string {
+  if (nb.state === "current") return "bg-primary ring-2 ring-primary/30";
+  if (nb.silent) return "border border-dashed border-muted-foreground/40 bg-transparent";
+  if (nb.state === "future") return "bg-muted-foreground/30";
+  return nb.tone?.bar ?? "bg-emerald-500"; // passado com atividade
 }
 
 /**
- * Régua-strip no topo da página: faixa com borda inferior, `label` curto à
- * esquerda, o `Cronograma` (ribbon) na sequência e uma `action` opcional à
- * direita. Casca reutilizada por Planning ("Histórico") e PM Review ("Semanas").
+ * Régua-strip no topo da página: `label` curto à esquerda, o cronograma e uma
+ * `action` opcional à direita. Casca reutilizada por Planning ("Histórico") e
+ * PM Review ("Semanas").
+ *
+ * Desktop (≥md): o `Cronograma` em **chip** com scroll lateral — centraliza o
+ * bloco selecionado conforme navega. Mobile (<md): vira um **dropdown**
+ * (a fileira de chips não cabe num telefone) — mesmo padrão do `DSRibbon`.
  * Retorna `null` quando não há blocos.
  */
 export function CronogramaRail({
@@ -395,8 +431,71 @@ export function CronogramaRail({
       <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
-      <Cronograma shape="ribbon" blocks={blocks} selectedKey={selectedKey} onSelect={onSelect} />
-      {action && <div className="ml-auto">{action}</div>}
+      {/* Mobile (<md): dropdown — a fileira de chips não cabe num telefone. */}
+      <div className="min-w-0 flex-1 md:hidden">
+        <CronogramaRailSelect
+          label={label}
+          blocks={blocks}
+          selectedKey={selectedKey}
+          onSelect={onSelect}
+        />
+      </div>
+      {/* Desktop (≥md): chips com scroll lateral. */}
+      <div className="hidden min-w-0 flex-1 md:block">
+        <Cronograma shape="chip" layout="scroll" blocks={blocks} selectedKey={selectedKey} onSelect={onSelect} />
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
     </div>
+  );
+}
+
+/**
+ * Picker mobile da régua — trigger mostra o bloco selecionado (●  indicador ·
+ * data · valor); tocar abre a lista completa. Espelha o `DSStepSelect`.
+ */
+function CronogramaRailSelect({
+  label,
+  blocks,
+  selectedKey,
+  onSelect,
+}: {
+  label: string;
+  blocks: CronogramaBlock[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}) {
+  const norm = blocks.map(normalize);
+  const selected = norm.find((b) => b.key === selectedKey) ?? null;
+  return (
+    <Select
+      value={selectedKey ?? undefined}
+      onValueChange={(value) => {
+        if (value != null) onSelect(value);
+      }}
+    >
+      <SelectTrigger size="sm" aria-label={label} className="w-full justify-between">
+        <SelectValue placeholder={label}>
+          {selected ? <RailOption nb={selected} /> : label}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {norm.map((nb) => (
+          <SelectItem key={nb.key} value={nb.key}>
+            <RailOption nb={nb} />
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function RailOption({ nb }: { nb: NormBlock }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 font-mono tabular-nums">
+      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", railDotClass(nb))} />
+      {nb.indicator != null && <span className="shrink-0 font-medium">{nb.indicator}</span>}
+      {nb.dateLabel && <span className="truncate text-muted-foreground">· {nb.dateLabel}</span>}
+      {nb.value && <span className="ml-1 shrink-0 text-[10px] text-muted-foreground">{nb.value}</span>}
+    </span>
   );
 }

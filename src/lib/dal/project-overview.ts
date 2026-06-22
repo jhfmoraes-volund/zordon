@@ -608,7 +608,14 @@ export async function getFactoryStats(): Promise<FactoryStats> {
   };
 }
 
-export async function getProjectOverviews(): Promise<ProjectOverview[]> {
+/**
+ * @param clientId Quando setado, escopa o board aos projetos do cliente
+ *   (aba Projetos da página de cliente). Sem ele, o universo é a fábrica
+ *   inteira (Overview org). Backward-compatible — `Project.clientId` já existe.
+ */
+export async function getProjectOverviews(
+  clientId?: string,
+): Promise<ProjectOverview[]> {
   const supabase = db();
   const now = new Date();
   const weekStart = startOfWeek(now);
@@ -617,13 +624,14 @@ export async function getProjectOverviews(): Promise<ProjectOverview[]> {
   const currentMonday = mondayOf(now);
 
   // ─── Projetos (ativos + pausados) ─────────────────────────
-  const { data: projectRows, error: projErr } = await supabase
+  let projectQuery = supabase
     .from("Project")
     .select(
       "id, name, category, phase, engagementType, startDate, endDate, status, createdAt, phaseChangedAt, client:Client(name), pm:Member!pmId(name), projectMembers:ProjectMember(member:Member(id, name, position))",
     )
-    .in("status", ["active", "paused"])
-    .order("name");
+    .in("status", ["active", "paused"]);
+  if (clientId) projectQuery = projectQuery.eq("clientId", clientId);
+  const { data: projectRows, error: projErr } = await projectQuery.order("name");
   if (projErr) throw projErr;
 
   const projects = projectRows ?? [];

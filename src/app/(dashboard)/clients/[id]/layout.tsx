@@ -48,15 +48,13 @@ function ClientLayoutShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="space-y-6">
       <ClientHeader />
-      <div className="grid gap-6 md:grid-cols-[200px_1fr]">
-        <ClientSidebarSlot />
-        <div className="min-w-0">{children}</div>
-      </div>
+      <ClientNavSlot />
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
 
-function ClientSidebarSlot() {
+function ClientNavSlot() {
   const { clientId } = useClientContext();
   return <ClientSidebar clientId={clientId} />;
 }

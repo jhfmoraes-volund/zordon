@@ -42,12 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { StatusChip } from "@/components/ui/status-chip";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   lookupChip,
   PROJECT_PHASE,
@@ -56,7 +51,12 @@ import {
 } from "@/lib/status-chips";
 import { fmtDate, fmtDayMonth } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { Cronograma, deliveryTone, type CronogramaBlock } from "@/components/timeline/cronograma";
+import {
+  Cronograma,
+  deliveryTone,
+  type CronogramaBlock,
+  type CronogramaTone,
+} from "@/components/timeline/cronograma";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast } from "@/lib/optimistic/toast";
 import {
@@ -90,6 +90,13 @@ export type RegistryUi = {
 };
 
 // ─── Vocabulary ───────────────────────────────────────────
+
+/**
+ * Placeholder de factory.committed_vs_capacity pra satisfazer o tipo de
+ * RibbonPanel quando o caller omite os dados fábrica-wide (board scoped por
+ * cliente, hideRibbon). Nunca é lido nesse caminho — a ribbon não renderiza.
+ */
+const EMPTY_FACTORY_LOAD: MetricValue = { value: null, asOf: "" };
 
 /** Seções do board seguem a fase do projeto (funil), não a categoria. */
 const PHASE_ORDER: ProjectPhase[] = ["commercial", "immersion", "ops", "post_ops"];
@@ -358,11 +365,27 @@ function segmentTitle(g: ProjectStats["segments"][number]): string {
 }
 
 /**
+ * Tom (chip + barra) por estado do segmento. `band` leve (.10) = fundo do chip;
+ * `bar` forte (.60–.70) = fill da régua glance; `text` = cor do valor. Closed
+ * herda `deliveryTone`; current/future/hole têm tom próprio (chip não usa o
+ * `state` pra cor, então o tom precisa carregar a semântica).
+ */
+function segTone(g: ReguaSegment): CronogramaTone {
+  const text = segmentValueTone(g);
+  if (g.kind === "closed") return { ...deliveryTone(g.deliveryPct), text };
+  if (g.kind === "current")
+    return { border: "border-primary/50", band: "bg-primary/10", bar: "bg-primary/40", text };
+  if (g.kind === "hole")
+    return { border: "border-muted-foreground/40", band: "bg-transparent", bar: "bg-transparent", text };
+  return { border: "border-border/60", band: "bg-transparent", bar: "bg-muted/50", text }; // future
+}
+
+/**
  * `ReguaSegment` → `CronogramaBlock` (idioma chip unificado). O estado/silent
- * vêm do `kind` (closed→past · hole→past+silent · current · future); o tom (band
- * da barra + cor do texto) vem dos helpers de delivery; ⚑ no índice do marco. O
- * Cronograma renderiza barra+valor+data a partir disso — sem `cellClass` nem 3º
- * enum: "delivery" é só tom explícito.
+ * vêm do `kind` (closed→past · hole→past+silent · current · future); o tom vem de
+ * `segTone`; ⚑ no índice do marco. O Cronograma renderiza chip (expandida) ou
+ * barra (glance) a partir disso — sem `cellClass` nem 3º enum: "delivery" é só
+ * tom explícito.
  */
 function segToBlock(
   g: ReguaSegment,
@@ -377,11 +400,7 @@ function segToBlock(
     silent: g.kind === "hole",
     dateLabel: fmtDayMonth(g.monday),
     value: segmentValueLabel(g) || undefined,
-    tone: {
-      band: deliveryTone(g.deliveryPct).band,
-      text: segmentValueTone(g),
-      border: "border-border/60",
-    },
+    tone: segTone(g),
     title: segmentTitle(g),
     flagged: milestoneIndex === i,
   };
@@ -461,15 +480,6 @@ function ReguaSummaryLine({ stats }: { stats: ProjectStats }) {
   );
 }
 
-function ReguaSummaryTip({ stats }: { stats: ProjectStats }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="text-muted-foreground">1 bloco = 1 sprint do contrato · cor = entrega real</div>
-      <ReguaSummaryLine stats={stats} />
-    </div>
-  );
-}
-
 /** Texto da célula na timeline expandida — entrega em %, estados em palavra. */
 function segmentValueLabel(g: ReguaSegment): string {
   if (g.kind === "closed") return g.deliveryPct === null ? "sem PFV" : `${g.deliveryPct}%`;
@@ -502,7 +512,8 @@ function SprintTimeline({ stats }: { stats: ProjectStats }) {
   return (
     <div>
       <Cronograma
-        shape="grid"
+        shape="chip"
+        layout="wrap"
         blocks={stats.segments.map((g, i) => segToBlock(g, i, stats.milestoneIndex))}
       />
       <div className="mt-4 text-[11px] text-muted-foreground">
@@ -1450,53 +1461,6 @@ function PMReviewSection({ p }: { p: ProjectOverview }) {
 
 // ─── STATS (drawer) ───────────────────────────────────────
 
-/**
- * Tooltip de defesa (D6) no drawer — controlled mirror: hover/focus do Base UI
- * continuam valendo (todo onOpenChange é espelhado) e o onClick cobre tap no
- * mobile, que o Base UI ignora por design.
- */
-function StatTip({
-  hint,
-  block = false,
-  children,
-}: {
-  hint?: React.ReactNode;
-  /** Trigger como div block (célula de grid) em vez de span inline. */
-  block?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const lastToggle = useRef(0);
-  if (!hint) return <>{children}</>;
-  const onToggle = () => {
-    lastToggle.current = Date.now();
-    setOpen((o) => !o);
-  };
-  // Base UI fecha tooltip no press do trigger — ignora esse close imediato
-  // pra não desfazer o toggle do tap.
-  const onOpenChange = (o: boolean) => {
-    if (!o && Date.now() - lastToggle.current < 400) return;
-    setOpen(o);
-  };
-  const triggerCls =
-    "cursor-help rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-  return (
-    <Tooltip open={open} onOpenChange={onOpenChange}>
-      <TooltipTrigger
-        render={
-          block ? (
-            <div tabIndex={0} onClick={onToggle} className={cn("min-w-0", triggerCls)} />
-          ) : (
-            <span tabIndex={0} onClick={onToggle} className={triggerCls} />
-          )
-        }
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent>{hint}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 /** Descritor de um campo de STATS — alimenta o card compacto e o drawer de detalhe. */
 type StatColData = {
@@ -1658,11 +1622,6 @@ function ritmoSub(s: ProjectStats): string {
 function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
   const s = p.stats;
   const producing = PRODUCING_PHASES.includes(p.phase);
-  // Tela cheia (sheet expandida): a régua vira timeline com data + entrega.
-  const expanded = useResponsiveSheetExpanded();
-  // "Ver mais": drawer da timeline sprint-a-sprint, logo abaixo da régua. Na
-  // tela cheia a timeline já está acima, então some.
-  const [detailsOpen, setDetailsOpen] = useState(false);
   // Accordion dos 3 campos: um aberto por vez. `lastColKey` retém o último campo
   // pra animar o fechamento (o conteúdo só some depois da transição).
   const [activeCol, setActiveCol] = useState<string | null>(null);
@@ -1747,47 +1706,10 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
           )}
         </div>
 
-        {/* Visão semana-a-semana — régua + "Ver mais" (timeline detalhada)
-            agrupados no topo. Na tela cheia a timeline já vive aqui, sem toggle. */}
-        {expanded ? (
-          <SprintTimeline stats={s} />
-        ) : (
-          <>
-            <StatTip hint={<ReguaSummaryTip stats={s} />} block>
-              <Regua stats={s} size="lg" legend={false} />
-            </StatTip>
-            {s.segments.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setDetailsOpen((v) => !v)}
-                  aria-expanded={detailsOpen}
-                  aria-controls="stats-details-drawer"
-                  className="mt-1.5 inline-flex items-center gap-1 rounded-md px-1 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                >
-                  <ChevronDown
-                    className={cn("h-3.5 w-3.5 transition-transform", !detailsOpen && "-rotate-90")}
-                  />
-                  {detailsOpen ? "Ver menos" : "Ver mais"}
-                </button>
-                <div
-                  id="stats-details-drawer"
-                  role="region"
-                  aria-label="Detalhe das sprints"
-                  aria-hidden={!detailsOpen}
-                  className={cn(
-                    "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
-                    detailsOpen ? "max-h-[720px] opacity-100" : "max-h-0 opacity-0",
-                  )}
-                >
-                  <div className="pt-3 text-[11px] text-muted-foreground">
-                    <SprintTimeline stats={s} />
-                  </div>
-                </div>
-              </>
-            )}
-          </>
-        )}
+        {/* Cronograma (chips) — fonte única da régua: data + estado + entrega,
+            com o breakdown ("N entregues · …") no rodapé. Sem glance + toggle
+            redundantes: o próprio componente já carrega tudo. */}
+        <SprintTimeline stats={s} />
 
         {/* Campos (accordion): label + valor sempre; o texto + explicação abrem
             no drawer abaixo da linha, um campo por vez. */}
@@ -1936,14 +1858,25 @@ export function ProjetosBoard({
   factoryLoad,
   builderLoads,
   registryUi: ui,
+  hideRibbon = false,
 }: {
   projects: ProjectOverview[];
-  /** factory.committed_vs_capacity computado no server (computeMetric). */
-  factoryLoad: MetricValue;
+  /**
+   * factory.committed_vs_capacity computado no server (computeMetric). Opcional
+   * quando `hideRibbon` — a ribbon (única consumidora) não é renderizada e o
+   * caller pula o fetch fábrica-wide (board scoped por cliente).
+   */
+  factoryLoad?: MetricValue;
   /** Carga por builder (member_commitment_overview) — painel do eixo "load". */
-  builderLoads: Array<{ memberId: string; name: string; committed: number; capacity: number }>;
+  builderLoads?: Array<{ memberId: string; name: string; committed: number; capacity: number }>;
   /** Vocabulário do registry (names/defenses/bands), resolvido no server. */
   registryUi: RegistryUi;
+  /**
+   * Esconde a ribbon de KPIs fábrica-wide + o painel de detalhe (D2). Usado no
+   * board scoped por cliente, onde linhas ativas / buffer comercial / nº de
+   * clientes não fazem sentido. Lista/kanban/régua/saúde/drawer ficam.
+   */
+  hideRibbon?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2086,7 +2019,7 @@ export function ProjetosBoard({
     const attention = lines.filter((p) => p.health !== "green").length;
     const util = meanOf(lines.map((p) => p.stats.utilizationPct));
     const loadBand =
-      factoryLoad.value !== null
+      factoryLoad != null && factoryLoad.value !== null
         ? bandOf(factoryLoad.value, ui.bands["factory.committed_vs_capacity"] ?? [])
         : null;
     return [
@@ -2121,9 +2054,9 @@ export function ProjetosBoard({
         label: ui.names["factory.committed_vs_capacity"] ?? "Carga da fábrica",
         // Faixa verde fica só na cor (sem sufixo); alerta ganha o nome da faixa
         // num caption ao lado do número (badge), não dentro do valor-herói.
-        value: factoryLoad.value === null ? "—" : `${factoryLoad.value}%`,
+        value: factoryLoad?.value == null ? "—" : `${factoryLoad.value}%`,
         badge:
-          factoryLoad.value !== null && loadBand && loadBand.tone !== "green"
+          factoryLoad?.value != null && loadBand && loadBand.tone !== "green"
             ? loadBand.label
             : undefined,
         tone:
@@ -2209,22 +2142,28 @@ export function ProjetosBoard({
   return (
     <div className="space-y-5">
       {/* Ribbon — leitura de 5 segundos da fábrica; click no KPI expande o
-          painel do eixo logo abaixo (padrão SprintRibbon) */}
-      <div>
-        <OverviewRibbon
-          items={ribbon}
-          active={ribbonAxis}
-          onToggle={(axis) => setRibbonAxis((prev) => (prev === axis ? null : axis))}
-        />
-        <RibbonPanel
-          axis={ribbonAxis}
-          projects={effective}
-          factoryLoad={factoryLoad}
-          builderLoads={builderLoads}
-          ui={ui}
-          onOpenProject={(id) => navigate(id, "push")}
-        />
-      </div>
+          painel do eixo logo abaixo (padrão SprintRibbon). Escondida (D2) no
+          board scoped por cliente: KPIs fábrica-wide não fazem sentido por
+          cliente, e o caller pula os fetches que a alimentavam. */}
+      {!hideRibbon && (
+        <div>
+          <OverviewRibbon
+            items={ribbon}
+            active={ribbonAxis}
+            onToggle={(axis) => setRibbonAxis((prev) => (prev === axis ? null : axis))}
+          />
+          {/* factoryLoad/builderLoads são garantidos aqui: o caller só omite
+              quando hideRibbon, e este bloco não renderiza nesse caso. */}
+          <RibbonPanel
+            axis={ribbonAxis}
+            projects={effective}
+            factoryLoad={factoryLoad ?? EMPTY_FACTORY_LOAD}
+            builderLoads={builderLoads ?? []}
+            ui={ui}
+            onOpenProject={(id) => navigate(id, "push")}
+          />
+        </div>
+      )}
 
       {/* Projetos por fase (funil) — lista em seções ou kanban em colunas */}
       {grouped.length > 0 && (

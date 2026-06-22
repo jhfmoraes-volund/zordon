@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Finance · Contrato como espinha — sandbox de UX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ── tokens reais (dark) — src/app/globals.css .dark ───────────────── */
+  :root{
+    --bg: oklch(0.145 0 0);
+    --card: oklch(0.205 0 0);
+    --fg: oklch(0.92 0 0);
+    --muted: oklch(0.245 0 0);
+    --muted-fg: oklch(0.58 0 0);
+    --border: oklch(1 0 0 / 12%);
+    --ring-soft: oklch(1 0 0 / 8%);
+    --rose: #fb7185;          /* text-rose-400 (deduções) */
+    --sky-dot:#0ea5e9; --sky-band:rgba(14,165,233,.12); --sky-bd:rgba(14,165,233,.42); --sky-tx:#38bdf8;
+    --vio-dot:#8b5cf6; --vio-band:rgba(139,92,246,.12); --vio-bd:rgba(139,92,246,.42); --vio-tx:#a78bfa;
+    --amb-dot:#f59e0b; --amb-band:rgba(245,158,11,.12); --amb-bd:rgba(245,158,11,.42); --amb-tx:#fbbf24;
+    --font: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0a0a0a;color:var(--fg);font-family:var(--font);
+       -webkit-font-smoothing:antialiased;padding:28px 22px 80px}
+  h1{font-size:19px;font-weight:600;margin:0 0 4px}
+  .lede{color:var(--muted-fg);font-size:13px;max-width:760px;line-height:1.55;margin:0 0 18px}
+  .lede b{color:var(--fg);font-weight:500}
+  .row{display:flex;gap:18px;align-items:flex-start;overflow-x:auto;padding-bottom:18px}
+  .col{flex:0 0 380px;width:380px}
+  .col > .cap{margin-bottom:8px}
+  .cap .tag{display:inline-block;font:500 10px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;
+            color:var(--muted-fg);border:1px solid var(--border);border-radius:5px;padding:4px 7px;margin-bottom:6px}
+  .cap h2{font-size:14px;font-weight:600;margin:6px 0 3px}
+  .cap p{font-size:12px;color:var(--muted-fg);margin:0;line-height:1.5}
+  .cap .pros{font-size:11.5px;color:var(--muted-fg);margin:7px 0 0;line-height:1.5}
+  .cap .pros .g{color:#4ade80}.cap .pros .b{color:var(--rose)}
+
+  /* sheet shell (mimics ResponsiveSheet lg, conteúdo) */
+  .sheet{background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:16px 14px;
+         display:flex;flex-direction:column;gap:16px}
+  .sheet-h{display:flex;flex-direction:column;gap:2px;padding:0 2px}
+  .sheet-h .t{font-size:16px;font-weight:600}
+  .sheet-h .s{font:400 11px/1 var(--mono);color:var(--muted-fg)}
+
+  .surface{background:var(--card);border-radius:12px;box-shadow:inset 0 0 0 1px var(--ring-soft);overflow:hidden}
+  .bordered{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seclbl{display:flex;align-items:center;gap:6px;font:500 11px/1 var(--font);letter-spacing:.05em;
+          text-transform:uppercase;color:var(--muted-fg);padding:0 2px}
+  .seclbl .ic{width:14px;height:14px;opacity:.8}
+  .btn{font:500 12px/1 var(--font);color:var(--fg);background:transparent;border:1px solid var(--border);
+       border-radius:7px;padding:6px 9px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+  .btn:hover{background:var(--muted)}
+  .btn .plus{font-size:13px;line-height:1}
+
+  /* DRE */
+  .dre .line{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 12px;font-size:13px}
+  .dre .line.sub,.dre .line.strong{border-top:1px solid var(--border);background:rgba(255,255,255,.025)}
+  .dre .line.strong{font-weight:600}.dre .line.sub{font-weight:500}
+  .dre .line .lbl.ded{color:var(--muted-fg)}
+  .dre .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
+  .dre .v.ded{color:var(--rose)} .dre .note{font-size:11px;color:var(--muted-fg);margin-right:8px}
+
+  /* contract card */
+  .ccard{border:1px solid var(--border);border-radius:11px;overflow:hidden;cursor:pointer;transition:.13s}
+  .ccard:hover{background:rgba(255,255,255,.03)}
+  .ccard.sel.sky{border-color:var(--sky-bd);background:var(--sky-band)}
+  .ccard.sel.vio{border-color:var(--vio-bd);background:var(--vio-band)}
+  .ccard .top{display:flex;align-items:flex-start;gap:10px;padding:9px 11px 7px}
+  .dot{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:0 0 auto}
+  .sky .dot{background:var(--sky-dot)}.vio .dot{background:var(--vio-dot)}
+  .ccard .id{flex:1;min-width:0}
+  .ccard .id .nm{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500}
+  .chip{font:400 10px/1 var(--font);border-radius:4px;padding:3px 5px;border:1px solid}
+  .sky .chip{border-color:var(--sky-bd);color:var(--sky-tx)}.vio .chip{border-color:var(--vio-bd);color:var(--vio-tx)}
+  .ccard .id .sub{font-size:12px;color:var(--muted-fg);margin-top:3px}
+  .ccard .id .sub .val{color:var(--fg)}
+  .crono{display:flex;gap:6px;padding:2px 11px 10px;overflow-x:auto}
+  .blk{flex:0 0 auto;display:flex;align-items:center;gap:6px;border:1px solid;border-radius:7px;padding:5px 8px;font-size:11px;color:var(--muted-fg)}
+  .blk .n{font:500 10px/1 var(--mono);border-radius:4px;padding:3px 5px}
+  .sky .blk{border-color:var(--sky-bd);background:var(--sky-band)} .sky .blk .n{background:var(--sky-band);color:var(--sky-tx)}
+  .vio .blk{border-color:var(--vio-bd);background:var(--vio-band)} .vio .blk .n{background:var(--vio-band);color:var(--vio-tx)}
+
+  /* nested detail (team etc) */
+  .detail{border-top:1px dashed var(--border);padding:10px 11px 11px;display:none;flex-direction:column;gap:9px}
+  .ccard.sel .detail,.panel.open .detail{display:flex}
+  .team .trow{display:flex;align-items:center;gap:10px;padding:6px 2px}
+  .team .trow + .trow{border-top:1px solid var(--border)}
+  .team .tn{flex:1;min-width:0;font-size:13px}
+  .team .tn .meta{font-size:11px;color:var(--muted-fg)}
+  .team .tc{font-family:var(--mono);font-size:11.5px;color:var(--muted-fg);font-variant-numeric:tabular-nums}
+  .miniadd{display:flex;justify-content:space-between;align-items:center}
+  .scopepill{font:500 10px/1 var(--mono);color:var(--muted-fg);border:1px dashed var(--border);border-radius:6px;padding:5px 8px}
+
+  /* segmented (P3) */
+  .seg{display:flex;gap:4px;background:var(--card);padding:4px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--ring-soft);overflow-x:auto}
+  .seg button{flex:0 0 auto;font:500 12px/1 var(--font);color:var(--muted-fg);background:transparent;border:0;
+              border-radius:7px;padding:7px 11px;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .seg button .d{width:7px;height:7px;border-radius:50%}
+  .seg button.on{background:var(--muted);color:var(--fg)}
+  .seg .plus{margin-left:auto;border:1px dashed var(--border)}
+
+  /* panel (P2) */
+  .panel{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .panel + .panel{margin-top:9px}
+  .panel.sel.sky{border-color:var(--sky-bd)} .panel.sel.vio{border-color:var(--vio-bd)} .panel.open.glob{border-color:var(--border)}
+  .panel .ph{display:flex;align-items:center;gap:10px;padding:11px;cursor:pointer}
+  .panel.open.sky .ph{background:var(--sky-band)} .panel.open.vio .ph{background:var(--vio-band)} .panel.open.glob .ph{background:rgba(255,255,255,.03)}
+  .panel .ph .id{flex:1;min-width:0}
+  .panel .ph .nm{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+  .panel .ph .sub{font-size:11.5px;color:var(--muted-fg);margin-top:2px}
+  .panel .ph .kpi{text-align:right}
+  .panel .ph .kpi .big{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+  .panel .ph .kpi .cap2{font-size:10px;color:var(--muted-fg)}
+  .panel .chev{color:var(--muted-fg);transition:.15s;font-size:13px}
+  .panel.open .chev{transform:rotate(90deg)}
+  .panel .detail{border-top:1px solid var(--border)}
+  .globdot{width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,var(--sky-dot),var(--vio-dot))}
+
+  .hint{font-size:11px;color:var(--muted-fg);text-align:center;margin-top:9px;font-style:italic}
+  .footer{margin-top:34px;color:var(--muted-fg);font-size:12.5px;max-width:780px;line-height:1.6}
+  .footer b{color:var(--fg)}
+  code{font-family:var(--mono);font-size:11.5px;background:var(--card);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+  <h1>Contrato como espinha — sandbox de UX</h1>
+  <p class="lede">
+    Comportamento que você descreveu: <b>clicar num contrato expande + filtra a DRE pra ele; clicar de novo volta pro
+    global (soma dos contratos)</b>. Hoje isso existe, mas espalhado — o seletor da DRE é um <b>dropdown solto no topo</b>,
+    o botão <b>+ Contrato</b> e a <b>Equipe alocada</b> ficam em blocos separados. As 3 propostas abaixo unificam isso de
+    jeitos diferentes. <b>Todas são clicáveis</b> — interaja pra sentir. Tokens, fontes e paleta são os reais do app.
+  </p>
+
+  <div class="row">
+
+    <!-- ════════════════ HOJE (atual) ════════════════ -->
+    <div class="col">
+      <div class="cap">
+        <span class="tag">hoje · atual</span>
+        <h2>Como está</h2>
+        <p>Dropdown de escopo no topo, DRE, lista de contratos, e <em>embaixo de tudo</em> a equipe alocada — três blocos sem relação visual.</p>
+      </div>
+      <div class="sheet">
+        <div class="sheet-h"><span class="t">HITz</span><span class="s">12 sprints · 2026</span></div>
+        <div class="scopepill" style="align-self:flex-start">DRE: ▾ Contrato 1 · 24 mai → 13 jun</div>
+        <div class="surface dre" id="cur-dre"></div>
+        <div>
+          <div class="miniadd" style="margin-bottom:8px"><span class="seclbl"><span class="ic">📄</span>Contratos</span><button class="btn"><span class="plus">+</span> Contrato</button></div>
+          <div id="cur-cards"></div>
+        </div>
+        <div>
+          <div class="miniadd" style="margin-bottom:8px"><span class="seclbl"><span class="ic">👥</span>Equipe alocada</span><button class="btn"><span class="plus">+</span> Alocar</button></div>
+          <div class="surface team" id="cur-team" style="padding:2px 11px"></div>
+        </div>
+        <div class="hint">estático — referência do estado atual</div>
+      </div>
+    </div>
+
+    <!-- ════════════════ P1 — Espinha (DRE fixa no topo) ════════════════ -->
+    <div class="col">
+      <div class="cap">
+        <span class="tag">proposta 1 · espinha</span>
+        <h2>DRE fixa + contratos governam o escopo</h2>
+        <p>Some o dropdown. A DRE fica fixa no topo e <b>re-escopa</b> ao clicar num contrato. O card selecionado <b>expande inline</b> com a equipe daquela vigência + cronograma. <code>+ Contrato</code> e <code>Alocar</code> moram no bloco.</p>
+        <p class="pros"><span class="g">+ mudança mínima, DRE continua em destaque</span> · <span class="b">− equipe duplica visualmente se você quiser ver "todo mundo"</span></p>
+      </div>
+      <div class="sheet">
+        <div class="sheet-h"><span class="t">HITz</span><span class="s" id="p1-scope">escopo: Global (ano)</span></div>
+        <div class="surface dre" id="p1-dre"></div>
+        <div>
+          <div class="miniadd" style="margin-bottom:8px"><span class="seclbl"><span class="ic">📄</span>Contratos &amp; equipe</span><button class="btn"><span class="plus">+</span> Contrato</button></div>
+          <div id="p1-cards" style="display:flex;flex-direction:column;gap:9px"></div>
+        </div>
+        <div class="hint">clique num contrato → expande + re-escopa a DRE · clique de novo → Global</div>
+      </div>
+    </div>
+
+    <!-- ════════════════ P2 — Painéis auto-contidos ════════════════ -->
+    <div class="col">
+      <div class="cap">
+        <span class="tag">proposta 2 · painel</span>
+        <h2>Cada contrato é um painel com a SUA DRE</h2>
+        <p>Não há DRE separada. Uma pilha de painéis: <b>Global (ano)</b> no topo (a soma) e um painel por contrato. Abrir um painel revela a <b>DRE própria + equipe + cronograma</b> daquele contrato (accordion, um aberto por vez).</p>
+        <p class="pros"><span class="g">+ realiza 100% o "componente único"; cada contrato é auto-contido</span> · <span class="b">− mais alto; comparar dois exige fechar/abrir</span></p>
+      </div>
+      <div class="sheet">
+        <div class="sheet-h"><span class="t">HITz</span><span class="s">12 sprints · 2026</span></div>
+        <div id="p2-panels"></div>
+        <div class="miniadd"><span class="scopepill">soma viva = painel Global</span><button class="btn"><span class="plus">+</span> Contrato</button></div>
+        <div class="hint">clique num cabeçalho → abre a DRE daquele contrato · "Global" = soma</div>
+      </div>
+    </div>
+
+    <!-- ════════════════ P3 — Segmentado + corpo único ════════════════ -->
+    <div class="col">
+      <div class="cap">
+        <span class="tag">proposta 3 · segmentado</span>
+        <h2>Seletor segmentado + um corpo que troca</h2>
+        <p>Um controle <b>[ Global · Contrato 1 · Contrato 2 · + ]</b> no topo substitui o dropdown. Abaixo, <b>um corpo</b> (DRE + cronograma + equipe) que re-escopa ao trocar de segmento. Sem expansão aninhada — é troca de aba.</p>
+        <p class="pros"><span class="g">+ modelo mental mais simples, menos altura</span> · <span class="b">− perde a visão de todos os contratos de uma vez</span></p>
+      </div>
+      <div class="sheet">
+        <div class="sheet-h"><span class="t">HITz</span><span class="s">12 sprints · 2026</span></div>
+        <div class="seg" id="p3-seg"></div>
+        <div id="p3-body" style="display:flex;flex-direction:column;gap:14px"></div>
+        <div class="hint">clique nos segmentos → o corpo inteiro re-escopa</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <b>Meu palpite:</b> a <b>Proposta 1</b> é o menor salto a partir do que já funciona (a DRE segue como herói, o dropdown vira clique-no-card,
+    e a equipe entra no bloco do contrato escopada por vigência). A <b>Proposta 2</b> é a leitura mais literal do seu "componente gigante" —
+    melhor se você pensa em cada contrato como uma mini-DRE fechada. A <b>3</b> é a mais enxuta se o que importa é trocar de escopo rápido,
+    abrindo mão do panorama. Decisão real embutida: <b>a equipe (labor_allocation) é por data, não por contrato</b> — em P1/P2 ela aparece
+    filtrada pela vigência; no escopo global some todas. Me diz qual direção (ou combinação) e eu detalho a implementação no handoff.
+  </div>
+
+<script>
+  const fmt = n => 'R$ ' + Math.abs(n).toLocaleString('pt-BR');
+  // ── datasets DRE (reais do screenshot pra C1; Global/C2 plausíveis) ──
+  const DRE = {
+    global: {note:'22% da receita', lines:[
+      ['Faturamento',532733,'strong'],['(−) Impostos (ISS/PIS/COFINS)',-30086,'ded'],['= Receita líquida',502647,'sub'],
+      ['(−) Equipe',-228000,'ded'],['(−) Overhead por pessoa',-34600,'ded'],['(−) Despesa direta',0,'ded'],['(−) Custo financeiro',-2748,'ded'],
+      ['= Margem bruta',237299,'sub'],['(−) SG&A',-53273,'ded'],['= LAIR',184026,'sub'],['(−) IRPJ/CSLL',-62568,'ded'],['= Lucro líquido',121458,'strong']]},
+    c1: {note:'28% da receita', lines:[
+      ['Faturamento',172733,'strong'],['(−) Impostos (ISS/PIS/COFINS)',-9759,'ded'],['= Receita líquida',162973,'sub'],
+      ['(−) Equipe',-62000,'ded'],['(−) Overhead por pessoa',-9400,'ded'],['(−) Despesa direta',0,'ded'],['(−) Custo financeiro',-893,'ded'],
+      ['= Margem bruta',90681,'sub'],['(−) SG&A',-17273,'ded'],['= LAIR',73408,'sub'],['(−) IRPJ/CSLL',-24959,'ded'],['= Lucro líquido',48449,'strong']]},
+    c2: {note:'20% da receita', lines:[
+      ['Faturamento',360000,'strong'],['(−) Impostos (ISS/PIS/COFINS)',-20327,'ded'],['= Receita líquida',339673,'sub'],
+      ['(−) Equipe',-166000,'ded'],['(−) Overhead por pessoa',-25200,'ded'],['(−) Despesa direta',0,'ded'],['(−) Custo financeiro',-1855,'ded'],
+      ['= Margem bruta',146618,'sub'],['(−) SG&A',-36000,'ded'],['= LAIR',110618,'sub'],['(−) IRPJ/CSLL',-37609,'ded'],['= Lucro líquido',73009,'strong']]},
+  };
+  function dreHTML(key){
+    const d = DRE[key];
+    return '<div class="dre">' + d.lines.map(([lbl,v,kind])=>{
+      const ded = kind==='ded';
+      const isLast = lbl.startsWith('= Lucro');
+      return `<div class="line ${kind}"><span class="lbl ${ded?'ded':''}">${lbl}</span>`
+        + `<span style="display:flex;align-items:center">`
+        + (isLast?`<span class="note">${d.note}</span>`:'')
+        + `<span class="v ${ded?'ded':''}">${v<0?'-':''}${fmt(v)}</span></span></div>`;
+    }).join('') + '</div>';
+  }
+
+  // ── contratos + cronograma ──
+  const CONTRACTS = [
+    {id:'c1', tone:'sky', name:'Contrato 1', type:'Encomenda', period:'24 de mai. → 13 de jun.',
+     summary:'R$ 600.000 · 500 FP · R$ 1.200/FP',
+     blocks:[['1','25 mai'],['2','01 jun'],['3','08 jun']]},
+    {id:'c2', tone:'vio', name:'Contrato 2', type:'Squad', period:'14 de jun. → 19 de set.',
+     summary:'R$ 86.366/mês · 14 sprints',
+     blocks:[['4','15 jun'],['5','22 jun'],['6','29 jun'],['7','06 jul'],['8','13 jul']]},
+  ];
+  function cronoHTML(c){ return '<div class="crono">' + c.blocks.map(([n,d])=>`<span class="blk"><span class="n">${n}</span>${d}</span>`).join('') + '</div>'; }
+
+  // ── equipe (por data → filtrada por vigência) ──
+  const TEAM = {
+    c1:[['Ana Souza','Tech Lead','50% · 24 mai → 13 jun',31000],['Bruno Lima','Eng. Sênior','40% · 24 mai → 13 jun',24800],['Caio Reis','Designer','25% · 01 jun → 13 jun',6200]],
+    c2:[['Ana Souza','Tech Lead','60% · 14 jun → 19 set',92000],['Diana Melo','Eng. Pleno','100% · 14 jun → 19 set',54000],['Bruno Lima','Eng. Sênior','30% · 14 jun → 31 jul',20000]],
+  };
+  TEAM.global = [...TEAM.c1, ...TEAM.c2];
+  function teamHTML(key){
+    return TEAM[key].map(([n,role,meta,c])=>`<div class="trow"><div class="tn">${n}<div class="meta">${role} · ${meta}</div></div><span class="tc">${fmt(c)}</span></div>`).join('');
+  }
+  function teamBlock(key){ return `<div class="miniadd"><span class="seclbl"><span class="ic">👥</span>Equipe (${key==='global'?'todas':'nesta vigência'})</span><button class="btn"><span class="plus">+</span> Alocar</button></div><div class="surface team" style="padding:2px 11px;margin-top:7px">${teamHTML(key)}</div>`; }
+
+  // card markup (com detail aninhado opcional)
+  function cardHTML(c, withDetail){
+    let h = `<div class="ccard ${c.tone}" data-id="${c.id}"><div class="top"><span class="dot"></span>`
+      + `<div class="id"><div class="nm">${c.name}<span class="chip">${c.type}</span></div>`
+      + `<div class="sub">${c.period} · <span class="val">${c.summary}</span></div></div></div>`
+      + cronoHTML(c);
+    if(withDetail){ h += `<div class="detail">${teamBlock(c.id)}</div>`; }
+    return h + '</div>';
+  }
+
+  // ════ HOJE ════
+  document.getElementById('cur-dre').innerHTML = dreHTML('c1');
+  document.getElementById('cur-cards').innerHTML =
+    `<div style="display:flex;flex-direction:column;gap:9px">${CONTRACTS.map(c=>cardHTML(c,false)).join('')}</div>`;
+  document.getElementById('cur-team').innerHTML = teamHTML('global');
+
+  // ════ P1 — espinha ════
+  const p1cards = document.getElementById('p1-cards');
+  p1cards.innerHTML = CONTRACTS.map(c=>cardHTML(c,true)).join('');
+  function p1set(id){
+    const cards = p1cards.querySelectorAll('.ccard');
+    cards.forEach(el=>el.classList.toggle('sel', el.dataset.id===id));
+    document.getElementById('p1-dre').innerHTML = dreHTML(id||'global');
+    document.getElementById('p1-scope').textContent = 'escopo: ' + (id? CONTRACTS.find(c=>c.id===id).name + ' · ' + CONTRACTS.find(c=>c.id===id).period : 'Global (ano)');
+  }
+  p1cards.querySelectorAll('.ccard').forEach(el=>{
+    el.addEventListener('click', ()=> p1set(el.classList.contains('sel')? null : el.dataset.id));
+  });
+  p1set(null);
+
+  // ════ P2 — painéis ════
+  function panelHTML(c){
+    const k = DRE[c.id]; const lucro = k.lines[k.lines.length-1][1];
+    return `<div class="panel ${c.tone}" data-id="${c.id}"><div class="ph"><span class="dot"></span>`
+      + `<div class="id"><div class="nm">${c.name}<span class="chip">${c.type}</span></div><div class="sub">${c.period}</div></div>`
+      + `<div class="kpi"><div class="big">${fmt(lucro)}</div><div class="cap2">lucro líquido</div></div><span class="chev">▸</span></div>`
+      + `<div class="detail">${dreHTML(c.id)}${cronoHTML(c)}${teamBlock(c.id)}</div></div>`;
+  }
+  const globPanel = `<div class="panel glob" data-id="global"><div class="ph"><span class="globdot"></span>`
+    + `<div class="id"><div class="nm">Global (ano)</div><div class="sub">soma de todos os contratos · 2026</div></div>`
+    + `<div class="kpi"><div class="big">${fmt(DRE.global.lines.at(-1)[1])}</div><div class="cap2">lucro líquido</div></div><span class="chev">▸</span></div>`
+    + `<div class="detail">${dreHTML('global')}${teamBlock('global')}</div></div>`;
+  document.getElementById('p2-panels').innerHTML = globPanel + CONTRACTS.map(panelHTML).join('');
+  const p2panels = document.getElementById('p2-panels');
+  p2panels.querySelectorAll('.panel').forEach(p=>{
+    p.querySelector('.ph').addEventListener('click', ()=>{
+      const wasOpen = p.classList.contains('open');
+      p2panels.querySelectorAll('.panel').forEach(x=>x.classList.remove('open','sel'));
+      if(!wasOpen){ p.classList.add('open'); if(p.dataset.id!=='global') p.classList.add('sel'); }
+    });
+  });
+  p2panels.querySelector('.panel.glob').classList.add('open');
+
+  // ════ P3 — segmentado ════
+  const segs = [{id:'global',label:'Global',dot:'linear-gradient(135deg,var(--sky-dot),var(--vio-dot))'},
+                {id:'c1',label:'Contrato 1',dot:'var(--sky-dot)'},{id:'c2',label:'Contrato 2',dot:'var(--vio-dot)'}];
+  const p3seg = document.getElementById('p3-seg');
+  p3seg.innerHTML = segs.map(s=>`<button data-id="${s.id}"><span class="d" style="background:${s.dot}"></span>${s.label}</button>`).join('')
+    + `<button class="plus"><span class="plus">+</span></button>`;
+  function p3set(id){
+    p3seg.querySelectorAll('button[data-id]').forEach(b=>b.classList.toggle('on', b.dataset.id===id));
+    const c = CONTRACTS.find(x=>x.id===id);
+    const body = document.getElementById('p3-body');
+    let h = `<div class="surface dre">${dreHTML(id)}</div>`;
+    if(c){ h += `<div class="ccard ${c.tone}" style="cursor:default">`+cronoHTML(c)+`</div>`; }
+    h += teamBlock(id);
+    body.innerHTML = h;
+  }
+  p3seg.querySelectorAll('button[data-id]').forEach(b=> b.addEventListener('click', ()=>p3set(b.dataset.id)));
+  p3set('global');
+</script>
+</body>
+</html>

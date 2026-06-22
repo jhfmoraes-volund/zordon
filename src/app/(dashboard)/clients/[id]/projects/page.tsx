@@ -1,110 +1,32 @@
-"use client";
+import { getEffectiveAccessLevel } from "@/lib/dal";
+import { hasMinAccessLevel } from "@/lib/roles";
+import { ProjetosView } from "@/components/overview/projetos-view";
+import { ClientProjectsGrid } from "@/components/clients/client-projects-grid";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { createClient } from "@/lib/supabase/client";
-import {
-  ClientProjectCard,
-  type ClientProject,
-  type ProjectInsightSummary,
-} from "@/components/clients/client-project-card";
-import { useClientContext } from "../_context/client-context";
+/**
+ * Aba Projetos do cliente.
+ *
+ * Manager+ → board estratégico completo (ProjetosView) scoped por clientId,
+ *   com a ribbon fábrica-wide oculta (D2). É o mesmo board do Overview org, que
+ *   roda sobre service_role (bypassa RLS) e é gated por manager+ na origem.
+ *   Replicamos esse gate aqui pra não introduzir bypass de RLS pra builder
+ *   (D5: preservar gating, sem regressão de segurança).
+ *
+ * Builder → grid RLS-safe (ClientProjectsGrid) — comportamento idêntico ao
+ *   anterior (browser client, só projetos visíveis ao usuário). Guest nem
+ *   chega aqui (bloqueado no proxy.ts).
+ */
+export default async function ClientProjectsPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const accessLevel = await getEffectiveAccessLevel();
 
-export default function ProjectsPage() {
-  const { clientId, canSeeInsights } = useClientContext();
-  const supabase = useMemo(() => createClient(), []);
-  const [projects, setProjects] = useState<ClientProject[]>([]);
-  const [insights, setInsights] = useState<Record<string, ProjectInsightSummary>>(
-    {},
-  );
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data: projectsRes } = await supabase
-      .from("Project")
-      .select(
-        "id, name, status, startDate, endDate, projectMembers:ProjectMember(memberId), taskCount:Task(count)",
-      )
-      .eq("clientId", clientId)
-      .order("createdAt", { ascending: false });
-
-    const mapped = ((projectsRes ?? []) as Array<{
-      id: string;
-      name: string;
-      status: string;
-      startDate: string | null;
-      endDate: string | null;
-      projectMembers: Array<{ memberId: string }>;
-      taskCount: Array<{ count: number }>;
-    }>).map((p) => ({
-      id: p.id,
-      name: p.name,
-      status: p.status,
-      startDate: p.startDate,
-      endDate: p.endDate,
-      memberCount: p.projectMembers?.length ?? 0,
-      taskCount: p.taskCount?.[0]?.count ?? 0,
-    }));
-    setProjects(mapped);
-
-    if (canSeeInsights && mapped.length > 0) {
-      const { data: insightsRes } = await supabase
-        .from("ProjectInsight")
-        .select("projectId, generatedAt, relationalHealth, technicalHealth")
-        .in(
-          "projectId",
-          mapped.map((p) => p.id),
-        );
-      const map: Record<string, ProjectInsightSummary> = {};
-      for (const row of insightsRes ?? []) {
-        if (!row.projectId) continue;
-        map[row.projectId] = {
-          generatedAt: row.generatedAt,
-          relationalHealth: row.relationalHealth,
-          technicalHealth: row.technicalHealth,
-        };
-      }
-      setInsights(map);
-    } else {
-      setInsights({});
-    }
-
-    setLoading(false);
-  }, [clientId, canSeeInsights, supabase]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional data loading pattern
-    void load();
-  }, [load]);
-
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <Skeleton className="h-28" />
-        <Skeleton className="h-28" />
-        <Skeleton className="h-28" />
-      </div>
-    );
+  if (hasMinAccessLevel(accessLevel, "manager")) {
+    return <ProjetosView clientId={id} hideRibbon />;
   }
 
-  if (projects.length === 0) {
-    return (
-      <div className="surface p-6 text-center text-sm text-muted-foreground">
-        Este cliente ainda não tem projetos.
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {projects.map((p) => (
-        <ClientProjectCard
-          key={p.id}
-          project={p}
-          insight={insights[p.id] ?? null}
-        />
-      ))}
-    </div>
-  );
+  return <ClientProjectsGrid />;
 }

@@ -51,7 +51,7 @@ type FormState = {
   from: string;
   to: string;
   monthlyFeeReais: string;
-  pricePerFpReais: string;
+  totalValueReais: string;
   contractedFp: string;
   contractedSprints: string;
   note: string;
@@ -114,7 +114,7 @@ export function FinanceContracts({
       from: "",
       to: "",
       monthlyFeeReais: "",
-      pricePerFpReais: "",
+      totalValueReais: "",
       contractedFp: "",
       contractedSprints: "",
       note: "",
@@ -128,7 +128,7 @@ export function FinanceContracts({
       from: c.effectiveFrom.slice(0, 10),
       to: c.effectiveTo?.slice(0, 10) ?? "",
       monthlyFeeReais: centsToReais(c.monthlyFeeCents),
-      pricePerFpReais: centsToReais(c.pricePerFpCents),
+      totalValueReais: centsToReais(c.totalValueCents),
       contractedFp: c.contractedFp != null ? String(c.contractedFp) : "",
       contractedSprints: c.contractedSprints != null ? String(c.contractedSprints) : "",
       note: c.note ?? "",
@@ -145,7 +145,7 @@ export function FinanceContracts({
       effectiveTo: form.to || null,
       billingType: form.billingType,
       monthlyFeeCents: isFixed ? null : reaisToCents(form.monthlyFeeReais),
-      pricePerFpCents: isFixed ? reaisToCents(form.pricePerFpReais) : null,
+      totalValueCents: isFixed ? reaisToCents(form.totalValueReais) : null,
       contractedFp: isFixed ? numOrNull(form.contractedFp) : null,
       contractedSprints: isFixed ? null : numOrNull(form.contractedSprints),
       note: form.note.trim() || null,
@@ -249,9 +249,11 @@ export function FinanceContracts({
                     <p className="truncate text-xs text-muted-foreground">
                       {fmtDate(c.effectiveFrom)} → {c.effectiveTo ? fmtDate(c.effectiveTo) : "atual"}
                       {c.billingType === "fixed_scope"
-                        ? c.pricePerFpCents != null
-                          ? ` · ${brlFromCents(c.pricePerFpCents)}/FP${c.contractedFp != null ? ` · ${c.contractedFp} FP` : ""}`
-                          : ""
+                        ? c.totalValueCents != null
+                          ? ` · ${brlFromCents(c.totalValueCents)}${c.contractedFp != null ? ` · ${c.contractedFp} FP` : ""}${c.pricePerFpCents != null ? ` · ${brlFromCents(c.pricePerFpCents)}/FP` : ""}`
+                          : c.contractedFp != null
+                            ? ` · ${c.contractedFp} FP`
+                            : ""
                         : c.monthlyFeeCents != null
                           ? ` · ${brlFromCents(c.monthlyFeeCents)}/mês${c.contractedSprints != null ? ` · ${c.contractedSprints} sprints` : ""}`
                           : ""}
@@ -331,6 +333,14 @@ function ContractForm({
 }) {
   const isFixed = form.billingType === "fixed_scope";
   const set = (patch: Partial<FormState>) => setForm({ ...form, ...patch });
+
+  // Preço/FP é DERIVADO (valor global ÷ FP contratado) — espelha a coluna
+  // GENERATED do DB. Mostrado read-only pra o usuário conferir antes de salvar.
+  const derivedPricePerFpCents = useMemo(() => {
+    const total = reaisToCents(form.totalValueReais);
+    const fp = numOrNull(form.contractedFp);
+    return total != null && fp != null && fp > 0 ? Math.round(total / fp) : null;
+  }, [form.totalValueReais, form.contractedFp]);
 
   // "preencher por sprint": escolher sprint preenche a data de início/fim.
   const fromSprintId = useMemo(
@@ -444,18 +454,23 @@ function ContractForm({
 
         {isFixed ? (
           <Field.Row cols={2}>
-            <Field name="price">
-              <Field.Label>Preço por FP (R$)</Field.Label>
+            <Field name="totalValue">
+              <Field.Label>Valor global do contrato (R$)</Field.Label>
               <Field.Control>
                 <Input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={form.pricePerFpReais}
-                  onChange={(e) => set({ pricePerFpReais: e.target.value })}
-                  placeholder="ex: 1200,00"
+                  value={form.totalValueReais}
+                  onChange={(e) => set({ totalValueReais: e.target.value })}
+                  placeholder="ex: 600000,00"
                 />
               </Field.Control>
+              <Field.Hint>
+                {derivedPricePerFpCents != null
+                  ? `Preço/FP derivado: ${brlFromCents(derivedPricePerFpCents)}`
+                  : "Preço/FP = valor global ÷ FP contratado"}
+              </Field.Hint>
             </Field>
             <Field name="scopeFp">
               <Field.Label>Escopo contratado (FP)</Field.Label>

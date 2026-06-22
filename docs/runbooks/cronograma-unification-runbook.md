@@ -180,20 +180,33 @@ toggle "Ver mais (N) ⌄ / Ver menos ⌃" (`useState`). Substitui expand bespoke
 - **pm-review-week-sheet.tsx**: `variant="full"` → `shape="chip" layout="wrap"`.
 - **wiki-identity.tsx**: `variant="mini"` → `shape="chip" layout="wrap" collapsible={{previewCount: 8}}`;
   blocks add `indicator: i+1` (idx da semana), `dateLabel: fmtDayMonth(start)`, `value: doneTaskCount || undefined`.
-- Rails (CronogramaRail) seguem ribbon — sem mudança.
+- Rails (CronogramaRail) seguem ribbon — sem mudança. *(revisado depois → ver Fase 4.)*
 - **Gate:** `tsc` + `eslint` nos 5 arquivos. Visual = mockup §2/§3/§4. ⚠️ pixels mudam → revisão visual.
 
-### Fase 3 — régua do overview — só `projetos-board.tsx` (ver C1)
-1. Adapter `segToBlock(g: ReguaSegment): CronogramaBlock`:
-   `key: g.monday` · `state: g.kind==="closed"?"past":g.kind` (mapear; "hole"→"past"+`silent:true`) ·
-   `dateLabel: fmtDayMonth(g.monday)` · `value: segmentValueLabel(g)` ·
-   `tone: { band: segmentColor(g.deliveryPct), text: segmentValueTone(g), border: <derivado> }` ·
-   `title: segmentTitle(g)` · `flagged: i===stats.milestoneIndex`.
-2. `Regua` → `<Cronograma shape="ribbon" blocks={stats.segments.map(segToBlock)} />` (sm: sem ⚑;
-   lg: `flagged` aceso). Sem `onSelect` (read-only).
-3. `SprintTimeline` (local) → `<Cronograma shape="grid" .../>` + `<ReguaSummaryLine stats={stats}/>`
-   caller-owned embaixo. Deletar o corpo do clone; manter os helpers de domínio.
-4. **Gate:** `tsc` + `eslint src/components/overview/projetos-board.tsx`. Visual = board + drawer.
+### Fase 4 — réguas (CronogramaRail) viram chip + responsivo — só `cronograma.tsx`
+- `CronogramaRail`: desktop (≥md) = `<Cronograma shape="chip" layout="scroll">` (fileira de chips com
+  scroll lateral; o bloco selecionado é auto-centralizado via `scrollIntoView` quando a seleção muda —
+  espelha o `DSRibbon`). Mobile (<md) = `CronogramaRailSelect`, um `<Select>` dropdown (trigger mostra o
+  bloco selecionado; lista completa no tap). Swap por **CSS** (`md:hidden` / `hidden md:block`), NÃO `useIsMobile`.
+- Padrão de referência: `src/components/design-session/ribbon/ds-ribbon.tsx` (`DSStepSelect`).
+- Cobre Planning + PM Review automaticamente (ambos passam por `CronogramaRail`) — **zero mudança nos callers**
+  (os blocks já têm `indicator`/`dateLabel`/`value` desde a Fase 2).
+- **Gate:** `tsc` + `eslint cronograma.tsx` limpos. Visual = rail desktop (chips rolando) + mobile (dropdown).
+
+### Fase 3 — régua do overview — só `projetos-board.tsx` (ver C1) — **FEITO**
+1. Adapter `segToBlock(g, i, milestoneIndex)` + `segTone(g)` (tom por kind, chip-aware):
+   `state: closed→past · hole→past+silent · current · future` · `dateLabel: fmtDayMonth(g.monday)` ·
+   `value: segmentValueLabel(g)` · `tone: segTone(g)` · `title: segmentTitle(g)` · `flagged: i===milestoneIndex`.
+   `segTone`: closed→`deliveryTone(pct)`; current→primary; future→muted; hole→dashed (silent). `text`=`segmentValueTone(g)`.
+2. `Regua` (board row + tooltip) → `<Cronograma shape="ribbon" size={sm|lg}>` (glance forte via `tone.bar`). Read-only.
+3. `SprintTimeline` (local, expandida) → `<Cronograma shape="chip" layout="wrap">` + `<ReguaSummaryLine>` embaixo.
+   **D1 (chip em tudo):** a régua expandida é CHIP, não grid (revisão do dono no side-sheet 2026-06-22).
+4. **Side-sheet STATS:** removido o glance `Regua` + toggle "Ver mais/menos" (redundante com a chip-cronograma,
+   que já carrega data+estado+entrega+breakdown). Dossier renderiza só `<SprintTimeline>`. Mortos removidos:
+   `StatTip`, `ReguaSummaryTip`, `cellClass`, `segmentColor` + imports `Tooltip*`.
+5. **`CronogramaTone` ganhou `bar?`** (fill forte .60–.70 da barra ribbon/grid) separado de `band` (.10, fundo do chip).
+   `deliveryTone` devolve os dois. Régua glance usa `bar`; chip usa `band`+`text`.
+6. **Gate:** `tsc` + `eslint projetos-board.tsx` limpos (só `set-state-in-effect` pré-existente). Visual = board + side-sheet.
 
 ### Final
 - `npx tsc --noEmit` global + `npx eslint` em TODOS os arquivos tocados.
