@@ -40,7 +40,7 @@ export type AppDef = {
   /** O que o app alimenta no projeto (contrato: app = unidade de input de contexto). */
   produces: { context?: string[]; artifacts?: string[] };
   requires?: { composio?: string };
-  minAccessLevel?: "manager" | "builder";
+  minAccessLevel?: "builder" | "manager" | "admin";
   /** installed = abre; available = visível no catálogo, ainda sem superfície. */
   status: "installed" | "available";
 };

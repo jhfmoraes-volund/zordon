@@ -5,6 +5,7 @@ import { OverviewTabs, type OverviewTab } from "@/components/overview/overview-t
 import { OperacaoView } from "@/components/overview/operacao-view";
 import { ProjetosView } from "@/components/overview/projetos-view";
 import { InsightsView } from "@/components/overview/insights-view";
+import { AppsView } from "@/components/overview/apps-view";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,13 @@ export default async function OverviewPage({
   await requireMinLevel(MANAGER, { redirectTo: "/projects" });
   const sp = await searchParams;
   const tab: OverviewTab =
-    sp?.tab === "ops" ? "ops" : sp?.tab === "insights" ? "insights" : "projetos";
+    sp?.tab === "ops"
+      ? "ops"
+      : sp?.tab === "insights"
+        ? "insights"
+        : sp?.tab === "apps"
+          ? "apps"
+          : "projetos";
 
   const now = new Date();
   const weekStart = startOfWeek(now);
@@ -52,6 +59,8 @@ export default async function OverviewPage({
         <ProjetosView />
       ) : tab === "insights" ? (
         <InsightsView />
+      ) : tab === "apps" ? (
+        <AppsView />
       ) : (
         <OperacaoView />
       )}
