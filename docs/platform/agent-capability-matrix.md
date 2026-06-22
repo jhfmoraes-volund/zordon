@@ -4,7 +4,7 @@
 > Regenere: `npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write docs/platform/agent-capability-matrix.md`.
 > Pertencimento (`surfaces`) e escopo (`needs`) vivem no descriptor — esta tabela é projeção. Drift cross-repo: `scripts/check-daemon-surface.ts`.
 
-**89 tools** · surfaces: vitor 41 · pm_review 17 · planning 21 · release_pl 24 · wiki 15 · alpha 26
+**89 tools** · surfaces: vitor 41 · pm_review 17 · planning 21 · release_pl 25 · wiki 15 · alpha 26
 
 | tool | class | needs | vitor | pm_review | planning | release_pl | wiki | alpha |
 |------|-------|-------|----|----|----|----|----|----|
@@ -71,7 +71,7 @@
 | `read_scope` | sense | sessionId | ✓ | · | · | · | · | · |
 | `read_session_memory` | remember | sessionId | ✓ | · | · | · | · | · |
 | `read_tech_specs` | sense | sessionId | ✓ | · | · | · | · | · |
-| `read_transcript_content` | sense | pmReviewId | · | ✓ | · | · | · | · |
+| `read_transcript_content` | sense | — | · | ✓ | · | ✓ | · | · |
 | `read_wiki` | sense | (routeProjectId\|projectId) | · | · | · | · | ✓ | ✓ |
 | `read_workspace_file` | sense | — | ✓ | · | · | · | · | · |
 | `recompose_wiki` | act | (routeProjectId\|projectId) | · | · | · | · | ✓ | ✓ |

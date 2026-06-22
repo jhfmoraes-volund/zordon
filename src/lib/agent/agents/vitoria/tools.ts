@@ -418,6 +418,14 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
                 .uuid()
                 .optional()
                 .describe("UserStory pra pendurar a task (crie antes via propose_story)."),
+              acceptanceCriteria: z
+                .array(z.string())
+                .optional()
+                .describe(
+                  "Critérios de aceitação observáveis pelo PM (OPCIONAL no lote — " +
+                    "backfill/kickoff dispensam SDD; quando presente, o apply materializa " +
+                    "AcceptanceCriterion via coerceAcTexts).",
+                ),
             }),
           )
           .describe(
@@ -533,6 +541,9 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
             ...(t.scope ? { scope: t.scope } : {}),
             ...(t.description ? { description: t.description } : {}),
             ...(t.userStoryId ? { userStoryId: t.userStoryId } : {}),
+            ...(t.acceptanceCriteria && t.acceptanceCriteria.length
+              ? { acceptanceCriteria: t.acceptanceCriteria }
+              : {}),
           } as Json,
           aiReasoning: reasoning,
           aiConfidence: aiConfidence ?? 0.8,

@@ -108,6 +108,7 @@
     "read_design_session_memory",
     "read_design_session_step",
     "read_prd",
+    "read_transcript_content",
     "update_proposed_action"
   ],
   "alpha": [

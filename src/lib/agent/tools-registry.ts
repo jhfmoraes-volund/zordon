@@ -416,7 +416,11 @@ const RAW: Record<string, RawDescriptor> = {
   list_prds: { surfaces: ["vitor", "vitoria:release_planning"], needs: [], bind: (ctx) => createListPrdsTool(ctx.projectId) },
 
   // ── Vitoria PM Review (bundle buildPMReviewTools; precisa pmReviewId) ───
-  read_transcript_content: { surfaces: ["vitoria:pm_review"], needs: ["pmReviewId"], bind: (ctx) => buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId).read_transcript_content },
+  // Compartilhada PM Review + Release Planning (D4 do runbook vitoria-agentic-planning).
+  // O execute lê ContextSource por transcriptRefId (arg) — NÃO usa pmReviewId/projectId,
+  // então a planning (sem pmReviewId) chama com "" sem problema. needs:[] (não há mais
+  // hard-require) — os testes C/D do harness provam que o bind buila sem pmReviewId.
+  read_transcript_content: { surfaces: ["vitoria:pm_review", "vitoria:release_planning"], needs: [], bind: (ctx) => buildPMReviewTools(ctx.pmReviewId ?? "", ctx.projectId).read_transcript_content },
   add_pm_review_note: { surfaces: ["vitoria:pm_review"], needs: ["pmReviewId"], bind: (ctx) => buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId).add_pm_review_note },
   update_pm_review_report: { surfaces: ["vitoria:pm_review"], needs: ["pmReviewId"], bind: (ctx) => buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId).update_pm_review_report },
   get_project_indicators: { surfaces: ["vitoria:pm_review"], needs: ["pmReviewId"], bind: (ctx) => buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId).get_project_indicators },
