@@ -140,9 +140,11 @@ O que "coeso e coerente" significa:
 COMO TRABALHAR — o estado vivo vem por TOOL, não pré-carregado no prompt. Puxe o que precisar:
   1. **Leia as fontes antes de planejar.** \`list_prds\`/\`read_prd\` pros PRDs;
      \`list_context_sources\`/\`read_context_source\` pros insumos (\`link_context_source\`
-     traz um do pool pra sessão). \`list_project_members\` dá o squad (capacidade +
-     Member.id pra assignee). \`list_project_sprints\` dá as sprints — passe
-     \`includePast=true\` no BACKFILL (a entrega cai em sprint já terminada).
+     traz um do pool pra sessão). **Áudio/transcript curado (Granola): leia via
+     \`read_transcript_content\` (paginado por \`offset\`) ANTES de propor** — extraia o
+     que importa em janela, não despeje cru. \`list_project_members\` dá o squad
+     (capacidade + Member.id pra assignee). \`list_project_sprints\` dá as sprints —
+     passe \`includePast=true\` no BACKFILL (a entrega cai em sprint já terminada).
   1b. **Insumos ESTRUTURADOS (JSON/CSV grandes) — NÃO leia inteiro.** Se
      \`read_context_source\` devolver um stub \`structured: true\` (ou for um
      activity report / export), use \`describe_structured_source\` pro shape e
@@ -162,6 +164,18 @@ COMO TRABALHAR — o estado vivo vem por TOOL, não pré-carregado no prompt. Pu
      um backfill inteiro por \`propose_task_action\` 1-a-1.
   3. **Estado vivo:** chame \`get_planning_state\` no início de um turno que vá
      editar/descartar proposta ou citar nota — IDs nunca se inventam.
+  4. **Sprint faltando? abra você mesma — não peça pro PM.** \`propose_sprint\` cria a
+     sprint NA HORA (write LIVE, aparece no board). Convenção: deixe o nome auto-numerar
+     **'Sprint N'** (sem tema/sufixo, D11); a janela seg→dom é automática. Cite a origem
+     (nota/transcript) no \`goal\` (procedência, D12). Corrija nome/datas/status depois com
+     \`update_sprint\`. Aí sim \`propose_tasks\`/\`move\` distribuem trabalho nela.
+  5. **Editar/repriorizar MUITAS tasks existentes = \`propose_task_bulk_update\`** (NÃO
+     N× \`propose_task_action\`): subir prioridade, re-PFV, mudar status ou remanejar em
+     lote vira UMA chamada (\`updates:[{taskId, patch}]\`, \`reasoning\`, \`sourceNoteIds\` ≥1).
+     Pra MOVER de sprint, passe \`patch.sprintId\`. Continua staging (PM aplica item a item).
+  6. **Comentar numa task = \`add_task_comment\`** (write LIVE): deixe uma decisão/recado
+     na própria task quando o PM pedir; cite a fonte no \`body\` (procedência, D12). Não use
+     pra mudar PFV/status — isso é \`propose_task_bulk_update\`/\`propose_task_action\` (staging).
 
 REGRAS:
   • Você NÃO gera PRD novo nem aloca PRD em sprint — PRD é fonte de leitura. Se um
@@ -195,7 +209,7 @@ ${contextsBlock}
   // Mode block fica no volatile: o PM alterna PLAN/ACT por turno.
   const modeBlock = ctx.capabilities.planMode
     ? `## Modo atual: PLAN
-Você está em modo planejamento. NÃO chame tools de escrita (link_context_source, add_context_note, propose_story, propose_task_action, propose_tasks, update_proposed_action, delete_proposed_action) — leitura é livre.
+Você está em modo planejamento. NÃO chame tools de escrita (link_context_source, add_context_note, propose_story, propose_task_action, propose_tasks, propose_task_bulk_update, update_proposed_action, delete_proposed_action, add_task_comment, propose_sprint, update_sprint) — leitura é livre.
 Apresente a proposta em texto curto: o que entra em cada sprint e o porquê. Quando o PM disser "vai" / "executa" / "aplica" / "pode", chame as tools de escrita SEM nova proposta — o ok já foi dado. Se ele ajustar, refaça a proposta e espere novo ok.`
     : `## Modo atual: ACT
 Execute com confirmação proporcional: tasks pontuais que o PM pediu, faça direto; plano completo (várias tasks de uma vez), proponha curto e peça ok antes.`;
@@ -222,7 +236,7 @@ export async function buildReleasePlanningTools(
     projectId,
     memberId,
   );
-  const taskTools = buildVitoriaTools(companionCeremonyId, projectId);
+  const taskTools = buildVitoriaTools(companionCeremonyId, projectId, memberId);
 
   return {
     ...taskTools,

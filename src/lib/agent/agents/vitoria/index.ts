@@ -252,7 +252,7 @@ export const vitoriaAgent: AgentDefinition = {
     const planningId = agentContext.planningId as string;
     const githubConnected = Boolean(agentContext.githubConnected);
 
-    const nativeTools = buildVitoriaTools(planningId, projectId);
+    const nativeTools = buildVitoriaTools(planningId, projectId, memberId);
 
     // Carrega tools do GitHub via Composio se o member tem conexão ativa.
     // Cap em 4 tools (VITORIA_GITHUB_TOOLS) pra Vitória ter precisão sem
