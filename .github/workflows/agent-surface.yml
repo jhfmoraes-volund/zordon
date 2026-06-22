@@ -1,0 +1,35 @@
+name: agent-surface
+
+# Enforcement do guard de capacidades dos agentes (runbook agent-capability-unification,
+# ACU-006). Sai do "advisory": trava em PR/push se a superfície anunciada regredir
+# ou driftar do daemon. Roda só os checks tsx-based (rede confiável em checkout
+# limpo) — NÃO roda `tsc --noEmit` do projeto inteiro (Next 16 gera tipos em
+# .next/types via `next build`; tsc puro num checkout sem .next falha por motivo
+# alheio à superfície). tsc é gate do sync-main local + workflow de build.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  agent-surface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      # (A) advertised surface + (B) bind-smoke + (C/D) needs↔bind
+      - run: pnpm exec tsx --tsconfig tsconfig.eval.json scripts/agent-surface.test.ts
+      # manifest gerado == registry
+      - run: pnpm exec tsx --tsconfig tsconfig.eval.json scripts/gen-agent-surface.ts --check docs/platform/agent-surface.manifest.json
+      # matriz gerada == registry
+      - run: pnpm exec tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --check docs/platform/agent-capability-matrix.md
+      # drift cross-repo: daemon == (monorepo − exclusions)
+      - run: pnpm exec tsx scripts/check-daemon-surface.ts

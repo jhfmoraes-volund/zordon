@@ -1,0 +1,4 @@
+{
+  "_doc": "Tools DELIBERADAMENTE só no monorepo (não espelhadas no zordon-daemon). O guard check-daemon-surface.ts ignora estes nomes na direção (monorepo − exclusions) ⊆ daemon. Vazio hoje: o daemon anuncia todos os 89 nomes. Adicione um nome AQUI (com motivo) só quando uma tool for intencionalmente monorepo-only — caso contrário, espelhe-a no daemon. Ver runbook agent-capability-unification §3.4.",
+  "monorepoOnly": []
+}

@@ -78,8 +78,20 @@ Antes de criar/registrar uma tool, responda:
 
 [structured-context-sources-runbook.md](../runbooks/structured-context-sources-runbook.md): insumos estruturados consultados via SQL (SENSE rico: `query_structured_source` lê a realidade → não alucina) + `propose_tasks` (ACT geral em lote, procedência por fonte). O eval real (`zordon-daemon/scripts/daemon/eval-backfill.ts`) rodou a Vitoria de verdade e cada amarra/relaxe (D12/D13/D14) saiu de um achado dela — não de precaução. É o template de "construir tool sob a doutrina + validar com eval".
 
+## 8. Como capacidades se organizam (descriptor, sharing, drift)
+
+§1–§7 cobrem *como fazer 1 tool*. Isto cobre *como as tools se organizam e fluem entre agentes/superfícies* (ver [agent-capability-unification-runbook.md](../runbooks/agent-capability-unification-runbook.md)).
+
+- **Cada tool é um `ToolDescriptor`** (`src/lib/agent/tool-descriptor.ts`): `{ name, surfaces[], class, needs[], optional?, bind }`. O `TOOL_REGISTRY` é `Record<string, ToolDescriptor>` — **SSOT do pertencimento**. Não há mais `Set` de nomes hand-maintained.
+- **Pertencimento vive em `surfaces`.** `getToolNamesForAgent(slug, surface)` **deriva** filtrando os descriptors por surface. **Compartilhar uma tool entre superfícies/agentes = adicionar 1 surface ao array** (ex.: as wiki tools são `surfaces: ["vitoria:wiki", "alpha"]` — uma definição, dois donos). Default deixou de ser silo.
+- **`require*` fica DENTRO do `bind`** (mensagens hand-tuned por surface). `needs` é **metadata declarativa** do que o bind hard-guarda (dá throw) — `sessionId`/`pmReviewId`/`planningId`/`routeProjectId` e OR-groups (`needs: [["routeProjectId","projectId"]]` = "qualquer um presente"). `projectId` NÃO é need (é invariante: `string` que o router sempre resolve). A consistência `needs ↔ bind` é provada por **teste**, não por substituir o guard.
+- **Validação (gates, não opcional):** `scripts/agent-surface.test.ts` (sob `--tsconfig tsconfig.eval.json`) trava regressão — **(A)** manifest de nomes == registry, **(B)** bind-smoke (todo bind devolve Tool com ctx cheio), **(C/D)** needs over/under-declared. O registry puxa `server-only` transitivamente → **todo teste/gerador que o importa roda com `--tsconfig tsconfig.eval.json`**.
+- **Espelho no daemon + guard de drift.** Tool de agente vive em DOIS repos (`zordon` executa, `zordon-daemon` anuncia schema-stub e proxia — [[project_daemon_tool_advertisement]]). O guard `scripts/check-daemon-surface.ts` (NAME-only) trava: `daemon == (monorepo − exclusions)` na união de nomes. Pega os dois lados do drift: daemon anuncia o que o app não executa **E** app tem tool que o daemon não anuncia (→ ININVOCÁVEL). Allowlist `docs/platform/agent-surface.daemon-exclusions.json` (vazia hoje) lista o que é deliberadamente monorepo-only.
+- **Doc gerado, nunca à mão:** `docs/platform/agent-capability-matrix.md` (matriz tool×surface) via `scripts/gen-capability-matrix.ts`; `agent-surface.manifest.json` via `scripts/gen-agent-surface.ts`.
+
 ## Referências
 
+- Organização de capacidades (descriptor/sharing/drift): [agent-capability-unification-runbook.md](../runbooks/agent-capability-unification-runbook.md)
 - Transporte/daemon: [agent-daemon-mcp-architecture.md](agent-daemon-mcp-architecture.md)
 - Como criar um agente (mecânico): [agent-creation-runbook.md](../agents/agent-creation-runbook.md)
 - Caso vivo + evals: [structured-context-sources-runbook.md](../runbooks/structured-context-sources-runbook.md)
