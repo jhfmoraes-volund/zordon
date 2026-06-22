@@ -196,4 +196,53 @@ export type ProjectDetail = {
   laborByMember: LaborByMember[];
   allocations: AllocationItem[];
   squadMemberIds: string[];
+  overheadCents: number; // custos indiretos por pessoa (premissas) no período
+  dre: Dre;
+  assumptions: Assumptions;
+  assumptionsIsOverride: boolean;
+};
+
+// ─── Premissas (pricing/DRE) + DRE (decisões: global+override, híbrido) ─────
+
+export type Assumptions = {
+  id: string;
+  projectId: string | null;
+  issPct: number;
+  pisPct: number;
+  cofinsPct: number;
+  sgaPct: number;
+  financialCostPct: number;
+  irpjCsllPct: number;
+  targetMarginPct: number;
+  hoursPerFte: number;
+  aiPerFteCents: number;
+  softwarePerHeadCents: number;
+  equipCapexCents: number;
+  equipLifeMonths: number;
+};
+
+/** Campos editáveis (sem id/projectId). */
+export type AssumptionsInput = Omit<Assumptions, "id" | "projectId">;
+
+export type AssumptionsResponse = {
+  assumptions: Assumptions;
+  isOverride: boolean;
+};
+
+/** Linhas da DRE (cascata da planilha P&L), em centavos. */
+export type Dre = {
+  faturamentoCents: number;
+  impostosCents: number;
+  receitaLiquidaCents: number;
+  laborCents: number;
+  overheadCents: number;
+  directExpenseCents: number;
+  custoDeliveryCents: number;
+  custoFinanceiroCents: number;
+  margemBrutaCents: number;
+  sgaCents: number;
+  lairCents: number;
+  irpjCsllCents: number;
+  lucroLiquidoCents: number;
+  margemLiquidaPct: number | null;
 };

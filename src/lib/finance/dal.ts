@@ -8,10 +8,13 @@ import type {
   Allocation,
   AllocationInput,
   AllocationItem,
+  Assumptions,
+  AssumptionsInput,
   Category,
   CategoryMonthRow,
   CategoryTotal,
   Entry,
+  Dre,
   EntryInput,
   EntryListItem,
   LaborByMember,
@@ -411,6 +414,150 @@ export async function deleteAllocation(id: string): Promise<void> {
   if (res.error) throw new Error(res.error.message);
 }
 
+// ─── Premissas + DRE (planilha Hitz) ────────────────────────────────────────
+
+function mapAssumptions(r: Record<string, unknown>): Assumptions {
+  return {
+    id: String(r.id),
+    projectId: (r.project_id as string | null) ?? null,
+    issPct: Number(r.iss_pct),
+    pisPct: Number(r.pis_pct),
+    cofinsPct: Number(r.cofins_pct),
+    sgaPct: Number(r.sga_pct),
+    financialCostPct: Number(r.financial_cost_pct),
+    irpjCsllPct: Number(r.irpj_csll_pct),
+    targetMarginPct: Number(r.target_margin_pct),
+    hoursPerFte: Number(r.hours_per_fte),
+    aiPerFteCents: Number(r.ai_per_fte_cents),
+    softwarePerHeadCents: Number(r.software_per_head_cents),
+    equipCapexCents: Number(r.equip_capex_cents),
+    equipLifeMonths: Number(r.equip_life_months),
+  };
+}
+
+function toAssumptionsRow(input: AssumptionsInput) {
+  return {
+    iss_pct: input.issPct,
+    pis_pct: input.pisPct,
+    cofins_pct: input.cofinsPct,
+    sga_pct: input.sgaPct,
+    financial_cost_pct: input.financialCostPct,
+    irpj_csll_pct: input.irpjCsllPct,
+    target_margin_pct: input.targetMarginPct,
+    hours_per_fte: input.hoursPerFte,
+    ai_per_fte_cents: input.aiPerFteCents,
+    software_per_head_cents: input.softwarePerHeadCents,
+    equip_capex_cents: input.equipCapexCents,
+    equip_life_months: input.equipLifeMonths,
+  };
+}
+
+export async function getGlobalAssumptions(): Promise<Assumptions> {
+  const { fin } = await finance();
+  const res = await fin.from("assumptions").select("*").is("project_id", null).maybeSingle();
+  if (res.error) throw new Error(res.error.message);
+  if (!res.data) throw new Error("Premissas globais não encontradas (seed ausente)");
+  return mapAssumptions(res.data);
+}
+
+export async function getEffectiveAssumptions(
+  projectId?: string,
+): Promise<{ assumptions: Assumptions; isOverride: boolean }> {
+  const { fin } = await finance();
+  if (projectId) {
+    const res = await fin.from("assumptions").select("*").eq("project_id", projectId).maybeSingle();
+    if (res.error) throw new Error(res.error.message);
+    if (res.data) return { assumptions: mapAssumptions(res.data), isOverride: true };
+  }
+  return { assumptions: await getGlobalAssumptions(), isOverride: false };
+}
+
+export async function upsertAssumptions(
+  projectId: string | null,
+  input: AssumptionsInput,
+): Promise<Assumptions> {
+  const { fin } = await finance();
+  const lookup = projectId
+    ? await fin.from("assumptions").select("id").eq("project_id", projectId).maybeSingle()
+    : await fin.from("assumptions").select("id").is("project_id", null).maybeSingle();
+  const row = toAssumptionsRow(input);
+  if (lookup.data) {
+    const res = await fin
+      .from("assumptions")
+      .update({ ...row, updated_at: new Date().toISOString() })
+      .eq("id", (lookup.data as { id: string }).id)
+      .select("*")
+      .single();
+    if (res.error) throw new Error(res.error.message);
+    return mapAssumptions(res.data);
+  }
+  const res = await fin
+    .from("assumptions")
+    .insert({ ...row, project_id: projectId, created_by: await currentMemberId() })
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return mapAssumptions(res.data);
+}
+
+export async function deleteAssumptionsOverride(projectId: string): Promise<void> {
+  const { fin } = await finance();
+  const res = await fin.from("assumptions").delete().eq("project_id", projectId);
+  if (res.error) throw new Error(res.error.message);
+}
+
+/** Lista de meses (YYYY-MM-01) entre from e to (inclusive), ambos YYYY-MM. */
+function monthList(fromMonth: string, toMonth: string): string[] {
+  const [fy, fm] = fromMonth.split("-").map(Number);
+  const [ty, tm] = toMonth.split("-").map(Number);
+  const out: string[] = [];
+  let y = fy;
+  let m = fm;
+  while (y < ty || (y === ty && m <= tm)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}-01`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
+
+/** DRE no padrão da planilha P&L (faturamento → impostos → … → lucro líquido). */
+export function computeDre(
+  input: { revenueCents: number; directExpenseCents: number; laborCents: number; overheadCents: number; months: number },
+  a: Assumptions,
+): Dre {
+  const faturamentoCents = input.revenueCents;
+  const impostosCents = Math.round(faturamentoCents * (a.issPct + a.pisPct + a.cofinsPct));
+  const receitaLiquidaCents = faturamentoCents - impostosCents;
+  const custoDeliveryCents = input.laborCents + input.overheadCents + input.directExpenseCents;
+  const monthsN = Math.max(input.months, 1);
+  const custoFinanceiroCents = Math.round((custoDeliveryCents / monthsN) * a.financialCostPct);
+  const margemBrutaCents = receitaLiquidaCents - custoDeliveryCents - custoFinanceiroCents;
+  const sgaCents = Math.round(faturamentoCents * a.sgaPct);
+  const lairCents = margemBrutaCents - sgaCents;
+  const irpjCsllCents = lairCents > 0 ? Math.round(lairCents * a.irpjCsllPct) : 0;
+  const lucroLiquidoCents = lairCents - irpjCsllCents;
+  return {
+    faturamentoCents,
+    impostosCents,
+    receitaLiquidaCents,
+    laborCents: input.laborCents,
+    overheadCents: input.overheadCents,
+    directExpenseCents: input.directExpenseCents,
+    custoDeliveryCents,
+    custoFinanceiroCents,
+    margemBrutaCents,
+    sgaCents,
+    lairCents,
+    irpjCsllCents,
+    lucroLiquidoCents,
+    margemLiquidaPct: faturamentoCents > 0 ? lucroLiquidoCents / faturamentoCents : null,
+  };
+}
+
 // ─── Detalhe por projeto (drill de análise) ─────────────────────────────────
 
 async function squadMemberIds(
@@ -432,7 +579,7 @@ export async function getProjectDetail(
   const { sb, fin } = await finance();
   const { from, to } = monthBounds(fromMonth, toMonth);
 
-  const [monthsRes, laborRes, nameRes, allocations, squad] = await Promise.all([
+  const [monthsRes, laborRes, nameRes, allocations, squad, eff] = await Promise.all([
     fin
       .from("v_project_month")
       .select("*")
@@ -449,6 +596,7 @@ export async function getProjectDetail(
     sb.from("Project").select("name").eq("id", projectId).maybeSingle(),
     listAllocations({ projectId }),
     squadMemberIds(sb, projectId),
+    getEffectiveAssumptions(projectId),
   ]);
   if (monthsRes.error) throw new Error(monthsRes.error.message);
   if (laborRes.error) throw new Error(laborRes.error.message);
@@ -485,6 +633,38 @@ export async function getProjectDetail(
     }))
     .sort((a, b) => b.laborCents - a.laborCents);
 
+  // Overhead por pessoa (premissas × alocação): IA/FTE + software/cabeça +
+  // equipamento amortizado, mês a mês (decisão híbrida — soma com despesa real).
+  const a = eff.assumptions;
+  let overheadCents = 0;
+  for (const mf of monthList(fromMonth, toMonth)) {
+    const mk = mf.slice(0, 7);
+    const active = allocations.filter(
+      (al) =>
+        al.effective_from.slice(0, 7) <= mk &&
+        (al.effective_to === null || al.effective_to.slice(0, 7) >= mk),
+    );
+    if (active.length === 0) continue;
+    const fte = active.reduce((s, al) => s + Number(al.percent) / 100, 0);
+    const heads = new Set(active.map((al) => al.member_id)).size;
+    overheadCents += Math.round(
+      fte * a.aiPerFteCents +
+        heads * a.softwarePerHeadCents +
+        heads * (a.equipCapexCents / a.equipLifeMonths),
+    );
+  }
+
+  const dre = computeDre(
+    {
+      revenueCents: totals.revenueCents,
+      directExpenseCents: totals.expenseCents,
+      laborCents: totals.laborCents,
+      overheadCents,
+      months: months.length,
+    },
+    a,
+  );
+
   return {
     projectId,
     name: (nameRes.data?.name as string) ?? projectId,
@@ -493,5 +673,9 @@ export async function getProjectDetail(
     laborByMember,
     allocations,
     squadMemberIds: squad,
+    overheadCents,
+    dre,
+    assumptions: a,
+    assumptionsIsOverride: eff.isOverride,
   };
 }

@@ -16,7 +16,7 @@ import {
   Tooltip,
   XAxis,
 } from "recharts";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Pencil, Plus, SlidersHorizontal, Trash2, Users } from "lucide-react";
 
 import {
   ResponsiveSheet,
@@ -42,6 +42,7 @@ import { fmtDate } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import { positionLabel } from "@/lib/roles";
 import type { AllocationItem, MemberRef, ProjectDetail } from "@/lib/finance/types";
+import { FinanceAssumptionsForm } from "./finance-assumptions-form";
 
 function monthLabel(iso: string): string {
   return new Date(iso)
@@ -76,6 +77,7 @@ export function FinanceProjectSheet({
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
 
   const reload = useCallback(async () => {
     const res = await fetch(`/api/finance/projects/${projectId}?from=${year}-01&to=${year}-12`);
@@ -118,10 +120,6 @@ export function FinanceProjectSheet({
     equipe: m.labor_cents / 100,
     margem: m.margin_team_cents / 100,
   }));
-
-  const t = detail?.totals;
-  const teamPct = t && t.revenueCents > 0 ? t.marginTeamCents / t.revenueCents : null;
-  const directPct = t && t.revenueCents > 0 ? t.marginDirectCents / t.revenueCents : null;
 
   function openAdd() {
     setForm({ id: null, memberId: "", percent: "", from: firstOfMonthISO(), to: "" });
@@ -198,22 +196,41 @@ export function FinanceProjectSheet({
             </p>
           ) : (
             <div className="space-y-4">
-              {/* KPIs */}
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-                <Stat label="Receita" value={brlFromCents(t!.revenueCents)} tone="income" />
-                <Stat label="Despesa" value={brlFromCents(t!.expenseCents)} tone="expense" />
-                <Stat label="Equipe" value={brlFromCents(t!.laborCents)} tone="expense" />
-                <Stat
-                  label="Margem direta"
-                  value={brlFromCents(t!.marginDirectCents)}
-                  sub={pct(directPct)}
-                  tone={t!.marginDirectCents >= 0 ? "income" : "expense"}
-                />
-                <Stat
-                  label="Margem equipe"
-                  value={brlFromCents(t!.marginTeamCents)}
-                  sub={pct(teamPct)}
-                  tone={t!.marginTeamCents >= 0 ? "income" : "expense"}
+              {/* Premissas em uso */}
+              <div className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+                <span>
+                  premissas:{" "}
+                  <span className="text-foreground">
+                    {detail.assumptionsIsOverride ? "próprias do projeto" : "globais"}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAssumptionsOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
+                >
+                  <SlidersHorizontal className="size-3" /> ajustar
+                </button>
+              </div>
+
+              {/* DRE — folha de cálculo da margem (padrão planilha P&L) */}
+              <div className="surface overflow-hidden rounded-md border">
+                <DreLine label="Faturamento" cents={detail.dre.faturamentoCents} strong />
+                <DreLine label="(−) Impostos (ISS/PIS/COFINS)" cents={-detail.dre.impostosCents} deduction />
+                <DreLine label="= Receita líquida" cents={detail.dre.receitaLiquidaCents} subtotal />
+                <DreLine label="(−) Equipe" cents={-detail.dre.laborCents} deduction />
+                <DreLine label="(−) Overhead por pessoa" cents={-detail.dre.overheadCents} deduction />
+                <DreLine label="(−) Despesa direta" cents={-detail.dre.directExpenseCents} deduction />
+                <DreLine label="(−) Custo financeiro" cents={-detail.dre.custoFinanceiroCents} deduction />
+                <DreLine label="= Margem bruta" cents={detail.dre.margemBrutaCents} subtotal />
+                <DreLine label="(−) SG&A" cents={-detail.dre.sgaCents} deduction />
+                <DreLine label="= LAIR" cents={detail.dre.lairCents} subtotal />
+                <DreLine label="(−) IRPJ/CSLL" cents={-detail.dre.irpjCsllCents} deduction />
+                <DreLine
+                  label="= Lucro líquido"
+                  cents={detail.dre.lucroLiquidoCents}
+                  strong
+                  sub={`${pct(detail.dre.margemLiquidaPct)} da receita`}
                 />
               </div>
 
@@ -384,33 +401,61 @@ export function FinanceProjectSheet({
       </ResponsiveSheetContent>
 
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+
+      {assumptionsOpen && (
+        <FinanceAssumptionsForm
+          open
+          onOpenChange={(o) => {
+            if (!o) setAssumptionsOpen(false);
+          }}
+          projectId={projectId}
+          scopeLabel="Premissas do projeto"
+          onSaved={() => {
+            void reload();
+            onChanged();
+          }}
+        />
+      )}
     </ResponsiveSheet>
   );
 }
 
-const toneClass: Record<"income" | "expense", string> = {
-  income: "text-emerald-600 dark:text-emerald-400",
-  expense: "text-rose-600 dark:text-rose-400",
-};
-
-function Stat({
+function DreLine({
   label,
-  value,
+  cents,
+  strong,
+  subtotal,
+  deduction,
   sub,
-  tone,
 }: {
   label: string;
-  value: string;
+  cents: number;
+  strong?: boolean;
+  subtotal?: boolean;
+  deduction?: boolean;
   sub?: string;
-  tone: "income" | "expense";
 }) {
   return (
-    <div className="rounded-md border p-2.5">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={cn("mt-1 text-base font-bold tabular-nums tracking-tight", toneClass[tone])}>
-        {value}
-      </p>
-      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 px-3 py-1.5 text-sm",
+        (strong || subtotal) && "border-t bg-muted/20",
+        strong && "font-semibold",
+        subtotal && "font-medium",
+      )}
+    >
+      <span className={cn(deduction && "text-muted-foreground")}>{label}</span>
+      <span className="flex items-center gap-2">
+        {sub && <span className="text-[11px] font-normal text-muted-foreground">{sub}</span>}
+        <span
+          className={cn(
+            "font-mono tabular-nums",
+            deduction || cents < 0 ? "text-rose-600 dark:text-rose-400" : "text-foreground",
+          )}
+        >
+          {brlFromCents(cents)}
+        </span>
+      </span>
     </div>
   );
 }

@@ -20,7 +20,7 @@ import {
   Tooltip,
   XAxis,
 } from "recharts";
-import { Banknote, Receipt, TrendingUp, Users, Wallet } from "lucide-react";
+import { Banknote, Receipt, SlidersHorizontal, TrendingUp, Users, Wallet } from "lucide-react";
 
 import { AppFileList, AppFileRow, AppFileBadge } from "@/components/apps/app-file-list";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ import type {
   ProjectsResponse,
 } from "@/lib/finance/types";
 import { cn } from "@/lib/utils";
+import { FinanceAssumptionsForm } from "./finance-assumptions-form";
 import { FinanceCategorySheet } from "./finance-category-sheet";
 import { FinanceEntryForm } from "./finance-entry-form";
 import { FinanceProjectSheet } from "./finance-project-sheet";
@@ -101,6 +102,7 @@ export function FinanceApp() {
   const [drill, setDrill] = useState<CategoryTotal | null>(null);
   const [projectDrill, setProjectDrill] = useState<ProjectFinanceRow | null>(null);
   const [appForm, setAppForm] = useState<{ kind: FinanceKind; key: number } | null>(null);
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -200,6 +202,14 @@ export function FinanceApp() {
             onClick={() => setAppForm({ kind: "expense", key: Date.now() })}
           >
             <Receipt className="size-3.5" /> Despesa
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setAssumptionsOpen(true)}
+            title="Premissas: impostos, SG&A, custos por pessoa"
+          >
+            <SlidersHorizontal className="size-3.5" /> Premissas
           </Button>
         </div>
       </div>
@@ -405,6 +415,17 @@ export function FinanceApp() {
           year={year}
           members={members}
           onChanged={reload}
+        />
+      )}
+      {assumptionsOpen && (
+        <FinanceAssumptionsForm
+          open
+          onOpenChange={(o) => {
+            if (!o) setAssumptionsOpen(false);
+          }}
+          projectId={null}
+          scopeLabel="Premissas globais"
+          onSaved={reload}
         />
       )}
     </div>
