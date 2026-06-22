@@ -126,6 +126,14 @@ export type EntryInput = {
 export type CategoriesResponse = { categories: Category[] };
 export type EntriesResponse = { entries: EntryListItem[] };
 
+/** Membro pros selects/roster do app Finanças. */
+export type MemberRef = {
+  id: string;
+  name: string;
+  position: string | null;
+  isExternal: boolean;
+};
+
 // ─── Alocação financeira de mão-de-obra (D12) ───────────────────────────────
 
 export type Allocation = {

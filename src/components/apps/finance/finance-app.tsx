@@ -29,6 +29,7 @@ import type {
   Category,
   CategoryTotal,
   FinanceKind,
+  MemberRef,
   OrgMonthRow,
   OverviewResponse,
   ProjectFinanceRow,
@@ -95,7 +96,7 @@ export function FinanceApp() {
   // Insumos pros forms/drill (carregados uma vez).
   const [categories, setCategories] = useState<Category[]>([]);
   const [projects, setProjects] = useState<NamedRef[]>([]);
-  const [members, setMembers] = useState<NamedRef[]>([]);
+  const [members, setMembers] = useState<MemberRef[]>([]);
 
   const [drill, setDrill] = useState<CategoryTotal | null>(null);
   const [projectDrill, setProjectDrill] = useState<ProjectFinanceRow | null>(null);
@@ -129,7 +130,16 @@ export function FinanceApp() {
       if (Array.isArray(projs))
         setProjects(projs.map((p: NamedRef) => ({ id: p.id, name: p.name })));
       if (Array.isArray(mems))
-        setMembers(mems.map((m: NamedRef) => ({ id: m.id, name: m.name })));
+        setMembers(
+          mems.map(
+            (m: { id: string; name: string; position?: string | null; isExternal?: boolean }) => ({
+              id: m.id,
+              name: m.name,
+              position: m.position ?? null,
+              isExternal: !!m.isExternal,
+            }),
+          ),
+        );
     })();
     return () => {
       cancelled = true;
@@ -242,32 +252,45 @@ export function FinanceApp() {
         )}
       </div>
 
-      {/* ─── Categorias (clicar → drill) ─────────────────────────────── */}
+      {/* ─── Categorias (clicar → drill; lista completa, mesmo zeradas) ── */}
       <div>
         <p className="px-1 pb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Categorias · {data?.categories.length ?? 0}
+          Categorias · {categories.length}
         </p>
-        {data && data.categories.length > 0 ? (
+        {categories.length > 0 ? (
           <AppFileList>
-            {data.categories.map((c) => (
-              <AppFileRow
-                key={c.categoryId}
-                icon={c.kind === "revenue" ? Banknote : Receipt}
-                tileClassName={
-                  c.kind === "revenue"
-                    ? "bg-emerald-500/15 text-emerald-500"
-                    : "bg-muted text-muted-foreground"
-                }
-                title={c.name}
-                subtitle={c.kind === "revenue" ? "receita" : "despesa"}
-                meta={brlFromCents(c.amountCents)}
-                onOpen={() => setDrill(c)}
-              />
-            ))}
+            {categories
+              .filter((c) => !c.archived)
+              .map((cat) => {
+                const amountCents =
+                  data?.categories.find((t) => t.categoryId === cat.id)?.amountCents ?? 0;
+                const total: CategoryTotal = {
+                  categoryId: cat.id,
+                  slug: cat.slug,
+                  kind: cat.kind,
+                  name: cat.name,
+                  amountCents,
+                };
+                return (
+                  <AppFileRow
+                    key={cat.id}
+                    icon={cat.kind === "revenue" ? Banknote : Receipt}
+                    tileClassName={
+                      cat.kind === "revenue"
+                        ? "bg-emerald-500/15 text-emerald-500"
+                        : "bg-muted text-muted-foreground"
+                    }
+                    title={cat.name}
+                    subtitle={cat.feeds_labor ? "salários · por membro" : cat.kind === "revenue" ? "receita" : "despesa"}
+                    meta={brlFromCents(amountCents)}
+                    onOpen={() => setDrill(total)}
+                  />
+                );
+              })}
           </AppFileList>
         ) : (
           <div className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">
-            {loading ? "carregando…" : "nenhum lançamento — use + Receita / + Despesa"}
+            {loading ? "carregando…" : "categorias indisponíveis"}
           </div>
         )}
       </div>

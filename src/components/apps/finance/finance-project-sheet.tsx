@@ -40,9 +40,8 @@ import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { brlFromCents, pct } from "@/lib/format-currency";
 import { fmtDate } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import type { AllocationItem, ProjectDetail } from "@/lib/finance/types";
-
-type NamedRef = { id: string; name: string };
+import { positionLabel } from "@/lib/roles";
+import type { AllocationItem, MemberRef, ProjectDetail } from "@/lib/finance/types";
 
 function monthLabel(iso: string): string {
   return new Date(iso)
@@ -69,7 +68,7 @@ export function FinanceProjectSheet({
   projectId: string;
   projectName: string;
   year: number;
-  members: NamedRef[];
+  members: MemberRef[];
   onChanged: () => void;
 }) {
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
@@ -95,14 +94,16 @@ export function FinanceProjectSheet({
     };
   }, [reload]);
 
-  // Membros ordenados: squad do projeto primeiro.
+  // Membros internos ordenados: squad do projeto primeiro.
   const memberOptions = useMemo(() => {
     const squad = new Set(detail?.squadMemberIds ?? []);
-    return [...members].sort((a, b) => {
-      const sa = squad.has(a.id) ? 0 : 1;
-      const sb = squad.has(b.id) ? 0 : 1;
-      return sa - sb || a.name.localeCompare(b.name);
-    });
+    return members
+      .filter((m) => !m.isExternal)
+      .sort((a, b) => {
+        const sa = squad.has(a.id) ? 0 : 1;
+        const sb = squad.has(b.id) ? 0 : 1;
+        return sa - sb || a.name.localeCompare(b.name);
+      });
   }, [members, detail?.squadMemberIds]);
 
   const laborMap = useMemo(
@@ -268,12 +269,17 @@ export function FinanceProjectSheet({
                               onValueChange={(v) => setForm((f) => (f ? { ...f, memberId: v ?? "" } : f))}
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="Selecione…" />
+                                <SelectValue>
+                                  {(v: string | null) =>
+                                    memberOptions.find((m) => m.id === v)?.name ?? "Selecione…"
+                                  }
+                                </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 {memberOptions.map((m) => (
                                   <SelectItem key={m.id} value={m.id}>
                                     {m.name}
+                                    {m.position ? ` · ${positionLabel(m.position)}` : ""}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

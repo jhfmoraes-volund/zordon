@@ -28,9 +28,11 @@ import type {
   CategoryTotal,
   EntriesResponse,
   EntryListItem,
+  MemberRef,
   Recurrence,
 } from "@/lib/finance/types";
 import { FinanceEntryForm } from "./finance-entry-form";
+import { FinanceSalaryRoster } from "./finance-salary-roster";
 
 type NamedRef = { id: string; name: string };
 
@@ -60,7 +62,7 @@ export function FinanceCategorySheet({
   category: CategoryTotal;
   categories: Category[];
   projects: NamedRef[];
-  members: NamedRef[];
+  members: MemberRef[];
   onChanged: () => void;
 }) {
   const { items, setCommitted, mutate } = useOptimisticCollection<EntryListItem>([]);
@@ -113,6 +115,14 @@ export function FinanceCategorySheet({
         </ResponsiveSheetHeader>
 
         <ResponsiveSheetBody>
+          {category.slug === "salarios" ? (
+            <FinanceSalaryRoster
+              categoryId={category.categoryId}
+              members={members}
+              onChanged={onChanged}
+            />
+          ) : (
+            <>
           <div className="mb-3 flex items-center justify-between gap-2">
             <p className="font-mono text-xs text-muted-foreground">
               <span className="text-foreground">{brlFromCents(category.amountCents)}</span> no ano ·{" "}
@@ -175,6 +185,8 @@ export function FinanceCategorySheet({
                 />
               ))}
             </AppFileList>
+          )}
+            </>
           )}
         </ResponsiveSheetBody>
       </ResponsiveSheetContent>

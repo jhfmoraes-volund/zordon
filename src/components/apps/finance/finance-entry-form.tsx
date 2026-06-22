@@ -2,11 +2,9 @@
 
 /**
  * Form de lançamento financeiro (criar/editar) — ResponsiveSheet + Field/FormBody.
- * Os campos seguem a categoria: recorrência (vigência) vs pontual (data), membro
- * obrigatório quando requires_member (Salários). Valores em R$ → centavos.
- *
- * Estado inicial vem de lazy useState (derivado das props); o reset entre
- * aberturas é feito pelo PAI via `key` (remonta) — evita setState em effect.
+ * Os campos seguem a categoria: salário (feeds_labor) é mensal + por membro
+ * interno, sem fornecedor; ferramentas/extras têm fornecedor e recorrência
+ * livre. Valores em R$ → centavos. Reset entre aberturas via `key` no pai.
  */
 
 import { useMemo, useState } from "react";
@@ -30,12 +28,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { positionLabel } from "@/lib/roles";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import type {
   Category,
   EntryInput,
   EntryListItem,
   FinanceKind,
+  MemberRef,
   Recurrence,
 } from "@/lib/finance/types";
 
@@ -103,11 +103,10 @@ export function FinanceEntryForm({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  /** Tipo no modo criar (filtra categorias). Em edição, vem do entry. */
   kind: FinanceKind;
   categories: Category[];
   projects: NamedRef[];
-  members: NamedRef[];
+  members: MemberRef[];
   entry?: EntryListItem | null;
   presetCategoryId?: string | null;
   onSaved: () => void;
@@ -117,6 +116,8 @@ export function FinanceEntryForm({
     () => categories.filter((c) => c.kind === effectiveKind && !c.archived),
     [categories, effectiveKind],
   );
+  // Salário é despesa de pessoa interna — esconde externos no select.
+  const memberOptions = useMemo(() => members.filter((m) => !m.isExternal), [members]);
 
   const [init] = useState(() => deriveInitial(entry, categoryOptions, presetCategoryId));
   const [categoryId, setCategoryId] = useState(init.categoryId);
@@ -133,7 +134,8 @@ export function FinanceEntryForm({
 
   const selectedCat = categories.find((c) => c.id === categoryId);
   const requiresMember = selectedCat?.requires_member ?? false;
-  const recurring = recurrence !== "once";
+  const feedsLabor = selectedCat?.feeds_labor ?? false; // salário: mensal, sem fornecedor
+  const recurring = feedsLabor || recurrence !== "once";
 
   const amountCents = Math.round(parseFloat(amountReais.replace(",", ".")) * 100);
   const amountValid = Number.isFinite(amountCents) && amountCents > 0;
@@ -150,16 +152,17 @@ export function FinanceEntryForm({
 
   async function handleSave() {
     if (!canSave) return;
+    const isRecurring = feedsLabor || recurrence !== "once";
     const payload: EntryInput = {
       categoryId,
       projectId: projectId === NO_PROJECT ? null : projectId,
       memberId: requiresMember ? memberId : null,
       amountCents,
-      recurrence,
-      occurredOn: recurring ? null : occurredOn,
-      effectiveFrom: recurring ? effectiveFrom : null,
-      effectiveTo: recurring && effectiveTo ? effectiveTo : null,
-      vendor: vendor.trim() || null,
+      recurrence: feedsLabor ? "monthly" : recurrence,
+      occurredOn: isRecurring ? null : occurredOn,
+      effectiveFrom: isRecurring ? effectiveFrom : null,
+      effectiveTo: isRecurring && effectiveTo ? effectiveTo : null,
+      vendor: feedsLabor ? null : vendor.trim() || null,
       description: description.trim() || null,
     };
     setSaving(true);
@@ -183,13 +186,21 @@ export function FinanceEntryForm({
     }
   }
 
+  const memberById = (v: string | null) => members.find((m) => m.id === v) ?? null;
+
   const projectField = (
     <Field name="project">
       <Field.Label>Projeto</Field.Label>
       <Field.Control>
         <Select value={projectId} onValueChange={(v) => setProjectId(v ?? NO_PROJECT)}>
           <SelectTrigger>
-            <SelectValue />
+            <SelectValue>
+              {(v: string | null) =>
+                v === NO_PROJECT || !v
+                  ? "Operação (sem projeto)"
+                  : (projects.find((p) => p.id === v)?.name ?? "…")
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={NO_PROJECT}>Operação (sem projeto)</SelectItem>
@@ -210,12 +221,15 @@ export function FinanceEntryForm({
       <Field.Control>
         <Select value={memberId} onValueChange={(v) => setMemberId(v ?? "")}>
           <SelectTrigger>
-            <SelectValue placeholder="Selecione…" />
+            <SelectValue>
+              {(v: string | null) => memberById(v)?.name ?? "Selecione…"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {members.map((m) => (
+            {memberOptions.map((m) => (
               <SelectItem key={m.id} value={m.id}>
                 {m.name}
+                {m.position ? ` · ${positionLabel(m.position)}` : ""}
               </SelectItem>
             ))}
           </SelectContent>
@@ -245,7 +259,11 @@ export function FinanceEntryForm({
                 <Field.Control>
                   <Select value={categoryId} onValueChange={(v) => v && onCategoryChange(v)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione…" />
+                      <SelectValue>
+                        {(v: string | null) =>
+                          categoryOptions.find((c) => c.id === v)?.name ?? "Selecione…"
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {categoryOptions.map((c) => (
@@ -279,83 +297,113 @@ export function FinanceEntryForm({
               </Field>
             </Field.Row>
 
-            <Field.Row cols={recurring ? 3 : 2}>
-              <Field name="recurrence" required>
-                <Field.Label>Recorrência</Field.Label>
-                <Field.Control>
-                  <Select value={recurrence} onValueChange={(v) => setRecurrence(v as Recurrence)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(["once", "monthly", "annual"] as Recurrence[]).map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {RECURRENCE_LABEL[r]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field.Control>
-              </Field>
-
-              {recurring ? (
-                <>
-                  <Field name="from" required>
-                    <Field.Label>Início</Field.Label>
-                    <Field.Control>
-                      <Input
-                        type="date"
-                        value={effectiveFrom}
-                        onChange={(e) => setEffectiveFrom(e.target.value)}
-                      />
-                    </Field.Control>
-                  </Field>
-                  <Field name="to">
-                    <Field.Label>Fim (opcional)</Field.Label>
-                    <Field.Control>
-                      <Input
-                        type="date"
-                        value={effectiveTo}
-                        onChange={(e) => setEffectiveTo(e.target.value)}
-                      />
-                    </Field.Control>
-                  </Field>
-                </>
-              ) : (
-                <Field name="date" required>
-                  <Field.Label>Data</Field.Label>
+            {feedsLabor ? (
+              // Salário: mensal por definição — sem seletor de recorrência.
+              <Field.Row cols={2}>
+                <Field name="from" required>
+                  <Field.Label>Início</Field.Label>
                   <Field.Control>
                     <Input
                       type="date"
-                      value={occurredOn}
-                      onChange={(e) => setOccurredOn(e.target.value)}
+                      value={effectiveFrom}
+                      onChange={(e) => setEffectiveFrom(e.target.value)}
                     />
                   </Field.Control>
                 </Field>
-              )}
-            </Field.Row>
+                <Field name="to">
+                  <Field.Label>Fim (opcional)</Field.Label>
+                  <Field.Control>
+                    <Input
+                      type="date"
+                      value={effectiveTo}
+                      onChange={(e) => setEffectiveTo(e.target.value)}
+                    />
+                  </Field.Control>
+                </Field>
+              </Field.Row>
+            ) : (
+              <Field.Row cols={recurring ? 3 : 2}>
+                <Field name="recurrence" required>
+                  <Field.Label>Recorrência</Field.Label>
+                  <Field.Control>
+                    <Select value={recurrence} onValueChange={(v) => v && setRecurrence(v as Recurrence)}>
+                      <SelectTrigger>
+                        <SelectValue>
+                          {(v: string | null) => (v ? RECURRENCE_LABEL[v as Recurrence] : "")}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(["once", "monthly", "annual"] as Recurrence[]).map((r) => (
+                          <SelectItem key={r} value={r}>
+                            {RECURRENCE_LABEL[r]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field.Control>
+                </Field>
+
+                {recurring ? (
+                  <>
+                    <Field name="from" required>
+                      <Field.Label>Início</Field.Label>
+                      <Field.Control>
+                        <Input
+                          type="date"
+                          value={effectiveFrom}
+                          onChange={(e) => setEffectiveFrom(e.target.value)}
+                        />
+                      </Field.Control>
+                    </Field>
+                    <Field name="to">
+                      <Field.Label>Fim (opcional)</Field.Label>
+                      <Field.Control>
+                        <Input
+                          type="date"
+                          value={effectiveTo}
+                          onChange={(e) => setEffectiveTo(e.target.value)}
+                        />
+                      </Field.Control>
+                    </Field>
+                  </>
+                ) : (
+                  <Field name="date" required>
+                    <Field.Label>Data</Field.Label>
+                    <Field.Control>
+                      <Input
+                        type="date"
+                        value={occurredOn}
+                        onChange={(e) => setOccurredOn(e.target.value)}
+                      />
+                    </Field.Control>
+                  </Field>
+                )}
+              </Field.Row>
+            )}
 
             {requiresMember ? (
               <Field.Row cols={2}>
-                {projectField}
                 {memberField}
+                {projectField}
               </Field.Row>
             ) : (
               projectField
             )}
 
-            <Field name="vendor">
-              <Field.Label>{effectiveKind === "revenue" ? "Fonte" : "Fornecedor"}</Field.Label>
-              <Field.Control>
-                <Input
-                  value={vendor}
-                  onChange={(e) => setVendor(e.target.value)}
-                  placeholder={
-                    effectiveKind === "revenue" ? "Ex: contrato, hora extra" : "Ex: Figma, Vercel"
-                  }
-                />
-              </Field.Control>
-            </Field>
+            {!feedsLabor && (
+              <Field name="vendor">
+                <Field.Label>{effectiveKind === "revenue" ? "Fonte" : "Fornecedor"}</Field.Label>
+                <Field.Control>
+                  <Input
+                    value={vendor}
+                    onChange={(e) => setVendor(e.target.value)}
+                    placeholder={
+                      effectiveKind === "revenue" ? "Ex: contrato, hora extra" : "Ex: Figma, Vercel"
+                    }
+                  />
+                </Field.Control>
+              </Field>
+            )}
 
             <Field name="description">
               <Field.Label>Descrição</Field.Label>
