@@ -196,17 +196,18 @@ type BindFn = (ctx: ToolContext) => Tool;
 type VitoriaToolName = keyof ReturnType<typeof buildVitoriaTools>;
 
 /** Vitoria reads/planning-project: planningId OPCIONAL (passa "" se ausente —
- *  PM Review chama os reads sem planningId). projectId é invariante (não é need). */
+ *  PM Review chama os reads sem planningId). projectId é invariante (não é need).
+ *  memberId vai pro closure (autor de add_task_comment, D7); null quando ausente. */
 const vitoriaBind =
   (name: VitoriaToolName): BindFn =>
   (ctx) =>
-    buildVitoriaTools(ctx.planningId ?? "", ctx.projectId)[name] as Tool;
+    buildVitoriaTools(ctx.planningId ?? "", ctx.projectId, ctx.memberId ?? null)[name] as Tool;
 
 /** Vitoria ceremony: planningId OBRIGATÓRIO (staging/estado da ceremony). */
 const vitoriaCeremonyBind =
   (name: VitoriaToolName): BindFn =>
   (ctx) =>
-    buildVitoriaTools(requirePlanningId(ctx), ctx.projectId)[name] as Tool;
+    buildVitoriaTools(requirePlanningId(ctx), ctx.projectId, ctx.memberId ?? null)[name] as Tool;
 
 /** Alpha (ops) — bundle assemblado threadando routeProjectId/routeSprintId. */
 const alphaBind =
@@ -246,11 +247,13 @@ const VITORIA_SHARED_READ_NAMES: VitoriaToolName[] = [
 const VITORIA_PLANNING_PROJECT_NAMES: VitoriaToolName[] = [
   "propose_story",
   "append_project_memory",
+  "add_task_comment", // write direto live (D7) — needs:[], autor via ctx.memberId
 ];
 const VITORIA_PLANNING_CEREMONY_NAMES: VitoriaToolName[] = [
   "add_context_note",
   "propose_task_action",
   "propose_tasks",
+  "propose_task_bulk_update", // staged (D9) — N× MeetingTaskAction(type=update); needs:["planningId"]
   "update_proposed_action",
   "delete_proposed_action",
   "get_planning_state",

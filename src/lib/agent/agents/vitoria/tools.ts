@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { addContextNote } from "@/lib/dal/planning";
+import { createCommentAs } from "@/lib/dal/task-comments";
 import { getStepData } from "@/lib/agent/context";
 import { applyMarkdownMutation } from "@/lib/agent/tools/_markdown";
 import { createReadContextSourceTool } from "@/lib/agent/tools/read-context-source";
@@ -84,6 +85,25 @@ async function loadProjectSprintIds(projectId: string): Promise<Set<string>> {
   return new Set((data ?? []).map((s) => s.id));
 }
 
+/**
+ * Set de Task.id que EXISTEM no projeto, dado um conjunto de candidatos. Usado
+ * por `propose_task_bulk_update` pra validar `taskId` em lote: project-scoped
+ * (barra task de OUTRO projeto vazar pelo lote) e pega cedo o que viraria
+ * fail no conclude. Espelha loadProjectSprintIds — uma query pro lote inteiro.
+ */
+async function loadProjectTaskIds(
+  taskIds: string[],
+  projectId: string,
+): Promise<Set<string>> {
+  if (taskIds.length === 0) return new Set();
+  const { data } = await db()
+    .from("Task")
+    .select("id")
+    .eq("projectId", projectId)
+    .in("id", taskIds);
+  return new Set((data ?? []).map((t) => t.id));
+}
+
 type ProjectMemberRow = {
   id: string;
   name: string;
@@ -156,7 +176,11 @@ async function loadProjectMembers(projectId: string): Promise<ProjectMemberRow[]
   return Array.from(byId.values());
 }
 
-export function buildVitoriaTools(planningId: string, projectId: string) {
+export function buildVitoriaTools(
+  planningId: string,
+  projectId: string,
+  memberId?: string | null,
+) {
   return {
     add_context_note: tool({
       description:
@@ -581,6 +605,147 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
       },
     }),
 
+    propose_task_bulk_update: tool({
+      description:
+        "Atualiza N tasks EXISTENTES de UMA vez (lote) — propostas pra aprovação do PM. " +
+        "É o `propose_task_action(type=update)` que fala lote: use pra repriorizar/re-PFV/" +
+        "remanejar muitas tasks (ex: 'sobe a prioridade dessas 15', 'move o backlog de " +
+        "cobrança pra Sprint 12'). Pra mover de sprint, passe `sprintId` no patch. " +
+        "Cada update vira UMA MeetingTaskAction(type=update) em staging (o PM aplica ao " +
+        "Concluir, item a item) — o ganho é no write (1 tool call → N rows), não na semântica. " +
+        "PROCEDÊNCIA obrigatória: `sourceNoteIds` (≥1 PlanningContextNote.id, espelha o single). " +
+        "Valida cada linha (taskId é do projeto, patch não-vazio) e devolve " +
+        "{created, errors:[{index,msg}]} — corrija só as que falharem e re-chame com elas.",
+      inputSchema: z.object({
+        // projectId + planningCeremonyId vêm do closure (D13) — nunca args do modelo.
+        updates: z
+          .array(
+            z.object({
+              taskId: z
+                .string()
+                .uuid()
+                .describe("UUID da task a atualizar (resolva via list_project_tasks/get_task_detail)"),
+              patch: z
+                .record(z.string(), z.unknown())
+                .describe(
+                  "Campos a alterar (subset de: title, description, status, type, scope, " +
+                    "complexity, priority, functionPoints (1-13), notes, dueDate, sprintId, " +
+                    "userStoryId, assigneeIds, acceptanceCriteria). MERGE no apply — só os " +
+                    "campos passados mudam. Pra MOVER de sprint use patch.sprintId. " +
+                    "JSON OBJECT (nunca string stringificada).",
+                ),
+            }),
+          )
+          .describe(
+            "Linhas do lote (≥1). Cada linha vira uma MeetingTaskAction(type=update) em " +
+              "staging. Sem teto de schema — validação/clamp é server-side.",
+          ),
+        reasoning: z
+          .string()
+          .min(20)
+          .describe(
+            "O critério COMUM do lote (vale pra todas as updates). Ex: 'repriorização pós-" +
+              "granola: cobrança vira P0 porque o cliente subiu a urgência'. PM lê pra decidir.",
+          ),
+        sourceNoteIds: z
+          .array(z.string().uuid())
+          .min(1, "Cite ≥1 PlanningContextNote.id que embasa o lote")
+          .describe(
+            "PlanningContextNote.id que embasam o lote. OBRIGATÓRIO ≥1 (espelha " +
+              "propose_task_action). IDs vêm de get_planning_state; nunca invente.",
+          ),
+        aiConfidence: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Confiança 0-1. Default 0.8."),
+      }),
+      execute: async ({ updates, reasoning, sourceNoteIds, aiConfidence }) => {
+        const supabase = db();
+        if (!Array.isArray(updates) || updates.length === 0) {
+          return { ok: false, error: "updates vazio — passe ≥1 update no lote." };
+        }
+
+        // Validação server-side por-linha (D14: integridade/forma, não estratégia):
+        // taskId existe NO PROJETO (1 query pro lote; barra cross-project) + patch
+        // não-vazio. O apply (writeUpdate) filtra os campos permitidos — campo
+        // desconhecido no patch é ignorado lá, não aqui (mesmo contrato do single).
+        const allTaskIds = [...new Set(updates.map((u) => u.taskId))];
+        const projectTaskIds = await loadProjectTaskIds(allTaskIds, projectId);
+
+        const errors: { index: number; msg: string }[] = [];
+        const valid: Array<{ u: (typeof updates)[number] }> = [];
+        updates.forEach((u, index) => {
+          const issues: string[] = [];
+          if (!projectTaskIds.has(u.taskId))
+            issues.push(
+              `taskId ${u.taskId} não é task deste projeto — resolva via list_project_tasks`,
+            );
+          if (
+            !u.patch ||
+            typeof u.patch !== "object" ||
+            Object.keys(u.patch).length === 0
+          )
+            issues.push("patch vazio — passe ≥1 campo a alterar");
+          if (issues.length) errors.push({ index, msg: issues.join("; ") });
+          else valid.push({ u });
+        });
+
+        if (valid.length === 0) {
+          return {
+            ok: false,
+            created: 0,
+            errors,
+            hint: "Nenhuma linha válida — corrija os erros por index e re-chame.",
+          };
+        }
+
+        // Bulk-insert das linhas válidas (1 statement). type=update: taskId
+        // top-level, patch no payload (mesmo contrato que o executor lê em
+        // writeUpdate). projectId + ceremony do closure — nunca do modelo (D13).
+        const rows = valid.map(({ u }) => ({
+          planningCeremonyId: planningId,
+          projectId,
+          type: "update" as const,
+          taskId: u.taskId,
+          targetSprintId: null,
+          payload: u.patch as Json,
+          aiReasoning: reasoning,
+          aiConfidence: aiConfidence ?? 0.8,
+          sourceNoteIds: sourceNoteIds as unknown as string[],
+          decision: "pending" as const,
+          execution: "pending" as const,
+          source: "ai" as const,
+          notes: null,
+        }));
+
+        const { data, error } = await supabase
+          .from("MeetingTaskAction")
+          .insert(rows)
+          .select("id");
+        if (error)
+          return {
+            ok: false,
+            created: 0,
+            errors,
+            error: `Falha ao inserir lote: ${error.message}`,
+          };
+
+        return {
+          ok: errors.length === 0,
+          created: data?.length ?? 0,
+          actionIds: (data ?? []).map((r) => r.id),
+          errors,
+          ...(errors.length
+            ? {
+                hint: "Corrija as linhas em `errors` (por index) e re-chame propose_task_bulk_update só com elas.",
+              }
+            : {}),
+        };
+      },
+    }),
+
     propose_story: tool({
       description:
         "Cria uma User Story pra AGRUPAR tasks da planning. A story é o container; as tasks vão penduradas via `userStoryId` no propose_task_action (use o storyId retornado aqui). " +
@@ -756,6 +921,61 @@ export function buildVitoriaTools(planningId: string, projectId: string) {
           .eq("id", actionId);
         if (error) return { ok: false, error: error.message };
         return { ok: true, actionId };
+      },
+    }),
+
+    add_task_comment: tool({
+      description:
+        "Comenta NA HORA (write direto, live) numa task — deixa uma anotação/decisão " +
+        "visível no board imediatamente. Use quando o PM pedir pra registrar um recado " +
+        "ou justificativa numa task específica (ex: 'comenta na VLD-204 que o cliente " +
+        "mudou o escopo'). NÃO passa pelo staging — aparece na hora. " +
+        "GROUNDED (anti-alucinação): cite a fonte no próprio body (transcript/nota/decisão). " +
+        "Pra MUDAR PFV/status/sprint de tasks, use propose_task_action/propose_task_bulk_update — " +
+        "essas vão pro staging e o PM aplica ao Concluir.",
+      inputSchema: z.object({
+        // projectId/memberId vêm do closure (D2) — nunca args do modelo.
+        taskId: z
+          .string()
+          .uuid()
+          .describe("UUID da task a comentar (resolva via list_project_tasks/get_task_detail)"),
+        body: z
+          .string()
+          .min(1)
+          .describe(
+            "Texto do comentário. Cite a fonte (transcript/nota) quando registrar uma decisão.",
+          ),
+        mentionedMemberIds: z
+          .array(z.string().uuid())
+          .optional()
+          .describe(
+            "Member.id mencionados (opcional). Resolva via list_project_members — nunca invente.",
+          ),
+      }),
+      execute: async ({ taskId, body, mentionedMemberIds }) => {
+        // Guard cross-project: a task TEM que ser deste projeto (closure). Sem
+        // isso um taskId de outro projeto passaria (FK válida) e vazaria comentário.
+        const { data: task, error: tErr } = await db()
+          .from("Task")
+          .select("id, projectId")
+          .eq("id", taskId)
+          .maybeSingle();
+        if (tErr) return { ok: false, error: tErr.message };
+        if (!task) return { ok: false, error: "task não encontrada" };
+        if (task.projectId !== projectId) {
+          return { ok: false, error: "task pertence a outro projeto" };
+        }
+        try {
+          const comment = await createCommentAs({
+            taskId,
+            body,
+            mentionedMemberIds: mentionedMemberIds ?? [],
+            authorMemberId: memberId ?? null,
+          });
+          return { ok: true, commentId: comment.id };
+        } catch (e) {
+          return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
       },
     }),
 

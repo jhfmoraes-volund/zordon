@@ -4,13 +4,14 @@
 > Regenere: `npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write docs/platform/agent-capability-matrix.md`.
 > Pertencimento (`surfaces`) e escopo (`needs`) vivem no descriptor — esta tabela é projeção. Drift cross-repo: `scripts/check-daemon-surface.ts`.
 
-**89 tools** · surfaces: vitor 41 · pm_review 17 · planning 21 · release_pl 25 · wiki 15 · alpha 26
+**91 tools** · surfaces: vitor 41 · pm_review 17 · planning 23 · release_pl 27 · wiki 15 · alpha 26
 
 | tool | class | needs | vitor | pm_review | planning | release_pl | wiki | alpha |
 |------|-------|-------|----|----|----|----|----|----|
 | `add_context_note` | act | planningId | · | · | ✓ | ✓ | · | · |
 | `add_open_question` | act | sessionId | ✓ | · | · | · | · | · |
 | `add_pm_review_note` | act | pmReviewId | · | ✓ | · | · | · | · |
+| `add_task_comment` | act | — | · | · | ✓ | ✓ | · | · |
 | `append_project_memory` | remember | — | · | · | ✓ | ✓ | · | · |
 | `approve_prd` | act | — | ✓ | · | · | · | · | · |
 | `ask_meeting` | sense | — | · | · | · | · | · | ✓ |
@@ -53,6 +54,7 @@
 | `propose_prd` | act | sessionId | ✓ | · | · | · | · | · |
 | `propose_story` | act | — | · | · | ✓ | ✓ | · | · |
 | `propose_task_action` | act | planningId | · | · | ✓ | ✓ | · | · |
+| `propose_task_bulk_update` | act | planningId | · | · | ✓ | ✓ | · | · |
 | `propose_tasks` | act | planningId | · | · | ✓ | ✓ | · | · |
 | `query_structured_source` | sense | — | ✓ | ✓ | ✓ | ✓ | · | ✓ |
 | `read_brainstorm` | sense | sessionId | ✓ | · | · | · | · | · |

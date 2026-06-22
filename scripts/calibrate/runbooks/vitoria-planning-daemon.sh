@@ -54,14 +54,38 @@ run_DV3() {
   echo "${_c_dim}  (DV3 criou staging no PGF — limpe com: …/runbooks/cleanup-runbook.sh)${_c_rst}"
 }
 
+run_DV4() {
+  scenario "DV4 — add_task_comment (MUTANTE: comentário live)"
+  enqueue_daemon_turn "$CH" "$SESSION" "[runbook] DV4 comentário" \
+    "Pegue UMA task aberta do PGF (a primeira que achar via list_project_tasks) e deixe um comentário nela usando add_task_comment. O body deve conter, no meio da frase, este marker exato: RUNBOOK-DV4. Cite que a fonte é este teste de runbook. NÃO proponha mudança de PFV/status — só o comentário."
+  wait_turn "$TURN" 300
+  assert_no_tool_errors "$TURN"
+  assert_tool_called "$TURN" "add_task_comment"
+  assert_commented "RUNBOOK-DV4" 8
+  echo "${_c_dim}  (DV4 criou comentário live no PGF — limpe se necessário)${_c_rst}"
+}
+
+run_DV5() {
+  scenario "DV5 — propose_task_bulk_update (MUTANTE: cria staging type=update)"
+  enqueue_daemon_turn "$CH" "$SESSION" "[runbook] DV5 bulk-update" \
+    "Pegue 3 tasks abertas do PGF (via list_project_tasks) e suba a prioridade delas. Faça num ÚNICO call de propose_task_bulk_update (NÃO 3× propose_task_action). Cite a nota de contexto que embasa via get_planning_state (sourceNoteIds)."
+  wait_turn "$TURN" 360
+  assert_no_tool_errors "$TURN"
+  assert_tool_called "$TURN" "propose_task_bulk_update"
+  assert_bulk_updated "$CEREMONY" 3 8
+  echo "${_c_dim}  (DV5 criou staging type=update no PGF — limpe com: …/runbooks/cleanup-runbook.sh)${_c_rst}"
+}
+
 MODE="${1:-smoke}"
 echo "${_c_cyn}RUNBOOK Vitoria·planning·daemon — modo=$MODE — $(date '+%H:%M:%S')${_c_rst}"
 case "$MODE" in
   smoke) run_DV1; run_DV2 ;;
-  all)   run_DV1; run_DV2; run_DV3 ;;
+  all)   run_DV1; run_DV2; run_DV3; run_DV4; run_DV5 ;;
   DV1)   run_DV1 ;;
   DV2)   run_DV2 ;;
   DV3)   run_DV3 ;;
-  *) echo "modo inválido: $MODE (use smoke|all|DV1|DV2|DV3)"; exit 2 ;;
+  DV4)   run_DV4 ;;
+  DV5)   run_DV5 ;;
+  *) echo "modo inválido: $MODE (use smoke|all|DV1|DV2|DV3|DV4|DV5)"; exit 2 ;;
 esac
 report

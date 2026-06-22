@@ -63,6 +63,7 @@
   ],
   "vitoria:planning": [
     "add_context_note",
+    "add_task_comment",
     "append_project_memory",
     "delete_proposed_action",
     "describe_structured_source",
@@ -77,6 +78,7 @@
     "list_project_tasks",
     "propose_story",
     "propose_task_action",
+    "propose_task_bulk_update",
     "propose_tasks",
     "query_structured_source",
     "read_context_source",
@@ -86,6 +88,7 @@
   ],
   "vitoria:release_planning": [
     "add_context_note",
+    "add_task_comment",
     "append_project_memory",
     "delete_proposed_action",
     "describe_structured_source",
@@ -102,6 +105,7 @@
     "list_project_tasks",
     "propose_story",
     "propose_task_action",
+    "propose_task_bulk_update",
     "propose_tasks",
     "query_structured_source",
     "read_context_source",

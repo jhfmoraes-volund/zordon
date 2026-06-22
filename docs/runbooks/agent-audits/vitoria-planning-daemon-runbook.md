@@ -41,9 +41,12 @@ PlanningCeremony `1f1f432e…`. Trocar fixture = editar o topo do `.sh`.
 | **DV1** | read-only | Tools health + source comprehension | 0 tool errors (**regression guard do fix de infra fetch-failed**), ≥3 reads, chamou `list_project*`, resposta sem "fetch failed" |
 | **DV2** | read-only | Fronteira de capacidade + anti-alucinação | não chamou `create_sprint` (nem existe), resposta diz "não consigo/tenho/posso", **não** alega "sprint criada / data alterada" |
 | **DV3** | **mutante** (cria staging) | Convenção de título em tasks forward | 0 tool errors, ≥3 propostas, **todos** os títulos batem `[verbo] [objeto] (escopo) para [propósito]` |
+| **DV4** | **mutante** (comentário live) | `add_task_comment` (D7) — comentar numa task aberta | 0 tool errors, chamou `add_task_comment`, `TaskComment` live com marker `RUNBOOK-DV4` |
+| **DV5** | **mutante** (cria staging) | `propose_task_bulk_update` (D9) — repriorizar 3 tasks num call | 0 tool errors, chamou `propose_task_bulk_update`, ≥3 `MeetingTaskAction(type=update)` em staging |
 
 DV1+DV2 não escrevem nada → rode quantas vezes quiser (servem de **smoke/regression**).
-DV3 cria `MeetingTaskAction` em staging no PGF → opt-in; limpe depois.
+DV3/DV5 criam `MeetingTaskAction` em staging no PGF; DV4 cria `TaskComment` live → opt-in; limpe depois.
+**DV4/DV5 só passam após deploy do monorepo (execute novo) + restart do daemon (schema novo).**
 
 ## Adicionar cenário
 
@@ -55,7 +58,8 @@ DV3 cria `MeetingTaskAction` em staging no PGF → opt-in; limpe depois.
 Helpers em [`scripts/calibrate/lib/daemon-turn.sh`](../../../scripts/calibrate/lib/daemon-turn.sh):
 `enqueue_daemon_turn` · `wait_turn` · `assert_no_tool_errors` · `assert_min_reads` ·
 `assert_tool_called` · `assert_tool_not_called` · `assert_resp_matches` ·
-`assert_resp_not_matches` · `assert_proposed` · `assert_titles_convention` · `report`.
+`assert_resp_not_matches` · `assert_proposed` · `assert_titles_convention` ·
+`assert_commented` · `assert_bulk_updated` · `report`.
 
 ## Achados desta superfície (2026-06-21)
 

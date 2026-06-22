@@ -31,6 +31,32 @@ const COMMENT_SELECT =
   "*, author:Member!TaskComment_authorMemberId_fkey(id, name)";
 
 /**
+ * Insert a comment with an EXPLICIT author. Used by callers that resolve the
+ * author outside the auth session (e.g. the agent tool router / daemon, where
+ * `getActorMemberId()` has no request context). UI routes should use
+ * `createComment`, which resolves the author from the auth session.
+ */
+export async function createCommentAs(input: {
+  taskId: string;
+  body: string;
+  mentionedMemberIds: string[];
+  authorMemberId: string | null;
+}): Promise<TaskCommentWithAuthor> {
+  const { data, error } = await db()
+    .from("TaskComment")
+    .insert({
+      taskId: input.taskId,
+      body: input.body,
+      mentionedMemberIds: input.mentionedMemberIds,
+      authorMemberId: input.authorMemberId,
+    })
+    .select(COMMENT_SELECT)
+    .single();
+  if (error) throw error;
+  return data as unknown as TaskCommentWithAuthor;
+}
+
+/**
  * Insert a comment. Author resolved internally via `getActorMemberId()` —
  * never accept it from caller (consistent with task-activity-recorder).
  */
@@ -40,18 +66,7 @@ export async function createComment(input: {
   mentionedMemberIds: string[];
 }): Promise<TaskCommentWithAuthor> {
   const authorMemberId = await getActorMemberId();
-  const { data, error } = await db()
-    .from("TaskComment")
-    .insert({
-      taskId: input.taskId,
-      body: input.body,
-      mentionedMemberIds: input.mentionedMemberIds,
-      authorMemberId: authorMemberId ?? null,
-    })
-    .select(COMMENT_SELECT)
-    .single();
-  if (error) throw error;
-  return data as unknown as TaskCommentWithAuthor;
+  return createCommentAs({ ...input, authorMemberId: authorMemberId ?? null });
 }
 
 /**

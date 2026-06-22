@@ -58,6 +58,7 @@ turn_tool_count()  { _psql -c "SELECT count(*) FROM \"ChatTurnEvent\" WHERE \"tu
 turn_errors()      { _psql -c "SELECT count(*) FROM \"ChatTurnEvent\" WHERE \"turnId\"='$1' AND kind='tool_result' AND (payload->>'isError')='true';"; }
 turn_response()    { _psql -c "SELECT content FROM \"ChatMessage\" WHERE \"threadId\"=(SELECT \"threadId\" FROM \"ChatTurn\" WHERE id='$1') AND role='assistant' ORDER BY \"createdAt\" DESC LIMIT 1;"; }
 proposed_count()   { _psql -c "SELECT count(*) FROM \"MeetingTaskAction\" WHERE \"planningCeremonyId\"='$1' AND \"createdAt\" > now() - interval '$2 min';"; }
+proposed_update_count() { _psql -c "SELECT count(*) FROM \"MeetingTaskAction\" WHERE \"planningCeremonyId\"='$1' AND type='update' AND source='ai' AND \"createdAt\" > now() - interval '$2 min';"; }
 
 # wait_turn <turnId> [timeout_s=480] → ecoa status final; imprime progresso
 wait_turn() {
@@ -90,6 +91,22 @@ assert_titles_convention() {
   local tot; tot=$(proposed_count "$1" "$2")
   if [[ "$bad" == "0" && "$tot" != "0" ]]; then _pass "convenção de título: $tot/$tot no padrão"
   else _fail "convenção de título: $bad/$tot fora do padrão [verbo] [objeto] (escopo) para [propósito]"; fi
+}
+
+# assert_bulk_updated <ceremony> <minCount> <minutes> — N MeetingTaskAction
+# (type=update, source=ai) em staging, do propose_task_bulk_update (D9).
+assert_bulk_updated() {
+  local n; n="$(proposed_update_count "$1" "${3:-8}")"
+  (( n >= $2 )) && _pass "propôs $n (≥ $2) updates em staging (type=update)" || _fail "propôs $n updates (< $2)"
+}
+
+# assert_commented <marker> <minutes> — TaskComment live com o marker no body
+# (write direto de add_task_comment, D7). Marker evita falso-positivo no DB
+# compartilhado: a frase é instruída verbatim no probe.
+assert_commented() {
+  local n
+  n=$(_psql -c "SELECT count(*) FROM \"TaskComment\" WHERE body ILIKE '%$1%' AND \"createdAt\" > now() - interval '$2 min';")
+  (( n >= 1 )) && _pass "comentário live criado (marker '$1', $n)" || _fail "nenhum TaskComment com marker '$1' nos últimos $2 min"
 }
 
 scenario() { echo ""; echo "${_c_cyn}━━━ $1 ━━━${_c_rst}"; }
