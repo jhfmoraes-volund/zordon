@@ -142,6 +142,22 @@ function requireReleasePlanningId(ctx: ToolContext): string {
   return ctx.releasePlanningId;
 }
 
+/**
+ * Projeto pras tools de Wiki: Vitoria surface 'wiki' resolve por ctx.projectId
+ * (thread do projeto); Alpha global resolve por ctx.routeProjectId (a página
+ * onde o PM está). Sem nenhum → erro que ensina (abra a página do projeto).
+ */
+function requireWikiProjectId(ctx: ToolContext): string {
+  const pid = ctx.routeProjectId || ctx.projectId;
+  if (!pid) {
+    throw new Error(
+      "Pra ajustar a Wiki preciso saber o projeto. Abra a página do projeto " +
+        "(/projects/<id>) e peça de novo.",
+    );
+  }
+  return pid;
+}
+
 type ToolFactory = (ctx: ToolContext) => Tool;
 
 /**
@@ -291,14 +307,17 @@ export const TOOL_REGISTRY: Record<string, ToolFactory> = {
     buildPMReviewTools(requirePMReviewId(ctx), ctx.projectId)
       .get_project_indicators,
 
-  // ── Vitoria Wiki copiloto (surface 'wiki') — afina grounded ───────────
-  read_wiki: (ctx) => createReadWikiTool(ctx.projectId),
+  // ── Wiki copiloto (afina grounded) — Vitoria surface 'wiki' OU Alpha global.
+  // Projeto resolvido por requireWikiProjectId (ctx.projectId p/ Vitoria;
+  // ctx.routeProjectId p/ Alpha na página do projeto).
+  read_wiki: (ctx) => createReadWikiTool(requireWikiProjectId(ctx)),
   set_wiki_emphasis: (ctx) =>
-    createSetWikiEmphasisTool(ctx.projectId, ctx.memberId ?? null),
+    createSetWikiEmphasisTool(requireWikiProjectId(ctx), ctx.memberId ?? null),
   suppress_wiki_bullet: (ctx) =>
-    createSuppressWikiBulletTool(ctx.projectId, ctx.memberId ?? null),
-  restore_wiki_bullet: (ctx) => createRestoreWikiBulletTool(ctx.projectId),
-  recompose_wiki: (ctx) => createRecomposeWikiTool(ctx.projectId),
+    createSuppressWikiBulletTool(requireWikiProjectId(ctx), ctx.memberId ?? null),
+  restore_wiki_bullet: (ctx) =>
+    createRestoreWikiBulletTool(requireWikiProjectId(ctx)),
+  recompose_wiki: (ctx) => createRecomposeWikiTool(requireWikiProjectId(ctx)),
 };
 
 // ── Alpha (ops) — reads pro daemon ────────────────────────────────────────
@@ -496,6 +515,14 @@ const ALPHA_TOOLS = new Set<string>([
   ...ALPHA_ROUTE_TOOL_NAMES,
   "describe_structured_source",
   "query_structured_source",
+  // Wiki copiloto: afinar a Wiki do projeto da rota direto do chat global do
+  // Alpha (route-scoped via requireWikiProjectId). Mesmas tools da surface
+  // 'wiki' da Vitoria — definidas 1×, compartilhadas (não duplicadas).
+  "read_wiki",
+  "set_wiki_emphasis",
+  "suppress_wiki_bullet",
+  "restore_wiki_bullet",
+  "recompose_wiki",
 ]);
 
 // Release Planning (surface 'release_planning'): board (PRD↔sprint) + staging

@@ -32,6 +32,7 @@ import type { RitualCapability } from "@/lib/rituals/types";
 import type {
   GranolaFoldersResponse,
   GranolaFolderBinding,
+  GranolaFolderOption,
 } from "@/app/api/projects/[id]/granola-folders/route";
 import type { FolderFreshness } from "@/app/api/projects/[id]/granola-folders/[bindingId]/freshness/route";
 
@@ -93,10 +94,11 @@ export function AutomationRitualCard({ projectId, ritualType }: Props) {
   const [enabled, setEnabled] = useState(false);
   const [togglingEnabled, setTogglingEnabled] = useState(false);
 
-  // ── Granola (só exibido; picker não adiciona granola) ────
+  // ── Granola (bindings exibidos; available alimenta o picker) ──
   const [needsAuth, setNeedsAuth] = useState(false);
   const [granolaError, setGranolaError] = useState<string | null>(null);
   const [bindings, setBindings] = useState<GranolaFolderBinding[]>([]);
+  const [available, setAvailable] = useState<GranolaFolderOption[]>([]);
   const [freshness, setFreshness] = useState<Record<string, FolderFreshness | "loading">>({});
 
   // ── Drive (vive no playbook como load_context caps) ──────
@@ -156,6 +158,7 @@ export function AutomationRitualCard({ projectId, ritualType }: Props) {
         setNeedsAuth(granola.needsAuth);
         setGranolaError(granola.error ?? null);
         setBindings(granola.bindings);
+        setAvailable(granola.available);
 
         setEnabled(playbook.enabled);
 
@@ -257,6 +260,16 @@ export function AutomationRitualCard({ projectId, ritualType }: Props) {
     [driveSources, boundDriveIds],
   );
 
+  // ── Opções do picker (folders Granola ainda não vinculadas) ──
+  const boundFolderIds = useMemo(
+    () => new Set(bindings.map((b) => b.folderId)),
+    [bindings],
+  );
+  const granolaOptions = useMemo(
+    () => available.filter((f) => !boundFolderIds.has(f.id)),
+    [available, boundFolderIds],
+  );
+
   const driveTitle = useMemo(() => {
     const m = new Map<string, string>();
     for (const d of driveSources) m.set(d.id, d.title);
@@ -268,21 +281,40 @@ export function AutomationRitualCard({ projectId, ritualType }: Props) {
     return m;
   }, [driveSources]);
 
-  // ── Adicionar fonte (só Drive → load_context(drive_file) + PUT) ──
+  // ── Adicionar fonte. Valor do picker é prefixado: "g:<folderId>" (Granola,
+  //    cria binding em ProjectGranolaFolder via POST) ou "d:<contextSourceId>"
+  //    (Drive, vira load_context(drive_file) no playbook via PUT). ──
   async function addSource() {
     if (!pick) return;
     setAdding(true);
     try {
-      const nextDrive = [
-        ...driveCaps,
-        {
-          capabilityKey: "load_context" as const,
-          enabled: true,
-          params: { kind: "drive_file" as const, ref: { contextSourceId: pick } },
-        },
-      ];
-      await putPlaybook(nextDrive, text);
-      setDriveCaps(nextDrive);
+      if (pick.startsWith("g:")) {
+        const folderId = pick.slice(2);
+        const folder = granolaOptions.find((f) => f.id === folderId);
+        const res = await fetchOrThrow(
+          `/api/projects/${projectId}/granola-folders`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folderId, folderName: folder?.name ?? null }),
+          },
+        );
+        const { binding } = (await res.json()) as { binding: GranolaFolderBinding };
+        setBindings((prev) => [...prev, binding]);
+        void loadFreshness(binding.id);
+      } else {
+        const contextSourceId = pick.startsWith("d:") ? pick.slice(2) : pick;
+        const nextDrive = [
+          ...driveCaps,
+          {
+            capabilityKey: "load_context" as const,
+            enabled: true,
+            params: { kind: "drive_file" as const, ref: { contextSourceId } },
+          },
+        ];
+        await putPlaybook(nextDrive, text);
+        setDriveCaps(nextDrive);
+      }
       setPick("");
     } catch (err) {
       showErrorToast(err, { label: "Falha ao vincular fonte" });
@@ -517,39 +549,52 @@ export function AutomationRitualCard({ projectId, ritualType }: Props) {
                 </p>
               )}
 
-              {needsAuth && driveOptions.length === 0 ? (
+              {needsAuth ? (
                 <p className="text-xs text-muted-foreground">
                   Conecte sua conta Granola na aba Integrações para vincular
                   folders, ou importe arquivos do Drive no pool do projeto.
                 </p>
               ) : null}
 
-              {driveOptions.length > 0 ? (
+              {granolaOptions.length > 0 || driveOptions.length > 0 ? (
                 <div className="flex gap-2">
                   <Select value={pick} onValueChange={(v) => setPick(v ?? "")}>
                     <SelectTrigger className="min-w-0 flex-1">
                       <SelectValue placeholder="Adicionar fonte…" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectGroup>
-                        <SelectLabel>Drive</SelectLabel>
-                        {driveOptions.map((d) => (
-                          <SelectItem key={`d-${d.id}`} value={d.id}>
-                            {d.title}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
+                      {granolaOptions.length > 0 ? (
+                        <SelectGroup>
+                          <SelectLabel>Granola</SelectLabel>
+                          {granolaOptions.map((f) => (
+                            <SelectItem key={`g-${f.id}`} value={`g:${f.id}`}>
+                              {f.name ?? f.id}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ) : null}
+                      {driveOptions.length > 0 ? (
+                        <SelectGroup>
+                          <SelectLabel>Drive</SelectLabel>
+                          {driveOptions.map((d) => (
+                            <SelectItem key={`d-${d.id}`} value={`d:${d.id}`}>
+                              {d.title}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ) : null}
                     </SelectContent>
                   </Select>
                   <Button onClick={addSource} disabled={adding || !pick}>
                     {adding ? "Vinculando…" : "Vincular"}
                   </Button>
                 </div>
-              ) : (
+              ) : !needsAuth ? (
                 <p className="text-xs text-muted-foreground">
-                  Nenhuma fonte adicional disponível — importe arquivos no app Drive.
+                  Nenhuma fonte adicional disponível — vincule uma folder do
+                  Granola ou importe arquivos no app Drive.
                 </p>
-              )}
+              ) : null}
             </section>
 
             {/* ── Seção 2: Instrução do PM ── */}
