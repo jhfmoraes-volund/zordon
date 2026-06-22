@@ -76,16 +76,40 @@ run_DV5() {
   echo "${_c_dim}  (DV5 criou staging type=update no PGF — limpe com: …/runbooks/cleanup-runbook.sh)${_c_rst}"
 }
 
+run_DV6() {
+  scenario "DV6 — propose_sprint (MUTANTE: cria sprint live)"
+  enqueue_daemon_turn "$CH" "$SESSION" "[runbook] DV6 propose_sprint" \
+    "Abra a próxima sprint do PGF com propose_sprint. No goal, inclua EXATAMENTE o marker RUNBOOK-DV6 + a procedência (diga que veio deste teste). Deixe o nome auto-numerar (Sprint N)."
+  wait_turn "$TURN" 300
+  assert_no_tool_errors "$TURN"
+  assert_tool_called "$TURN" "propose_sprint"
+  assert_sprint_created "RUNBOOK-DV6" 8
+  echo "${_c_dim}  (DV6 criou sprint live no PGF — limpe depois; cuidado com sprint_unique_week)${_c_rst}"
+}
+
+run_DV7() {
+  scenario "DV7 — update_sprint (MUTANTE: edita sprint live)"
+  enqueue_daemon_turn "$CH" "$SESSION" "[runbook] DV7 update_sprint" \
+    "Liste as sprints do PGF (list_project_sprints) e edite o goal de UMA sprint 'upcoming' com update_sprint, incluindo EXATAMENTE o marker RUNBOOK-DV7 no goal. Não mude datas nem status."
+  wait_turn "$TURN" 300
+  assert_no_tool_errors "$TURN"
+  assert_tool_called "$TURN" "update_sprint"
+  assert_sprint_updated "RUNBOOK-DV7" 8
+  echo "${_c_dim}  (DV7 editou sprint live no PGF)${_c_rst}"
+}
+
 MODE="${1:-smoke}"
 echo "${_c_cyn}RUNBOOK Vitoria·planning·daemon — modo=$MODE — $(date '+%H:%M:%S')${_c_rst}"
 case "$MODE" in
   smoke) run_DV1; run_DV2 ;;
-  all)   run_DV1; run_DV2; run_DV3; run_DV4; run_DV5 ;;
+  all)   run_DV1; run_DV2; run_DV3; run_DV4; run_DV5; run_DV6; run_DV7 ;;
   DV1)   run_DV1 ;;
   DV2)   run_DV2 ;;
   DV3)   run_DV3 ;;
   DV4)   run_DV4 ;;
   DV5)   run_DV5 ;;
-  *) echo "modo inválido: $MODE (use smoke|all|DV1|DV2|DV3|DV4|DV5)"; exit 2 ;;
+  DV6)   run_DV6 ;;
+  DV7)   run_DV7 ;;
+  *) echo "modo inválido: $MODE (use smoke|all|DV1|DV2|DV3|DV4|DV5|DV6|DV7)"; exit 2 ;;
 esac
 report

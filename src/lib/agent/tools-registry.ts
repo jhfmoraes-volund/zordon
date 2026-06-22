@@ -248,6 +248,8 @@ const VITORIA_PLANNING_PROJECT_NAMES: VitoriaToolName[] = [
   "propose_story",
   "append_project_memory",
   "add_task_comment", // write direto live (D7) — needs:[], autor via ctx.memberId
+  "propose_sprint", // write direto live (D6) — needs:[], só projectId (invariante)
+  "update_sprint", // write direto live (D6) — needs:[], valida projeto no execute
 ];
 const VITORIA_PLANNING_CEREMONY_NAMES: VitoriaToolName[] = [
   "add_context_note",

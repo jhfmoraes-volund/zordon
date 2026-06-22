@@ -43,10 +43,12 @@ PlanningCeremony `1f1f432e…`. Trocar fixture = editar o topo do `.sh`.
 | **DV3** | **mutante** (cria staging) | Convenção de título em tasks forward | 0 tool errors, ≥3 propostas, **todos** os títulos batem `[verbo] [objeto] (escopo) para [propósito]` |
 | **DV4** | **mutante** (comentário live) | `add_task_comment` (D7) — comentar numa task aberta | 0 tool errors, chamou `add_task_comment`, `TaskComment` live com marker `RUNBOOK-DV4` |
 | **DV5** | **mutante** (cria staging) | `propose_task_bulk_update` (D9) — repriorizar 3 tasks num call | 0 tool errors, chamou `propose_task_bulk_update`, ≥3 `MeetingTaskAction(type=update)` em staging |
+| **DV6** | **mutante** (sprint live) | `propose_sprint` (D6) — abrir a próxima sprint | 0 tool errors, chamou `propose_sprint`, `Sprint` live com marker `RUNBOOK-DV6` no goal |
+| **DV7** | **mutante** (sprint live) | `update_sprint` (D6) — editar goal de uma sprint | 0 tool errors, chamou `update_sprint`, `Sprint` com marker `RUNBOOK-DV7` no goal (updatedAt recente) |
 
 DV1+DV2 não escrevem nada → rode quantas vezes quiser (servem de **smoke/regression**).
-DV3/DV5 criam `MeetingTaskAction` em staging no PGF; DV4 cria `TaskComment` live → opt-in; limpe depois.
-**DV4/DV5 só passam após deploy do monorepo (execute novo) + restart do daemon (schema novo).**
+DV3/DV5 criam `MeetingTaskAction` em staging; DV4 cria `TaskComment`; DV6/DV7 criam/editam `Sprint` live → opt-in; limpe depois.
+**DV4–DV7 só passam após deploy do monorepo (execute novo) + restart do daemon (schema novo).**
 
 ## Adicionar cenário
 
@@ -59,7 +61,8 @@ Helpers em [`scripts/calibrate/lib/daemon-turn.sh`](../../../scripts/calibrate/l
 `enqueue_daemon_turn` · `wait_turn` · `assert_no_tool_errors` · `assert_min_reads` ·
 `assert_tool_called` · `assert_tool_not_called` · `assert_resp_matches` ·
 `assert_resp_not_matches` · `assert_proposed` · `assert_titles_convention` ·
-`assert_commented` · `assert_bulk_updated` · `report`.
+`assert_commented` · `assert_bulk_updated` · `assert_sprint_created` ·
+`assert_sprint_updated` · `report`.
 
 ## Achados desta superfície (2026-06-21)
 

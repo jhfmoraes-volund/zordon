@@ -3,6 +3,12 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { addContextNote } from "@/lib/dal/planning";
 import { createCommentAs } from "@/lib/dal/task-comments";
+import {
+  getNextSprintDefaults,
+  mondayOf,
+  sundayOf,
+  toDateStr,
+} from "@/lib/sprint-dates";
 import { getStepData } from "@/lib/agent/context";
 import { applyMarkdownMutation } from "@/lib/agent/tools/_markdown";
 import { createReadContextSourceTool } from "@/lib/agent/tools/read-context-source";
@@ -1010,6 +1016,167 @@ export function buildVitoriaTools(
         const { data, error } = await q;
         if (error) return { ok: false, error: error.message };
         return { ok: true, sprints: data ?? [] };
+      },
+    }),
+
+    propose_sprint: tool({
+      description:
+        "Cria uma Sprint NA HORA (write direto, live — D6): aparece imediatamente no board, " +
+        "NÃO passa pelo staging (sprint é container, não item — mesma semântica de propose_story). " +
+        "Use quando o PM pedir pra abrir a próxima sprint pra distribuir trabalho. " +
+        "CONVENÇÃO (D11): nome 'Sprint N' auto-numerado quando omitido. " +
+        "JANELA seg→dom de 7 dias é INVARIANTE (CHECK no DB): se passar startDate, ela é " +
+        "ancorada na segunda daquela semana e o fim vira o domingo; se omitir, cai na próxima " +
+        "semana livre após a última sprint. GROUNDED (D12): cite a nota/transcript de origem no goal.",
+      inputSchema: z.object({
+        // projectId vem do closure (D2) — nunca arg do modelo.
+        name: z
+          .string()
+          .optional()
+          .describe("Nome da sprint. Omita pra auto-numerar 'Sprint N' (convenção, D11)."),
+        startDate: z
+          .string()
+          .optional()
+          .describe(
+            "YYYY-MM-DD. Ancorado na segunda da semana; fim = domingo (7d). Omita = próxima semana livre.",
+          ),
+        goal: z
+          .string()
+          .optional()
+          .describe(
+            "Objetivo da sprint. Cite aqui a nota/transcript que originou (procedência, D12).",
+          ),
+      }),
+      execute: async ({ name, startDate, goal }) => {
+        const supabase = db();
+        // Sprints existentes (datas) — base pro auto-número + próxima janela livre.
+        const { data: existing, error: exErr } = await supabase
+          .from("Sprint")
+          .select("startDate, endDate")
+          .eq("projectId", projectId);
+        if (exErr) return { ok: false, error: exErr.message };
+
+        // getNextSprintDefaults snapa pra seg→dom e produz o label 'Sprint N'.
+        // O número final no banco é garantido pelo trigger renumber_sprints_chronologically.
+        const defaults = getNextSprintDefaults(
+          (existing ?? []) as { startDate: string; endDate: string }[],
+          startDate,
+        );
+        const finalName = name?.trim() || defaults.name;
+
+        const { data, error } = await supabase
+          .from("Sprint")
+          .insert({
+            projectId, // closure — autoritativo (D2)
+            name: finalName,
+            startDate: defaults.startDate,
+            endDate: defaults.endDate,
+            goal: goal?.trim() ? goal.trim() : null,
+            // status omitido → DB default 'upcoming' (lifecycle 3-estados).
+            updatedAt: new Date().toISOString(),
+          })
+          .select("id, name, startDate, endDate, status")
+          .single();
+        if (error) {
+          // 23505: semana já tem sprint, ou nome duplicado no projeto.
+          const msg =
+            error.code === "23505"
+              ? error.message.includes("sprint_unique_week_per_project")
+                ? `já existe uma sprint na semana de ${defaults.startDate} neste projeto`
+                : `já existe uma sprint com o nome '${finalName}' neste projeto`
+              : error.message;
+          return { ok: false, error: msg };
+        }
+        return {
+          ok: true,
+          sprintId: data.id,
+          name: data.name,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          status: data.status,
+        };
+      },
+    }),
+
+    update_sprint: tool({
+      description:
+        "Edita uma Sprint existente NA HORA (write direto, live — D6). Valida que a sprint é " +
+        "DESTE projeto. MERGE shallow: só os campos passados mudam. Pra remarcar a janela, passe " +
+        "startDate (re-ancorado na segunda; fim = domingo, 7d). status ∈ upcoming|active|completed " +
+        "(no máximo 1 'active' por projeto). Use pra corrigir nome/goal/datas/status de uma sprint.",
+      inputSchema: z.object({
+        // projectId vem do closure (D2) — nunca arg do modelo.
+        sprintId: z
+          .string()
+          .uuid()
+          .describe("UUID da sprint a editar (resolva via list_project_sprints)"),
+        name: z.string().optional().describe("Novo nome da sprint."),
+        startDate: z
+          .string()
+          .optional()
+          .describe("YYYY-MM-DD — re-ancora a janela na segunda dessa semana (fim = domingo, 7d)."),
+        goal: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("Novo objetivo (use null pra limpar)."),
+        status: z
+          .enum(["upcoming", "active", "completed"])
+          .optional()
+          .describe("Estado da sprint. No máximo 1 'active' por projeto."),
+      }),
+      execute: async ({ sprintId, name, startDate, goal, status }) => {
+        const supabase = db();
+        // Guard cross-project: a sprint TEM que ser deste projeto (closure).
+        const { data: sprint, error: sErr } = await supabase
+          .from("Sprint")
+          .select("id, projectId")
+          .eq("id", sprintId)
+          .maybeSingle();
+        if (sErr) return { ok: false, error: sErr.message };
+        if (!sprint) return { ok: false, error: "sprint não encontrada" };
+        if (sprint.projectId !== projectId) {
+          return { ok: false, error: "sprint pertence a outro projeto" };
+        }
+
+        const patch: Database["public"]["Tables"]["Sprint"]["Update"] = {};
+        if (name !== undefined) patch.name = name;
+        if (goal !== undefined) patch.goal = goal; // null limpa
+        if (status !== undefined) patch.status = status;
+        if (startDate !== undefined) {
+          // Re-ancora seg→dom pra nunca violar o CHECK de semana.
+          const monday = mondayOf(new Date(`${startDate}T00:00:00`));
+          patch.startDate = toDateStr(monday);
+          patch.endDate = toDateStr(sundayOf(monday));
+        }
+        if (Object.keys(patch).length === 0) {
+          return { ok: false, error: "nenhum campo passado pra editar" };
+        }
+        patch.updatedAt = new Date().toISOString();
+
+        const { data, error } = await supabase
+          .from("Sprint")
+          .update(patch)
+          .eq("id", sprintId)
+          .select("id, name, startDate, endDate, status, goal")
+          .single();
+        if (error) {
+          const msg =
+            error.code === "23505"
+              ? error.message.includes("sprint_one_active_per_project")
+                ? "já existe outra sprint 'active' neste projeto (só 1 ativa por vez)"
+                : error.message.includes("sprint_unique_week_per_project")
+                  ? "já existe uma sprint nessa semana neste projeto"
+                  : error.message
+              : error.message;
+          return { ok: false, error: msg };
+        }
+        return {
+          ok: true,
+          sprintId: data.id,
+          fieldsUpdated: Object.keys(patch).filter((k) => k !== "updatedAt"),
+          sprint: data,
+        };
       },
     }),
 

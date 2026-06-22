@@ -93,6 +93,14 @@ assert_titles_convention() {
   else _fail "convenção de título: $bad/$tot fora do padrão [verbo] [objeto] (escopo) para [propósito]"; fi
 }
 
+# sprint_marker_count <marker> <col> <minutes> — Sprints cujo goal casa o marker,
+# filtradas pela coluna de tempo (createdAt p/ propose_sprint, updatedAt p/ update_sprint).
+sprint_marker_count() { _psql -c "SELECT count(*) FROM \"Sprint\" WHERE goal ILIKE '%'||'$1'||'%' AND \"$2\" > now() - interval '$3 min';"; }
+# assert_sprint_created <marker> <minutes> — propose_sprint (live, D6) gravou o marker no goal.
+assert_sprint_created() { local n; n="$(sprint_marker_count "$1" "createdAt" "${2:-8}")"; (( n >= 1 )) && _pass "sprint criada (goal~'$1', $n)" || _fail "nenhuma Sprint criada com goal~'$1' em $2 min"; }
+# assert_sprint_updated <marker> <minutes> — update_sprint (live, D6) tocou um Sprint com o marker.
+assert_sprint_updated() { local n; n="$(sprint_marker_count "$1" "updatedAt" "${2:-8}")"; (( n >= 1 )) && _pass "sprint editada (goal~'$1', $n)" || _fail "nenhuma Sprint com goal~'$1' editada em $2 min"; }
+
 # assert_bulk_updated <ceremony> <minCount> <minutes> — N MeetingTaskAction
 # (type=update, source=ai) em staging, do propose_task_bulk_update (D9).
 assert_bulk_updated() {

@@ -4,7 +4,7 @@
 > Regenere: `npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write docs/platform/agent-capability-matrix.md`.
 > Pertencimento (`surfaces`) e escopo (`needs`) vivem no descriptor — esta tabela é projeção. Drift cross-repo: `scripts/check-daemon-surface.ts`.
 
-**91 tools** · surfaces: vitor 41 · pm_review 17 · planning 23 · release_pl 27 · wiki 15 · alpha 26
+**93 tools** · surfaces: vitor 41 · pm_review 17 · planning 25 · release_pl 29 · wiki 15 · alpha 26
 
 | tool | class | needs | vitor | pm_review | planning | release_pl | wiki | alpha |
 |------|-------|-------|----|----|----|----|----|----|
@@ -52,6 +52,7 @@
 | `list_unplanned_tasks` | sense | routeProjectId | · | · | · | · | · | ✓ |
 | `load_heuristic` | sense | — | · | · | · | · | · | ✓ |
 | `propose_prd` | act | sessionId | ✓ | · | · | · | · | · |
+| `propose_sprint` | act | — | · | · | ✓ | ✓ | · | · |
 | `propose_story` | act | — | · | · | ✓ | ✓ | · | · |
 | `propose_task_action` | act | planningId | · | · | ✓ | ✓ | · | · |
 | `propose_task_bulk_update` | act | planningId | · | · | ✓ | ✓ | · | · |
@@ -88,6 +89,7 @@
 | `update_project_memory` | remember | sessionId | ✓ | · | · | · | · | · |
 | `update_proposed_action` | act | planningId | · | · | ✓ | ✓ | · | · |
 | `update_session_memory` | remember | sessionId | ✓ | · | · | · | · | · |
+| `update_sprint` | act | — | · | · | ✓ | ✓ | · | · |
 | `update_task` | act | — | · | · | · | · | · | ✓ |
 | `verify_sprint_distribution` | sense | routeProjectId | · | · | · | · | · | ✓ |
 | `write_brainstorm` | act | sessionId | ✓ | · | · | · | · | · |

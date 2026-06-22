@@ -76,6 +76,7 @@
     "list_project_members",
     "list_project_sprints",
     "list_project_tasks",
+    "propose_sprint",
     "propose_story",
     "propose_task_action",
     "propose_task_bulk_update",
@@ -84,7 +85,8 @@
     "read_context_source",
     "read_design_session_memory",
     "read_design_session_step",
-    "update_proposed_action"
+    "update_proposed_action",
+    "update_sprint"
   ],
   "vitoria:release_planning": [
     "add_context_note",
@@ -103,6 +105,7 @@
     "list_project_members",
     "list_project_sprints",
     "list_project_tasks",
+    "propose_sprint",
     "propose_story",
     "propose_task_action",
     "propose_task_bulk_update",
@@ -113,7 +116,8 @@
     "read_design_session_step",
     "read_prd",
     "read_transcript_content",
-    "update_proposed_action"
+    "update_proposed_action",
+    "update_sprint"
   ],
   "alpha": [
     "ask_meeting",
