@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   ChevronDown,
   ChevronRight,
+  KanbanSquare,
   LayoutGrid,
   List,
   Plus,
@@ -50,6 +51,8 @@ import {
   ConfirmDialog,
   type ConfirmState,
 } from "@/components/ui/confirm-dialog";
+import { useTasksViewMode } from "@/hooks/use-tasks-view-mode";
+import { TasksKanban } from "./tasks-kanban";
 
 type SprintLite = {
   id: string;
@@ -157,6 +160,7 @@ export function TasksList({
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const isMobile = useIsMobile();
+  const { viewMode, setViewMode } = useTasksViewMode();
 
   const bulkEnabled = !!(onBulkUpdate || onBulkDelete);
 
@@ -191,12 +195,6 @@ export function TasksList({
     setSortKey(null);
     setSortDir("asc");
   };
-
-  // Fecha o bottom sheet automaticamente se a janela cresce pra desktop —
-  // a toolbar inline reaparece e não faz sentido manter o sheet aberto.
-  useEffect(() => {
-    if (!isMobile && filtersSheetOpen) setFiltersSheetOpen(false);
-  }, [isMobile, filtersSheetOpen]);
 
   const activeFilterCount =
     (moduleFilter !== "__all" ? 1 : 0) +
@@ -353,7 +351,7 @@ export function TasksList({
 
   return (
     <div className="space-y-4">
-      {bulkEnabled && selected.size > 0 ? (
+      {bulkEnabled && viewMode === "list" && selected.size > 0 ? (
         <BulkActionsBar
           count={selected.size}
           onClear={clearSelection}
@@ -457,34 +455,70 @@ export function TasksList({
         </div>
 
         <div className="ml-auto flex items-center gap-1">
-          <div className="flex overflow-hidden rounded-md border">
-            <button
-              type="button"
-              onClick={() => setGroupBy("story")}
-              className={`flex h-8 items-center gap-1 px-2 text-[11px] ${
-                groupBy === "story"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted/50"
-              }`}
-              title="Agrupar por story"
-            >
-              <LayoutGrid className="size-3.5" />
-              Story
-            </button>
-            <button
-              type="button"
-              onClick={() => setGroupBy("none")}
-              className={`flex h-8 items-center gap-1 border-l px-2 text-[11px] ${
-                groupBy === "none"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted/50"
-              }`}
-              title="Lista plana"
-            >
-              <List className="size-3.5" />
-              Flat
-            </button>
-          </div>
+          {/* View: Lista | Kanban — só no desktop (colunas não empilham bem
+              no mobile, onde o hook força list). */}
+          {!isMobile ? (
+            <div className="flex overflow-hidden rounded-md border">
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`flex h-8 items-center gap-1 px-2 text-[11px] ${
+                  viewMode === "list"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50"
+                }`}
+                title="Visão em lista"
+              >
+                <List className="size-3.5" />
+                Lista
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("kanban")}
+                className={`flex h-8 items-center gap-1 border-l px-2 text-[11px] ${
+                  viewMode === "kanban"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50"
+                }`}
+                title="Visão em Kanban (por status)"
+              >
+                <KanbanSquare className="size-3.5" />
+                Kanban
+              </button>
+            </div>
+          ) : null}
+
+          {/* Agrupamento por story — só faz sentido na lista. */}
+          {viewMode === "list" ? (
+            <div className="flex overflow-hidden rounded-md border">
+              <button
+                type="button"
+                onClick={() => setGroupBy("story")}
+                className={`flex h-8 items-center gap-1 px-2 text-[11px] ${
+                  groupBy === "story"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50"
+                }`}
+                title="Agrupar por story"
+              >
+                <LayoutGrid className="size-3.5" />
+                Story
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupBy("none")}
+                className={`flex h-8 items-center gap-1 border-l px-2 text-[11px] ${
+                  groupBy === "none"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50"
+                }`}
+                title="Lista plana"
+              >
+                <List className="size-3.5" />
+                Flat
+              </button>
+            </div>
+          ) : null}
           {onCreateTask ? (
             <Button size="sm" onClick={onCreateTask}>
               <Plus className="size-3.5" />
@@ -500,7 +534,14 @@ export function TasksList({
       </div>
 
       {/* Body ───────────────────────────────────────────────────────── */}
-      {groupBy === "story" ? (
+      {viewMode === "kanban" ? (
+        <TasksKanban
+          tasks={sortedFiltered}
+          members={members}
+          onOpenTask={onOpenTask}
+          onChangeStatus={onChangeStatus}
+        />
+      ) : groupBy === "story" ? (
         <GroupedByStory
           tasks={sortedFiltered}
           stories={stories}
@@ -517,7 +558,7 @@ export function TasksList({
       )}
 
       {/* Mobile filters bottom sheet ─────────────────────────────────── */}
-      <Sheet open={filtersSheetOpen} onOpenChange={setFiltersSheetOpen}>
+      <Sheet open={filtersSheetOpen && isMobile} onOpenChange={setFiltersSheetOpen}>
         <SheetContent
           side="bottom"
           className="max-h-[85dvh] rounded-t-xl"
