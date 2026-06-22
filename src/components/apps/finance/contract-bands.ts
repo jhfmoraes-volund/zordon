@@ -24,14 +24,6 @@ export function paletteFor(seq: number): ContractPalette {
   return CONTRACT_PALETTE[(Math.max(seq, 1) - 1) % CONTRACT_PALETTE.length];
 }
 
-/** Banda neutra pra sprints sem contrato cobrindo. */
-export const NEUTRAL_PALETTE: ContractPalette = {
-  dot: "bg-muted-foreground/40",
-  band: "bg-muted/30",
-  border: "border-border/60",
-  text: "text-muted-foreground",
-};
-
 /** Contrato cuja vigência contém a data (YYYY-MM-DD): o de início mais recente que começa até a data. */
 export function contractForDate(contracts: Contract[], dateISO: string): Contract | null {
   const day = dateISO.slice(0, 10);

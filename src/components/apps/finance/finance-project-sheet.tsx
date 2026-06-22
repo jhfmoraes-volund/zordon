@@ -45,7 +45,6 @@ import type { AllocationItem, MemberRef, ProjectDetail } from "@/lib/finance/typ
 import { FinanceAssumptionsForm } from "./finance-assumptions-form";
 import { FinanceFpBilling } from "./finance-fp-billing";
 import { FinanceContracts } from "./finance-contracts";
-import { FinanceSprintTimeline } from "./finance-sprint-timeline";
 
 function monthLabel(iso: string): string {
   return new Date(iso)
@@ -315,14 +314,6 @@ export function FinanceProjectSheet({
                   void reload();
                   onChanged();
                 }}
-              />
-
-              {/* Cronograma de blocos (sprints bandeadas por contrato) */}
-              <FinanceSprintTimeline
-                sprints={detail.sprints}
-                contracts={detail.contracts}
-                selectedContractId={scope.id}
-                onSelectContract={selectScope}
               />
 
               {/* Entregas de FP (encomenda) */}

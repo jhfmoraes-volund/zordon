@@ -6,6 +6,10 @@
  * 4+ sob B). A fronteira é autorada por sprint (preenche a data pelo
  * startDate/endDate da sprint) mas guardada por data. Clicar num contrato
  * escopa a DRE àquela vigência. Visível pra squad e encomenda.
+ *
+ * Cada card embute seu próprio cronograma de blocos (as sprints cobertas pela
+ * vigência, numa faixa horizontal que rola) — substitui o cronograma global,
+ * tornando explícita a relação contrato→sprints.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -65,6 +69,11 @@ function numOrNull(s: string): number | null {
 }
 function billingLabel(b: BillingType): string {
   return b === "fixed_scope" ? "Encomenda" : "Squad";
+}
+/** "Sprint 12" → "12"; resto inalterado. Rótulo curto pros blocos do cronograma. */
+function shortName(name: string): string {
+  const m = /^Sprint\s+(.+)$/i.exec(name);
+  return m ? m[1] : name;
 }
 
 /** Sprints cobertas por este contrato (membership pela data de início da sprint). */
@@ -207,16 +216,10 @@ export function FinanceContracts({
           Sem contrato — defina um pra registrar preço/condições por período.
         </div>
       ) : (
-        <div className="surface divide-y divide-border/60 overflow-hidden">
+        <div className="space-y-2">
           {contracts.map((c) => {
             const pal = paletteFor(c.seq);
             const covered = coveredSprints(c, contracts, sprints);
-            const range =
-              covered.length > 0
-                ? covered.length === 1
-                  ? covered[0].name
-                  : `${covered[0].name}–${covered[covered.length - 1].name}`
-                : null;
             const selected = selectedContractId === c.id;
             return (
               <div
@@ -228,56 +231,80 @@ export function FinanceContracts({
                   if (e.key === "Enter" || e.key === " ") onSelectContract(selected ? null : c.id);
                 }}
                 className={cn(
-                  "group flex cursor-pointer items-center gap-3 px-3 py-2.5 text-left transition-colors",
-                  selected ? pal.band : "hover:bg-muted/40",
+                  "group cursor-pointer overflow-hidden rounded-lg border text-left transition-colors",
+                  selected ? cn(pal.border, pal.band) : "border-border hover:bg-muted/40",
                 )}
               >
-                <span className={cn("size-2.5 shrink-0 rounded-full", pal.dot)} />
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2 truncate text-sm font-medium">
-                    {c.label}
-                    <span className={cn("rounded-sm border px-1 py-px text-[10px] font-normal", pal.border, pal.text)}>
-                      {billingLabel(c.billingType)}
-                    </span>
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {range ? `${range} · ` : ""}
-                    {fmtDate(c.effectiveFrom)} → {c.effectiveTo ? fmtDate(c.effectiveTo) : "atual"}
-                    {c.billingType === "fixed_scope"
-                      ? c.pricePerFpCents != null
-                        ? ` · ${brlFromCents(c.pricePerFpCents)}/FP${c.contractedFp != null ? ` · ${c.contractedFp} FP` : ""}`
-                        : ""
-                      : c.monthlyFeeCents != null
-                        ? ` · ${brlFromCents(c.monthlyFeeCents)}/mês${c.contractedSprints != null ? ` · ${c.contractedSprints} sprints` : ""}`
-                        : ""}
-                  </p>
+                {/* Cabeçalho: identidade + vigência/preço + ações */}
+                <div className="flex items-start gap-3 px-3 pb-2 pt-2.5">
+                  <span className={cn("mt-1 size-2.5 shrink-0 rounded-full", pal.dot)} />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-2 truncate text-sm font-medium">
+                      {c.label}
+                      <span className={cn("rounded-sm border px-1 py-px text-[10px] font-normal", pal.border, pal.text)}>
+                        {billingLabel(c.billingType)}
+                      </span>
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {fmtDate(c.effectiveFrom)} → {c.effectiveTo ? fmtDate(c.effectiveTo) : "atual"}
+                      {c.billingType === "fixed_scope"
+                        ? c.pricePerFpCents != null
+                          ? ` · ${brlFromCents(c.pricePerFpCents)}/FP${c.contractedFp != null ? ` · ${c.contractedFp} FP` : ""}`
+                          : ""
+                        : c.monthlyFeeCents != null
+                          ? ` · ${brlFromCents(c.monthlyFeeCents)}/mês${c.contractedSprints != null ? ` · ${c.contractedSprints} sprints` : ""}`
+                          : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      title="Editar"
+                      aria-label="Editar"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(c);
+                      }}
+                      className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Remover"
+                      aria-label="Remover"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        remove(c);
+                      }}
+                      className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-rose-500 group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    title="Editar"
-                    aria-label="Editar"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEdit(c);
-                    }}
-                    className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
-                  >
-                    <Pencil className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    title="Remover"
-                    aria-label="Remover"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      remove(c);
-                    }}
-                    className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-rose-500 group-hover:opacity-100"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
+
+                {/* Cronograma de blocos deste contrato — faixa de 1 linha, rola na horizontal */}
+                {covered.length > 0 && (
+                  <div className="px-3 pb-2.5">
+                    <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {covered.map((s) => (
+                        <span
+                          key={s.id}
+                          title={`${s.name} · ${fmtDate(s.startDate)} → ${fmtDate(s.endDate)}`}
+                          className={cn(
+                            "flex size-6 shrink-0 items-center justify-center rounded-sm border font-mono text-[10px] font-medium tabular-nums",
+                            pal.border,
+                            pal.band,
+                            pal.text,
+                          )}
+                        >
+                          {shortName(s.name)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
