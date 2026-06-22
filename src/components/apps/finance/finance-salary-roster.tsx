@@ -2,7 +2,7 @@
 
 /**
  * Roster de salários — referência a despesa de pessoal de forma organizada:
- * lista TODOS os internos da Volund (Member.isExternal = false) com o custo
+ * lista TODOS os membros (internos e externos, em seções separadas) com o custo
  * mensal vigente (entry da categoria Salários sem effective_to), e permite
  * definir/atualizar/remover inline. Cada membro = 1 comp vigente.
  *
@@ -73,6 +73,10 @@ export function FinanceSalaryRoster({
 
   const internal = useMemo(
     () => members.filter((m) => !m.isExternal).sort((a, b) => a.name.localeCompare(b.name)),
+    [members],
+  );
+  const external = useMemo(
+    () => members.filter((m) => m.isExternal).sort((a, b) => a.name.localeCompare(b.name)),
     [members],
   );
 
@@ -149,18 +153,10 @@ export function FinanceSalaryRoster({
     return <p className="px-1 py-8 text-center text-sm text-muted-foreground">carregando…</p>;
   }
 
-  return (
-    <div>
-      <p className="mb-3 font-mono text-xs text-muted-foreground">
-        <span className="text-foreground">{brlFromCents(totalMonthly)}</span>/mês ·{" "}
-        {definedCount}/{internal.length} internos com salário definido
-      </p>
-
-      <div className="surface divide-y divide-border/60 overflow-hidden">
-        {internal.map((m) => {
-          const cur = activeByMember.get(m.id);
-          const isEditing = editing?.memberId === m.id;
-          return (
+  function renderRow(m: MemberRef) {
+    const cur = activeByMember.get(m.id);
+    const isEditing = editing?.memberId === m.id;
+    return (
             <div key={m.id} className="group">
               <div className="flex items-center gap-3 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
@@ -255,8 +251,32 @@ export function FinanceSalaryRoster({
               )}
             </div>
           );
-        })}
+  }
+
+  return (
+    <div>
+      <p className="mb-3 font-mono text-xs text-muted-foreground">
+        <span className="text-foreground">{brlFromCents(totalMonthly)}</span>/mês ·{" "}
+        {definedCount}/{members.length} com custo definido
+      </p>
+
+      <p className="px-1 pb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        Internos · {internal.length}
+      </p>
+      <div className="surface divide-y divide-border/60 overflow-hidden">
+        {internal.map(renderRow)}
       </div>
+
+      {external.length > 0 && (
+        <>
+          <p className="mt-4 px-1 pb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Externos · {external.length}
+          </p>
+          <div className="surface divide-y divide-border/60 overflow-hidden">
+            {external.map(renderRow)}
+          </div>
+        </>
+      )}
 
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </div>
