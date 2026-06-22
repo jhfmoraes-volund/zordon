@@ -102,8 +102,8 @@ Não há endpoint HTTP novo de produto. As tools rodam pelo tool router genéric
 
 | Tool (MCP) | Args (do modelo) | Efeito | Modelo de mutação |
 |------------|------------------|--------|-------------------|
-| `propose_sprint` | `{ name?, startDate?, endDate?, goal? }` | INSERT Sprint (datas auto via sprint-dates se omitidas) | **live** (D6) — retorna `{ sprintId, name }` |
-| `update_sprint` | `{ sprintId, name?, startDate?, endDate?, goal?, status? }` | UPDATE Sprint | **live** (D6) |
+| `propose_sprint` | `{ name?, startDate?, goal? }` (endDate derivado seg→dom) | INSERT Sprint (datas auto via sprint-dates se omitidas; status→`upcoming`) | **live** (D6) — retorna `{ sprintId, name, startDate, endDate, status }` |
+| `update_sprint` | `{ sprintId, name?, startDate?, goal?(null limpa), status? (upcoming\|active\|completed) }` | UPDATE Sprint (merge shallow) | **live** (D6) — retorna `{ sprintId, fieldsUpdated, sprint }` |
 | `propose_task_bulk_update` | `{ updates: [{ taskId, patch }], reasoning, sourceNoteIds[], aiConfidence? }` | N× INSERT MeetingTaskAction(type=update) | **staged** (D9) — retorna `{ created, errors[] }` |
 | `add_task_comment` | `{ taskId, body, mentionedMemberIds? }` | INSERT TaskComment | **live** (D7) |
 | `read_transcript_content` | `{ transcriptRefId, offset? }` | leitura paginada de transcript curado | read-only (D4) |
@@ -189,7 +189,7 @@ Tool nova: recebe `updates:[{taskId, patch}]`, `reasoning`, `sourceNoteIds(≥1)
 
 ### P5 — `propose_sprint` (INSERT Sprint live)
 
-Tool nova: cria Sprint (live, D6). Args `{name?, startDate?, endDate?, goal?}`. Datas omitidas → deriva via `src/lib/sprint-dates.ts` `getNextSprintDefaults` (seg→dom). `name` omitido → auto-numera "Sprint N" (D11). `status` default `'planned'`. Retorna `{sprintId, name}`. Grava procedência no `goal` quando relevante (D12).
+Tool nova: cria Sprint (live, D6). Args `{name?, startDate?, goal?}` (NÃO expõe `endDate` — é derivado do `startDate` pelo CHECK seg→dom de 7d; expor seria footgun). Datas omitidas → deriva via `src/lib/sprint-dates.ts` `getNextSprintDefaults` (seg→dom). `name` omitido → auto-numera "Sprint N" (D11). **`status` omitido → default do DB `'upcoming'`** (lifecycle 3-estados `upcoming|active|completed`, migration `20260504_sprint_lifecycle_3_states.sql` — `'planned'` é valor LEGADO, não usar). Retorna `{sprintId, name, startDate, endDate, status}`. Grava procedência no `goal` quando relevante (D12). Conflitos `23505` (semana/nome duplicado) viram erro legível pro modelo se corrigir.
 
 - **Toca:** `src/lib/agent/agents/vitoria/tools.ts` · `src/lib/agent/tools-registry.ts` · `../zordon-daemon/src/lib/agent/agents/vitoria/tools.ts` · `../zordon-daemon/src/lib/agent/tools-registry.ts`
 - **Pronto quando:** `propose_sprint` faz INSERT em `Sprint`; datas omitidas derivadas via `getNextSprintDefaults` (não viola o CHECK seg→dom); `name` omitido auto-numera "Sprint N"; retorna `{sprintId, name}`; write é **live** (não cria `MeetingTaskAction`); presente nos dois sets dos dois registries; stub no daemon; `tsc` nos dois repos.
@@ -197,7 +197,7 @@ Tool nova: cria Sprint (live, D6). Args `{name?, startDate?, endDate?, goal?}`. 
 
 ### P6 — `update_sprint` (UPDATE Sprint live) — depende de P5
 
-Tool nova: edita Sprint existente (live, D6). Args `{sprintId, name?, startDate?, endDate?, goal?, status?}`. Valida `sprint.projectId === projectId`. Merge shallow: só campos passados. Retorna `{sprintId, fieldsUpdated}`.
+Tool nova: edita Sprint existente (live, D6). Args `{sprintId, name?, startDate?, goal?(nullable), status?}` — `status` é enum `upcoming|active|completed` (NÃO `'planned'`); `startDate` re-ancora a janela seg→dom (endDate derivado, não exposto). Valida `sprint.projectId === projectId`. Merge shallow: só campos passados, seta `updatedAt`. Retorna `{sprintId, fieldsUpdated, sprint}`. Conflito `23505` em `sprint_one_active_per_project` (2ª active) vira erro legível.
 
 - **Toca:** `src/lib/agent/agents/vitoria/tools.ts` · `src/lib/agent/tools-registry.ts` · `../zordon-daemon/src/lib/agent/agents/vitoria/tools.ts` · `../zordon-daemon/src/lib/agent/tools-registry.ts`
 - **Pronto quando:** `update_sprint` faz UPDATE em `Sprint`; valida sprint pertence ao projeto (rejeita cross-project); atualiza só os campos passados (merge shallow), seta `updatedAt`; presente nos dois sets dos dois registries; stub no daemon; `tsc` nos dois repos.
