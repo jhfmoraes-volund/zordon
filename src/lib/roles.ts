@@ -18,6 +18,8 @@
  * `accessLevel` from `role` via `mapPositionToAccessLevel()`.
  */
 
+import { TOWER_KEYS, towerLabel, type TowerKey } from "@/lib/memberSkills";
+
 // ─── Access Level (authz axis) ───────────────────────────
 
 export type AccessLevel = "guest" | "builder" | "manager" | "admin";
@@ -115,33 +117,24 @@ export const ROLE_LABELS: Record<Role, string> = {
 /** @deprecated use `POSITIONS`. */
 export const ROLES = Object.keys(ROLE_LEVELS) as Role[];
 
-// ─── Specialties ─────────────────────────────────────────
+// ─── Specialties (= torre principal declarada) ───────────
+//
+// A "especialidade declarada" é a torre principal do membro, reconciliada com
+// as 10 torres do perfil de skills (SSOT único em `memberSkills.ts`). Substitui
+// o enum legado de 6 valores que não batia com a grid "Torres de especialidade".
+// Mantemos os nomes SPECIALTIES/SPECIALTY_LABELS/specialtyLabel pra minimizar o
+// diff nos consumers (API validation, members-load, etc).
 
-export const SPECIALTIES = [
-  "fullstack",
-  "ux-ui",
-  "backend",
-  "qa",
-  "infra",
-  "security",
-] as const;
+export const SPECIALTIES = TOWER_KEYS;
 
-export type Specialty = (typeof SPECIALTIES)[number];
+export type Specialty = TowerKey;
 
-export const SPECIALTY_LABELS: Record<Specialty, string> = {
-  fullstack: "Fullstack",
-  "ux-ui": "UX / UI",
-  backend: "Backend",
-  qa: "QA",
-  infra: "Infra",
-  security: "Security",
-};
+export const SPECIALTY_LABELS: Record<string, string> = Object.fromEntries(
+  TOWER_KEYS.map((k) => [k, towerLabel(k)]),
+);
 
-/** Human-friendly label for a specialty; falls back to the raw string. */
-export function specialtyLabel(specialty: string | null | undefined): string {
-  if (!specialty) return "—";
-  return SPECIALTY_LABELS[specialty as Specialty] ?? specialty;
-}
+/** Human-friendly label for a specialty (torre); falls back to the raw string. */
+export const specialtyLabel = towerLabel;
 
 // ─── Helpers (new — preferred) ───────────────────────────
 

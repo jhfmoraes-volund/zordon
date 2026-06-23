@@ -11,6 +11,8 @@ import { PageTitle } from "@/components/app-shell";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { ConversationFab } from "@/components/ui/conversation/conversation-fab";
 import { ConversationPanel } from "@/components/ui/conversation";
+import { AgentSplit, CanvasStage } from "@/components/ui/canvas";
+import { cn } from "@/lib/utils";
 import { useIsMobile, XL_BREAKPOINT } from "@/hooks/use-mobile";
 import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
@@ -321,12 +323,58 @@ export function PMReviewWorkspace({
       planMode={planMode}
       onPlanModeChange={setPlanMode}
       fallbackActive={isFallback}
-      className="h-full"
+      className={cn(
+        "h-full",
+        // No desktop o chat fica flush dentro do rail (.canvas-rail) — sem
+        // card próprio competindo com a mesa. No drawer mantém o sheet.
+        !chatAsDrawer && "rounded-none border-0 bg-transparent shadow-none",
+      )}
     />
   );
 
+  const canvas = (
+    <CanvasStage
+      header={
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {hasReport ? "Report da semana" : "Curadoria de contexto"}
+        </span>
+      }
+    >
+      {hasReport ? (
+        <>
+          <PMReviewReport
+            reportMarkdown={pmReview.reportMarkdown}
+            reportGeneratedAt={pmReview.reportGeneratedAt}
+            notes={pmReview.notes}
+            projectContext={pmReview.projectContext}
+            onRequestSync={handleSynthesize}
+            refreshing={refreshing}
+          />
+          {/* Curar contexto — collapsible no rodapé */}
+          <div className="mt-8 border-t pt-4">
+            <button
+              type="button"
+              onClick={() => setWizardExpanded((v) => !v)}
+              className="flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            >
+              {wizardExpanded ? (
+                <ChevronUp className="size-3.5" />
+              ) : (
+                <ChevronDown className="size-3.5" />
+              )}
+              Curar contexto (insumos · notas · síntese)
+            </button>
+            {wizardExpanded && <div className="mt-3">{wizard}</div>}
+          </div>
+        </>
+      ) : (
+        wizard
+      )}
+    </CanvasStage>
+  );
+
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <>
       {withTitle && (
         <PageTitle
           title={pmReview.projectName ?? "PM Review"}
@@ -334,78 +382,47 @@ export function PMReviewWorkspace({
         />
       )}
 
-      <PMReviewRibbon
-        status={pmReview.status}
-        referenceWeek={pmReview.referenceWeek}
-        publishedAt={pmReview.publishedAt}
-        linkedMeetingCount={pmReview.linkedMeetingCount}
-        linkedTranscriptCount={pmReview.linkedTranscriptCount}
-        noteTotal={pmReview.noteTotal}
-        reportGenerated={pmReview.reportGeneratedAt !== null}
-        backHref={backHref}
-        busy={busy}
-        onEdit={() => setEditSheetOpen(true)}
-        onPublish={handlePublish}
-        onOpenContext={() => setContextSheetOpen(true)}
-      />
-
-      {topSlot}
-
-      {isBackdated && (
-        <div className="shrink-0 border-b bg-muted/40 px-6 py-1.5 text-[11px] text-muted-foreground">
-          Review retroativa (semana de {fmtWeek(pmReview.referenceWeek)}) — a síntese
-          reflete o contexto de projeto de hoje, não o da semana de referência.
-        </div>
-      )}
-
-      {/* Main panel: wizard (sem report) OU report + collapsible curar (com report) */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] gap-4 p-4">
-        <div className="surface overflow-y-auto min-h-0 p-6">
-          {hasReport ? (
-            <>
-              <PMReviewReport
-                reportMarkdown={pmReview.reportMarkdown}
-                reportGeneratedAt={pmReview.reportGeneratedAt}
-                notes={pmReview.notes}
-                projectContext={pmReview.projectContext}
-                onRequestSync={handleSynthesize}
-                refreshing={refreshing}
-              />
-              {/* Curar contexto — collapsible no rodapé */}
-              <div className="mt-8 border-t pt-4">
-                <button
-                  type="button"
-                  onClick={() => setWizardExpanded((v) => !v)}
-                  className="flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-                >
-                  {wizardExpanded ? (
-                    <ChevronUp className="size-3.5" />
-                  ) : (
-                    <ChevronDown className="size-3.5" />
-                  )}
-                  Curar contexto (insumos · notas · síntese)
-                </button>
-                {wizardExpanded && <div className="mt-3">{wizard}</div>}
+      <AgentSplit
+        ribbon={
+          <>
+            <PMReviewRibbon
+              status={pmReview.status}
+              referenceWeek={pmReview.referenceWeek}
+              publishedAt={pmReview.publishedAt}
+              linkedMeetingCount={pmReview.linkedMeetingCount}
+              linkedTranscriptCount={pmReview.linkedTranscriptCount}
+              noteTotal={pmReview.noteTotal}
+              reportGenerated={pmReview.reportGeneratedAt !== null}
+              backHref={backHref}
+              busy={busy}
+              onEdit={() => setEditSheetOpen(true)}
+              onPublish={handlePublish}
+              onOpenContext={() => setContextSheetOpen(true)}
+            />
+            {topSlot}
+            {isBackdated && (
+              <div className="shrink-0 border-b bg-muted/40 px-6 py-1.5 text-[11px] text-muted-foreground">
+                Review retroativa (semana de {fmtWeek(pmReview.referenceWeek)}) — a
+                síntese reflete o contexto de projeto de hoje, não o da semana de
+                referência.
               </div>
-            </>
-          ) : (
-            wizard
-          )}
-        </div>
-
-        {!chatAsDrawer && <div className="min-h-0">{chatPanel}</div>}
-      </div>
-
-      {chatAsDrawer && (
-        <>
-          <ConversationFab
-            agent="vitoria"
-            isOpen={mobileOpen}
-            onClick={() => setMobileOpen(!mobileOpen)}
-          />
-          {chatPanel}
-        </>
-      )}
+            )}
+          </>
+        }
+        canvas={canvas}
+        chat={chatPanel}
+        chatAsDrawer={chatAsDrawer}
+        drawer={
+          <>
+            <ConversationFab
+              agent="vitoria"
+              isOpen={mobileOpen}
+              onClick={() => setMobileOpen(!mobileOpen)}
+            />
+            {chatPanel}
+          </>
+        }
+      />
 
       <PMReviewContextSheet
         pmReviewId={pmReview.id}
@@ -432,6 +449,6 @@ export function PMReviewWorkspace({
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
-    </div>
+    </>
   );
 }

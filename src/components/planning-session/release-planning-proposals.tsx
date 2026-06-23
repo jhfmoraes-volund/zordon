@@ -328,7 +328,9 @@ export function ReleasePlanningProposals({
   const isStaging = pendingCount > 0;
 
   return (
-    <div className="rounded-lg border bg-card">
+    // Chromeless: a folha do <CanvasStage bleed> é a superfície (bg-card + raio +
+    // sombra). Renderiza o board direto nela, de borda a borda — sem card próprio.
+    <div>
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Sparkles className="size-4 text-muted-foreground" />

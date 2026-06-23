@@ -7,10 +7,11 @@
  * (esq Contratos→Equipe→Cronograma · dir KPIs→NF→DRE→Cláusulas), gráfico
  * full-width no fundo; mobile colapsa pro stack (col direita antes da esquerda).
  * Escopo segmentado (Global · contratos · +) re-escopa tudo pela vigência.
- * Remontado por projeto via `key` no `FinanceApp`.
+ * Escrita (contrato, equipe, aditivos, NF) vive nos sheets. Remontado por
+ * projeto via `key` no `FinanceApp`.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bar,
   ComposedChart,
@@ -23,37 +24,26 @@ import {
   CalendarRange,
   ChevronLeft,
   Paperclip,
-  Pencil,
   Plus,
   Scale,
   Shield,
   SlidersHorizontal,
-  Trash2,
   Users,
 } from "lucide-react";
 
-import { Field, FormBody } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { Cronograma } from "@/components/timeline/cronograma";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { brlFromCents, pct } from "@/lib/format-currency";
 import { fmtDate, fmtDayMonth } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { positionLabel } from "@/lib/roles";
-import type { AllocationItem, MemberRef, ProjectDetail } from "@/lib/finance/types";
+import type { Contract, Invoice, MemberRef, ProjectDetail } from "@/lib/finance/types";
 import { FinanceAssumptionsForm } from "./finance-assumptions-form";
 import { FinanceFpBilling } from "./finance-fp-billing";
-import { FinanceContracts, type FinanceContractsHandle } from "./finance-contracts";
+import { FinanceContracts } from "./finance-contracts";
+import { FinanceContractSheet } from "./finance-contract-sheet";
+import { FinanceNfWidget } from "./finance-nf-widget";
+import { FinanceInvoiceSheet } from "./finance-invoice-sheet";
 import { contractForDate, paletteFor } from "./contract-bands";
 
 function monthLabel(iso: string): string {
@@ -61,16 +51,11 @@ function monthLabel(iso: string): string {
     .toLocaleDateString("pt-BR", { month: "short", timeZone: "UTC" })
     .replace(".", "");
 }
-function firstOfMonthISO(): string {
-  return `${new Date().toISOString().slice(0, 7)}-01`;
-}
 /** "Sprint 12" → "12"; resto inalterado. Rótulo curto pro chip do cronograma. */
 function shortName(name: string): string {
   const m = /^Sprint\s+(.+)$/i.exec(name);
   return m ? m[1] : name;
 }
-
-type FormState = { id: string | null; memberId: string; percent: string; from: string; to: string };
 
 export function FinanceProjectView({
   projectId,
@@ -90,9 +75,6 @@ export function FinanceProjectView({
   const isMobile = useIsMobile();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  const [form, setForm] = useState<FormState | null>(null);
-  const [saving, setSaving] = useState(false);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   // Escopo: null = ano inteiro (Global); senão a vigência de um contrato.
   const [scope, setScope] = useState<{ id: string | null; from: string; to: string }>({
@@ -100,9 +82,14 @@ export function FinanceProjectView({
     from: `${year}-01`,
     to: `${year}-12`,
   });
-  // Abre a criação de contrato (form inline do FinanceContracts) a partir do `+`
-  // do segmentado. Vira o sheet rico na Fase 2.6.
-  const contractsRef = useRef<FinanceContractsHandle>(null);
+  // Sheet de contrato rico (write) — { contract: null } = novo · { contract } = editar.
+  const [contractSheet, setContractSheet] = useState<{ contract: Contract | null } | null>(null);
+  // Sheet "Emitir NF" (write) — criar (invoice=null + mês) ou editar.
+  const [invoiceSheet, setInvoiceSheet] = useState<{
+    contract: Contract;
+    invoice: Invoice | null;
+    month?: string;
+  } | null>(null);
 
   const reload = useCallback(async () => {
     const res = await fetch(`/api/finance/projects/${projectId}?from=${scope.from}&to=${scope.to}`);
@@ -139,83 +126,10 @@ export function FinanceProjectView({
     };
   }, [reload]);
 
-  // Membros internos ordenados: squad do projeto primeiro.
-  const memberOptions = useMemo(() => {
-    const squad = new Set(detail?.squadMemberIds ?? []);
-    return members
-      .filter((m) => !m.isExternal)
-      .sort((a, b) => {
-        const sa = squad.has(a.id) ? 0 : 1;
-        const sb = squad.has(b.id) ? 0 : 1;
-        return sa - sb || a.name.localeCompare(b.name);
-      });
-  }, [members, detail?.squadMemberIds]);
-
   const laborMap = useMemo(
     () => new Map((detail?.laborByMember ?? []).map((l) => [l.memberId, l.laborCents])),
     [detail?.laborByMember],
   );
-
-  function openAdd() {
-    setForm({ id: null, memberId: "", percent: "", from: firstOfMonthISO(), to: "" });
-  }
-  function openEdit(a: AllocationItem) {
-    setForm({
-      id: a.id,
-      memberId: a.member_id,
-      percent: String(a.percent),
-      from: a.effective_from,
-      to: a.effective_to ?? "",
-    });
-  }
-
-  async function saveForm() {
-    if (!form) return;
-    const percent = parseFloat(form.percent.replace(",", "."));
-    if (!form.memberId || !(percent > 0 && percent <= 100) || !form.from) return;
-    setSaving(true);
-    try {
-      await fetchOrThrow(
-        form.id ? `/api/finance/allocations/${form.id}` : "/api/finance/allocations",
-        {
-          method: form.id ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            memberId: form.memberId,
-            projectId,
-            percent,
-            effectiveFrom: form.from,
-            effectiveTo: form.to || null,
-          }),
-        },
-      );
-      setForm(null);
-      await reload();
-      onChanged();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao salvar alocação" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function removeAllocation(a: AllocationItem) {
-    setConfirm({
-      title: "Remover alocação?",
-      description: `${a.memberName} deixará de compor o custo de equipe deste projeto.`,
-      destructive: true,
-      confirmLabel: "Remover",
-      onConfirm: async () => {
-        try {
-          await fetchOrThrow(`/api/finance/allocations/${a.id}`, { method: "DELETE" });
-          await reload();
-          onChanged();
-        } catch (e) {
-          showErrorToast(e, { label: "Falha ao remover alocação" });
-        }
-      },
-    });
-  }
 
   // Cabeçalho: voltar + identidade do projeto (sempre visível).
   const header = (
@@ -250,6 +164,10 @@ export function FinanceProjectView({
   }
 
   // ── A partir daqui `detail` é não-nulo. Blocos compostos no layout V2. ──
+  const reloadAndBubble = () => {
+    void reload();
+    onChanged();
+  };
   const selectedContract = scope.id
     ? (detail.contracts.find((c) => c.id === scope.id) ?? null)
     : null;
@@ -376,6 +294,28 @@ export function FinanceProjectView({
     </div>
   );
 
+  // Notas Fiscais (read) — NFs escopadas; emitir só com 1 contrato no escopo.
+  const contractsInScope = selectedContract ? [selectedContract] : detail.contracts;
+  const scopedInvoices = scope.id
+    ? detail.invoices.filter((i) => i.contractId === scope.id)
+    : detail.invoices;
+  const nfBlock = (
+    <FinanceNfWidget
+      invoices={scopedInvoices}
+      contractsInScope={contractsInScope}
+      emitContractId={selectedContract?.id ?? null}
+      year={year}
+      onEmit={(contractId, month) => {
+        const c = detail.contracts.find((x) => x.id === contractId);
+        if (c) setInvoiceSheet({ contract: c, invoice: null, month });
+      }}
+      onOpenInvoice={(inv) => {
+        const c = detail.contracts.find((x) => x.id === inv.contractId);
+        if (c) setInvoiceSheet({ contract: c, invoice: inv });
+      }}
+    />
+  );
+
   // Cronograma — grade 3-por-linha (desktop) / faixa que rola (mobile), via prop
   // genérica do componente unificado. Escopado: contrato → só suas sprints.
   const cronoSprints = scope.id
@@ -409,131 +349,50 @@ export function FinanceProjectView({
 
   const contractsBlock = (
     <FinanceContracts
-      ref={contractsRef}
-      projectId={projectId}
       contracts={detail.contracts}
       sprints={detail.sprints}
-      engagementType={detail.engagementType}
       selectedContractId={scope.id}
       onSelectContract={selectScope}
-      onChanged={() => {
-        void reload();
-        onChanged();
-      }}
+      onCreateContract={() => setContractSheet({ contract: null })}
+      onEditContract={(c) => setContractSheet({ contract: c })}
+      onChanged={reloadAndBubble}
     />
   );
 
   const fpBlock = (detail.engagementType === "fixed_scope" ||
     detail.contracts.some((c) => c.billingType === "fixed_scope")) && (
-    <FinanceFpBilling
-      projectId={projectId}
-      contracts={detail.contracts}
-      onChanged={() => {
-        void reload();
-        onChanged();
-      }}
-    />
+    <FinanceFpBilling projectId={projectId} contracts={detail.contracts} onChanged={reloadAndBubble} />
   );
 
+  // Equipe — READ-ONLY no hub (escrita vive no sheet do contrato). Contrato
+  // selecionado → "Editar no contrato"; Global → edite via um contrato.
+  const teamRows = scope.id
+    ? detail.allocations.filter((a) => a.contract_id === scope.id)
+    : detail.allocations;
   const teamBlock = (
     <div>
       <div className="mb-2 flex items-center justify-between px-1">
         <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          <Users className="size-3.5" /> Equipe alocada
+          <Users className="size-3.5" /> Equipe {selectedContract ? "· nesta vigência" : "· todas"}
         </p>
-        {!form && (
-          <Button size="sm" variant="outline" onClick={openAdd}>
-            <Plus className="size-3.5" /> Alocar
+        {selectedContract ? (
+          <Button size="sm" variant="outline" onClick={() => setContractSheet({ contract: selectedContract })}>
+            Editar no contrato →
           </Button>
+        ) : (
+          <span className="text-[11px] text-muted-foreground">edite num contrato</span>
         )}
       </div>
-
-      {form && (
-        <div className="mb-2 rounded-md border bg-muted/20 p-3">
-          <FormBody density="compact">
-            <Field.Row cols={2}>
-              <Field name="member" required>
-                <Field.Label>Membro</Field.Label>
-                <Field.Control>
-                  <Select
-                    value={form.memberId}
-                    onValueChange={(v) => setForm((f) => (f ? { ...f, memberId: v ?? "" } : f))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(v: string | null) =>
-                          memberOptions.find((m) => m.id === v)?.name ?? "Selecione…"
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {memberOptions.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                          {m.position ? ` · ${positionLabel(m.position)}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field.Control>
-              </Field>
-              <Field name="percent" required>
-                <Field.Label>Alocação (%)</Field.Label>
-                <Field.Control>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={form.percent}
-                    onChange={(e) => setForm((f) => (f ? { ...f, percent: e.target.value } : f))}
-                    placeholder="ex: 50"
-                  />
-                </Field.Control>
-              </Field>
-            </Field.Row>
-            <Field.Row cols={2}>
-              <Field name="from" required>
-                <Field.Label>Início</Field.Label>
-                <Field.Control>
-                  <Input
-                    type="date"
-                    value={form.from}
-                    onChange={(e) => setForm((f) => (f ? { ...f, from: e.target.value } : f))}
-                  />
-                </Field.Control>
-              </Field>
-              <Field name="to">
-                <Field.Label>Fim (opcional)</Field.Label>
-                <Field.Control>
-                  <Input
-                    type="date"
-                    value={form.to}
-                    onChange={(e) => setForm((f) => (f ? { ...f, to: e.target.value } : f))}
-                  />
-                </Field.Control>
-              </Field>
-            </Field.Row>
-          </FormBody>
-          <div className="mt-2 flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setForm(null)} disabled={saving}>
-              Cancelar
-            </Button>
-            <Button size="sm" onClick={saveForm} disabled={saving}>
-              {saving ? "Salvando…" : "Salvar"}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {detail.allocations.length === 0 ? (
+      {teamRows.length === 0 ? (
         <div className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">
-          Ninguém alocado — a margem equipe ainda não desconta mão-de-obra.
+          {selectedContract
+            ? "Ninguém atribuído a este contrato — edite no contrato pra alocar."
+            : "Ninguém alocado — a margem equipe ainda não desconta mão-de-obra."}
         </div>
       ) : (
         <div className="surface divide-y divide-border/60 overflow-hidden">
-          {detail.allocations.map((a) => (
-            <div key={a.id} className="group flex items-center gap-3 px-3 py-2.5">
+          {teamRows.map((a) => (
+            <div key={a.id} className="flex items-center gap-3 px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{a.memberName}</p>
                 <p className="truncate text-xs text-muted-foreground">
@@ -544,26 +403,6 @@ export function FinanceProjectView({
               <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
                 {brlFromCents(laborMap.get(a.member_id) ?? 0)}
               </span>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  title="Editar"
-                  aria-label="Editar"
-                  onClick={() => openEdit(a)}
-                  className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
-                >
-                  <Pencil className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Remover"
-                  aria-label="Remover"
-                  onClick={() => removeAllocation(a)}
-                  className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-rose-500 group-hover:opacity-100"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
             </div>
           ))}
         </div>
@@ -662,7 +501,7 @@ export function FinanceProjectView({
             type="button"
             title="Novo contrato"
             aria-label="Novo contrato"
-            onClick={() => contractsRef.current?.openCreate()}
+            onClick={() => setContractSheet({ contract: null })}
             className="flex shrink-0 items-center rounded-md border border-dashed px-2 py-1.5 text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
           >
             <Plus className="size-3.5" />
@@ -686,7 +525,7 @@ export function FinanceProjectView({
         </div>
         <div className="order-1 space-y-4 lg:order-2">
           {kpisBlock}
-          {/* Widget Notas Fiscais — Fase 2.5 */}
+          {nfBlock}
           {dreBlock}
           {clausesBlock}
         </div>
@@ -695,7 +534,39 @@ export function FinanceProjectView({
       {/* Gráfico mensal — full-width no fundo */}
       {chartBlock}
 
-      <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+      {contractSheet && (
+        <FinanceContractSheet
+          key={contractSheet.contract?.id ?? "new-contract"}
+          open
+          onOpenChange={(o) => {
+            if (!o) setContractSheet(null);
+          }}
+          projectId={projectId}
+          contract={contractSheet.contract}
+          contractCount={detail.contracts.length}
+          sprints={detail.sprints}
+          members={members}
+          squadMemberIds={detail.squadMemberIds}
+          allocations={detail.allocations}
+          clauses={detail.clauses}
+          engagementType={detail.engagementType}
+          onChanged={reloadAndBubble}
+        />
+      )}
+
+      {invoiceSheet && (
+        <FinanceInvoiceSheet
+          key={invoiceSheet.invoice?.id ?? `new-${invoiceSheet.month ?? ""}`}
+          open
+          onOpenChange={(o) => {
+            if (!o) setInvoiceSheet(null);
+          }}
+          contract={invoiceSheet.contract}
+          invoice={invoiceSheet.invoice}
+          defaultMonth={invoiceSheet.month}
+          onChanged={reloadAndBubble}
+        />
+      )}
 
       {assumptionsOpen && (
         <FinanceAssumptionsForm
@@ -705,10 +576,7 @@ export function FinanceProjectView({
           }}
           projectId={projectId}
           scopeLabel="Premissas do projeto"
-          onSaved={() => {
-            void reload();
-            onChanged();
-          }}
+          onSaved={reloadAndBubble}
         />
       )}
     </div>

@@ -87,6 +87,15 @@
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.577 0.2 18);
 
+  /* Canvas (superfícies de agente: PM Review, Release Planning, Alpha…) —
+     modelo de 3 camadas estilo "documento numa mesa": rail (chat) elevado,
+     mesa (stage) recuada, folha (paper) flutuando. Cria separação óbvia
+     chat × canvas. Theme-varying: cada tema dark sobrescreve abaixo. */
+  --canvas-stage: oklch(0.955 0 0);   /* mesa recuada (mais escura que tudo) */
+  --canvas-rail: oklch(0.99 0 0);     /* rail do chat — levemente elevado */
+  --canvas-paper: var(--card);        /* folha flutuante = card branco */
+  --canvas-paper-shadow: 0 1px 2px oklch(0 0 0 / 5%), 0 10px 28px -14px oklch(0 0 0 / 14%);
+
   /* Form field tokens — escopo: form controls dentro de <FormBody> */
   --field-h: 2.25rem;            /* 36px — altura canônica de control */
   --field-h-sm: 2rem;             /* 32px — densidade compact */
@@ -253,6 +262,9 @@
   --input: oklch(1 0 0 / 14%);
   --sidebar: oklch(0.115 0 0);
   --sidebar-accent: oklch(0.165 0 0);
+  --canvas-stage: oklch(0.12 0 0);
+  --canvas-rail: oklch(0.175 0 0);
+  --canvas-paper-shadow: 0 1px 0 oklch(1 0 0 / 5%) inset, 0 10px 30px -14px oklch(0 0 0 / 60%);
 }
 
 .dark[data-theme="oled"] {
@@ -273,6 +285,9 @@
   --input: oklch(1 0 0 / 12%);
   --sidebar: oklch(0.075 0 0);
   --sidebar-accent: oklch(0.13 0 0);
+  --canvas-stage: oklch(0.05 0 0);
+  --canvas-rail: oklch(0.11 0 0);
+  --canvas-paper-shadow: 0 1px 0 oklch(1 0 0 / 4%) inset, 0 12px 32px -16px oklch(0 0 0 / 80%);
 }
 
 @layer base {
@@ -346,6 +361,28 @@
   /* Nivel 3: destaques dentro de items (code blocks, callouts) */
   .surface-nested {
     @apply rounded-lg bg-muted/80 ring-1 ring-foreground/5;
+  }
+
+  /* Canvas de agente — 3 camadas: rail (chat) elevado, mesa (stage) recuada,
+     folha (paper) flutuando. Ver <CanvasStage> e <AgentSplit>. */
+  .canvas-stage {
+    background-color: var(--canvas-stage);
+  }
+  .canvas-rail {
+    background-color: var(--canvas-rail);
+  }
+  .canvas-paper {
+    @apply rounded-xl text-card-foreground ring-1 ring-foreground/10;
+    background-color: var(--canvas-paper);
+    box-shadow: var(--canvas-paper-shadow);
+  }
+  /* Header fixo no topo da mesa — fade pra ela embaixo (some sob o conteúdo). */
+  .canvas-stage-head {
+    background: linear-gradient(
+      var(--canvas-stage),
+      var(--canvas-stage) 72%,
+      transparent
+    );
   }
 
   /* Shimmer text animation for AI processing indicators */

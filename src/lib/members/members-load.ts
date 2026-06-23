@@ -19,6 +19,8 @@ export type MembersListItem = {
   githubUsername: string | null;
   isExternal: boolean;
   isGuest: boolean;
+  /** Tem conta de login (auth user vinculado)? Membros podem existir só como registro. */
+  hasAccount: boolean;
   fpCapacity: number;
   /** Soma de PFV planejados (≠ backlog) nas sprints que rodam na semana atual. */
   fpPlannedWeek: number;
@@ -103,6 +105,7 @@ export async function loadMembersList(supabase: SupabaseClient<any, any, any>): 
       githubUsername: (m.githubUsername as string) ?? null,
       isExternal: (m.isExternal as boolean) ?? false,
       isGuest: (m.isGuest as boolean) ?? false,
+      hasAccount: (m.userId as string | null) != null,
       fpCapacity: (m.fpCapacity as number) ?? 0,
       fpPlannedWeek: weekLoadMap.get(id) ?? 0,
       skills,

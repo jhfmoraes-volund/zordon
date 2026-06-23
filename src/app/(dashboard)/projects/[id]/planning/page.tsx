@@ -16,6 +16,8 @@ import { PageTitle } from "@/components/app-shell";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { ConversationFab } from "@/components/ui/conversation/conversation-fab";
 import { ConversationPanel } from "@/components/ui/conversation";
+import { AgentSplit, CanvasStage } from "@/components/ui/canvas";
+import { cn } from "@/lib/utils";
 import { useIsMobile, XL_BREAKPOINT } from "@/hooks/use-mobile";
 import { readPlanMode, useChatPlanMode } from "@/hooks/use-chat-plan-mode";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
@@ -558,12 +560,66 @@ export default function PlanningSessionPage({
             ? "Planning aprovado — read-only"
             : undefined
       }
-      className="h-full"
+      className={cn(
+        "h-full",
+        // No desktop o chat fica flush dentro do rail (.canvas-rail) — sem card
+        // próprio competindo com a mesa. No drawer mantém o sheet.
+        !chatAsDrawer && "rounded-none border-0 bg-transparent shadow-none",
+      )}
     />
   );
 
+  // Canvas: plano (tasks/stories por sprint) OU canvas histórico read-only.
+  // PRD↔sprint board saiu (2026-06-19) — a planning lê fontes e produz tasks.
+  // Board vivo (proposals) ocupa a folha de borda a borda → bleed. Empty-state e
+  // canvas histórico são mensagens/cards menores → folha com padding de leitura.
+  const canvas = (
+    <CanvasStage bleed={!historyMode && hasPlan}>
+      {historyMode ? (
+        // Canvas HISTÓRICO (read-only) da versão selecionada. Sem versão na
+        // semana → estado vazio (bloco passado sem atividade).
+        historyEventId ? (
+          <PlanningHistoricalCanvas sessionId={session.id} eventId={historyEventId} />
+        ) : (
+          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            Nenhuma versão do plano nesta semana.
+          </div>
+        )
+      ) : (
+        <>
+          <ReleasePlanningProposals
+            planningCeremonyId={session.planningCeremonyId}
+            projectId={projectId}
+            refreshKey={actionsRefresh}
+            readOnly={isApproved}
+            agentBusy={busy}
+            onStateChange={setPlanState}
+            onApplied={handleApplied}
+          />
+          {!hasPlan && (
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              <p className="mb-4">
+                Plano vazio. Peça pra Vitoria montar a partir das fontes (insumos +
+                PRDs) — ela propõe as tasks por sprint, você revisa e aplica.
+              </p>
+              <Button
+                variant="magic"
+                size="sm"
+                onClick={handleKickoff}
+                disabled={isApproved || busy}
+              >
+                <Sparkles className="size-4" />
+                Montar plano
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </CanvasStage>
+  );
+
   return (
-    <div className="-mx-3 -my-4 flex h-[calc(100svh-3rem)] flex-col overflow-hidden sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6">
+    <>
       <PageTitle
         title={session.projectName ?? session.title}
         subtitle={
@@ -573,95 +629,54 @@ export default function PlanningSessionPage({
         }
       />
 
-      <ReleasePlanningRibbon
-        title={session.title}
-        phaseLabel={phase.label}
-        phaseTone={phase.tone}
-        scheduledFor={session.scheduledFor}
-        sprintCount={sprints.length}
-        pendingCount={planState.pendingCount}
-        planCount={planState.planCount}
-        doneCount={planState.doneCount}
-        insumoCount={insumoCount}
-        backHref={backHref}
-        busy={busy}
-        readOnly={isApproved}
-        historyMode={historyMode}
-        onMontar={handleKickoff}
-        onOpenContext={() => setContextOpen(true)}
-        onEdit={() => setEditOpen(true)}
-        onExitHistory={exitHistory}
-        onOpenVersions={() => setHistorySheetOpen(true)}
+      <AgentSplit
+        className="-mx-3 -my-4 h-[calc(100svh-3rem)] sm:-mx-4 md:h-[calc(100svh-3.5rem)] lg:-m-6"
+        ribbon={
+          <>
+            <ReleasePlanningRibbon
+              title={session.title}
+              phaseLabel={phase.label}
+              phaseTone={phase.tone}
+              scheduledFor={session.scheduledFor}
+              sprintCount={sprints.length}
+              pendingCount={planState.pendingCount}
+              planCount={planState.planCount}
+              doneCount={planState.doneCount}
+              insumoCount={insumoCount}
+              backHref={backHref}
+              busy={busy}
+              readOnly={isApproved}
+              historyMode={historyMode}
+              onMontar={handleKickoff}
+              onOpenContext={() => setContextOpen(true)}
+              onEdit={() => setEditOpen(true)}
+              onExitHistory={exitHistory}
+              onOpenVersions={() => setHistorySheetOpen(true)}
+            />
+            {/* Mini-régua sempre visível no ribbon — glance + entrada. Click num
+                bloco abre o side-sheet e entra no modo histórico. */}
+            <CronogramaRail
+              label="Histórico"
+              blocks={blocks}
+              selectedKey={historyBlockKey}
+              onSelect={handleSelectBlock}
+            />
+          </>
+        }
+        canvas={canvas}
+        chat={chatPanel}
+        chatAsDrawer={chatAsDrawer}
+        drawer={
+          <>
+            <ConversationFab
+              agent="vitoria"
+              isOpen={mobileOpen}
+              onClick={() => setMobileOpen(!mobileOpen)}
+            />
+            {chatPanel}
+          </>
+        }
       />
-
-      {/* Mini-régua sempre visível no ribbon — glance + entrada. Click num bloco
-          abre o side-sheet (PlanningHistorySheet) e entra no modo histórico. */}
-      <CronogramaRail
-        label="Histórico"
-        blocks={blocks}
-        selectedKey={historyBlockKey}
-        onSelect={handleSelectBlock}
-      />
-
-      {/* Canvas: plano (tasks/stories por sprint) à esquerda + chat Vitoria à direita.
-          PRD↔sprint board saiu (2026-06-19) — a planning lê fontes e produz tasks. */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] gap-4 p-4">
-        <div className="surface overflow-y-auto min-h-0 p-4 space-y-4">
-          {historyMode ? (
-            // Canvas HISTÓRICO (read-only) da versão selecionada. Sem versão na
-            // semana → estado vazio (bloco passado sem atividade).
-            historyEventId ? (
-              <PlanningHistoricalCanvas sessionId={session.id} eventId={historyEventId} />
-            ) : (
-              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                Nenhuma versão do plano nesta semana.
-              </div>
-            )
-          ) : (
-            <>
-              <ReleasePlanningProposals
-                planningCeremonyId={session.planningCeremonyId}
-                projectId={projectId}
-                refreshKey={actionsRefresh}
-                readOnly={isApproved}
-                agentBusy={busy}
-                onStateChange={setPlanState}
-                onApplied={handleApplied}
-              />
-              {!hasPlan && (
-                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  <p className="mb-4">
-                    Plano vazio. Peça pra Vitoria montar a partir das fontes (insumos +
-                    PRDs) — ela propõe as tasks por sprint, você revisa e aplica.
-                  </p>
-                  <Button
-                    variant="magic"
-                    size="sm"
-                    onClick={handleKickoff}
-                    disabled={isApproved || busy}
-                  >
-                    <Sparkles className="size-4" />
-                    Montar plano
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {!chatAsDrawer && <div className="min-h-0">{chatPanel}</div>}
-      </div>
-
-      {chatAsDrawer && (
-        <>
-          <ConversationFab
-            agent="vitoria"
-            isOpen={mobileOpen}
-            onClick={() => setMobileOpen(!mobileOpen)}
-          />
-          {chatPanel}
-        </>
-      )}
 
       {/* Navegador de versões (side-sheet). Fechar NÃO sai do histórico — o
           canvas segue congelado; reabrir = clicar um bloco na mini-régua. */}
@@ -700,6 +715,6 @@ export default function PlanningSessionPage({
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
-    </div>
+    </>
   );
 }
