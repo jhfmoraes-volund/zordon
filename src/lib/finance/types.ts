@@ -167,8 +167,26 @@ export type ContractPeriod = {
   effectiveFrom: string;
   effectiveTo: string | null;
   billingType: BillingType;
+  status: ContractStatus; // PM-safe: estado é seguro, valores não (admin-only)
 };
 export type ContractPeriodsResponse = { periods: ContractPeriod[] };
+
+/**
+ * Roster de um contrato legível por PM+ (view finance.v_contract_roster). Equipe
+ * alocada (nome, cargo, % contratual, vigência) — NUNCA custo/salário. Agrupado
+ * por contrato no client via `contractId`.
+ */
+export type ContractRosterMember = {
+  allocationId: string;
+  contractId: string;
+  memberId: string;
+  memberName: string;
+  memberPosition: string | null;
+  percent: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+};
+export type ContractRosterResponse = { roster: ContractRosterMember[] };
 
 // ─── Cláusulas do contrato (1-N; agent-fill + manual) ───────────────────────
 

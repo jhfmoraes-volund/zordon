@@ -57,15 +57,15 @@ Sequência (cada step só começa com o anterior verificado):
 
 ## FASE 2 — Convergência de alocação + participação pontual (depois)
 
-Resumo (detalhar quando chegarmos):
-- Migration `labor_allocation` + `kind`/`sprint_id` (spot) + CHECK spot⇒sprint_id.
+Resumo (detalhar quando chegarmos). **Modelo spot REVISADO 2026-06-23 — D11/D12/D13: dias (não %/sprint), teto 60d/entrada, acesso contributor permanente.**
+- Migration `labor_allocation` + `kind` (standing/spot) + **`days numeric`** (spot; 1 dia=8h, fracionável) + CHECK `kind='spot' ⇒ days IS NOT NULL AND days <= 60` + data de competência (effective_from = início da entrada). Standing continua com `percent`.
 - View `v_project_team` = alocados (labor_allocation vigente) ∪ access-only (ProjectAccess).
-- **Backfill órfãos** (ProjectAccess viewer p/ ProjectMember sem allocation) ANTES do cutover.
+- **Backfill órfãos** (ProjectAccess p/ ProjectMember sem allocation) ANTES do cutover.
 - Apontar os 3 readers (api members, vitoria, alpha) pra `v_project_team`; remover squad do UNION.
 - Member box do project sheet → read-only "Equipe (dos contratos)".
 - Redirect members API + Alpha (insert→update-only).
-- UI participação pontual (TagPicker de sprints, fan-out 1 row/sprint) + auto-grant ProjectAccess + chips no sprint view.
-- Σ% validation (null-scoped + spot) + RLS audit admin-only.
+- **UI participação pontual:** admin informa membro + quantidade de dias (cap 60/entrada) + quando (data/mês); custo = `days × custo-dia`. Spot ganha `ProjectAccess` **contributor PERMANENTE** (não expira — builder normal). Chips de spot no sprint/Planning view.
+- Custo: branch `kind='spot'` nas views de custo (dias × custo-dia, atribuído ao mês de início). RLS audit admin-only.
 
 ---
 
@@ -76,4 +76,8 @@ Resumo (detalhar quando chegarmos):
 | 2026-06-23 | runbook criado | Fase 1 definida |
 | 2026-06-23 | F1.1 contract.status | ✅ aplicado PROD (11 contratos = active), index criado, types regenerados, tsc 0 |
 | 2026-06-23 | F1.2 seed Volund | ✅ aplicado PROD (no-op: Volund já existia, count=1); migration idempotente no repo |
-| 2026-06-23 | F1.3 status no contract sheet | ✅ ContractStatus + máquina de estados (dal) + chip/StatusChipSelect no sheet + CONTRACT_STATUS registry. tsc 0. NÃO commitado (sessão concorrente editando finance/dal.ts). |
+| 2026-06-23 | F1.3 status no contract sheet | ✅ ContractStatus + máquina de estados (dal) + chip/StatusChipSelect no sheet + CONTRACT_STATUS registry. tsc 0. |
+| 2026-06-23 | F1.4 kind selector | ✅ 3 cards (Interno/Proposta/Contratado) no project-edit-sheet (só criação); applyKind seta category/phase/cliente Volund. |
+| 2026-06-23 | F1.5 criação por kind | ✅ save() cria contrato via POST /api/finance/contract (proposed/active, billing do engagementType, vigência das datas). Interno = sem contrato. Admin-only (403 → toast, projeto fica). |
+| 2026-06-23 | F1.6 datas derivadas | ✅ edição: fetch contract-period → se há contrato, datas/engajamento read-only (DerivedDate "⤷ contrato"); interno editável. |
+| 2026-06-23 | F1.7 ganhar proposta | ✅ winContract (dal): proposed→active + fase commercial→immersion + ProjectPhaseEvent. POST /api/finance/contract/[id]/win. Botão "🏆 Ganhar proposta" no sheet quando status=proposed. tsc 0, eslint limpo. NÃO commitado. |

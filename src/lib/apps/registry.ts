@@ -12,6 +12,7 @@
  */
 import {
   CalendarClock,
+  FileText,
   Flame,
   FolderOpen,
   Lightbulb,
@@ -46,6 +47,21 @@ export type AppDef = {
 };
 
 export const APP_REGISTRY: AppDef[] = [
+  {
+    key: "contract",
+    name: "Contratos",
+    tagline: "Vigência e equipe do projeto",
+    description:
+      "Os contratos que regem o projeto — vigência, tipo de faturamento, status e equipe alocada. Somente leitura; valores e edição ficam no S&OP (admin).",
+    icon: FileText,
+    dot: "bg-sky-500",
+    window: "xl",
+    // Read-only: não emite contexto nem artefato.
+    produces: {},
+    // PM pra cima (admin + manager). Builder/guest não veem.
+    minAccessLevel: "manager",
+    status: "installed",
+  },
   {
     key: "drive",
     name: "Google Drive",

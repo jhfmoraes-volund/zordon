@@ -212,6 +212,22 @@ export function FinanceContractSheet({
     }
   }
 
+  /** Ganhar proposta (F1.7): proposed→active + bump de fase. Só p/ contrato proposed. */
+  async function winProposal() {
+    if (!cid || saving) return;
+    setSaving(true);
+    try {
+      await fetchOrThrow(`/api/finance/contract/${cid}/win`, { method: "POST" });
+      toast.success("Proposta ganha — contrato ativado");
+      onChanged();
+      onOpenChange(false);
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao ganhar proposta" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
       <ResponsiveSheetContent size="lg">
@@ -480,6 +496,11 @@ export function FinanceContractSheet({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Fechar
           </Button>
+          {contract?.status === "proposed" && (
+            <Button variant="outline" onClick={winProposal} disabled={saving}>
+              🏆 Ganhar proposta
+            </Button>
+          )}
           <Button onClick={saveContract} disabled={saving || !form.label.trim() || !form.from}>
             {saving ? "Salvando…" : "Salvar contrato"}
           </Button>

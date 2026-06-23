@@ -26,12 +26,39 @@ import { PROJECT_STATUS, PROJECT_CATEGORY, PROJECT_PHASE, PROJECT_ENGAGEMENT } f
 import { createClient } from "@/lib/supabase/client";
 import { isPmEligible, roleLabel } from "@/lib/roles";
 import { generateUniqueReferenceKey } from "@/lib/project-reference-key";
-import { showErrorToast } from "@/lib/optimistic/toast";
+import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { parseDriveFolderId } from "@/lib/drive";
 import { useAuth } from "@/contexts/auth-context";
 
 type ClientOption = { id: string; name: string };
 type MemberOption = { id: string; name: string; role: string; position: string | null };
+
+/**
+ * Kind do projeto (só na criação) — preset que define category/phase/cliente e
+ * se um contrato é criado junto (D4). Interno = sem contrato (cliente Volund);
+ * Proposta = contrato `proposed` + fase commercial; Contratado = contrato
+ * `active` + fase immersion. Ver docs/runbooks/contract-allocation-ssot-runbook.md.
+ */
+type ProjectKind = "internal" | "proposal" | "contracted";
+
+/** Data read-only derivada do contrato ativo (D2) — usada quando o projeto já tem contrato. */
+function DerivedDate({ value }: { value: string }) {
+  return (
+    <div className="flex h-(--field-h) items-center gap-2 rounded-md border border-dashed bg-muted px-3 text-sm text-muted-foreground">
+      <span>{value || "—"}</span>
+      <span className="ml-auto text-[10px]">⤷ contrato</span>
+    </div>
+  );
+}
+
+const KIND_PRESET: Record<
+  ProjectKind,
+  { label: string; icon: string; desc: string; category: string; phase: string }
+> = {
+  internal:   { label: "Interno",    icon: "🏠", desc: "Sem cliente externo, sem contrato.", category: "internal", phase: "ops" },
+  proposal:   { label: "Proposta",   icon: "📝", desc: "Comercial — cria contrato em proposta.", category: "billable", phase: "commercial" },
+  contracted: { label: "Contratado", icon: "🤝", desc: "Engajamento ativo — contrato ativo.", category: "billable", phase: "immersion" },
+};
 
 /** Forma de entrada na edição. `null` em `project` → modo criação. */
 export type ProjectEditInitial = {
@@ -63,6 +90,7 @@ type Props = {
 };
 
 const EMPTY_FORM = {
+  kind: "proposal" as ProjectKind,
   name: "",
   repoUrl: "",
   startDate: "",
@@ -87,6 +115,7 @@ const EMPTY_FORM = {
 function formFromProject(project: ProjectEditInitial | null): typeof EMPTY_FORM {
   if (!project) return EMPTY_FORM;
   return {
+    kind: "contracted" as ProjectKind, // irrelevante na edição (selector só aparece na criação)
     name: project.name,
     repoUrl: project.repoUrl ?? "",
     startDate: project.startDate ? project.startDate.slice(0, 10) : "",
@@ -111,6 +140,10 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  // Editar: datas/engajamento são read-through do contrato (D2). Saber se há
+  // contrato decide se travamos esses campos. Criação não tem contrato ainda.
+  const [hasContract, setHasContract] = useState(false);
+  const datesLocked = Boolean(project) && hasContract;
 
   // Reseta o form quando o sheet abre (criar) ou troca de projeto (editar).
   // Padrão "adjust state during render" do React — evita setState em effect.
@@ -119,6 +152,7 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
   if (formKey !== prevFormKey) {
     setPrevFormKey(formKey);
     setForm(formFromProject(project));
+    setHasContract(false); // reabre limpo; o effect reconfirma na edição
   }
 
   // Carrega clientes/membros (sistema externo) quando abre.
@@ -133,6 +167,34 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
       if (mRes.data) setMembers(mRes.data as MemberOption[]);
     });
   }, [open]);
+
+  // Editar: descobre se o projeto já tem contrato (→ datas viram read-only).
+  useEffect(() => {
+    if (!open || !project) return; // reset já acontece no bloco de render acima
+    let alive = true;
+    fetchOrThrow(`/api/finance/contract-period?projectId=${project.id}`)
+      .then((r) => r.json())
+      .then((d: { periods?: unknown[] }) => {
+        if (alive) setHasContract((d.periods?.length ?? 0) > 0);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [open, project]);
+
+  /** Preset de kind (só criação): define category/phase e, p/ interno, cliente Volund. */
+  function applyKind(kind: ProjectKind) {
+    const preset = KIND_PRESET[kind];
+    const volundId = clients.find((c) => c.name === "Volund")?.id ?? "";
+    setForm((f) => ({
+      ...f,
+      kind,
+      category: preset.category,
+      phase: preset.phase,
+      clientId: kind === "internal" ? volundId : f.clientId === volundId ? "" : f.clientId,
+    }));
+  }
 
   function toggleMember(memberId: string) {
     setForm((f) => ({
@@ -234,6 +296,30 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
         );
       }
 
+      // Kind proposal/contracted (só criação): cria o contrato junto (verdade
+      // comercial, D1/D4). Interno não tem contrato. Datas/engajamento do form
+      // viram a vigência/billing inicial; o trigger ressincroniza as datas do
+      // projeto. Contrato é admin-only — se 403, projeto fica e avisa.
+      if (!project && form.kind !== "internal") {
+        const today = new Date().toISOString().slice(0, 10);
+        try {
+          await fetchOrThrow("/api/finance/contract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectId,
+              label: "Contrato 1",
+              status: form.kind === "proposal" ? "proposed" : "active",
+              billingType: form.engagementType === "fixed_scope" ? "fixed_scope" : "squad",
+              effectiveFrom: form.startDate || today,
+              effectiveTo: form.endDate || null,
+            }),
+          });
+        } catch (e) {
+          showErrorToast(e, { label: "Projeto criado, mas o contrato falhou" });
+        }
+      }
+
       onOpenChange(false);
       onSaved();
     } finally {
@@ -253,6 +339,41 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
 
         <ResponsiveSheetBody>
           <FormBody>
+            {!project && (
+              <Field name="project-kind" required>
+                <Field.Label>Tipo de projeto</Field.Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(Object.keys(KIND_PRESET) as ProjectKind[]).map((k) => {
+                    const p = KIND_PRESET[k];
+                    const selected = form.kind === k;
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => applyKind(k)}
+                        className={`flex flex-col gap-1 rounded-lg border p-2.5 text-left transition-colors ${
+                          selected
+                            ? "border-primary bg-primary/5 ring-2 ring-primary/30"
+                            : "hover:border-foreground/20"
+                        }`}
+                      >
+                        <span className="text-base leading-none">{p.icon}</span>
+                        <span className="text-xs font-semibold">{p.label}</span>
+                        <span className="text-[10px] leading-tight text-muted-foreground">{p.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <Field.Hint>
+                  {form.kind === "internal"
+                    ? "Cliente Volund, sem contrato."
+                    : form.kind === "proposal"
+                      ? "Cria um contrato em Proposta — datas/valor editáveis depois em Finanças."
+                      : "Cria um contrato Ativo — datas abaixo viram a vigência inicial."}
+                </Field.Hint>
+              </Field>
+            )}
+
             <Field name="project-client" required>
               <Field.Label>Cliente</Field.Label>
               <Field.Control>
@@ -411,20 +532,29 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                     value={form.engagementType}
                     options={PROJECT_ENGAGEMENT}
                     onValueChange={(v) => setForm({ ...form, engagementType: v })}
+                    disabled={datesLocked}
                   />
                 </Field.Control>
-                <Field.Hint>Squad as a Service = faturamento recorrente (data de fim = renovação); Por encomenda = faturado por PFV entregue.</Field.Hint>
+                <Field.Hint>
+                  {datesLocked
+                    ? "Derivado do contrato ativo — edite a vigência/billing em Finanças."
+                    : "Squad as a Service = faturamento recorrente (data de fim = renovação); Por encomenda = faturado por PFV entregue."}
+                </Field.Hint>
               </Field>
               <Field.Row cols={2}>
                 <Field name="project-start">
                   <Field.Label>Data Início</Field.Label>
                   <Field.Control>
-                    <DatePicker
-                      data-slot="button"
-                      clearable
-                      value={form.startDate}
-                      onChange={(iso) => setForm({ ...form, startDate: iso })}
-                    />
+                    {datesLocked ? (
+                      <DerivedDate value={form.startDate} />
+                    ) : (
+                      <DatePicker
+                        data-slot="button"
+                        clearable
+                        value={form.startDate}
+                        onChange={(iso) => setForm({ ...form, startDate: iso })}
+                      />
+                    )}
                   </Field.Control>
                 </Field>
                 <Field name="project-end">
@@ -432,12 +562,16 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                     {form.engagementType === "continuous" ? "Renovação" : "Estimativa de fim"}
                   </Field.Label>
                   <Field.Control>
-                    <DatePicker
-                      data-slot="button"
-                      clearable
-                      value={form.endDate}
-                      onChange={(iso) => setForm({ ...form, endDate: iso })}
-                    />
+                    {datesLocked ? (
+                      <DerivedDate value={form.endDate} />
+                    ) : (
+                      <DatePicker
+                        data-slot="button"
+                        clearable
+                        value={form.endDate}
+                        onChange={(iso) => setForm({ ...form, endDate: iso })}
+                      />
+                    )}
                   </Field.Control>
                 </Field>
               </Field.Row>

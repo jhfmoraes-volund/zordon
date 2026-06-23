@@ -22,6 +22,7 @@ import { AppDesktop } from "@/components/apps/app-desktop";
 import { ProjectDriveTab } from "@/components/project-drive/drive-tab";
 import { ProjectSessionsTab } from "@/components/project-sessions-tab";
 import { CreateAppDialog } from "@/components/apps/create-app-dialog";
+import { ProjectContractApp } from "@/components/apps/finance/project-contract-app";
 import { RituaisFileView } from "@/components/apps/rituais-file-view";
 import { SessionsFileView } from "@/components/apps/sessions-file-view";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -90,6 +91,8 @@ export function AppsTab({
    */
   function renderDesktopSurface(app: AppDef) {
     switch (app.key) {
+      case "contract":
+        return <ProjectContractApp projectId={projectId} />;
       case "drive":
         return (
           <ProjectDriveTab

@@ -17,7 +17,7 @@ import { type AppDef } from "./registry";
 export const OVERVIEW_APP_REGISTRY: AppDef[] = [
   {
     key: "finance",
-    name: "Finanças",
+    name: "S&OP",
     tagline: "Receita, despesa e margem por projeto",
     description:
       "Análise financeira da operação — receita e despesa por projeto e por mês, com margem de ganho. Dado sensível: visível só para admin.",

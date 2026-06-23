@@ -19,6 +19,7 @@ import type {
   ContractMonthOverrideInput,
   ContractMonthRow,
   ContractPeriod,
+  ContractRosterMember,
   ContractClause,
   ContractClauseInput,
   Invoice,
@@ -658,6 +659,34 @@ export async function listContractPeriods(projectId: string): Promise<ContractPe
     effectiveFrom: String(r.effective_from),
     effectiveTo: (r.effective_to as string | null) ?? null,
     billingType: (r.billing_type as ContractPeriod["billingType"]) ?? "squad",
+    status: (r.status as ContractPeriod["status"]) ?? "active",
+  }));
+}
+
+/**
+ * Roster de contrato PM-safe (app Contratos). Lê finance.v_contract_roster, cuja
+ * fronteira (can_view_project OR is_admin) já filtra as linhas; nunca trafega valor.
+ */
+export async function listContractRoster(
+  projectId: string,
+): Promise<ContractRosterMember[]> {
+  const { fin } = await finance();
+  const res = await fin
+    .from("v_contract_roster")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("member_position", { ascending: true })
+    .order("member_name", { ascending: true });
+  if (res.error) throw new Error(res.error.message);
+  return ((res.data ?? []) as Record<string, unknown>[]).map((r) => ({
+    allocationId: String(r.allocation_id),
+    contractId: String(r.contract_id),
+    memberId: String(r.member_id),
+    memberName: String(r.member_name),
+    memberPosition: (r.member_position as string | null) ?? null,
+    percent: Number(r.percent),
+    effectiveFrom: String(r.effective_from),
+    effectiveTo: (r.effective_to as string | null) ?? null,
   }));
 }
 
@@ -758,6 +787,45 @@ export async function deleteContract(id: string): Promise<void> {
   const { fin } = await finance();
   const res = await fin.from("contract").delete().eq("id", id);
   if (res.error) throw new Error(res.error.message);
+}
+
+/**
+ * "Ganhar proposta" (D1/F1.7): contrato proposed→active e, se o projeto ainda
+ * está na fase commercial, avança pra immersion registrando o ProjectPhaseEvent.
+ * Uma transição só — sem re-digitar datas/valor/equipe (já estão na proposta).
+ */
+export async function winContract(id: string): Promise<Contract> {
+  const { sb, fin } = await finance();
+  const cur = await fin.from("contract").select("project_id, status").eq("id", id).maybeSingle();
+  if (cur.error) throw new Error(cur.error.message);
+  if (!cur.data) throw new Error("Contrato não encontrado");
+  const row = cur.data as { project_id: string; status: Contract["status"] };
+  if (row.status !== "proposed")
+    throw new Error(`Só uma proposta pode ser ganha (status atual: ${row.status})`);
+
+  const upd = await fin
+    .from("contract")
+    .update({ status: "active", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (upd.error) throw new Error(upd.error.message);
+
+  // Fase commercial→immersion (só se ainda commercial), com log de transição.
+  const proj = await sb.from("Project").select("phase").eq("id", row.project_id).maybeSingle();
+  if (proj.data?.phase === "commercial") {
+    await sb
+      .from("Project")
+      .update({ phase: "immersion", phaseChangedAt: new Date().toISOString() })
+      .eq("id", row.project_id);
+    await sb.from("ProjectPhaseEvent").insert({
+      projectId: row.project_id,
+      fromPhase: "commercial",
+      toPhase: "immersion",
+      changedBy: await currentMemberId(),
+    });
+  }
+  return mapContract(upd.data);
 }
 
 // ─── Override de mês do contrato (valor especial de 1 mês) ──────────────────
