@@ -11,12 +11,14 @@ import { getPlanningById } from "@/lib/dal/planning";
 import { db } from "@/lib/db";
 
 const SELECT = `
-  id, type, payload, decision, execution, source,
+  id, type, entityType, payload, decision, execution, source,
   aiReasoning, aiConfidence, errorMessage, notes,
   reviewReasons, reviewNote, createdAt, updatedAt,
-  meetingId, planningCeremonyId, projectId, taskId, targetSprintId,
+  meetingId, planningCeremonyId, projectId, taskId, targetSprintId, storyId, moduleId,
   task:Task(id, reference, title, status, scope, type, priority, sprintId, projectId),
-  targetSprint:Sprint!MeetingTaskAction_targetSprintId_fkey(id, name)
+  targetSprint:Sprint!MeetingTaskAction_targetSprintId_fkey(id, name),
+  story:UserStory!MeetingTaskAction_storyId_fkey(id, reference, title, refinementStatus),
+  module:Module!MeetingTaskAction_moduleId_fkey(id, name)
 `;
 
 export async function GET(

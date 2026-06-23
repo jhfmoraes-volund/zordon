@@ -46,10 +46,9 @@ export function useStoryActions(args: {
    * form they already know. If it was a misclick, they delete via the row's
    * kebab menu like any other story.
    *
-   * `refinementStatus="draft"` is reserved for AI-proposed stories pending
-   * human review (revealed only inside the originating Design Session), and is
-   * set explicitly by that flow — never by this manual button. Manual stubs
-   * nascem 'refined' (default no DAL) e aparecem na lista do projeto na hora.
+   * Stubs nascem 'draft' (default no DAL) — estado de trabalho normal,
+   * editável e visível na lista do projeto na hora. 'committed' (travado como
+   * deliverable) é alcançado depois, via commit do PM / cascata da DS.
    */
   async function handleCreateStory() {
     if (!project?.referenceKey) {

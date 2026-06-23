@@ -4071,10 +4071,12 @@ export type Database = {
           decidedAt: string | null
           decidedById: string | null
           decision: string
+          entityType: string
           errorMessage: string | null
           execution: string
           id: string
           meetingId: string | null
+          moduleId: string | null
           notes: string | null
           payload: Json
           planningCeremonyId: string | null
@@ -4083,6 +4085,7 @@ export type Database = {
           reviewReasons: string[] | null
           source: string
           sourceNoteIds: string[]
+          storyId: string | null
           targetSprintId: string | null
           taskId: string | null
           type: string
@@ -4097,10 +4100,12 @@ export type Database = {
           decidedAt?: string | null
           decidedById?: string | null
           decision?: string
+          entityType?: string
           errorMessage?: string | null
           execution?: string
           id?: string
           meetingId?: string | null
+          moduleId?: string | null
           notes?: string | null
           payload?: Json
           planningCeremonyId?: string | null
@@ -4109,6 +4114,7 @@ export type Database = {
           reviewReasons?: string[] | null
           source: string
           sourceNoteIds?: string[]
+          storyId?: string | null
           targetSprintId?: string | null
           taskId?: string | null
           type: string
@@ -4123,10 +4129,12 @@ export type Database = {
           decidedAt?: string | null
           decidedById?: string | null
           decision?: string
+          entityType?: string
           errorMessage?: string | null
           execution?: string
           id?: string
           meetingId?: string | null
+          moduleId?: string | null
           notes?: string | null
           payload?: Json
           planningCeremonyId?: string | null
@@ -4135,6 +4143,7 @@ export type Database = {
           reviewReasons?: string[] | null
           source?: string
           sourceNoteIds?: string[]
+          storyId?: string | null
           targetSprintId?: string | null
           taskId?: string | null
           type?: string
@@ -4178,6 +4187,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "MeetingTaskAction_moduleId_fkey"
+            columns: ["moduleId"]
+            isOneToOne: false
+            referencedRelation: "Module"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "MeetingTaskAction_planningCeremonyId_fkey"
             columns: ["planningCeremonyId"]
             isOneToOne: false
@@ -4189,6 +4205,20 @@ export type Database = {
             columns: ["projectId"]
             isOneToOne: false
             referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_storyId_fkey"
+            columns: ["storyId"]
+            isOneToOne: false
+            referencedRelation: "user_story_overview"
+            referencedColumns: ["userStoryId"]
+          },
+          {
+            foreignKeyName: "MeetingTaskAction_storyId_fkey"
+            columns: ["storyId"]
+            isOneToOne: false
+            referencedRelation: "UserStory"
             referencedColumns: ["id"]
           },
           {

@@ -7,14 +7,12 @@ import { db } from "@/lib/db";
 /**
  * PATCH /api/stories/[ref]/refinement-status
  *
- * Atualiza UserStory.refinementStatus entre 'refined' ↔ 'committed'. Voltar
- * para 'draft' não é permitido nessa rota: 'draft' é exclusivo do agente em
- * sub-fase de descoberta dentro da Design Session — não há semântica de
- * "reabrir como rascunho" depois que a story já foi exposta no projeto.
+ * Alterna UserStory.refinementStatus entre 'draft' (em construção, editável) e
+ * 'committed' (travado como deliverable). Reabrir para 'draft' é permitido.
  */
 
 const Schema = z.object({
-  status: z.enum(["refined", "committed"]),
+  status: z.enum(["draft", "committed"]),
 });
 
 export async function PATCH(

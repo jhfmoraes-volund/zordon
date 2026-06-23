@@ -256,28 +256,18 @@ export default function PlanningSessionPage({
       onError: (err) => showErrorToast(err, { label: "Vitoria falhou" }),
     });
 
-  // Smart-refresh: quando o turno termina, a Vitoria pode ter mexido no board
-  // via tools. Recarregar na cara reordena sob o usuário (perde scroll/colapso/
-  // descartes). Então: recarrega só a SESSÃO (meta, barato, não toca o board) e
-  // — se o board está vazio (nada a atrapalhar) — puxa direto; senão sinaliza
-  // "novo conteúdo" e o usuário recarrega pelo ⟳ quando quiser.
-  // Espelha "board vazio" num ref (atualizado fora do render) pra o efeito de
-  // fim-de-turno não precisar depender de planState — depender de state + setState
-  // no mesmo efeito dispara o alerta de cascata.
-  const boardEmptyRef = useRef(true);
-  useEffect(() => {
-    boardEmptyRef.current =
-      planState.planCount === 0 && planState.pendingCount === 0;
-  }, [planState.planCount, planState.pendingCount]);
-
+  // Ao fim de cada turno a Vitoria pode ter proposto tasks/stories/módulos via
+  // tools. SEMPRE puxamos o canvas (recarrega a sessão + bumpa actionsRefresh)
+  // pra as propostas novas aparecerem sem clique manual — era a dor #1 do PM
+  // ("o canvas não atualizou nenhuma proposta"). O custo é re-ordenar o board
+  // sob o usuário; aceitável frente a propostas invisíveis.
   const prevStatusRef = useRef(status);
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = status;
     if ((prev === "streaming" || prev === "submitted") && status === "ready") {
       void loadSession();
-      if (boardEmptyRef.current) setActionsRefresh((n) => n + 1);
-      else setHasNewContent(true);
+      setActionsRefresh((n) => n + 1);
     }
   }, [status, loadSession]);
 
@@ -751,8 +741,8 @@ export default function PlanningSessionPage({
       {historyMode ? (
         // Canvas HISTÓRICO (read-only) da versão selecionada. Sem versão na
         // semana → estado vazio (bloco passado sem atividade).
-        historyEventId ? (
-          <PlanningHistoricalCanvas sessionId={session.id} eventId={historyEventId} />
+        effectiveHistoryEventId ? (
+          <PlanningHistoricalCanvas sessionId={session.id} eventId={effectiveHistoryEventId} />
         ) : (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
             Nenhuma versão do plano nesta semana.
@@ -761,7 +751,9 @@ export default function PlanningSessionPage({
       ) : view === "stories" ? (
         <ReleasePlanningStories
           projectId={projectId}
+          planningCeremonyId={session.planningCeremonyId}
           refreshKey={actionsRefresh}
+          readOnly={isApproved}
           onCountChange={setStoryCount}
           onOpenStory={setOpenStoryRef}
         />
@@ -866,7 +858,7 @@ export default function PlanningSessionPage({
         onSelectBlock={handleSelectBlock}
         weekLabel={selectedBlockLabel}
         events={drawerEvents}
-        selectedEventId={historyEventId}
+        selectedEventId={effectiveHistoryEventId}
         onSelectEvent={setHistoryEventId}
       />
 

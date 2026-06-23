@@ -192,7 +192,7 @@ export const STORIES_INITIAL: Story[] = [
     personaId: "p-client",
     want: "filtrar métricas por mês, trimestre ou ano",
     soThat: null,
-    refinementStatus: "refined",
+    refinementStatus: "committed",
     acValidatedAt: null,
     acValidatedBy: null,
     acceptanceCriteria: [

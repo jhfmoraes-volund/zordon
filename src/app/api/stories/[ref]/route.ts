@@ -25,7 +25,7 @@ const patchSchema = z
     title: z.string().min(3).max(160).optional(),
     want: z.string().min(3).max(500).optional(),
     soThat: z.string().nullable().optional(),
-    refinementStatus: z.enum(["draft", "refined", "committed"]).optional(),
+    refinementStatus: z.enum(["draft", "committed"]).optional(),
   })
   .refine((d) => !(d.moduleId && d.proposedModuleName), {
     message: "moduleId XOR proposedModuleName",

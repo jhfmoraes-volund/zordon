@@ -17,12 +17,10 @@ import {
   listModulesForOpsTool,
   listStoriesForOpsTool,
   getStoryForOpsTool,
-  manageStoryAcForOpsTool,
 } from "@/lib/agent/tools/alpha-hierarchy";
 import {
   getStoryByReference,
   getModulesForProject,
-  updateStory,
 } from "@/lib/dal/story-hierarchy";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
@@ -198,6 +196,41 @@ export function buildVitoriaTools(
   projectId: string,
   memberId?: string | null,
 ) {
+  // Stagea uma proposta de story/module no MESMO MeetingTaskAction das tasks —
+  // vira card pendente no canvas (igual task), aplicado no Concluir pelo
+  // executor (dispatch por entityType). Story/módulo deixam de ser write direto.
+  async function stageEntityProposal(input: {
+    entityType: "story" | "module";
+    type: "create" | "update";
+    storyId?: string | null;
+    moduleId?: string | null;
+    payload: Record<string, unknown>;
+    aiReasoning: string;
+    sourceNoteIds?: string[];
+  }): Promise<{ ok: true; actionId: string } | { ok: false; error: string }> {
+    const { data, error } = await db()
+      .from("MeetingTaskAction")
+      .insert({
+        planningCeremonyId: planningId,
+        projectId,
+        entityType: input.entityType,
+        type: input.type,
+        storyId: input.storyId ?? null,
+        moduleId: input.moduleId ?? null,
+        payload: input.payload as Json,
+        aiReasoning: input.aiReasoning,
+        sourceNoteIds: (input.sourceNoteIds ?? []) as unknown as string[],
+        decision: "pending",
+        execution: "pending",
+        source: "ai",
+        notes: null,
+      })
+      .select("id")
+      .single();
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, actionId: data.id };
+  }
+
   return {
     add_context_note: tool({
       description:
@@ -820,26 +853,23 @@ export function buildVitoriaTools(
     }),
 
     // ── Camada Story (Module → UserStory → AC) ──────────────────────────────
-    // Reuso das tools de hierarquia project-scoped do Alpha (alpha-hierarchy.ts):
-    // mesma leitura/escrita, projectId vem do closure (D2). Fecha a lacuna do
-    // diagnóstico — a Vitoria lia `userStoryId` sem título/módulo e só sabia
-    // CRIAR story (propose_story duplicaria as que já estão no board). Agora LÊ
-    // a árvore e CARIMBA módulo/AC numa US existente.
-    // Fronteira Vitor/Vitoria: personaId e refinementStatus continuam exclusivos
-    // do Vitor (Inception) — update_story abaixo NÃO os expõe.
+    // Leituras project-scoped reusadas do Alpha (alpha-hierarchy.ts). As
+    // ESCRITAS da Vitoria viram PROPOSTAS no canvas (igual task): update_story
+    // (título/want/módulo/commit/AC) e approve_module são staged em
+    // MeetingTaskAction e aplicadas no Concluir. propose_story segue criando a
+    // story LIVE (draft) pra as tasks poderem pendurar via userStoryId na mesma
+    // sessão; as MUDANÇAS dela é que viram card aprovável.
     list_project_modules: listModulesForOpsTool(projectId),
     list_project_stories: listStoriesForOpsTool(projectId),
     get_story_detail: getStoryForOpsTool(projectId),
-    manage_story_ac: manageStoryAcForOpsTool(projectId),
 
     update_story: tool({
       description:
-        "Atualiza uma User Story que JÁ existe (write direto, live — D6, igual propose_story/propose_sprint). " +
-        "Use pra CARIMBAR módulo numa story que está sem módulo, ou ajustar título/want/soThat. " +
-        "NUNCA use propose_story quando a US já está no board (duplicaria) — use esta. " +
-        "moduleId XOR proposedModuleName: passe moduleId (resolva via list_project_modules) quando o módulo já existe; " +
-        "proposedModuleName (string crua) só pra propor módulo novo. " +
-        "NÃO mexe em AC (use manage_story_ac), persona nem refinementStatus (domínio do Vitor na Inception).",
+        "Propõe mudanças numa User Story existente — vira CARD pendente no canvas (igual task), aplicado no Concluir. " +
+        "Use pra: carimbar módulo, ajustar título/want/soThat, COMMITAR a story (refinementStatus='committed' trava como deliverable; 'draft' reabre), ou reescrever os AC. " +
+        "NUNCA use propose_story quando a US já existe (duplicaria) — use esta. " +
+        "moduleId XOR proposedModuleName (passe moduleId via list_project_modules quando o módulo já existe). " +
+        "acceptanceCriteria SUBSTITUI o set inteiro — leia get_story_detail antes e mande a LISTA COMPLETA desejada (não só os novos, senão apaga os atuais).",
       inputSchema: z.object({
         reference: z
           .string()
@@ -861,8 +891,27 @@ export function buildVitoriaTools(
           .string()
           .optional()
           .describe("Nome de módulo NOVO a propor (string crua). XOR com moduleId. Não use se o módulo já existe."),
+        refinementStatus: z
+          .enum(["draft", "committed"])
+          .optional()
+          .describe("'committed' trava a story como deliverable; 'draft' reabre. É o COMMIT que o PM aprova."),
+        acceptanceCriteria: z
+          .array(z.string().min(3))
+          .optional()
+          .describe("LISTA COMPLETA de AC desejada (substitui o set). Leia get_story_detail antes pra não perder os existentes."),
+        reasoning: z.string().min(20).describe("Por quê desta mudança — o PM lê pra decidir."),
       }),
-      execute: async ({ reference, title, want, soThat, moduleId, proposedModuleName }) => {
+      execute: async ({
+        reference,
+        title,
+        want,
+        soThat,
+        moduleId,
+        proposedModuleName,
+        refinementStatus,
+        acceptanceCriteria,
+        reasoning,
+      }) => {
         if (moduleId && proposedModuleName) {
           return { ok: false, error: "moduleId XOR proposedModuleName — passe apenas um." };
         }
@@ -872,42 +921,69 @@ export function buildVitoriaTools(
           return { ok: false, error: "story pertence a outro projeto" };
         }
 
-        const patch: Parameters<typeof updateStory>[1] = {};
-        if (title !== undefined) patch.title = title;
-        if (want !== undefined) patch.want = want;
-        if (soThat !== undefined) patch.soThat = soThat;
+        const payload: Record<string, unknown> = {};
+        if (title !== undefined) payload.title = title;
+        if (want !== undefined) payload.want = want;
+        if (soThat !== undefined) payload.soThat = soThat;
         if (moduleId !== undefined) {
           const modules = await getModulesForProject(projectId);
           if (!modules.find((m) => m.id === moduleId)) {
             return { ok: false, error: "moduleId não pertence ao projeto" };
           }
-          // XOR — carimbar módulo real limpa o proposto (mirror create_user_story).
-          patch.moduleId = moduleId;
-          patch.proposedModuleName = null;
+          payload.moduleId = moduleId;
+          payload.proposedModuleName = null;
         } else if (proposedModuleName !== undefined) {
-          // Cru (não normalizado) — espelha propose_story; o board agrupa por
-          // string e normalizar aqui divergiria das stories já criadas.
-          patch.proposedModuleName = proposedModuleName;
-          patch.moduleId = null;
+          payload.proposedModuleName = proposedModuleName;
+          payload.moduleId = null;
+        }
+        if (refinementStatus !== undefined) payload.refinementStatus = refinementStatus;
+        if (acceptanceCriteria !== undefined) payload.acceptanceCriteria = acceptanceCriteria;
+
+        if (Object.keys(payload).length === 0) {
+          return { ok: false, error: "nenhum campo passado pra propor" };
         }
 
-        if (Object.keys(patch).length === 0) {
-          return { ok: false, error: "nenhum campo passado pra atualizar" };
-        }
+        const res = await stageEntityProposal({
+          entityType: "story",
+          type: "update",
+          storyId: story.id,
+          payload,
+          aiReasoning: reasoning,
+        });
+        if (!res.ok) return res;
+        return {
+          ok: true,
+          actionId: res.actionId,
+          reference: story.reference,
+          hint: "Proposta criada — aparece no canvas (aba Stories) pra o PM aprovar; aplica no Concluir.",
+        };
+      },
+    }),
 
-        try {
-          const updated = await updateStory(story.id, patch);
-          return {
-            ok: true,
-            storyId: updated.id,
-            reference: updated.reference,
-            title: updated.title,
-            moduleId: updated.moduleId,
-            proposedModuleName: updated.proposedModuleName,
-          };
-        } catch (e) {
-          return { ok: false, error: e instanceof Error ? e.message : String(e) };
-        }
+    approve_module: tool({
+      description:
+        "Propõe APROVAR um módulo proposto — vira CARD pendente; ao aprovar, materializa o Module e consolida TODAS as stories que propuseram esse nome (ex: várias stories 'QA' viram um módulo só). " +
+        "proposedName = nome como aparece nas stories (via list_project_stories).",
+      inputSchema: z.object({
+        proposedName: z
+          .string()
+          .min(2)
+          .describe("Nome do módulo proposto a aprovar, como aparece nas stories."),
+        reasoning: z.string().min(20).describe("Por quê aprovar agora — o PM lê pra decidir."),
+      }),
+      execute: async ({ proposedName, reasoning }) => {
+        const res = await stageEntityProposal({
+          entityType: "module",
+          type: "create",
+          payload: { proposedName },
+          aiReasoning: reasoning,
+        });
+        if (!res.ok) return res;
+        return {
+          ok: true,
+          actionId: res.actionId,
+          hint: "Proposta de aprovação criada — aparece no canvas pra o PM aprovar; consolida as stories no Concluir.",
+        };
       },
     }),
 

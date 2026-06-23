@@ -211,7 +211,7 @@ function formatUserPrompt(input: ExtractActionsInput): string {
   parts.push("");
 
   if (input.userStories.length > 0) {
-    parts.push(`## User Stories ativas (refined/committed)`);
+    parts.push(`## User Stories ativas (draft/committed)`);
     parts.push(`(use APENAS estas refs em userStoryReference)`);
     for (const us of input.userStories) {
       parts.push(`- ${us.reference}: ${us.title}`);

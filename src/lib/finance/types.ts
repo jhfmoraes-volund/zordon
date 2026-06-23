@@ -119,6 +119,7 @@ export type Contract = {
   effectiveTo: string | null; // null = vigente
   billingType: BillingType;
   monthlyFeeCents: number | null; // mensalidade squad (gera receita via v_contract_revenue_month)
+  billingCount: number | null; // squad: Nº de mensalidades cobradas (separado da duração da vigência)
   totalValueCents: number | null; // encomenda: VALOR GLOBAL do contrato (campo aberto)
   pricePerFpCents: number | null; // DERIVADO (read-only): total_value ÷ contracted_fp (coluna GENERATED)
   contractedFp: number | null;
@@ -134,6 +135,7 @@ export type ContractInput = {
   effectiveTo?: string | null;
   billingType: BillingType;
   monthlyFeeCents?: number | null;
+  billingCount?: number | null; // squad: Nº de mensalidades cobradas
   totalValueCents?: number | null; // encomenda: valor global (preço/FP é derivado, não entra no input)
   contractedFp?: number | null;
   contractedSprints?: number | null;
@@ -320,6 +322,16 @@ export type ProjectMonthPoint = {
   labor_cents: number;
   margin_direct_cents: number;
   margin_team_cents: number;
+};
+
+/** Linha de finance.v_contract_month — fato mensal atribuído a UM contrato. */
+export type ContractMonthRow = {
+  contract_id: string;
+  project_id: string;
+  month: string;
+  revenue_cents: number;
+  expense_cents: number;
+  labor_cents: number;
 };
 
 export type LaborByMember = {

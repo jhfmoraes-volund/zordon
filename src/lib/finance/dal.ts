@@ -17,6 +17,7 @@ import type {
   ContractInput,
   ContractMonthOverride,
   ContractMonthOverrideInput,
+  ContractMonthRow,
   ContractPeriod,
   ContractClause,
   ContractClauseInput,
@@ -611,6 +612,7 @@ function mapContract(r: Record<string, unknown>): Contract {
     effectiveTo: (r.effective_to as string | null) ?? null,
     billingType: r.billing_type === "fixed_scope" ? "fixed_scope" : "squad",
     monthlyFeeCents: num(r.monthly_fee_cents),
+    billingCount: num(r.billing_count),
     totalValueCents: num(r.total_value_cents),
     pricePerFpCents: num(r.price_per_fp_cents), // derivado (coluna GENERATED)
     contractedFp: num(r.contracted_fp),
@@ -687,6 +689,7 @@ function toContractRow(input: ContractInput) {
     effective_to: input.effectiveTo ?? null,
     billing_type: input.billingType,
     monthly_fee_cents: input.monthlyFeeCents ?? null,
+    billing_count: input.billingCount ?? null,
     total_value_cents: input.totalValueCents ?? null, // preço/FP é derivado (GENERATED) — não gravar
     contracted_fp: input.contractedFp ?? null,
     contracted_sprints: input.contractedSprints ?? null,
@@ -861,14 +864,24 @@ export async function getProjectDetail(
   projectId: string,
   fromMonth: string,
   toMonth: string,
+  contractId?: string | null,
 ): Promise<ProjectDetail> {
   const { sb, fin } = await finance();
   const { from, to } = monthBounds(fromMonth, toMonth);
 
-  const [monthsRes, laborRes, nameRes, allocations, squad, eff, sprintRes, contracts, fpRes, clauses, invoices] =
+  const [monthsRes, cmRes, laborRes, nameRes, allocations, squad, eff, sprintRes, contracts, fpRes, clauses, invoices] =
     await Promise.all([
     fin
       .from("v_project_month")
+      .select("*")
+      .eq("project_id", projectId)
+      .gte("month", from)
+      .lte("month", to)
+      .order("month", { ascending: true }),
+    // Fato POR CONTRATO no período — usado quando um contrato está escopado
+    // (atribui receita/equipe/despesa ao contrato, sem vazar de janela de mês).
+    fin
+      .from("v_contract_month")
       .select("*")
       .eq("project_id", projectId)
       .gte("month", from)
@@ -900,9 +913,24 @@ export async function getProjectDetail(
     listInvoices({ projectId }),
   ]);
   if (monthsRes.error) throw new Error(monthsRes.error.message);
+  if (cmRes.error) throw new Error(cmRes.error.message);
   if (laborRes.error) throw new Error(laborRes.error.message);
 
-  const months = (monthsRes.data ?? []) as ProjectMonthPoint[];
+  // Escopo de contrato: série mensal vem do fato POR CONTRATO (sem vazamento de
+  // janela — ex.: a mensalidade do squad não aparece no escopo da encomenda que
+  // só encosta no mesmo mês de calendário). Global: usa v_project_month.
+  const months: ProjectMonthPoint[] = contractId
+    ? ((cmRes.data ?? []) as ContractMonthRow[])
+        .filter((r) => r.contract_id === contractId)
+        .map((r) => ({
+          month: r.month,
+          revenue_cents: Number(r.revenue_cents),
+          expense_cents: Number(r.expense_cents),
+          labor_cents: Number(r.labor_cents),
+          margin_direct_cents: Number(r.revenue_cents) - Number(r.expense_cents),
+          margin_team_cents: Number(r.revenue_cents) - Number(r.expense_cents) - Number(r.labor_cents),
+        }))
+    : ((monthsRes.data ?? []) as ProjectMonthPoint[]);
   const totals = months.reduce(
     (acc, m) => ({
       revenueCents: acc.revenueCents + Number(m.revenue_cents),
@@ -937,10 +965,14 @@ export async function getProjectDetail(
   // Overhead por pessoa (premissas × alocação): IA/FTE + software/cabeça +
   // equipamento amortizado, mês a mês (decisão híbrida — soma com despesa real).
   const a = eff.assumptions;
+  // Escopo de contrato: overhead conta só a equipe alocada NESTE contrato.
+  const overheadAllocations = contractId
+    ? allocations.filter((al) => al.contract_id === contractId)
+    : allocations;
   let overheadCents = 0;
   for (const mf of monthList(fromMonth, toMonth)) {
     const mk = mf.slice(0, 7);
-    const active = allocations.filter(
+    const active = overheadAllocations.filter(
       (al) =>
         al.effective_from.slice(0, 7) <= mk &&
         (al.effective_to === null || al.effective_to.slice(0, 7) >= mk),

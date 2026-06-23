@@ -18,7 +18,7 @@ import {
 import { logAgentQuality } from "@/lib/agent/quality-log";
 import { decodeUnicodeEscapes } from "./_text-decode";
 
-const REFINEMENT_STATUSES = ["draft", "refined", "committed"] as const;
+const REFINEMENT_STATUSES = ["draft", "committed"] as const;
 
 function normalizeTitle(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -196,12 +196,13 @@ export function createStoryForOpsTool(projectId: string, createdById: string) {
         .describe("Por que essa story, esse módulo, essa persona."),
     }),
     execute: async (input) => {
-      // Idempotência Alpha-only: (projectId, normalizedTitle) com refinementStatus IN ('draft','refined')
+      // Idempotência Alpha-only: (projectId, normalizedTitle) com refinementStatus='draft'
+      // (committed nunca faz merge — story travada é deliverable).
       const existing = await getStoriesForProject(projectId);
       const dup = existing.find(
         (s) =>
           normalizeTitle(s.title) === normalizeTitle(input.title) &&
-          (s.refinementStatus === "draft" || s.refinementStatus === "refined"),
+          s.refinementStatus === "draft",
       );
       if (dup) {
         return {
@@ -362,10 +363,10 @@ export function updateStoryForOpsTool(projectId: string) {
 export function setStoryRefinementForOpsTool(projectId: string) {
   return tool({
     description:
-      "Transiciona o refinementStatus de uma story (draft → refined → committed). Use 'refined' apenas quando PM confirmar que AC e narrativa estão maduros. 'committed' apenas quando todas as tasks técnicas existirem.",
+      "Transiciona o refinementStatus de uma story (draft ↔ committed). 'committed' trava a story como deliverable (use apenas quando AC/narrativa maduros e as tasks técnicas existirem). 'draft' reabre para edição.",
     inputSchema: z.object({
       reference: z.string().min(3),
-      status: z.enum(["refined", "committed"]),
+      status: z.enum(["draft", "committed"]),
       reasoning: z.string().min(10),
     }),
     execute: async ({ reference, status }) => {

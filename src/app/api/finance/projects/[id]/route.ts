@@ -18,8 +18,9 @@ export async function GET(
   const year = new Date().getUTCFullYear();
   const from = searchParams.get("from") || `${year}-01`;
   const to = searchParams.get("to") || `${year}-12`;
+  const contract = searchParams.get("contract"); // escopa a UM contrato (sem vazamento de janela)
   try {
-    return NextResponse.json(await getProjectDetail(id, from, to));
+    return NextResponse.json(await getProjectDetail(id, from, to, contract));
   } catch (e) {
     console.error("[/api/finance/projects/[id]]", e);
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

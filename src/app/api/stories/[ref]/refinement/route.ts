@@ -7,7 +7,7 @@ import {
 } from "@/lib/dal/story-hierarchy";
 
 const patchSchema = z.object({
-  status: z.enum(["draft", "refined", "committed"]),
+  status: z.enum(["draft", "committed"]),
 });
 
 export async function PATCH(

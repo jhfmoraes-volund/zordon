@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import {
+  createStory,
+  updateStory,
+  approveProposedModuleByName,
+  normalizeModuleName,
+} from "@/lib/dal/story-hierarchy";
 
 type Supabase = SupabaseClient<Database>;
 type ActionRow = Database["public"]["Tables"]["MeetingTaskAction"]["Row"];
@@ -157,7 +163,24 @@ async function applyActions(
   fallbackSprintId: string | null = null,
 ): Promise<ApplyResult> {
   const result: ApplyResult = { applied: 0, failed: 0, skipped: 0, details: [] };
-  const sorted = actions.slice().sort((a, b) => ORDER[a.type] - ORDER[b.type]);
+
+  // Polymorphic staging: story/module proposals reusam o MESMO ciclo de
+  // decision/execution, mas escrevem por DAL próprio. Rodam ANTES das tasks
+  // (módulo → story → task) pra que um task.create possa referenciar a story
+  // recém-criada e a story já caia no módulo recém-aprovado.
+  const entityActions = actions.filter(
+    (a) => a.entityType === "story" || a.entityType === "module",
+  );
+  if (entityActions.length > 0) {
+    const r = await applyEntityActions(supabase, entityActions);
+    result.applied += r.applied;
+    result.failed += r.failed;
+    result.skipped += r.skipped;
+    result.details.push(...r.details);
+  }
+
+  const taskActions = actions.filter((a) => (a.entityType ?? "task") === "task");
+  const sorted = taskActions.slice().sort((a, b) => ORDER[a.type] - ORDER[b.type]);
   if (sorted.length === 0) return result;
 
   // ── FASE 1: reads em lote ─────────────────────────────────
@@ -211,7 +234,7 @@ async function applyActions(
       }
       // Seta execution='applied' + taskId (do create) na MESMA update — a
       // transição atômica satisfaz o CHECK que só admite create+taskId aplicado.
-      await markExecuted(supabase, w.action.id, "applied", createdTaskId);
+      await markExecuted(supabase, w.action.id, "applied", { taskId: createdTaskId });
       await recordProposalOutcome(supabase, w.action);
       return {
         id: w.action.id,
@@ -237,6 +260,108 @@ async function applyActions(
   }
 
   return result;
+}
+
+// ─── Story / Module proposals (staging polimórfico) ──────────
+//
+// Volume baixo (poucas por planning) → sequencial, reusando o DAL testado
+// (createStory / updateStory / approveProposedModuleByName). Mesmo ciclo de
+// markExecuted / markFailed / recordProposalOutcome das tasks; a transição
+// atômica execution='applied' + storyId/moduleId satisfaz os CHECKs.
+
+async function applyEntityActions(
+  supabase: Supabase,
+  actions: ActionRow[],
+): Promise<ApplyResult> {
+  const result: ApplyResult = { applied: 0, failed: 0, skipped: 0, details: [] };
+  // módulos antes de stories (story.create pode cair no módulo recém-aprovado).
+  const ordered = actions
+    .slice()
+    .sort((a, b) => (a.entityType === "module" ? 0 : 1) - (b.entityType === "module" ? 0 : 1));
+
+  for (const action of ordered) {
+    const p = payloadOf(action);
+    try {
+      if (action.entityType === "module") {
+        const proposedName =
+          ((p.proposedName as string) ?? (p.proposedModuleName as string) ?? "").trim();
+        if (!proposedName) {
+          throw new Error("module approve requires payload.proposedName");
+        }
+        const { module } = await approveProposedModuleByName(
+          action.projectId,
+          proposedName,
+          action.decidedById,
+        );
+        await markExecuted(supabase, action.id, "applied", { moduleId: module.id });
+      } else if (action.type === "create") {
+        // story.create
+        const story = await createStory({
+          projectId: action.projectId,
+          title: (p.title as string) ?? "Nova story",
+          want: (p.want as string) ?? "",
+          soThat: (p.soThat as string | null) ?? null,
+          personaId: (p.personaId as string | null) ?? null,
+          moduleId: (p.moduleId as string | null) ?? null,
+          proposedModuleName: p.proposedModuleName
+            ? normalizeModuleName(p.proposedModuleName as string)
+            : null,
+          refinementStatus: p.refinementStatus === "committed" ? "committed" : "draft",
+          acceptanceCriteria: coerceAcTexts(p.acceptanceCriteria),
+          createdById: action.decidedById,
+          createdByAgent: action.source === "ai",
+        });
+        await markExecuted(supabase, action.id, "applied", { storyId: story.id });
+      } else {
+        // story.update — inclui commit (refinementStatus) e replace de AC.
+        if (!action.storyId) throw new Error("story update requires storyId");
+        const patch: Record<string, unknown> = {};
+        for (const k of ["title", "want", "soThat", "moduleId", "proposedModuleName", "personaId"] as const) {
+          if (k in p) patch[k] = p[k];
+        }
+        if (typeof patch.proposedModuleName === "string" && patch.proposedModuleName) {
+          patch.proposedModuleName = normalizeModuleName(patch.proposedModuleName);
+        }
+        if ("refinementStatus" in p) {
+          patch.refinementStatus = p.refinementStatus === "committed" ? "committed" : "draft";
+        }
+        if (Object.keys(patch).length > 0) {
+          await updateStory(action.storyId, patch as Parameters<typeof updateStory>[1]);
+        }
+        if (Array.isArray(p.acceptanceCriteria)) {
+          await replaceStoryAc(supabase, action.storyId, coerceAcTexts(p.acceptanceCriteria));
+        }
+        await markExecuted(supabase, action.id, "applied");
+      }
+      await recordProposalOutcome(supabase, action);
+      result.applied++;
+      result.details.push({ id: action.id, type: action.type, status: "applied" });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await markFailed(supabase, action.id, msg);
+      result.failed++;
+      result.details.push({ id: action.id, type: action.type, status: "failed", error: msg });
+    }
+  }
+  return result;
+}
+
+async function replaceStoryAc(
+  supabase: Supabase,
+  storyId: string,
+  texts: string[],
+): Promise<void> {
+  const { error: dErr } = await supabase
+    .from("AcceptanceCriterion")
+    .delete()
+    .eq("userStoryId", storyId);
+  if (dErr) throw new Error(`Clear story AC failed: ${dErr.message}`);
+  if (texts.length > 0) {
+    const { error: iErr } = await supabase.from("AcceptanceCriterion").insert(
+      texts.map((text, i) => ({ id: crypto.randomUUID(), userStoryId: storyId, text, order: i })),
+    );
+    if (iErr) throw new Error(`Set story AC failed: ${iErr.message}`);
+  }
 }
 
 // ─── FASE 1: contexto de reads em lote ───────────────────────
@@ -803,16 +928,18 @@ async function markExecuted(
   supabase: Supabase,
   id: string,
   execution: "applied" | "skipped",
-  taskId?: string | null,
+  links?: { taskId?: string | null; storyId?: string | null; moduleId?: string | null },
 ) {
   const patch: TaskActionUpdate = {
     execution,
     appliedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  // Linka a task criada (só faz sentido em create aplicado). Setar junto com
-  // execution='applied' é o que satisfaz o CHECK MeetingTaskAction_taskId_consistency.
-  if (taskId) patch.taskId = taskId;
+  // Linka a entidade criada (task/story/module) junto com execution='applied' —
+  // a transição atômica satisfaz os CHECKs *_consistency (create + link aplicado).
+  if (links?.taskId) patch.taskId = links.taskId;
+  if (links?.storyId) patch.storyId = links.storyId;
+  if (links?.moduleId) patch.moduleId = links.moduleId;
   const { error } = await supabase
     .from("MeetingTaskAction")
     .update(patch)

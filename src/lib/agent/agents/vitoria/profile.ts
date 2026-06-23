@@ -129,7 +129,7 @@ export async function buildProjectProfile(
     supabase
       .from("UserStory")
       .select("id, reference, title, refinementStatus, personaId, moduleId")
-      .in("refinementStatus", ["refined", "committed"])
+      .in("refinementStatus", ["draft", "committed"])
       .is("dismissedAt", null)
       .or(`moduleId.in.(${await collectProjectModuleIds(projectId)})`),
     supabase

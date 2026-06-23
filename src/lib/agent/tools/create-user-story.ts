@@ -31,9 +31,8 @@ export function createUserStoryTool(
     description: `Cria (ou atualiza idempotentemente) uma User Story na hierarquia Module → UserStory → Task. AC aqui e DE PRODUTO (verificavel pelo PM/usuario, sem ler codigo).
 
 CONTRATO POR refinementStatus:
-- "refined" (caminho padrao em story_tree): EXIGE personaId + acceptanceCriteriaProduct (3-5 itens) + (moduleId OU proposedModuleName). Story nasce pronta pra revisao.
+- "draft" (caminho padrao em story_tree): EXIGE personaId + acceptanceCriteriaProduct (3-5 itens) + (moduleId OU proposedModuleName). Story nasce completa e editavel, pronta pra revisao.
 - "committed": so apos task_breakdown ter gerado as tasks. Use set_story_refinement em vez disso.
-- "draft": fallback legado. So quando o PM explicitamente pediu story incompleta.
 
 EXEMPLO de chamada bem-formada em story_tree (copie e adapte):
 {
@@ -48,13 +47,13 @@ EXEMPLO de chamada bem-formada em story_tree (copie e adapte):
     "Apos aprovar, status das invoices muda pra 'approved' e elas somem da lista pendente",
     "Aprovacao individual continua funcionando apos a mudanca"
   ],
-  refinementStatus: "refined"
+  refinementStatus: "draft"
 }
 
 REGRAS DURAS:
 - moduleId XOR proposedModuleName: passe SEMPRE moduleId quando o modulo ja existe na Hierarquia atual (rascunho ou aprovado). proposedModuleName e fallback so quando voce esta propondo modulo novo.
 - Em story_tree, NUNCA omita personaId nem acceptanceCriteriaProduct. O executor rejeita.
-- Em story_tree, refinementStatus DEVE ser "refined". Default "draft" e proibido nesta fase.`,
+- Em story_tree, refinementStatus DEVE ser "draft" (story nasce completa, mas editavel). "committed" so apos as tasks existirem.`,
     inputSchema: z
       .object({
         title: z
@@ -90,19 +89,19 @@ REGRAS DURAS:
         personaId: z
           .string()
           .describe(
-            "UUID de ProjectPersona. COPIE LITERAL de `id=\\`<uuid>\\`` da 'Hierarquia atual > Personas'. OBRIGATORIO quando refinementStatus='refined'. Escolha a persona dominante da story (se serve duas, escolha a principal).",
+            "UUID de ProjectPersona. COPIE LITERAL de `id=\\`<uuid>\\`` da 'Hierarquia atual > Personas'. OBRIGATORIO. Escolha a persona dominante da story (se serve duas, escolha a principal).",
           ),
         acceptanceCriteriaProduct: z
           .array(z.string())
           .min(3)
           .max(7)
           .describe(
-            "AC DE PRODUTO: 3-5 strings, cada uma verificavel sim/nao pelo PM/usuario sem ler codigo. Inclua pelo menos 1 regression check ('Comportamento X continua funcionando apos a mudanca'). Evite 'funciona bem', 'otimizado', 'boa UX'. OBRIGATORIO quando refinementStatus='refined'.",
+            "AC DE PRODUTO: 3-5 strings, cada uma verificavel sim/nao pelo PM/usuario sem ler codigo. Inclua pelo menos 1 regression check ('Comportamento X continua funcionando apos a mudanca'). Evite 'funciona bem', 'otimizado', 'boa UX'. OBRIGATORIO.",
           ),
         refinementStatus: z
-          .enum(["draft", "refined", "committed"])
+          .enum(["draft", "committed"])
           .describe(
-            "Estado de refinamento. Em story_tree SEMPRE 'refined' (story nasce completa). 'committed' so apos tasks geradas (use set_story_refinement). 'draft' apenas em casos legados/explicitos.",
+            "Estado de refinamento. Em story_tree SEMPRE 'draft' (story nasce completa, mas editavel). 'committed' so apos tasks geradas (use set_story_refinement).",
           ),
       })
       .refine(
@@ -140,20 +139,20 @@ REGRAS DURAS:
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
 
-      if (input.refinementStatus === "refined") {
-        if (!input.personaId) {
-          return {
-            success: false,
-            error:
-              "refinementStatus='refined' exige personaId. Copie o uuid de `id=\\`...\\`` da 'Hierarquia atual > Personas' e tente de novo.",
-          };
-        }
-        if (trimmedAc.length < 3) {
-          return {
-            success: false,
-            error: `refinementStatus='refined' exige acceptanceCriteriaProduct com 3-5 itens. Voce passou ${trimmedAc.length}. Reescreva com criterios verificaveis pelo PM sem ler codigo (inclua 1 regression check).`,
-          };
-        }
+      // story_tree sempre cria story completa (persona + 3-5 AC), independente
+      // do status — defesa em runtime contra persona vazia / AC só-espaços.
+      if (!input.personaId) {
+        return {
+          success: false,
+          error:
+            "personaId é obrigatório. Copie o uuid de `id=\\`...\\`` da 'Hierarquia atual > Personas' e tente de novo.",
+        };
+      }
+      if (trimmedAc.length < 3) {
+        return {
+          success: false,
+          error: `acceptanceCriteriaProduct exige 3-5 itens. Voce passou ${trimmedAc.length}. Reescreva com criterios verificaveis pelo PM sem ler codigo (inclua 1 regression check).`,
+        };
       }
 
       const existingLookup = await supabase

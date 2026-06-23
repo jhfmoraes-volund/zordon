@@ -241,7 +241,7 @@ export async function createStory(input: {
   title: string;
   want: string;
   soThat?: string | null;
-  refinementStatus?: "draft" | "refined" | "committed";
+  refinementStatus?: "draft" | "committed";
   acceptanceCriteria?: string[];
   designSessionId?: string | null;
   designSessionItemId?: string | null;
@@ -261,11 +261,10 @@ export async function createStory(input: {
       personaId: input.personaId ?? null,
       want: input.want,
       soThat: input.soThat ?? null,
-      // 'refined' por default: criação manual (UI/API) nasce visível na lista
-      // do projeto. 'draft' é território exclusivo do agente em sub-fase de
-      // descoberta dentro da Design Session — passado explicitamente por
-      // quem precisa.
-      refinementStatus: input.refinementStatus ?? "refined",
+      // 'draft' por default: estado de trabalho normal (editável, visível na
+      // lista do projeto). 'committed' = travado como deliverable, passado
+      // explicitamente (commit do PM via proposta, ou cascata da DS complete).
+      refinementStatus: input.refinementStatus ?? "draft",
       designSessionId: input.designSessionId ?? null,
       designSessionItemId: input.designSessionItemId ?? null,
       createdById: input.createdById ?? null,
@@ -304,7 +303,7 @@ export async function updateStory(
     title: string;
     want: string;
     soThat: string | null;
-    refinementStatus: "draft" | "refined" | "committed";
+    refinementStatus: "draft" | "committed";
   }>,
 ): Promise<UserStoryRow> {
   const { data, error } = await db()
@@ -341,7 +340,7 @@ export async function dismissStory(id: string): Promise<void> {
 
 export async function setStoryRefinement(
   id: string,
-  status: "draft" | "refined" | "committed",
+  status: "draft" | "committed",
 ): Promise<UserStoryRow> {
   return updateStory(id, { refinementStatus: status });
 }
@@ -427,6 +426,77 @@ export async function approveProposedModule(
     proposedModuleName: null,
   });
   return { module: mod, story };
+}
+
+/**
+ * Approve a proposed module by NAME, consolidating every unattached story in
+ * the project whose `proposedModuleName` normalizes to the same name. This is
+ * the project-level approval (vs `approveProposedModule`, which re-attaches a
+ * single story): approving "QA" once links all stories that proposed "QA".
+ */
+export async function approveProposedModuleByName(
+  projectId: string,
+  proposedName: string,
+  approverId: string | null,
+): Promise<{ module: ModuleRow; storyIds: string[] }> {
+  const normalized = normalizeModuleName(proposedName);
+
+  const existing = await db()
+    .from("Module")
+    .select("*")
+    .eq("projectId", projectId)
+    .eq("name", normalized)
+    .maybeSingle();
+  if (existing.error) throw existing.error;
+
+  let mod =
+    existing.data ?? (await createModule({ projectId, name: normalized }));
+  if (!mod.approvedAt) {
+    const updated = await db()
+      .from("Module")
+      .update({
+        approvedAt: new Date().toISOString(),
+        approvedBy: approverId,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("id", mod.id)
+      .select("*")
+      .single();
+    if (updated.error) throw updated.error;
+    if (updated.data) mod = updated.data;
+  }
+
+  // Re-aponta TODAS as stories do projeto cujo proposedModuleName casa (ainda
+  // sem moduleId). Consolidação: "QA", "Portal" viram um módulo só.
+  const candidates = await db()
+    .from("UserStory")
+    .select("id, proposedModuleName")
+    .eq("projectId", projectId)
+    .is("moduleId", null)
+    .not("proposedModuleName", "is", null);
+  if (candidates.error) throw candidates.error;
+
+  const storyIds = (candidates.data ?? [])
+    .filter(
+      (s) =>
+        s.proposedModuleName &&
+        normalizeModuleName(s.proposedModuleName) === normalized,
+    )
+    .map((s) => s.id);
+
+  if (storyIds.length > 0) {
+    const { error } = await db()
+      .from("UserStory")
+      .update({
+        moduleId: mod.id,
+        proposedModuleName: null,
+        updatedAt: new Date().toISOString(),
+      })
+      .in("id", storyIds);
+    if (error) throw error;
+  }
+
+  return { module: mod, storyIds };
 }
 
 // ─── Cascading task promotion (Module approval) ──────────────────────────────

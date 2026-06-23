@@ -395,7 +395,7 @@ function StorySheetInner({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(["draft", "refined", "committed"] as RefinementStatus[]).map((s) => (
+                    {(["draft", "committed"] as RefinementStatus[]).map((s) => (
                       <SelectItem key={s} value={s}>
                         {REFINEMENT_MAP[s].label}
                       </SelectItem>

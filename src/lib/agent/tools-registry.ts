@@ -248,9 +248,9 @@ const VITORIA_SHARED_READ_NAMES: VitoriaToolName[] = [
   "get_story_detail", // hierarquia: 1 story com AC inteiros
 ];
 const VITORIA_PLANNING_PROJECT_NAMES: VitoriaToolName[] = [
-  "propose_story",
-  "update_story", // write direto live (D6) — carimba módulo/edita US existente
-  "manage_story_ac", // write direto live — add/edit/remove AC de produto da US
+  "propose_story", // create LIVE (draft) — tasks penduram via userStoryId na sessão
+  "update_story", // STAGED — módulo/título/want/commit/AC viram card no canvas
+  "approve_module", // STAGED — materializa Module e consolida stories no Concluir
   "append_project_memory",
   "add_task_comment", // write direto live (D7) — needs:[], autor via ctx.memberId
   "propose_sprint", // write direto live (D6) — needs:[], só projectId (invariante)

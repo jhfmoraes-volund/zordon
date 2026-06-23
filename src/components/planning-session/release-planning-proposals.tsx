@@ -130,7 +130,10 @@ export function ReleasePlanningProposals({
       const actsRes = await fetch(`/api/planning/${planningCeremonyId}/actions`);
       const acts: ProposalRow[] = actsRes.ok ? await actsRes.json() : [];
       // Staging = pendentes (rejeitadas-pendentes aparecem riscadas pra restaurar).
-      const pending = (acts ?? []).filter((a) => a.execution === "pending");
+      // SÓ tasks — propostas de story/módulo vivem na aba Stories (não no board).
+      const pending = (acts ?? []).filter(
+        (a) => a.execution === "pending" && (a.entityType ?? "task") === "task",
+      );
       setActions(pending);
 
       // Board VIVO = todas as Tasks do projeto (a /api/tasks já exclui draft +

@@ -24,9 +24,9 @@ const createSchema = z
     title: z.string().min(3).max(160),
     want: z.string().min(3).max(500),
     soThat: z.string().nullable().optional(),
-    // API pública não cria draft — draft é exclusivo do agente em Design
-    // Session (passado direto via DAL). UI/API nasce 'refined' por default.
-    refinementStatus: z.enum(["refined", "committed"]).optional(),
+    // Default 'draft' (estado de trabalho normal, via createStory). 'committed'
+    // pode ser passado explicitamente para nascer já travado.
+    refinementStatus: z.enum(["draft", "committed"]).optional(),
     acceptanceCriteria: z.array(z.string().min(1).max(500)).optional(),
   })
   .refine(

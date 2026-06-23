@@ -46,7 +46,7 @@ export function listStoriesTool(sessionId: string, projectId: string) {
       if (error) return { success: false, error: error.message };
 
       const storyIds = (data ?? []).map((s) => s.id);
-      let taskCounts = new Map<string, number>();
+      const taskCounts = new Map<string, number>();
       if (storyIds.length > 0) {
         const { data: tasks } = await supabase
           .from("Task")
@@ -92,18 +92,17 @@ export function listStoriesTool(sessionId: string, projectId: string) {
 
 /**
  * Transitions a Story's refinementStatus. Used by the agent to mark phase
- * boundaries: 'draft' → 'refined' (after AC + persona detail) → 'committed'
- * (after tasks generated).
+ * boundaries: 'draft' (em construção) → 'committed' (after tasks generated).
  */
 export function setStoryRefinementTool(projectId: string) {
   return tool({
     description:
-      "Atualiza o refinementStatus de uma User Story. Use 'refined' apos detalhar (AC + persona); 'committed' apos gerar todas as tasks tecnicas. NAO use 'draft' — uma vez refinada nao volta atras pela tool.",
+      "Atualiza o refinementStatus de uma User Story. Use 'committed' apos gerar todas as tasks tecnicas (trava como deliverable); 'draft' reabre para edicao.",
     inputSchema: z.object({
       storyId: z.string().describe("ID da UserStory"),
       status: z
-        .enum(["refined", "committed"])
-        .describe("Novo status. 'draft' nao e aceito aqui."),
+        .enum(["draft", "committed"])
+        .describe("Novo status: 'committed' trava, 'draft' reabre."),
     }),
     execute: async ({ storyId, status }) => {
       const supabase = db();

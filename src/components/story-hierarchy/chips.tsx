@@ -14,9 +14,8 @@ export const REFINEMENT_MAP: Record<
   RefinementStatus,
   { label: string; tone: ChipTone }
 > = {
-  draft:     { label: "Rascunho",  tone: "amber" },
-  refined:   { label: "Refinada",  tone: "blue"  },
-  committed: { label: "Committed", tone: "brand" },
+  draft:     { label: "Rascunho",     tone: "amber" },
+  committed: { label: "Comprometida", tone: "brand" },
 };
 
 export const COMPUTED_MAP: Record<

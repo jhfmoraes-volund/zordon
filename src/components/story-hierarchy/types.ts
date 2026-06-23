@@ -83,7 +83,7 @@ export type Task = {
 
 // ─── Story ───────────────────────────────────────────────────────────────────
 
-export type RefinementStatus = "draft" | "refined" | "committed";
+export type RefinementStatus = "draft" | "committed";
 export type ComputedStatus =
   | "pending"
   | "in_progress"

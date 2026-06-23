@@ -67,10 +67,7 @@ export function adaptStory(row: StoryWithRelations): AdaptedStory {
     personaId: row.personaId ?? "",
     want: row.want,
     soThat: row.soThat ?? null,
-    refinementStatus: row.refinementStatus as
-      | "draft"
-      | "refined"
-      | "committed",
+    refinementStatus: row.refinementStatus as "draft" | "committed",
     acValidatedAt: row.acValidatedAt,
     acValidatedBy: row.acValidatedBy,
     acceptanceCriteria: (row.acceptanceCriteria ?? []).map(adaptAc),

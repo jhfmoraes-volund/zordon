@@ -161,7 +161,7 @@ export function DesignSessionTree({
     const breakdownBusy = busyId === `breakdown:${story.id}`;
     return (
       <>
-        {story.refinementStatus === "draft" && (
+        {story.refinementStatus === "draft" && story.acProductCount === 0 && (
           <Button
             size="sm"
             variant="outline"
@@ -181,7 +181,7 @@ export function DesignSessionTree({
             Detalhar
           </Button>
         )}
-        {story.refinementStatus === "refined" && (
+        {story.refinementStatus === "draft" && story.acProductCount > 0 && (
           <Button
             size="sm"
             variant="outline"

@@ -98,10 +98,15 @@ export function FinanceProjectView({
   } | null>(null);
 
   const reload = useCallback(async () => {
-    const res = await fetch(`/api/finance/projects/${projectId}?from=${scope.from}&to=${scope.to}`);
+    // `contract` escopa os números a UM contrato (receita/equipe/despesa atribuídas
+    // ao contrato, sem vazar de janela de mês — ex.: mensalidade do squad não conta
+    // no escopo da encomenda que só encosta no mesmo mês).
+    const q = new URLSearchParams({ from: scope.from, to: scope.to });
+    if (scope.id) q.set("contract", scope.id);
+    const res = await fetch(`/api/finance/projects/${projectId}?${q.toString()}`);
     const json = res.ok ? ((await res.json()) as ProjectDetail) : null;
     setDetail(json);
-  }, [projectId, scope.from, scope.to]);
+  }, [projectId, scope.from, scope.to, scope.id]);
 
   // Escopa a uma vigência de contrato ou volta pro ano (Global).
   const selectScope = useCallback(
@@ -190,26 +195,43 @@ export function FinanceProjectView({
     margem: m.margin_team_cents / 100,
   }));
 
-  // KPIs scope-aware: 4º card varia (Contratos · FP entregue · Mensalidade).
-  const kpis: { label: string; value: string; tone?: string }[] = [
-    { label: "Faturamento", value: brlFromCents(detail.dre.faturamentoCents) },
-    { label: "Margem líq.", value: pct(detail.dre.margemLiquidaPct), tone: profitTone },
-    { label: "Lucro líquido", value: brlFromCents(detail.dre.lucroLiquidoCents), tone: profitTone },
-    selectedContract
-      ? selectedContract.billingType === "fixed_scope"
-        ? {
-            label: "FP entregue",
-            value: `${detail.fpDeliveredTotal}${selectedContract.contractedFp != null ? `/${selectedContract.contractedFp}` : ""}`,
-          }
-        : {
-            label: "Mensalidade",
-            value:
-              selectedContract.monthlyFeeCents != null
-                ? brlFromCents(selectedContract.monthlyFeeCents)
-                : "—",
-          }
-      : { label: "Contratos", value: String(detail.contracts.length) },
-  ];
+  // Valor CONTRATADO (previsto) do contrato escopado — distinto do realizado:
+  // squad = mensalidade × nº de cobranças (billingCount); encomenda = valor global.
+  // Sem billingCount setado, cai no realizado (o fallback da view os iguala).
+  const contractedCents = selectedContract
+    ? selectedContract.billingType === "fixed_scope"
+      ? (selectedContract.totalValueCents ?? 0)
+      : selectedContract.monthlyFeeCents != null && selectedContract.billingCount != null
+        ? selectedContract.monthlyFeeCents * selectedContract.billingCount
+        : detail.dre.faturamentoCents
+    : null;
+  const realizedCents = detail.dre.faturamentoCents;
+  const realizedPct = contractedCents && contractedCents > 0 ? realizedCents / contractedCents : null;
+  // Sub do "Realizado": encomenda amarra ao FP entregue (reconhece por entrega);
+  // squad mostra o % do contratado já faturado.
+  const realizedSub = selectedContract
+    ? selectedContract.billingType === "fixed_scope"
+      ? `${detail.fpDeliveredTotal}${selectedContract.contractedFp != null ? `/${selectedContract.contractedFp}` : ""} FP entregue`
+      : realizedPct != null
+        ? `${pct(realizedPct)} do contratado`
+        : undefined
+    : undefined;
+
+  // KPIs scope-aware. Global: Faturamento + nº de contratos. Contrato escopado:
+  // Contratado (previsto) × Realizado (faturado) lado a lado.
+  const kpis: { label: string; value: string; tone?: string; sub?: string }[] = selectedContract
+    ? [
+        { label: "Contratado", value: brlFromCents(contractedCents ?? 0) },
+        { label: "Realizado", value: brlFromCents(realizedCents), sub: realizedSub },
+        { label: "Margem líq.", value: pct(detail.dre.margemLiquidaPct), tone: profitTone },
+        { label: "Lucro líquido", value: brlFromCents(detail.dre.lucroLiquidoCents), tone: profitTone },
+      ]
+    : [
+        { label: "Faturamento", value: brlFromCents(detail.dre.faturamentoCents) },
+        { label: "Margem líq.", value: pct(detail.dre.margemLiquidaPct), tone: profitTone },
+        { label: "Lucro líquido", value: brlFromCents(detail.dre.lucroLiquidoCents), tone: profitTone },
+        { label: "Contratos", value: String(detail.contracts.length) },
+      ];
 
   const kpisBlock = (
     <div className="grid grid-cols-2 gap-2">
@@ -221,6 +243,7 @@ export function FinanceProjectView({
           <p className={cn("mt-1.5 font-mono text-base font-semibold tabular-nums", k.tone)}>
             {k.value}
           </p>
+          {k.sub && <p className="mt-0.5 text-[10px] text-muted-foreground">{k.sub}</p>}
         </div>
       ))}
     </div>

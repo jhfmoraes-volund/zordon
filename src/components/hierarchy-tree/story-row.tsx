@@ -47,13 +47,6 @@ export function StoryRow({
         </Badge>
       );
     }
-    if (story.refinementStatus === "refined") {
-      return (
-        <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-0 text-[10px] py-0 h-5">
-          refined
-        </Badge>
-      );
-    }
     return (
       <Badge
         variant="outline"

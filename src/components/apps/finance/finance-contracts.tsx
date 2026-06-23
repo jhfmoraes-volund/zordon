@@ -9,25 +9,19 @@
  */
 
 import { useState } from "react";
-import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarRange, FileText, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { brlFromCents } from "@/lib/format-currency";
-import { fmtDate, fmtDayMonth } from "@/lib/date-utils";
+import { fmtDate } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { Cronograma } from "@/components/timeline/cronograma";
 import type { BillingType, Contract, SprintLite } from "@/lib/finance/types";
 import { contractForDate, paletteFor } from "./contract-bands";
 
 function billingLabel(b: BillingType): string {
   return b === "fixed_scope" ? "Encomenda" : "Squad";
-}
-/** "Sprint 12" → "12"; resto inalterado. Rótulo curto pros blocos do cronograma. */
-function shortName(name: string): string {
-  const m = /^Sprint\s+(.+)$/i.exec(name);
-  return m ? m[1] : name;
 }
 /** Sprints cobertas por este contrato (membership pela data de início da sprint). */
 function coveredSprints(contract: Contract, contracts: Contract[], sprints: SprintLite[]): SprintLite[] {
@@ -157,20 +151,14 @@ export function FinanceContracts({
                   </div>
                 </div>
 
-                {/* Cronograma de blocos deste contrato — chip unificado, faixa que rola */}
+                {/* Chip de contagem — clicar o contrato já escopa o Cronograma 3-grid
+                    àquelas sprints; aqui só o tamanho (sem faixa que rola dentro do card). */}
                 {covered.length > 0 && (
                   <div className="px-3 pb-2.5">
-                    <Cronograma
-                      shape="chip"
-                      layout="scroll"
-                      blocks={covered.map((s) => ({
-                        key: s.id,
-                        indicator: shortName(s.name),
-                        dateLabel: fmtDayMonth(s.startDate),
-                        tone: { border: pal.border, band: pal.band, text: pal.text },
-                        title: `${s.name} · ${fmtDate(s.startDate)} → ${fmtDate(s.endDate)}`,
-                      }))}
-                    />
+                    <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+                      <CalendarRange className="size-3" />
+                      {covered.length} {covered.length === 1 ? "sprint" : "sprints"}
+                    </span>
                   </div>
                 )}
               </div>

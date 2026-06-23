@@ -81,6 +81,7 @@ type FormState = {
   from: string;
   to: string;
   monthlyFeeReais: string;
+  billingCount: string;
   totalValueReais: string;
   contractedFp: string;
   contractedSprints: string;
@@ -97,6 +98,7 @@ function deriveForm(contract: Contract | null, count: number, engagementType: st
       from: contract.effectiveFrom.slice(0, 10),
       to: contract.effectiveTo?.slice(0, 10) ?? "",
       monthlyFeeReais: centsToReais(contract.monthlyFeeCents),
+      billingCount: contract.billingCount != null ? String(contract.billingCount) : "",
       totalValueReais: centsToReais(contract.totalValueCents),
       contractedFp: contract.contractedFp != null ? String(contract.contractedFp) : "",
       contractedSprints: contract.contractedSprints != null ? String(contract.contractedSprints) : "",
@@ -111,6 +113,7 @@ function deriveForm(contract: Contract | null, count: number, engagementType: st
     from: "",
     to: "",
     monthlyFeeReais: "",
+    billingCount: "",
     totalValueReais: "",
     contractedFp: "",
     contractedSprints: "",
@@ -177,6 +180,7 @@ export function FinanceContractSheet({
       effectiveTo: form.to || null,
       billingType: form.billingType,
       monthlyFeeCents: isFixed ? null : reaisToCents(form.monthlyFeeReais),
+      billingCount: isFixed ? null : numOrNull(form.billingCount),
       totalValueCents: isFixed ? reaisToCents(form.totalValueReais) : null,
       contractedFp: isFixed ? numOrNull(form.contractedFp) : null,
       contractedSprints: isFixed ? null : numOrNull(form.contractedSprints),
@@ -334,20 +338,40 @@ export function FinanceContractSheet({
                 </Field>
               </Field.Row>
             ) : (
-              <Field.Row cols={2}>
-                <Field name="fee">
-                  <Field.Label>Mensalidade (R$)</Field.Label>
-                  <Field.Control>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.monthlyFeeReais}
-                      onChange={(e) => set({ monthlyFeeReais: e.target.value })}
-                      placeholder="ex: 24000,00"
-                    />
-                  </Field.Control>
-                </Field>
+              <>
+                <Field.Row cols={2}>
+                  <Field name="fee">
+                    <Field.Label>Mensalidade (R$)</Field.Label>
+                    <Field.Control>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.monthlyFeeReais}
+                        onChange={(e) => set({ monthlyFeeReais: e.target.value })}
+                        placeholder="ex: 24000,00"
+                      />
+                    </Field.Control>
+                  </Field>
+                  <Field name="billingCount">
+                    <Field.Label>Nº de mensalidades</Field.Label>
+                    <Field.Control>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={form.billingCount}
+                        onChange={(e) => set({ billingCount: e.target.value })}
+                        placeholder="ex: 3"
+                      />
+                    </Field.Control>
+                    <Field.Hint>
+                      {form.billingCount
+                        ? `Receita = ${form.billingCount}× a mensalidade (independe da duração da vigência)`
+                        : "Quantas vezes se cobra. Vazio = conta os meses da vigência"}
+                    </Field.Hint>
+                  </Field>
+                </Field.Row>
                 <Field name="scopeSprints">
                   <Field.Label>Sprints contratadas</Field.Label>
                   <Field.Control>
@@ -361,7 +385,7 @@ export function FinanceContractSheet({
                     />
                   </Field.Control>
                 </Field>
-              </Field.Row>
+              </>
             )}
 
             {/* ── Cláusulas & Garantia ── */}

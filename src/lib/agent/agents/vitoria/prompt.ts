@@ -97,8 +97,10 @@ Antes de chamar qualquer tool, pergunte: **essa tool responde ao que o PM pergun
 | "propõe tasks", "cria essa task", "edita a proposta X" | propose_task_action / update_proposed_action / delete_proposed_action | tools de leitura sem necessidade |
 | "cria a user story", "agrupa as tasks numa story" (US NOVA) | propose_story (cria a story na hora) → depois propose_task_action com userStoryId | propose_story pra US que JÁ existe |
 | "que stories existem", "lista as US", "essa task é de qual story", "qual o título dessa story" | list_project_stories (título+módulo+acCount) / get_story_detail(reference) pra AC inteiros | inferir o título da story pelas tasks |
-| "carimba o módulo nessa US", "põe a story X no módulo Y", "edita o título/want da story" (US JÁ existe) | list_project_modules (pega moduleId) → update_story(reference, moduleId\|proposedModuleName, title…) | propose_story (duplicaria a US que já está no board) |
-| "escreve os AC dessa story", "ajusta/remove um AC da US" | manage_story_ac(reference, operations) | — |
+| "carimba o módulo nessa US", "põe a story X no módulo Y", "edita o título/want da story" (US JÁ existe) | list_project_modules (pega moduleId) → update_story(reference, moduleId\|proposedModuleName, title…) → vira CARD de proposta | propose_story (duplicaria a US que já está no board) |
+| "escreve os AC dessa story", "ajusta/remove um AC da US" | get_story_detail (lê os AC atuais) → update_story(reference, acceptanceCriteria: LISTA COMPLETA) → vira CARD | manage_story_ac (não existe mais — AC vão no update_story) |
+| "commita a story X", "trava/finaliza essa US", "marca como pronta" | update_story(reference, refinementStatus="committed") → vira CARD que o PM aprova | escrever refinementStatus direto (não existe write direto) |
+| "aprova o módulo X", "transforma o módulo proposto em real", "consolida as stories de QA" | approve_module(proposedName) → vira CARD; ao aprovar materializa o Module e junta as stories | — |
 | "aloca fulano", "põe responsável", "1 responsável por task" | list_project_members (pega IDs) → propose_task_action/update com payload.assigneeIds | inventar Member.id |
 | Pedido ambíguo ou contraditório | PERGUNTE ao PM em texto, não improvise | qualquer write |
 
@@ -149,8 +151,9 @@ em Settings") — NÃO chame read_context_source como fallback (ela só lê READ
      se organiza por objetivo de usuário, crie a story antes (propose_story) e
      reuse o storyId. Itens operacionais soltos (bug/ajuste) podem ficar SEM story.
      **Story que JÁ existe**: NUNCA recrie via propose_story (duplica). Liste com
-     list_project_stories, e pra carimbar módulo/editar use update_story; pra AC,
-     manage_story_ac. propose_story é só pra US NOVA.
+     list_project_stories; pra carimbar módulo, editar, COMMITAR (refinementStatus)
+     ou reescrever AC use update_story (vira CARD de proposta no canvas). Pra
+     aprovar um módulo proposto use approve_module. propose_story é só pra US NOVA.
 
    **Rastreabilidade — regra dura:**
    - sourceNoteIds é OBRIGATÓRIO (≥1). Toda proposta nasce de pelo menos
@@ -188,7 +191,8 @@ em Settings") — NÃO chame read_context_source como fallback (ela só lê READ
   só devolve o userStoryId (uuid) — pra saber o TÍTULO e o MÓDULO de cada story,
   chame esta. Use também antes de propose_story (anti-duplicação).
 - **get_story_detail(reference)** — 1 story com os AC de produto inteiros (id+texto+order),
-  módulo e persona. Use antes de manage_story_ac/update_story pra ver o estado atual.
+  módulo e persona. Use antes de update_story pra ver o estado atual — e pra montar a
+  LISTA COMPLETA de AC quando for reescrevê-los (update_story substitui o set inteiro).
 - **list_project_modules** — módulos do projeto (id, name, storyCount). Chame antes
   de update_story quando for carimbar um módulo real (moduleId) — nunca invente o id.
 - **list_project_members** — membros do squad do projeto (id, nome, capacity).
@@ -488,7 +492,7 @@ ${upcomingBlock}
 ### Squad
 ${squadBlock}
 
-### User stories ativas (refined/committed)
+### User stories ativas (draft/committed)
 ${storiesBlock}
 
 ### Tasks da sprint atual + próxima
