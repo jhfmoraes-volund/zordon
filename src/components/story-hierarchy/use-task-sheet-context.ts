@@ -67,7 +67,7 @@ export function useTaskSheetContext(opts: UseTaskSheetContextOptions): Result {
         storiesRes,
         sprintsRes,
         tagsRes,
-        membersRes,
+        teamRes,
       ] = await Promise.all([
         supabase
           .from("Project")
@@ -95,26 +95,24 @@ export function useTaskSheetContext(opts: UseTaskSheetContextOptions): Result {
           .select("id, projectId, name, tone")
           .eq("projectId", projectId)
           .order("name"),
-        supabase
-          .from("ProjectMember")
-          .select("member:Member!ProjectMember_memberId_fkey(id, name, role, position)")
-          .eq("projectId", projectId),
+        fetch(`/api/projects/${projectId}/members`).then((r) =>
+          r.ok
+            ? (r.json() as Promise<
+                { id: string; name: string | null; role: string | null }[]
+              >)
+            : [],
+        ),
       ]);
 
       const modules = (modulesRes.data ?? []).map((r) => adaptModule(r as ModuleRow));
       const stories = ((storiesRes.data ?? []) as unknown as StoryWithRelations[]).map(
         adaptStory,
       );
-      const memberRows = (membersRes.data ?? [])
-        .map((pm) => {
-          const m = pm.member as
-            | { id: string; name: string; role: string | null }
-            | { id: string; name: string; role: string | null }[]
-            | null;
-          return Array.isArray(m) ? m[0] ?? null : m;
-        })
-        .filter((m): m is { id: string; name: string; role: string | null } => !!m);
-      const members = memberRows.map((m) => adaptMember(m));
+      // Roster canônico (finance.v_project_team via /api/projects/[id]/members):
+      // alocados ∪ acesso-only; squad NÃO entra (D9).
+      const members = teamRes
+        .filter((r) => r.id)
+        .map((r) => adaptMember({ id: r.id, name: r.name ?? "", role: r.role }));
 
       const project = projectRes.data;
       const definitionOfDone = Array.isArray(project?.definitionOfDone)
@@ -166,9 +164,9 @@ export function useTaskSheetContext(opts: UseTaskSheetContextOptions): Result {
   // Effect — initial load
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
 
     const run = async () => {
+      setLoading(true);
       if (opts.mode === "byTask") {
         if (!opts.taskId) {
           setCtx(null);

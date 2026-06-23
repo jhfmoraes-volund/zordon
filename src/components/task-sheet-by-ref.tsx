@@ -125,7 +125,8 @@ function TaskSheetByRefInner({
       const id = taskRow.id;
       const projectId = taskRow.projectId;
 
-    // Step 2 — load project context in parallel.
+    // Step 2 — load project context in parallel. Equipe vem do roster canônico
+    // (/api/projects/[id]/members → v_project_team), não mais do UNION client-side.
     const [
       projectRes,
       modulesRes,
@@ -134,14 +135,11 @@ function TaskSheetByRefInner({
       tasksRes,
       sprintsRes,
       tagsRes,
-      membersRes,
-      projectSquadRes,
+      teamRes,
     ] = await Promise.all([
       supabase
         .from("Project")
-        .select(
-          "definitionOfDone, pm:Member!Project_pmId_fkey(id, name, role, position)",
-        )
+        .select("definitionOfDone")
         .eq("id", projectId)
         .single(),
       supabase
@@ -177,11 +175,13 @@ function TaskSheetByRefInner({
         .select("id, projectId, name, tone")
         .eq("projectId", projectId)
         .order("name"),
-      supabase
-        .from("ProjectMember")
-        .select("member:Member!ProjectMember_memberId_fkey(id, name, role, position)")
-        .eq("projectId", projectId),
-      supabase.from("ProjectSquad").select("squadId").eq("projectId", projectId),
+      fetch(`/api/projects/${projectId}/members`).then((r) =>
+        r.ok
+          ? (r.json() as Promise<
+              { id: string; name: string | null; role: string | null }[]
+            >)
+          : [],
+      ),
     ]);
 
     if (!tasksRes.data) return null;
@@ -202,35 +202,24 @@ function TaskSheetByRefInner({
 
     const project = projectRes.data;
 
-    // União das TRÊS fontes que coexistem no schema (dedup por id, PM precede):
-    // Project.pmId ∪ ProjectMember ∪ (ProjectSquad → SquadMember). Espelha o
-    // loadProjectMembers canônico (src/lib/agent/agents/vitoria/tools.ts) e a
-    // rota /api/projects/[id]/members. Sem o branch do squad, um membro que está
-    // só no squad linkado (sem ProjectMember e não-PM) some da sheet embora
-    // apareça atribuído no board — caso SILFAE/Eduarda.
+    // Roster canônico (finance.v_project_team via /api/projects/[id]/members):
+    // alocados ∪ acesso-only; squad NÃO entra (D9). Quem já está atribuído à task
+    // mas saiu do roster (ex.: alocação encerrada) é preservado no picker — o chip
+    // não some.
     type MemberLite = { id: string; name: string; role: string | null };
     const byId = new Map<string, MemberLite>();
 
-    const pm = Array.isArray(project?.pm) ? project?.pm[0] : project?.pm;
-    if (pm) byId.set(pm.id, { id: pm.id, name: pm.name, role: pm.role });
-
-    for (const pmRow of membersRes.data ?? []) {
-      const m = pmRow.member as MemberLite | MemberLite[] | null;
-      const row = Array.isArray(m) ? m[0] ?? null : m;
-      if (row && !byId.has(row.id)) byId.set(row.id, row);
+    for (const row of teamRes) {
+      if (row.id) byId.set(row.id, { id: row.id, name: row.name ?? "", role: row.role });
     }
 
-    const squadIds = (projectSquadRes.data ?? []).map((r) => r.squadId);
-    if (squadIds.length > 0) {
-      const { data: smRows } = await supabase
-        .from("SquadMember")
-        .select("member:Member(id, name, role)")
-        .in("squadId", squadIds);
-      for (const smRow of smRows ?? []) {
-        const m = smRow.member as MemberLite | MemberLite[] | null;
-        const row = Array.isArray(m) ? m[0] ?? null : m;
-        if (row && !byId.has(row.id)) byId.set(row.id, row);
-      }
+    const taskAssignments = (tasksRes.data?.assignments ?? []) as Array<{
+      member: { id: string; name: string } | { id: string; name: string }[] | null;
+    }>;
+    for (const a of taskAssignments) {
+      const m = Array.isArray(a.member) ? a.member[0] ?? null : a.member;
+      if (m?.id && !byId.has(m.id))
+        byId.set(m.id, { id: m.id, name: m.name, role: null });
     }
 
     const members = Array.from(byId.values()).map((m) => adaptMember(m));
