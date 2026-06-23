@@ -8,6 +8,7 @@ import type {
   Allocation,
   AllocationInput,
   AllocationItem,
+  AllocationKind,
   Assumptions,
   AssumptionsInput,
   Category,
@@ -381,13 +382,22 @@ async function checkAllocation(
   input: AllocationInput,
   excludeId?: string,
 ): Promise<string | null> {
-  if (!(input.percent > 0 && input.percent <= 100))
+  const kind = input.kind ?? "standing";
+  // Spot: medido em DIAS (0 < d <= 60). Não entra na conta de Σ% contínua.
+  if (kind === "spot") {
+    if (!(input.days != null && input.days > 0 && input.days <= 60))
+      throw new Error("Participação pontual: dias deve estar entre 0 e 60");
+    return null;
+  }
+  const percent = input.percent;
+  if (!(percent != null && percent > 0 && percent <= 100))
     throw new Error("Percentual deve estar entre 0 e 100");
   const { fin } = await finance();
   const res = await fin
     .from("labor_allocation")
     .select("id, percent, effective_from, effective_to")
-    .eq("member_id", input.memberId);
+    .eq("member_id", input.memberId)
+    .eq("kind", "standing"); // só standing soma no teto de %
   if (res.error) throw new Error(res.error.message);
   const others = ((res.data ?? []) as Allocation[]).filter((a) => a.id !== excludeId);
   const overlapping = others.filter((a) =>
@@ -399,17 +409,20 @@ async function checkAllocation(
     ),
   );
   const prior = overlapping.reduce((s, a) => s + Number(a.percent), 0);
-  const sum = prior + input.percent;
+  const sum = prior + percent;
   return sum > 100
-    ? `Alocação passa de 100% no período: ${prior}% já alocado + ${input.percent}% = ${sum}%. Salvo mesmo assim — ajuste quando a operação estabilizar.`
+    ? `Alocação passa de 100% no período: ${prior}% já alocado + ${percent}% = ${sum}%. Salvo mesmo assim — ajuste quando a operação estabilizar.`
     : null;
 }
 
 function allocRow(input: AllocationInput, createdBy: string | null) {
+  const kind = input.kind ?? "standing";
   return {
     member_id: input.memberId,
     project_id: input.projectId,
-    percent: input.percent,
+    kind,
+    percent: kind === "spot" ? null : input.percent,
+    days: kind === "spot" ? input.days : null,
     effective_from: input.effectiveFrom,
     effective_to: input.effectiveTo ?? null,
     note: input.note ?? null,
@@ -684,7 +697,9 @@ export async function listContractRoster(
     memberId: String(r.member_id),
     memberName: String(r.member_name),
     memberPosition: (r.member_position as string | null) ?? null,
-    percent: Number(r.percent),
+    kind: (r.kind as AllocationKind) ?? "standing",
+    percent: r.percent != null ? Number(r.percent) : null,
+    days: r.days != null ? Number(r.days) : null,
     effectiveFrom: String(r.effective_from),
     effectiveTo: (r.effective_to as string | null) ?? null,
   }));

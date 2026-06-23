@@ -80,4 +80,7 @@ Resumo (detalhar quando chegarmos). **Modelo spot REVISADO 2026-06-23 — D11/D1
 | 2026-06-23 | F1.4 kind selector | ✅ 3 cards (Interno/Proposta/Contratado) no project-edit-sheet (só criação); applyKind seta category/phase/cliente Volund. |
 | 2026-06-23 | F1.5 criação por kind | ✅ save() cria contrato via POST /api/finance/contract (proposed/active, billing do engagementType, vigência das datas). Interno = sem contrato. Admin-only (403 → toast, projeto fica). |
 | 2026-06-23 | F1.6 datas derivadas | ✅ edição: fetch contract-period → se há contrato, datas/engajamento read-only (DerivedDate "⤷ contrato"); interno editável. |
-| 2026-06-23 | F1.7 ganhar proposta | ✅ winContract (dal): proposed→active + fase commercial→immersion + ProjectPhaseEvent. POST /api/finance/contract/[id]/win. Botão "🏆 Ganhar proposta" no sheet quando status=proposed. tsc 0, eslint limpo. NÃO commitado. |
+| 2026-06-23 | F1.7 ganhar proposta | ✅ winContract (dal): proposed→active + fase commercial→immersion + ProjectPhaseEvent. POST /api/finance/contract/[id]/win. Botão "🏆 Ganhar proposta" no sheet quando status=proposed. tsc 0, eslint limpo. Commitado ZRD-JM-222. |
+| 2026-06-23 | **F2.1 fundação spot** | ✅ migration 20260624j PROD (labor_allocation +kind +days, percent nullable, CHECK forma 0<days≤60, 35 linhas=standing). |
+| 2026-06-23 | F2.2 v_contract_roster +kind/days | ✅ migration 20260624k PROD (CREATE OR REPLACE, anexa kind/days no fim). |
+| 2026-06-23 | F2.3 código kind-aware | ✅ types (AllocationKind, Allocation/Input/ContractRosterMember), dal (checkAllocation branch spot, allocRow, listContractRoster mapper). POST /api/finance/allocations já cria spot. tsc 0, eslint limpo. |

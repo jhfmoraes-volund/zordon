@@ -182,7 +182,9 @@ export type ContractRosterMember = {
   memberId: string;
   memberName: string;
   memberPosition: string | null;
-  percent: number;
+  kind: AllocationKind; // standing (%) | spot (dias)
+  percent: number | null; // standing
+  days: number | null; // spot
   effectiveFrom: string;
   effectiveTo: string | null;
 };
@@ -310,11 +312,16 @@ export type MemberRef = {
 
 // ─── Alocação financeira de mão-de-obra (D12) ───────────────────────────────
 
+/** standing = % contratual contínuo · spot = participação pontual em dias (D11). */
+export type AllocationKind = "standing" | "spot";
+
 export type Allocation = {
   id: string;
   member_id: string;
   project_id: string;
-  percent: number;
+  kind: AllocationKind;
+  percent: number | null; // standing (spot = null)
+  days: number | null; // spot: dias de ajuda, 1 dia=8h (standing = null)
   effective_from: string;
   effective_to: string | null;
   note: string | null;
@@ -333,7 +340,9 @@ export type AllocationItem = Allocation & {
 export type AllocationInput = {
   memberId: string;
   projectId: string;
-  percent: number;
+  kind?: AllocationKind; // default standing
+  percent?: number | null; // standing
+  days?: number | null; // spot: dias (0 < d <= 60)
   effectiveFrom: string;
   effectiveTo?: string | null;
   note?: string | null;
