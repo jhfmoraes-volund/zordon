@@ -85,7 +85,7 @@ export const decks: DeckMeta[] = [
       "Vitor, Vitoria e Alpha não são chat solto — são o motor dos apps (Design Session, Rituais, Ops). O que cada um faz, as ferramentas de cada um, como roda por baixo (daemon + MCP) e o roadmap.",
     kind: "guide",
     slideCount: 11,
-    updatedAt: "2026-06-17",
+    updatedAt: "2026-06-23",
     tags: ["Agentes", "MCP", "Daemon"],
     minAccessLevel: "manager",
   },

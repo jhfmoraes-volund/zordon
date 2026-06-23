@@ -608,6 +608,7 @@ function mapContract(r: Record<string, unknown>): Contract {
     projectId: String(r.project_id),
     label: String(r.label),
     seq: Number(r.seq),
+    status: (r.status as Contract["status"]) ?? "active",
     effectiveFrom: String(r.effective_from),
     effectiveTo: (r.effective_to as string | null) ?? null,
     billingType: r.billing_type === "fixed_scope" ? "fixed_scope" : "squad",
@@ -682,9 +683,19 @@ async function validateContract(
   return existing;
 }
 
+/** Transições válidas do lifecycle do contrato (D1). */
+const CONTRACT_STATUS_NEXT: Record<Contract["status"], Contract["status"][]> = {
+  proposed: ["proposed", "active", "declined"],
+  active: ["active", "ended"],
+  ended: ["ended"],
+  declined: ["declined"],
+};
+
 function toContractRow(input: ContractInput) {
   return {
     label: input.label.trim(),
+    // status omitido no create → cai no DEFAULT 'active' do schema.
+    ...(input.status ? { status: input.status } : {}),
     effective_from: input.effectiveFrom,
     effective_to: input.effectiveTo ?? null,
     billing_type: input.billingType,
@@ -722,10 +733,17 @@ export async function createContract(
 
 export async function updateContract(id: string, input: ContractInput): Promise<Contract> {
   const { fin } = await finance();
-  const cur = await fin.from("contract").select("project_id").eq("id", id).maybeSingle();
+  const cur = await fin.from("contract").select("project_id, status").eq("id", id).maybeSingle();
   if (cur.error) throw new Error(cur.error.message);
   if (!cur.data) throw new Error("Contrato não encontrado");
-  await validateContract(String((cur.data as { project_id: string }).project_id), input, id);
+  const curRow = cur.data as { project_id: string; status: Contract["status"] };
+  // Máquina de estados: bloqueia transição inválida (ex.: ended→active).
+  if (input.status && input.status !== curRow.status) {
+    const allowed = CONTRACT_STATUS_NEXT[curRow.status] ?? [];
+    if (!allowed.includes(input.status))
+      throw new Error(`Transição de status inválida: ${curRow.status} → ${input.status}`);
+  }
+  await validateContract(String(curRow.project_id), input, id);
   const res = await fin
     .from("contract")
     .update({ ...toContractRow(input), updated_at: new Date().toISOString() })
@@ -869,7 +887,7 @@ export async function getProjectDetail(
   const { sb, fin } = await finance();
   const { from, to } = monthBounds(fromMonth, toMonth);
 
-  const [monthsRes, cmRes, laborRes, nameRes, allocations, squad, eff, sprintRes, contracts, fpRes, clauses, invoices] =
+  const [monthsRes, cmRes, laborRes, allocLaborRes, nameRes, allocations, squad, eff, sprintRes, contracts, fpRes, clauses, invoices] =
     await Promise.all([
     fin
       .from("v_project_month")
@@ -878,14 +896,14 @@ export async function getProjectDetail(
       .gte("month", from)
       .lte("month", to)
       .order("month", { ascending: true }),
-    // Fato POR CONTRATO no período — usado quando um contrato está escopado
-    // (atribui receita/equipe/despesa ao contrato, sem vazar de janela de mês).
+    // Fato POR CONTRATO — usado quando um contrato está escopado (atribui
+    // receita/equipe/despesa ao contrato, sem vazar de janela de mês). SEM
+    // recorte de janela: o escopo de contrato mostra a economia COMPLETA do
+    // contrato (ex.: equipe alocada antes do 1º faturamento ainda conta).
     fin
       .from("v_contract_month")
       .select("*")
       .eq("project_id", projectId)
-      .gte("month", from)
-      .lte("month", to)
       .order("month", { ascending: true }),
     fin
       .from("v_project_member_labor_month")
@@ -893,6 +911,12 @@ export async function getProjectDetail(
       .eq("project_id", projectId)
       .gte("month", from)
       .lte("month", to),
+    // Custo PRO-RATA por alocação×mês (base única). Sem janela: cada linha de
+    // equipe mostra o custo somado do SEU prazo (a vigência da alocação).
+    fin
+      .from("v_allocation_labor_month")
+      .select("allocation_id, labor_cents")
+      .eq("project_id", projectId),
     sb.from("Project").select("name, engagementType").eq("id", projectId).maybeSingle(),
     listAllocations({ projectId }),
     squadMemberIds(sb, projectId),
@@ -915,6 +939,7 @@ export async function getProjectDetail(
   if (monthsRes.error) throw new Error(monthsRes.error.message);
   if (cmRes.error) throw new Error(cmRes.error.message);
   if (laborRes.error) throw new Error(laborRes.error.message);
+  if (allocLaborRes.error) throw new Error(allocLaborRes.error.message);
 
   // Escopo de contrato: série mensal vem do fato POR CONTRATO (sem vazamento de
   // janela — ex.: a mensalidade do squad não aparece no escopo da encomenda que
@@ -962,6 +987,16 @@ export async function getProjectDetail(
     }))
     .sort((a, b) => b.laborCents - a.laborCents);
 
+  // Custo pro-rata SOMADO por alocação (o prazo da linha de equipe) — base
+  // única `v_allocation_labor_month`, consistente com a equipe da DRE.
+  const allocLaborMap = new Map<string, number>();
+  for (const r of (allocLaborRes.data ?? []) as { allocation_id: string; labor_cents: number }[])
+    allocLaborMap.set(r.allocation_id, (allocLaborMap.get(r.allocation_id) ?? 0) + Number(r.labor_cents));
+  const allocationsWithLabor = allocations.map((al) => ({
+    ...al,
+    laborCents: allocLaborMap.get(al.id) ?? 0,
+  }));
+
   // Overhead por pessoa (premissas × alocação): IA/FTE + software/cabeça +
   // equipamento amortizado, mês a mês (decisão híbrida — soma com despesa real).
   const a = eff.assumptions;
@@ -969,8 +1004,13 @@ export async function getProjectDetail(
   const overheadAllocations = contractId
     ? allocations.filter((al) => al.contract_id === contractId)
     : allocations;
+  // Escopado: itera os meses atribuídos ao contrato (full period, sem janela).
+  // Global: a janela do ano.
+  const overheadMonths = contractId
+    ? months.map((m) => m.month)
+    : monthList(fromMonth, toMonth);
   let overheadCents = 0;
-  for (const mf of monthList(fromMonth, toMonth)) {
+  for (const mf of overheadMonths) {
     const mk = mf.slice(0, 7);
     const active = overheadAllocations.filter(
       (al) =>
@@ -1007,7 +1047,7 @@ export async function getProjectDetail(
     months,
     totals,
     laborByMember,
-    allocations,
+    allocations: allocationsWithLabor,
     squadMemberIds: squad,
     sprints,
     sprintCount: sprints.length,

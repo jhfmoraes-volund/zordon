@@ -57,11 +57,11 @@ export function SlideMapa() {
           <div className="ov-phase">
             <div className="marker">2</div>
             <div className="ph-eyebrow">APP 02 · RITUAIS</div>
-            <h3>Sprint · PM Review · Release</h3>
+            <h3>PM Review · Planning</h3>
             <div className="duration">· agente: Vitoria</div>
             <p className="desc">
               O copiloto do PM nos rituais. Enxerga sprint e capacidade, propõe
-              o plano de tasks e redige o report da semana.
+              o plano de tasks e stories, e redige o report da semana.
             </p>
             <div className="steps">
               <div className="step">

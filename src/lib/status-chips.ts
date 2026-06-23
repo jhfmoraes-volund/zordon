@@ -87,6 +87,14 @@ export const PROJECT_ENGAGEMENT = defineRegistry({
   continuous:  { label: "Squad as a Service", tone: "brand" },
 });
 
+// ─── Contrato (lifecycle D1) ─────────────────────────────
+export const CONTRACT_STATUS = defineRegistry({
+  proposed: { label: "Proposta",  tone: "purple" },
+  active:   { label: "Ativo",     tone: "green"  },
+  ended:    { label: "Encerrado", tone: "muted"  },
+  declined: { label: "Recusada",  tone: "red"    },
+});
+
 // ─── Task ────────────────────────────────────────────────
 
 export const TASK_STATUS = defineRegistry({

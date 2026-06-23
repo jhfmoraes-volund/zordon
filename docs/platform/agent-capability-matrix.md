@@ -4,7 +4,7 @@
 > Regenere: `npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write docs/platform/agent-capability-matrix.md`.
 > Pertencimento (`surfaces`) e escopo (`needs`) vivem no descriptor — esta tabela é projeção. Drift cross-repo: `scripts/check-daemon-surface.ts`.
 
-**93 tools** · surfaces: vitor 41 · pm_review 17 · planning 25 · release_pl 29 · wiki 15 · alpha 26
+**98 tools** · surfaces: vitor 41 · pm_review 20 · planning 30 · release_pl 34 · wiki 18 · alpha 26
 
 | tool | class | needs | vitor | pm_review | planning | release_pl | wiki | alpha |
 |------|-------|-------|----|----|----|----|----|----|
@@ -13,6 +13,7 @@
 | `add_pm_review_note` | act | pmReviewId | · | ✓ | · | · | · | · |
 | `add_task_comment` | act | — | · | · | ✓ | ✓ | · | · |
 | `append_project_memory` | remember | — | · | · | ✓ | ✓ | · | · |
+| `approve_module` | act | — | · | · | ✓ | ✓ | · | · |
 | `approve_prd` | act | — | ✓ | · | · | · | · | · |
 | `ask_meeting` | sense | — | · | · | · | · | · | ✓ |
 | `delete_proposed_action` | act | planningId | · | · | ✓ | ✓ | · | · |
@@ -30,6 +31,7 @@
 | `get_sprint_capacity` | sense | — | · | ✓ | ✓ | ✓ | ✓ | · |
 | `get_sprint_overview` | sense | — | · | · | · | · | · | ✓ |
 | `get_story` | sense | routeProjectId | · | · | · | · | · | ✓ |
+| `get_story_detail` | sense | — | · | ✓ | ✓ | ✓ | ✓ | · |
 | `get_task_detail` | sense | — | · | ✓ | ✓ | ✓ | ✓ | · |
 | `get_tasks` | sense | — | · | · | · | · | · | ✓ |
 | `glob_workspace` | act | — | ✓ | · | · | · | · | · |
@@ -45,7 +47,9 @@
 | `list_personas` | sense | routeProjectId | · | · | · | · | · | ✓ |
 | `list_prds` | sense | — | ✓ | · | · | ✓ | · | · |
 | `list_project_members` | sense | — | · | ✓ | ✓ | ✓ | ✓ | · |
+| `list_project_modules` | sense | — | · | ✓ | ✓ | ✓ | ✓ | · |
 | `list_project_sprints` | sense | — | · | ✓ | ✓ | ✓ | ✓ | · |
+| `list_project_stories` | sense | — | · | ✓ | ✓ | ✓ | ✓ | · |
 | `list_project_tasks` | sense | — | · | ✓ | ✓ | ✓ | ✓ | · |
 | `list_sprints` | sense | — | · | · | · | · | · | ✓ |
 | `list_stories` | sense | routeProjectId | · | · | · | · | · | ✓ |
@@ -90,6 +94,7 @@
 | `update_proposed_action` | act | planningId | · | · | ✓ | ✓ | · | · |
 | `update_session_memory` | remember | sessionId | ✓ | · | · | · | · | · |
 | `update_sprint` | act | — | · | · | ✓ | ✓ | · | · |
+| `update_story` | act | — | · | · | ✓ | ✓ | · | · |
 | `update_task` | act | — | · | · | · | · | · | ✓ |
 | `verify_sprint_distribution` | sense | routeProjectId | · | · | · | · | · | ✓ |
 | `write_brainstorm` | act | sessionId | ✓ | · | · | · | · | · |

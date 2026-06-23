@@ -30,7 +30,7 @@ export function SlideRituais() {
             className={styles.titleH2}
             style={{ marginTop: 16, fontSize: 46, maxWidth: 1500 }}
           >
-            Uma Vitoria, três rituais —
+            Uma Vitoria, dois rituais —
             <br />
             <em>mesmo núcleo</em> de visão de sprint.
           </h2>
@@ -62,45 +62,47 @@ export function SlideRituais() {
 
           <div className="step-card">
             <div className="head">
-              <span>Sprint Planning</span>
+              <span>Planning</span>
               <span className="ix">02</span>
             </div>
             <div className="meta-row">
               <span className="tag interno">Propõe</span>
-              <span className="tag">Por sprint</span>
+              <span className="tag">Contínuo</span>
             </div>
             <div className="body">
               <p>
-                Vê capacidade e backlog, propõe o plano de tasks/stories pra
+                Vê capacidade e backlog, propõe tasks e distribui em sprints pra
                 você aprovar. Nada entra sem o seu OK.
               </p>
             </div>
             <div className="outputs">
               <div className="ot">Ferramentas</div>
               <div className="note">
-                propor task/story · staging · estado da planning
+                propor task em lote · mover de sprint · estado da planning
               </div>
             </div>
           </div>
 
           <div className="step-card refino">
             <div className="head">
-              <span>Release Planning</span>
+              <span>Stories &amp; módulos</span>
               <span className="ix">03</span>
             </div>
             <div className="meta-row">
-              <span className="tag cliente">Roadmap</span>
-              <span className="tag">1× / projeto</span>
+              <span className="tag cliente">Organiza</span>
+              <span className="tag">novo</span>
             </div>
             <div className="body">
               <p>
-                Apoia a ordem do roadmap e a quebra em sprints. Toolset dedicado
-                ainda em evolução (ver roadmap).
+                Lê a árvore de stories, carimba o módulo, propõe critérios de
+                aceite e o commit da story — tudo como card pra você aprovar.
               </p>
             </div>
             <div className="outputs">
               <div className="ot">Ferramentas</div>
-              <div className="note">núcleo de leitura · em expansão</div>
+              <div className="note">
+                listar stories/módulos · update_story · approve_module
+              </div>
             </div>
           </div>
         </div>
@@ -108,11 +110,11 @@ export function SlideRituais() {
         <div className={styles.durationBar} style={{ margin: "8px 0 0" }}>
           <div className="l">
             <span>
-              Núcleo compartilhado: sprint · tasks · capacidade · dependências ·
-              DS
+              Núcleo compartilhado: sprint · tasks · stories · capacidade ·
+              dependências · DS
             </span>
           </div>
-          <div>Só os writes mudam por ritual</div>
+          <div>Mudanças viram card — você aprova ao Concluir</div>
         </div>
       </div>
 

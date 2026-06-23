@@ -11,7 +11,7 @@
  * projeto via `key` no `FinanceApp`.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Bar,
   ComposedChart,
@@ -137,10 +137,6 @@ export function FinanceProjectView({
     };
   }, [reload]);
 
-  const laborMap = useMemo(
-    () => new Map((detail?.laborByMember ?? []).map((l) => [l.memberId, l.laborCents])),
-    [detail?.laborByMember],
-  );
 
   // Cabeçalho: voltar + identidade do projeto (sempre visível).
   const header = (
@@ -404,8 +400,9 @@ export function FinanceProjectView({
     />
   );
 
-  const fpBlock = (detail.engagementType === "fixed_scope" ||
-    detail.contracts.some((c) => c.billingType === "fixed_scope")) && (
+  // Entregas de FP só fazem sentido escopadas a UM contrato de encomenda — no
+  // Global (ou num contrato squad) a seção não aparece.
+  const fpBlock = selectedContract?.billingType === "fixed_scope" && (
     <FinanceFpBilling projectId={projectId} contracts={detail.contracts} onChanged={reloadAndBubble} />
   );
 
@@ -446,7 +443,7 @@ export function FinanceProjectView({
                 </p>
               </div>
               <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                {brlFromCents(laborMap.get(a.member_id) ?? 0)}
+                {brlFromCents(a.laborCents ?? 0)}
               </span>
             </div>
           ))}

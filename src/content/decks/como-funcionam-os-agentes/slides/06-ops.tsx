@@ -81,31 +81,32 @@ export function SlideOps() {
 
           <div className="step-card refino">
             <div className="head">
-              <span>Em breve</span>
+              <span>Escrita (começou)</span>
               <span className="ix">03</span>
             </div>
             <div className="meta-row">
-              <span className="tag cliente">Escrita</span>
-              <span className="tag">roadmap</span>
+              <span className="tag cliente">Editar task</span>
+              <span className="tag">live</span>
             </div>
             <div className="body">
               <p>
-                Criar/editar task, sprint e alocação direto pelo chat — atrás de
-                um interruptor de segurança. Integrações (GitHub/Calendar) depois.
+                Já edita task pelo chat (status, sprint, responsável). Criar
+                task/sprint/alocação e integrações (GitHub/Calendar) vêm a
+                seguir — atrás de um interruptor de segurança.
               </p>
             </div>
             <div className="outputs">
               <div className="ot">Status</div>
-              <div className="note">Fase 3 (writes) · Fase 4 (integrações)</div>
+              <div className="note">editar task live · resto no roadmap</div>
             </div>
           </div>
         </div>
 
         <div className={styles.durationBar} style={{ margin: "8px 0 0" }}>
           <div className="l">
-            <span>Hoje: 18 ferramentas de leitura (global + route-scoped)</span>
+            <span>Hoje: leitura ampla (global + route-scoped) + 1ª escrita</span>
           </div>
-          <div>Escrita vem atrás de toggle</div>
+          <div>Novas escritas atrás de toggle</div>
         </div>
       </div>
 

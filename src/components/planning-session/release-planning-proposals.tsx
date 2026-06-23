@@ -105,6 +105,9 @@ export function ReleasePlanningProposals({
   readOnly?: boolean;
 }) {
   const [actions, setActions] = useState<ProposalRow[]>([]);
+  // Propostas de story/módulo pendentes — renderizadas na aba Stories, mas
+  // contadas aqui pro botão Aplicar/Concluir refletir tudo que entra no commit.
+  const [nonTaskPending, setNonTaskPending] = useState(0);
   const [boardTasks, setBoardTasks] = useState<BoardTask[]>([]);
   const [openAction, setOpenAction] = useState<ProposalRow | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
@@ -130,11 +133,16 @@ export function ReleasePlanningProposals({
       const actsRes = await fetch(`/api/planning/${planningCeremonyId}/actions`);
       const acts: ProposalRow[] = actsRes.ok ? await actsRes.json() : [];
       // Staging = pendentes (rejeitadas-pendentes aparecem riscadas pra restaurar).
-      // SÓ tasks — propostas de story/módulo vivem na aba Stories (não no board).
-      const pending = (acts ?? []).filter(
-        (a) => a.execution === "pending" && (a.entityType ?? "task") === "task",
+      // O BOARD renderiza só tasks; propostas de story/módulo vivem na aba
+      // Stories. Mas contamos as não-task aqui pro botão "Aplicar/Concluir"
+      // refletir TUDO que entra no commit (senão sessão só-story não conclui).
+      const allPending = (acts ?? []).filter((a) => a.execution === "pending");
+      setActions(allPending.filter((a) => (a.entityType ?? "task") === "task"));
+      setNonTaskPending(
+        allPending.filter(
+          (a) => (a.entityType ?? "task") !== "task" && a.decision !== "rejected",
+        ).length,
       );
-      setActions(pending);
 
       // Board VIVO = todas as Tasks do projeto (a /api/tasks já exclui draft +
       // dismissed), agrupadas por sprint. NÃO filtra por status nem por companion:
@@ -182,7 +190,8 @@ export function ReleasePlanningProposals({
   }, [loadAll, refreshKey]);
 
   // Reporta os counts pra página derivar a fase do header e o empty-state.
-  const pendingCountForState = actions.filter((a) => a.decision !== "rejected").length;
+  const pendingCountForState =
+    actions.filter((a) => a.decision !== "rejected").length + nonTaskPending;
   const doneCountForState = useMemo(
     () => boardTasks.filter((t) => t.status === "done").length,
     [boardTasks],

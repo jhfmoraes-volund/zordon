@@ -86,11 +86,12 @@ export function FinanceNfWidget({
   const todayMonth = new Date().toISOString().slice(0, 7);
   const todayISO = new Date().toISOString().slice(0, 10);
 
-  // Meses a exibir: os que têm NF ∪ (squad) os meses esperados pela vigência.
+  // Meses a exibir: os que têm NF ∪ os meses da vigência de cada contrato no
+  // escopo. Encomenda (fixed_scope) também entra — emite NF pelo período, mesmo
+  // sem mensalidade fixa (o valor é definido por NF).
   const monthsSet = new Set<string>();
   for (const inv of invoices) monthsSet.add(inv.competenceMonth.slice(0, 7));
   for (const c of contractsInScope) {
-    if (c.billingType !== "squad") continue;
     const start = c.effectiveFrom.slice(0, 7);
     const end = (c.effectiveTo ?? `${year}-12-31`).slice(0, 7);
     for (const m of monthRange(start, end)) monthsSet.add(m);

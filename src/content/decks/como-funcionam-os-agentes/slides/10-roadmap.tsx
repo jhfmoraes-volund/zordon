@@ -33,19 +33,19 @@ export function SlideRoadmap() {
         <div className={styles.ovRail}>
           <div className="ov-phase">
             <div className="marker">1</div>
-            <div className="ph-eyebrow">ALPHA · FASE 3</div>
-            <h3>Escrita no Ops</h3>
+            <div className="ph-eyebrow">ALPHA · ESCRITA</div>
+            <h3>De editar a criar</h3>
             <div className="duration">· atrás de toggle</div>
             <p className="desc">
-              Alpha cria e edita task, sprint e alocação direto pelo chat —
-              ligado por um interruptor de segurança por projeto.
+              Editar task pelo chat já é live. Falta criar task, abrir sprint e
+              alocar — cada novo write ligado por um interruptor por projeto.
             </p>
             <div className="steps">
               <div className="step">
-                <span className="ix">01</span>Criar / editar task
+                <span className="ix">01</span>Editar task ✓
               </div>
               <div className="step">
-                <span className="ix">02</span>Sprint + alocação
+                <span className="ix">02</span>Criar task · sprint · alocação
               </div>
             </div>
           </div>
@@ -71,19 +71,20 @@ export function SlideRoadmap() {
 
           <div className="ov-phase">
             <div className="marker">3</div>
-            <div className="ph-eyebrow">COBERTURA</div>
-            <h3>Mais superfícies</h3>
+            <div className="ph-eyebrow">QUALIDADE</div>
+            <h3>Rede de regressão</h3>
             <div className="duration">· evolução contínua</div>
             <p className="desc">
-              Toolset dedicado pro Release Planning e checagem automática de
-              paridade das ferramentas entre os dois lados.
+              Eval contínuo dos agentes e checagem automática de paridade das
+              ferramentas entre app e daemon — pra mudança nenhuma driftar sem
+              alguém ver.
             </p>
             <div className="steps">
               <div className="step">
-                <span className="ix">01</span>Release Planning
+                <span className="ix">01</span>Eval em CI
               </div>
               <div className="step">
-                <span className="ix">02</span>Paridade de tools
+                <span className="ix">02</span>Guard de paridade de tools
               </div>
             </div>
           </div>

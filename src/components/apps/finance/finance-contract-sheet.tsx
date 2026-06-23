@@ -30,6 +30,9 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
+import { StatusChipSelect } from "@/components/ui/status-chip-select";
+import { StatusChip } from "@/components/ui/status-chip";
+import { CONTRACT_STATUS } from "@/lib/status-chips";
 import { toast } from "sonner";
 
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
@@ -44,6 +47,7 @@ import type {
   Contract,
   ContractClause,
   ContractInput,
+  ContractStatus,
   ContractMonthOverride,
   ContractOverridesResponse,
   MemberRef,
@@ -77,6 +81,7 @@ function firstOfMonthISO(): string {
 
 type FormState = {
   label: string;
+  status: ContractStatus;
   billingType: BillingType;
   from: string;
   to: string;
@@ -94,6 +99,7 @@ function deriveForm(contract: Contract | null, count: number, engagementType: st
   if (contract) {
     return {
       label: contract.label,
+      status: contract.status,
       billingType: contract.billingType,
       from: contract.effectiveFrom.slice(0, 10),
       to: contract.effectiveTo?.slice(0, 10) ?? "",
@@ -109,6 +115,7 @@ function deriveForm(contract: Contract | null, count: number, engagementType: st
   }
   return {
     label: `Contrato ${count + 1}`,
+    status: "active",
     billingType: engagementType === "fixed_scope" ? "fixed_scope" : "squad",
     from: "",
     to: "",
@@ -176,6 +183,7 @@ export function FinanceContractSheet({
     if (!form.label.trim() || !form.from) return;
     const body: ContractInput = {
       label: form.label.trim(),
+      status: form.status,
       effectiveFrom: form.from,
       effectiveTo: form.to || null,
       billingType: form.billingType,
@@ -208,11 +216,32 @@ export function FinanceContractSheet({
     <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
       <ResponsiveSheetContent size="lg">
         <ResponsiveSheetHeader>
-          <ResponsiveSheetTitle>{contract ? `Editar — ${contract.label}` : "Novo contrato"}</ResponsiveSheetTitle>
+          <div className="flex items-center gap-2">
+            <ResponsiveSheetTitle>{contract ? `Editar — ${contract.label}` : "Novo contrato"}</ResponsiveSheetTitle>
+            {contract && (
+              <StatusChip tone={CONTRACT_STATUS[form.status].tone}>
+                {CONTRACT_STATUS[form.status].label}
+              </StatusChip>
+            )}
+          </div>
         </ResponsiveSheetHeader>
 
         <ResponsiveSheetBody>
           <FormBody density="comfortable">
+            {/* ── Status (lifecycle D1) ── */}
+            <Field name="status">
+              <Field.Label>Status</Field.Label>
+              <Field.Control>
+                <StatusChipSelect
+                  variant="input"
+                  value={form.status}
+                  options={CONTRACT_STATUS}
+                  onValueChange={(v) => set({ status: v as ContractStatus })}
+                />
+              </Field.Control>
+              <Field.Hint>Proposta → Ativo (ganhou) / Recusada · Ativo → Encerrado.</Field.Hint>
+            </Field>
+
             {/* ── Termos ── */}
             <Field.Row cols={2}>
               <Field name="label" required>

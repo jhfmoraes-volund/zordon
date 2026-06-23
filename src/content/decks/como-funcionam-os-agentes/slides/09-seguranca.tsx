@@ -86,7 +86,7 @@ export function SlideSeguranca() {
 
         <div className={styles.durationBar} style={{ margin: "8px 0 0" }}>
           <div className="l">
-            <span>Escrita autônoma (Alpha) entra atrás de um interruptor</span>
+            <span>Novas escritas autônomas (Alpha) entram atrás de um interruptor</span>
           </div>
           <div>Humano aprova o que muda</div>
         </div>

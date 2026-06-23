@@ -105,6 +105,13 @@ export type ProjectFinanceRow = {
 export type BillingType = "squad" | "fixed_scope";
 
 /**
+ * Lifecycle do contrato (D1). Proposta NÃO é tabela nova — é um contrato em
+ * `proposed`. Ganhar = `active`; `ended` = vigência encerrada; `declined` =
+ * proposta perdida. Transições válidas: proposed→active|declined, active→ended.
+ */
+export type ContractStatus = "proposed" | "active" | "ended" | "declined";
+
+/**
  * Contrato por projeto, com vigência. N por projeto: sprints diferentes podem
  * rodar sob contratos diferentes (HITz: 1-3 contrato A, 4+ contrato B). Termos
  * (preço/FP, mensalidade, escopo, tipo) são POR CONTRATO. A fronteira é autorada
@@ -115,6 +122,7 @@ export type Contract = {
   projectId: string;
   label: string;
   seq: number;
+  status: ContractStatus; // proposed→active→ended | declined (D1)
   effectiveFrom: string; // YYYY-MM-DD
   effectiveTo: string | null; // null = vigente
   billingType: BillingType;
@@ -131,6 +139,7 @@ export type Contract = {
 };
 export type ContractInput = {
   label: string;
+  status?: ContractStatus; // omitido no create → default 'active'; no update valida transição
   effectiveFrom: string;
   effectiveTo?: string | null;
   billingType: BillingType;
@@ -299,6 +308,8 @@ export type Allocation = {
 export type AllocationItem = Allocation & {
   memberName: string;
   projectName: string;
+  /** Custo pro-rata SOMADO no prazo da alocação (preenchido por getProjectDetail). */
+  laborCents?: number;
 };
 
 export type AllocationInput = {
