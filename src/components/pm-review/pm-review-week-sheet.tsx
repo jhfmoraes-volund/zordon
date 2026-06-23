@@ -153,7 +153,7 @@ export function PMReviewWeekSheet({
             {review ? (
               <>
                 {loadingLog ? (
-                  <p className="py-2 text-sm text-muted-foreground">Carregando log…</p>
+                  <p className="py-2 text-sm text-muted-foreground">Carregando…</p>
                 ) : entries && entries.length > 0 ? (
                   <ol className="space-y-2.5">
                     {entries.map((e, i) => (

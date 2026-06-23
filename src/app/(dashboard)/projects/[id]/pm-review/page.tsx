@@ -138,12 +138,18 @@ export default function ProjectPMReviewPage({
         key: w,
         indicator: sprint ? shortName(sprint.name) : undefined,
         dateLabel: fmtDayMonth(w),
-        label: sprint?.name ?? null,
         kind: w === currentMonday ? "current" : w > currentMonday ? "future" : "past",
-        // logCount>0 = "tem review" (célula acesa); 0 = vazia (tracejada).
-        logCount: review ? Math.max(review.noteTotal, 1) : 0,
-        // value explícito = "N notes" (sobrescreve o default "N logs" do normalize).
-        value: review ? `${review.noteTotal} note${review.noteTotal === 1 ? "" : "s"}` : undefined,
+        // logCount>0 = "tem review" (borda sólida); 0 = vazia (tracejada). Sinal
+        // visual = borda; a contagem de notes some do chip (irrelevante na régua).
+        logCount: review ? 1 : 0,
+        // Tooltip limpo (sem o "N logs" legado): sprint · semana · status da review.
+        title: [
+          sprint?.name,
+          `Semana de ${fmtDayMonth(w)}`,
+          review ? "com PM Review" : "sem review",
+        ]
+          .filter(Boolean)
+          .join(" · "),
       };
     });
   }, [sprints, activeReviews, reviewByWeek, currentMonday]);

@@ -223,7 +223,7 @@ export function Cronograma({
                   pill,
                   interactive && "transition-transform hover:scale-110",
                   barClass(nb),
-                  isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+                  isSelected && "ring-1 ring-primary",
                 )}
               />
             </span>
@@ -307,7 +307,13 @@ export function Cronograma({
       >
         {visible.map((nb) => {
           const isSelected = selectedKey === nb.key;
+          // `tone` explícito (Finanças/delivery) ⇒ cor é o sinal, renderiza colorido.
+          // Sem tone (modo atividade: PM Review/semanas) ⇒ chip NEUTRO; a cor fica
+          // reservada ao indicador da semana atual + à barra de seleção (idioma quieto).
+          const explicit = !!nb.tone;
           const tone = nb.tone ?? activityTone(nb.state);
+          const empty = !explicit && (nb.silent || nb.state === "future"); // sem atividade → tracejado
+          const isCurrent = !explicit && nb.state === "current";
           return (
             <span
               key={nb.key}
@@ -321,22 +327,28 @@ export function Cronograma({
                   : {})}
                 title={nb.title}
                 className={cn(
-                  "flex h-[30px] min-w-[58px] items-center gap-1.5 rounded-[7px] border pl-1.5 pr-2.5 font-mono tabular-nums transition-colors",
-                  nb.silent
-                    ? "border-dashed border-muted-foreground/40 bg-transparent text-muted-foreground"
-                    : cn(tone.border, tone.band),
-                  nb.state === "future" && !nb.tone && "opacity-70",
-                  interactive && "cursor-pointer hover:brightness-110",
-                  isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+                  "relative flex h-[30px] min-w-[58px] items-center gap-1.5 rounded-[7px] border pl-1.5 pr-2.5 font-mono tabular-nums transition-colors",
+                  explicit
+                    ? cn(tone.border, tone.band)
+                    : empty
+                      ? "border-dashed border-muted-foreground/30 bg-transparent"
+                      : "border-border bg-transparent",
+                  !explicit && nb.state === "future" && "opacity-60",
+                  isSelected && (explicit ? "bg-foreground/[0.04]" : "bg-foreground/[0.06]"),
+                  interactive && "cursor-pointer hover:bg-foreground/[0.05]",
                 )}
               >
                 {nb.indicator != null && (
                   <span
                     className={cn(
                       "grid size-[18px] shrink-0 place-items-center rounded-[4px] text-[10px] font-bold",
-                      nb.silent
-                        ? "border border-dashed border-muted-foreground/40 text-muted-foreground"
-                        : cn(tone.band, tone.text),
+                      explicit
+                        ? cn(tone.band, tone.text)
+                        : isCurrent
+                          ? "text-primary"
+                          : empty
+                            ? "text-muted-foreground"
+                            : "text-foreground/80",
                     )}
                   >
                     {nb.indicator}
@@ -346,9 +358,16 @@ export function Cronograma({
                   <span className="text-[11px] font-normal text-muted-foreground">{nb.dateLabel}</span>
                 )}
                 {nb.value && (
-                  <span className={cn("ml-0.5 text-[10px] font-semibold", nb.silent ? "text-muted-foreground" : tone.text)}>
+                  <span className={cn("ml-0.5 text-[10px] font-semibold", explicit ? tone.text : "text-muted-foreground")}>
                     {nb.value}
                   </span>
+                )}
+                {/* Seleção = underline de acento (sem halo neon). */}
+                {isSelected && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-2 bottom-[3px] h-[2px] rounded-full bg-primary"
+                  />
                 )}
               </Cell>
             </span>

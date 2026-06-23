@@ -105,13 +105,18 @@
   .team .tn{flex:1;min-width:0;font-size:13px} .team .tn .meta{font-size:11px;color:var(--muted-fg);margin-top:1px}
   .team .tc{font-family:var(--mono);font-size:11.5px;color:var(--muted-fg);font-variant-numeric:tabular-nums}
 
-  /* cronograma bottom */
+  /* cronograma — grade 3-por-linha no desktop, faixa horizontal no mobile */
   .cronowrap{border:1px solid var(--border);border-radius:11px;padding:11px 12px;background:rgba(255,255,255,.015)}
-  .crono{display:flex;gap:7px;overflow-x:auto;padding-top:9px}
-  .blk{flex:0 0 auto;display:flex;align-items:center;gap:7px;border:1px solid;border-radius:8px;padding:7px 9px;font-size:11.5px;color:var(--muted-fg);cursor:pointer;transition:.12s}
-  .blk:hover{transform:translateY(-1px)} .blk .n{font:500 10px/1 var(--mono);border-radius:4px;padding:3px 5px}
+  .crono{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding-top:10px}
+  .blk{display:flex;align-items:center;gap:8px;border:1px solid;border-radius:9px;padding:8px 10px;color:var(--muted-fg);cursor:pointer;transition:.12s;width:100%;text-align:left;background:transparent;font-family:var(--font)}
+  .blk:hover{transform:translateY(-1px)}
+  .blk .n{font:500 11px/1 var(--mono);border-radius:5px;padding:4px 6px;flex:0 0 auto}
+  .blk .bl{flex:1;min-width:0;color:var(--fg);font-size:12px}
   .blk.sky{border-color:var(--sky-bd);background:var(--sky-band)} .blk.sky .n{background:var(--sky-band);color:var(--sky-tx)}
   .blk.vio{border-color:var(--vio-bd);background:var(--vio-band)} .blk.vio .n{background:var(--vio-band);color:var(--vio-tx)}
+  /* mobile: faixa horizontal que rola (a grade é só desktop) */
+  #stage.mobile .crono{display:flex;flex-direction:row;overflow-x:auto;gap:7px}
+  #stage.mobile .blk{width:auto;flex:0 0 auto}
 
   /* chart (fake bars) */
   .chart{display:flex;align-items:flex-end;gap:6px;height:120px;padding:8px 4px 0}
@@ -125,7 +130,37 @@
   /* layout columns (v2) */
   .v2grid{display:grid;grid-template-columns:330px 1fr;gap:14px;align-items:start}
   #stage.mobile .v2grid{grid-template-columns:1fr}
+  #stage.mobile .col-right{order:1} #stage.mobile .col-left{order:2}
   .stack{display:flex;flex-direction:column;gap:14px}
+
+  /* payment & NF widget */
+  .pay{border:1px solid var(--border);border-radius:11px;overflow:hidden}
+  .pay .ph{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
+  .pay .ph .seclbl{flex:1}
+  .paystep{display:flex;align-items:flex-start;gap:10px;padding:10px 12px} .paystep + .paystep{border-top:1px solid var(--border)}
+  .sdot{width:18px;height:18px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font:500 11px/1 var(--mono);margin-top:1px}
+  .sdot.ok{background:rgba(16,185,129,.15);color:var(--emr)} .sdot.warn{background:rgba(245,158,11,.15);color:var(--amb)} .sdot.idle{background:var(--muted);color:var(--muted-fg)}
+  .paystep .pc{flex:1;min-width:0} .paystep .pt{font-size:12px;color:var(--muted-fg)}
+  .paystep .pv{font-size:13px;margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .statuschip{font:500 10px/1 var(--font);border-radius:5px;padding:4px 7px;border:1px solid;white-space:nowrap}
+  .statuschip.ok{border-color:rgba(16,185,129,.4);color:var(--emr)} .statuschip.warn{border-color:rgba(245,158,11,.4);color:var(--amb)} .statuschip.idle{border-color:var(--border);color:var(--muted-fg)}
+
+  /* cláusulas & garantia */
+  .clauses{border:1px solid var(--border);border-radius:11px;padding:12px}
+  .clauses .gar{display:flex;align-items:center;gap:8px;font-size:13px;margin:10px 0 4px}
+  .clauses .gar .lab{color:var(--muted-fg)}
+  .clauses ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+  .clauses li{font-size:12.5px;display:flex;gap:8px} .clauses li::before{content:"§";color:var(--muted-fg);font-family:var(--mono)}
+  .clauses .prop{font-size:11.5px;color:var(--sky-tx);margin-top:11px;display:flex;align-items:center;gap:6px;cursor:pointer}
+  .clauses .hint{font-size:12px;color:var(--muted-fg);font-style:italic;margin:10px 0 0}
+
+  /* month strip dentro do widget de faturamento */
+  .mstrip{display:flex;gap:5px;overflow-x:auto;padding:9px 12px;border-bottom:1px solid var(--border)}
+  .mchip{flex:0 0 auto;display:flex;align-items:center;gap:6px;font:500 12px/1 var(--font);color:var(--muted-fg);background:transparent;border:1px solid var(--border);border-radius:7px;padding:6px 9px;cursor:pointer}
+  .mchip:hover{background:var(--muted)} .mchip.on{background:var(--muted);color:var(--fg)}
+  .md{width:7px;height:7px;border-radius:50%}
+  .md.ok{background:var(--emr)} .md.act{background:var(--amb)} .md.idle{background:var(--muted-fg);opacity:.5}
+  .msel{font:500 12px/1 var(--font);color:var(--muted-fg);padding:9px 12px 1px} .msel b{color:var(--fg);font-family:var(--mono)}
 
   /* chip popover */
   #pop{position:fixed;z-index:50;display:none;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 10px 30px rgba(0,0,0,.5);min-width:190px}
@@ -200,12 +235,12 @@
   <aside id="sheet">
     <div class="sh-h"><span class="t" id="sh-title">Novo contrato</span><button class="ico x" onclick="closeSheet()">✕</button></div>
     <div class="sh-b" id="sh-body"></div>
-    <div class="sh-f"><button class="btn" onclick="closeSheet()">Cancelar</button><button class="btn pri" onclick="closeSheet()">Salvar contrato</button></div>
+    <div class="sh-f"><button class="btn" onclick="closeSheet()">Cancelar</button><button class="btn pri" id="sh-save" onclick="closeSheet()">Salvar contrato</button></div>
   </aside>
 
 <script>
   const fmt = n => 'R$ ' + Math.abs(n).toLocaleString('pt-BR');
-  let VER=1, W='desktop', SCOPE='global';
+  let VER=1, W='desktop', SCOPE='global', PAYMONTH=null;
 
   const DRE = {
     global:{note:'22% da receita', lines:[['Faturamento',532733,'strong'],['(−) Impostos (ISS/PIS/COFINS)',-30086,'ded'],['= Receita líquida',502647,'sub'],['(−) Equipe',-228000,'ded'],['(−) Overhead por pessoa',-34600,'ded'],['(−) Despesa direta',0,'ded'],['(−) Custo financeiro',-2748,'ded'],['= Margem bruta',237299,'sub'],['(−) SG&A',-53273,'ded'],['= LAIR',184026,'sub'],['(−) IRPJ/CSLL',-62568,'ded'],['= Lucro líquido',121458,'strong']]},
@@ -226,17 +261,49 @@
     c2:[['Ana Souza','Tech Lead','60% · 14 jun → 19 set',92000],['Diana Melo','Eng. Pleno','100% · 14 jun → 19 set',54000],['Bruno Lima','Eng. Sênior','30% · 14 jun → 31 jul',20000]],
   };
   TEAM.global=[...TEAM.c1,...TEAM.c2];
+  // pagamento / NF — gate: condição (PF ou SOW) → NF emitida → faturado
+  // faturamento POR MÊS (squad fatura todo mês; encomenda por mês de entrega)
+  const MFULL={mai:'maio',jun:'junho',jul:'julho',ago:'agosto',set:'setembro'};
+  const MONTHS={
+    c1:[
+      {k:'mai',l:'mai',amount:96000,cond:{kind:'Planilha de PF',ready:true},nf:{issued:true,num:'0041',date:'31 mai'},billed:true},
+      {k:'jun',l:'jun',amount:76733,cond:{kind:'Planilha de PF',ready:true},nf:{issued:true,num:'0042',date:'13 jun'},billed:true},
+    ],
+    c2:[
+      {k:'jun',l:'jun',amount:86366,cond:{kind:'SOW',ready:true},nf:{issued:true,num:'0050',date:'30 jun'},billed:true},
+      {k:'jul',l:'jul',amount:86366,cond:{kind:'SOW',ready:true},nf:{issued:true,num:'0051',date:'31 jul'},billed:false},
+      {k:'ago',l:'ago',amount:110998,cond:{kind:'SOW',ready:true},nf:{issued:false},billed:false},
+      {k:'set',l:'set',amount:86366,cond:{kind:'SOW',ready:false},nf:{issued:false},billed:false},
+    ],
+  };
+  MONTHS.global=[
+    {k:'mai',l:'mai',amount:96000,cond:{kind:'Planilha de PF',ready:true},nf:{issued:true,num:'0041',date:'31 mai'},billed:true},
+    {k:'jun',l:'jun',amount:163099,cond:{kind:'2 fontes',ready:true},nf:{issued:true,num:'—',date:'jun'},billed:true},
+    {k:'jul',l:'jul',amount:86366,cond:{kind:'SOW',ready:true},nf:{issued:true,num:'0051',date:'31 jul'},billed:false},
+    {k:'ago',l:'ago',amount:110998,cond:{kind:'SOW',ready:true},nf:{issued:false},billed:false},
+    {k:'set',l:'set',amount:86366,cond:{kind:'SOW',ready:false},nf:{issued:false},billed:false},
+  ];
+  const mState=m=>m.billed?'ok':(m.cond.ready?'act':'idle');
+  // cláusulas & garantia (no contrato/proposta)
+  const CL={
+    c1:{garantia:'90 dias pós-entrega', proposta:'Proposta · Operação Especial (Gulf)', items:['SLA de correção: 5 dias úteis','Multa por atraso: 2% / semana','Propriedade intelectual: do cliente','Confidencialidade: 24 meses']},
+    c2:{garantia:'Suporte contínuo (squad ativo)', proposta:'Proposta · Squad as a Service', items:['Reajuste anual: IPCA','Aviso de rescisão: 30 dias','Builder adicional: R$ 24.632 / sprint','Confidencialidade: vigência + 12 meses']},
+  };
 
   function dreHTML(k){const d=DRE[k];return '<div class="surface dre">'+d.lines.map(([l,v,kind])=>{const ded=kind==='ded',last=l.startsWith('= Lucro');return `<div class="line ${kind}"><span class="lbl ${ded?'ded':''}">${l}</span><span style="display:flex;align-items:center">${last?`<span class="note">${d.note}</span>`:''}<span class="v ${ded?'ded':''}">${v<0?'-':''}${fmt(v)}</span></span></div>`}).join('')+'</div>';}
   function kpisHTML(k){return '<div class="kpis">'+KPI[k].map(([kk,v,c])=>`<div class="kpi"><div class="k">${kk}</div><div class="v ${c}">${v}</div></div>`).join('')+'</div>';}
-  function teamHTML(k){const lbl=k==='global'?'todas as vigências':'nesta vigência';return `<div><div class="secrow"><span class="seclbl"><span class="ic">👥</span>Equipe · ${lbl}</span><button class="btn" onclick="openSheet('alloc')"><span class="plus">+</span> Alocar</button></div><div class="surface team">${TEAM[k].map(([n,r,m,c])=>`<div class="trow"><div class="tn">${n}<div class="meta">${r} · ${m}</div></div><span class="tc">${fmt(c)}</span></div>`).join('')}</div></div>`;}
+  function teamHTML(k){
+    const lbl=k==='global'?'todas as vigências':'nesta vigência';
+    const action = k==='global' ? `<span class="hint2">editar no contrato</span>` : `<button class="btn" onclick="openSheet('${k}')">Editar no contrato →</button>`;
+    return `<div><div class="secrow"><span class="seclbl"><span class="ic">👥</span>Equipe · ${lbl}</span>${action}</div><div class="surface team">${TEAM[k].map(([n,r,m,c])=>`<div class="trow"><div class="tn">${n}<div class="meta">${r} · ${m}</div></div><span class="tc">${fmt(c)}</span></div>`).join('')}</div></div>`;
+  }
   function contractsHTML(k){
     const list = CONTRACTS.map(c=>`<div class="ccard ${c.tone} ${k===c.id?'on':''}"><div class="top"><span class="dot"></span><div class="id"><div class="nm">${c.name}<span class="chip">${c.type}</span></div><div class="sb">${c.period} · <span class="val">${c.sb}</span></div></div><button class="ico" title="Editar" onclick="openSheet('${c.id}')">✎</button></div></div>`).join('');
     return `<div><div class="secrow"><span class="seclbl"><span class="ic">📄</span>Contratos</span><button class="btn" onclick="openSheet('new')"><span class="plus">+</span> Contrato</button></div>${list}</div>`;
   }
   function cronoHTML(k){
     const cs = k==='global'?CONTRACTS:CONTRACTS.filter(c=>c.id===k);
-    const blks = cs.flatMap(c=>c.blocks.map(([n,d])=>`<span class="blk ${c.tone}" onclick="chipPop(event,'${n}','${d}')"><span class="n">${n}</span>${d}</span>`)).join('');
+    const blks = cs.flatMap(c=>c.blocks.map(([n,d])=>`<button class="blk ${c.tone}" onclick="chipPop(event,'${n}','${d}')"><span class="n">${n}</span><span class="bl">${d}</span></button>`)).join('');
     return `<div class="cronowrap"><span class="seclbl"><span class="ic">🗓️</span>Cronograma — clique numa sprint pra abrir Planning / PM Review</span><div class="crono">${blks}</div></div>`;
   }
   function chartHTML(){
@@ -249,23 +316,52 @@
     return '<div class="seg">'+segs.map(([id,l,d])=>`<button class="${SCOPE===id?'on':''}" onclick="setScope('${id}')"><span class="d" style="background:${d}"></span>${l}</button>`).join('')+`<button class="add" onclick="openSheet('new')">＋</button></div>`;
   }
 
+  function payHTML(k){
+    const months=MONTHS[k];
+    let sel = (PAYMONTH && months.find(m=>m.k===PAYMONTH)) || months.find(m=>mState(m)==='act') || months[0];
+    const strip = months.map(m=>`<button class="mchip ${m.k===sel.k?'on':''}" onclick="setPayMonth('${m.k}')"><span class="md ${mState(m)}"></span>${m.l}</button>`).join('');
+    const cond = `<span class="statuschip ${sel.cond.ready?'ok':'warn'}">${sel.cond.kind} · ${sel.cond.ready?'ok':'pendente'}</span>`;
+    const nf = sel.nf.issued
+      ? `<span class="sdot ok">✓</span><div class="pc"><div class="pt">② Faturado (NF emitida)</div><div class="pv">NF ${sel.nf.num} · ${sel.nf.date}</div></div>`
+      : `<span class="sdot idle">2</span><div class="pc"><div class="pt">② Faturar — emitir NF?</div><div class="pv">— não emitida ${sel.cond.ready?`<button class="btn pri" onclick="openSheet('nf')">Emitir NF</button>`:`<span class="statuschip idle">aguarda condição</span>`}</div></div>`;
+    const bill = sel.billed
+      ? `<span class="sdot ok">✓</span><div class="pc"><div class="pt">③ Recebido</div><div class="pv">${fmt(sel.amount)} · na conta</div></div>`
+      : `<span class="sdot idle">3</span><div class="pc"><div class="pt">③ Recebido?</div><div class="pv">${fmt(sel.amount)} · aguardando pagamento</div></div>`;
+    const billedSum=months.filter(m=>m.billed).reduce((s,m)=>s+m.amount,0);
+    const totalSum=months.reduce((s,m)=>s+m.amount,0);
+    return `<div class="pay"><div class="ph"><span class="seclbl"><span class="ic">💳</span>Notas Fiscais</span><span class="statuschip idle">${fmt(billedSum)} / ${fmt(totalSum)}</span></div>`
+      +`<div class="mstrip">${strip}</div>`
+      +`<div class="msel">${MFULL[sel.k]||sel.k}/2026 · <b>${fmt(sel.amount)}</b></div>`
+      +`<div class="paystep"><span class="sdot ${sel.cond.ready?'ok':'warn'}">${sel.cond.ready?'✓':'!'}</span><div class="pc"><div class="pt">① Condição p/ emitir NF</div><div class="pv">${cond}</div></div></div>`
+      +`<div class="paystep">${nf}</div><div class="paystep">${bill}</div></div>`;
+  }
+  function clausesHTML(k){
+    if(k==='global') return `<div class="clauses"><span class="seclbl"><span class="ic">⚖️</span>Cláusulas &amp; Garantia</span><p class="hint">Selecione um contrato pra ver garantia e cláusulas.</p></div>`;
+    const c=CL[k];
+    return `<div class="clauses"><span class="seclbl"><span class="ic">⚖️</span>Cláusulas &amp; Garantia</span>`
+      +`<div class="gar">🛡️ <span><span class="lab">Garantia:</span> ${c.garantia}</span></div>`
+      +`<ul>${c.items.map(i=>`<li>${i}</li>`).join('')}</ul>`
+      +`<div class="prop">📎 ${c.proposta}</div></div>`;
+  }
+
   function render(){
     const hub=document.getElementById('hub');
     document.getElementById('winscope').textContent = (SCOPE==='global'?'Global':CONTRACTS.find(c=>c.id===SCOPE).name)+' · 2026';
     if(VER===1){
-      hub.innerHTML = `<div class="stack">${segHTML()}${kpisHTML(SCOPE)}${dreHTML(SCOPE)}${contractsHTML(SCOPE)}${teamHTML(SCOPE)}${cronoHTML(SCOPE)}</div>`;
+      hub.innerHTML = `<div class="stack">${segHTML()}${kpisHTML(SCOPE)}${payHTML(SCOPE)}${dreHTML(SCOPE)}${clausesHTML(SCOPE)}${contractsHTML(SCOPE)}${teamHTML(SCOPE)}${cronoHTML(SCOPE)}${chartHTML()}</div>`;
     } else {
       hub.innerHTML = `<div class="stack">${segHTML()}
         <div class="v2grid">
-          <div class="stack">${contractsHTML(SCOPE)}${teamHTML(SCOPE)}</div>
-          <div class="stack">${kpisHTML(SCOPE)}${dreHTML(SCOPE)}${chartHTML()}</div>
+          <div class="stack col-left">${contractsHTML(SCOPE)}${teamHTML(SCOPE)}${cronoHTML(SCOPE)}</div>
+          <div class="stack col-right">${kpisHTML(SCOPE)}${payHTML(SCOPE)}${dreHTML(SCOPE)}${clausesHTML(SCOPE)}</div>
         </div>
-        ${cronoHTML(SCOPE)}</div>`;
+        ${chartHTML()}</div>`;
     }
   }
   function setVer(v){VER=v;document.getElementById('v1').classList.toggle('on',v===1);document.getElementById('v2').classList.toggle('on',v===2);render();}
   function setW(w){W=w;const s=document.getElementById('stage');s.className=w;document.body.classList.toggle('mob',w==='mobile');document.getElementById('wd').classList.toggle('on',w==='desktop');document.getElementById('wm').classList.toggle('on',w==='mobile');document.getElementById('vpcap').textContent=w==='mobile'?'mobile · 404px (bottom-sheet mindset)':'desktop · 1060px';hidePop();render();}
-  function setScope(s){SCOPE=s;render();}
+  function setScope(s){SCOPE=s;PAYMONTH=null;render();}
+  function setPayMonth(k){PAYMONTH=k;render();}
 
   // chip deep-link popover (mock)
   function chipPop(e,n,d){e.stopPropagation();const p=document.getElementById('pop');
@@ -278,25 +374,33 @@
   // contract sheet (creation / edit) — focused
   let SHTYPE='fixed';
   function openSheet(id){
-    const isNew=id==='new'||id==='alloc';
-    const c = (id!=='new'&&id!=='alloc')?CONTRACTS.find(x=>x.id===id):null;
-    SHTYPE = c? (c.type==='Squad'?'squad':'fixed') : 'fixed';
-    document.getElementById('sh-title').textContent = id==='alloc'?'Alocar membro':(c?`Editar — ${c.name}`:'Novo contrato');
-    renderSheet(id==='alloc');
+    let mode='contract', title='Novo contrato', save='Salvar contrato';
+    if(id==='alloc'){ mode='alloc'; title='Alocar membro'; save='Salvar alocação'; }
+    else if(id==='nf'){ mode='nf'; title='Emitir NF'; save='Emitir NF'; }
+    else { const c=CONTRACTS.find(x=>x.id===id); SHTYPE=c?(c.type==='Squad'?'squad':'fixed'):'fixed'; title=c?`Editar — ${c.name}`:'Novo contrato'; }
+    document.getElementById('sh-title').textContent=title;
+    document.getElementById('sh-save').textContent=save;
+    renderSheet(mode);
     document.getElementById('scrim').classList.add('open');
     requestAnimationFrame(()=>document.getElementById('sheet').classList.add('open'));
   }
   function closeSheet(){document.getElementById('sheet').classList.remove('open');document.getElementById('scrim').classList.remove('open');}
-  function setShType(t){SHTYPE=t;renderSheet(false);}
+  function setShType(t){SHTYPE=t;renderSheet('contract');}
   function deriv(){
     const tot=parseFloat((document.getElementById('f-total')||{}).value||'')*100;
     const fp=parseFloat((document.getElementById('f-fp')||{}).value||'');
     const h=document.getElementById('f-deriv');if(!h)return;
-    h.innerHTML = (tot>0&&fp>0)?`Preço/FP derivado: <b>${fmt(Math.round(tot/fp)/100*100)}</b>`:'Preço/FP = valor global ÷ FP contratado';
+    h.innerHTML = (tot>0&&fp>0)?`Preço/FP derivado: <b>${fmt(Math.round(tot/fp)/100)}</b>`:'Preço/FP = valor global ÷ FP contratado';
   }
-  function renderSheet(alloc){
+  function renderSheet(mode){
     const b=document.getElementById('sh-body');
-    if(alloc){b.innerHTML=`<div class="grp"><span class="lbl2">Membro</span><input class="inp" placeholder="Selecione…"></div><div class="grp row"><div class="grp"><span class="lbl2">Alocação (%)</span><input class="inp" type="number" placeholder="50"></div><div class="grp"><span class="lbl2">Início</span><input class="inp" type="date"></div></div><div class="grp"><span class="lbl2">Fim (opcional)</span><input class="inp" type="date"></div>`;return;}
+    if(mode==='alloc'){b.innerHTML=`<div class="grp"><span class="lbl2">Membro</span><input class="inp" placeholder="Selecione…"></div><div class="grp row"><div class="grp"><span class="lbl2">Alocação (%)</span><input class="inp" type="number" placeholder="50"></div><div class="grp"><span class="lbl2">Início</span><input class="inp" type="date"></div></div><div class="grp"><span class="lbl2">Fim (opcional)</span><input class="inp" type="date"></div>`;return;}
+    if(mode==='nf'){b.innerHTML=`
+      <div class="grp row"><div class="grp"><span class="lbl2">Mês de competência</span><input class="inp" value="agosto/2026"></div><div class="grp"><span class="lbl2">Valor (R$)</span><input class="inp" type="number" value="110998"></div></div>
+      <div class="grp row"><div class="grp"><span class="lbl2">Número da NF</span><input class="inp" placeholder="ex: 0052"></div><div class="grp"><span class="lbl2">Data de emissão</span><input class="inp" type="date" value="2026-08-31"></div></div>
+      <div class="grp"><span class="lbl2">Condição vinculada</span><div class="surface" style="padding:10px 12px;display:flex;align-items:center;gap:9px"><span class="statuschip ok">SOW · assinado</span><span class="hint2">destrava a emissão deste mês</span></div></div>
+      <div class="grp"><span class="lbl2">Anexo (XML / PDF da NF)</span><input class="inp" placeholder="arraste ou selecione…"></div>
+      <div class="grp"><span class="lbl2">Observação</span><input class="inp" placeholder="…"></div>`;return;}
     const fixed = SHTYPE==='fixed';
     b.innerHTML = `
       <div class="grp row">
@@ -320,19 +424,46 @@
       <div class="grp row">
         <div class="grp"><span class="lbl2">Mensalidade (R$)</span><input class="inp" type="number" value="86366"></div>
         <div class="grp"><span class="lbl2">Sprints contratadas</span><input class="inp" type="number" value="14"></div>
-      </div>
-      <div class="grp"><span class="seclbl sm"><span class="ic">📌</span>Overrides por mês <span style="text-transform:none;color:var(--muted-fg)">(substitui a mensalidade num mês)</span></span>
-        <div class="ovrow"><span>jul/2026 · builder adicional</span><span class="oc">R$ 110.998</span></div>
-        <button class="btn" style="margin-top:8px;align-self:flex-start"><span class="plus">+</span> Override de mês</button>
       </div>`}
       <div class="divider"></div>
+      <div class="grp"><div class="secrow" style="margin:0"><span class="seclbl sm"><span class="ic">➕</span>Aditivos &amp; Overrides <span style="text-transform:none;color:var(--muted-fg)">(por sprint · billable ou não)</span></span><button class="btn"><span class="plus">+</span> Aditivo</button></div>
+        <div class="surface" style="padding:2px 12px;margin-top:7px">
+          <div class="ovrow" style="border-top:0"><span>Builder adicional · sprints 5–8 <span class="statuschip ok" style="margin-left:6px">billable</span></span><span class="oc">+R$ 24.632/mês</span></div>
+          <div class="ovrow"><span>3º mês part-time · jul <span class="statuschip ok" style="margin-left:6px">billable</span></span><span class="oc">R$ 72.640</span></div>
+          <div class="ovrow"><span>Reforço interno (QA) · sprint 7 <span class="statuschip idle" style="margin-left:6px">não-billable</span></span><span class="oc">só custo</span></div>
+        </div>
+        <span class="hint2" style="margin-top:7px"><b>billable</b> entra na receita do período · <b>não-billable</b> só registra (custo/equipe), não fatura.</span>
+      </div>
+      <div class="divider"></div>
+      <div class="grp"><span class="seclbl sm"><span class="ic">⚖️</span>Cláusulas &amp; Garantia</span>
+        <div class="grp row">
+          <div class="grp"><span class="lbl2">Garantia</span><input class="inp" value="90 dias pós-entrega"></div>
+          <div class="grp"><span class="lbl2">Vínculo à proposta</span><input class="inp" value="Proposta · Gulf"></div>
+        </div>
+        <div class="surface" style="padding:2px 12px">
+          <div class="ovrow" style="border-top:0"><span>§ SLA de correção: 5 dias úteis</span><button class="ico">✕</button></div>
+          <div class="ovrow"><span>§ Multa por atraso: 2% / semana</span><button class="ico">✕</button></div>
+          <div class="ovrow"><span>§ Propriedade intelectual: do cliente</span><button class="ico">✕</button></div>
+        </div>
+        <button class="btn" style="align-self:flex-start"><span class="plus">+</span> Cláusula</button>
+      </div>
+      <div class="divider"></div>
+      <div class="grp"><span class="seclbl sm"><span class="ic">📎</span>Documentos <span style="text-transform:none;color:var(--muted-fg)">(proposta · SOW · contrato · planilha de PF)</span></span>
+        <div class="surface" style="padding:2px 12px">
+          <div class="ovrow" style="border-top:0"><span>📄 Proposta · Operação Especial (Gulf).pdf <span class="statuschip ok" style="margin-left:6px">Drive</span></span><button class="ico">↗</button></div>
+          <div class="ovrow"><span>📄 SOW assinado.pdf <span class="statuschip idle" style="margin-left:6px">upload</span></span><button class="ico">↗</button></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn"><span class="plus">+</span> Enviar arquivo</button><button class="btn">🔗 Vincular do Drive / SharePoint</button></div>
+        <span class="hint2" style="margin-top:6px">Onde já existe oficial (Drive/SharePoint), <b>vincula</b> (não duplica). Sem casa, <b>envia</b> pro storage.</span>
+      </div>
+      <div class="divider"></div>
       <div class="grp"><span class="lbl2">Nota</span><input class="inp" placeholder="condições, observações…"></div>
-      <div class="grp"><span class="seclbl sm"><span class="ic">👥</span>Equipe nesta vigência</span>
-        <div class="surface team">${(SHTYPE==='fixed'?TEAM.c1:TEAM.c2).map(([n,r,m,c])=>`<div class="trow"><div class="tn">${n}<div class="meta">${r} · ${m}</div></div><span class="tc">${fmt(c)}</span></div>`).join('')}</div></div>
+      <div class="grp"><div class="secrow" style="margin:0"><span class="seclbl sm"><span class="ic">👥</span>Equipe nesta vigência</span><button class="btn"><span class="plus">+</span> Membro</button></div>
+        <div class="surface team" style="margin-top:7px">${(SHTYPE==='fixed'?TEAM.c1:TEAM.c2).map(([n,r,m,c])=>`<div class="trow"><div class="tn">${n}<div class="meta">${r} · ${m}</div></div><span class="tc">${fmt(c)}</span><button class="ico" title="Editar">✎</button></div>`).join('')}</div></div>
     `;
   }
 
-  render();
+  setVer(2);
 </script>
 </body>
 </html>
