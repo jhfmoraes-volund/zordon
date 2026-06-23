@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ResponsiveSheet,
   ResponsiveSheetContent,
@@ -12,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { Field, FormBody } from "@/components/ui/field";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -136,6 +138,9 @@ function formFromProject(project: ProjectEditInitial | null): typeof EMPTY_FORM 
 
 export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props) {
   const { member } = useAuth();
+  const router = useRouter();
+  // Handoff pós-criação: pergunta se quer configurar contrato/equipe no S&OP.
+  const [handoff, setHandoff] = useState<ConfirmState | null>(null);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [members, setMembers] = useState<MemberOption[]>([]);
   // Equipe derivada (read-only) — roster canônico via /api/projects/[id]/members
@@ -283,11 +288,12 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
       // Equipe NÃO é escrita aqui (F2.9): roster = alocações de contrato
       // (admin, app Finanças). O sheet não toca mais ProjectMember.
 
-      // Kind proposal/contracted (só criação): cria o contrato junto (verdade
-      // comercial, D1/D4). Interno não tem contrato. Datas/engajamento do form
-      // viram a vigência/billing inicial; o trigger ressincroniza as datas do
-      // projeto. Contrato é admin-only — se 403, projeto fica e avisa.
-      if (!project && form.kind !== "internal") {
+      // Kind proposal/contracted (só criação): cria um contrato STUB já linkado
+      // (D1/D4) — vigência/billing/valor são configurados depois no S&OP, não aqui
+      // (sem duplicação). Interno não tem contrato. Contrato é admin-only.
+      const isNewBillable = !project && form.kind !== "internal";
+      let createdContract = false;
+      if (isNewBillable) {
         const today = new Date().toISOString().slice(0, 10);
         try {
           await fetchOrThrow("/api/finance/contract", {
@@ -297,11 +303,12 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
               projectId,
               label: "Contrato 1",
               status: form.kind === "proposal" ? "proposed" : "active",
-              billingType: form.engagementType === "fixed_scope" ? "fixed_scope" : "squad",
-              effectiveFrom: form.startDate || today,
-              effectiveTo: form.endDate || null,
+              billingType: "squad", // placeholder; admin ajusta no S&OP
+              effectiveFrom: today,
+              effectiveTo: null,
             }),
           });
+          createdContract = true;
         } catch (e) {
           showErrorToast(e, { label: "Projeto criado, mas o contrato falhou" });
         }
@@ -309,6 +316,20 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
 
       onOpenChange(false);
       onSaved();
+
+      // Handoff: leva o admin pro S&OP pra configurar contrato + equipe (modal
+      // simples). Só pra projeto novo com contrato; interno/edição fecham direto.
+      if (isNewBillable && createdContract && projectId) {
+        const pid = projectId;
+        setHandoff({
+          title: "Projeto criado",
+          description:
+            "Falta configurar vigência, valor e equipe no S&OP (Finanças). Quer ir agora?",
+          confirmLabel: "Configurar no S&OP",
+          cancelLabel: "Depois",
+          onConfirm: () => router.push(`/projects/${pid}?tab=apps&app=contract`),
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -317,6 +338,7 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
   const pmEligible = members.filter((m) => isPmEligible(m.position));
 
   return (
+    <>
     <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
       <ResponsiveSheetContent size="md">
         <ResponsiveSheetHeader>
@@ -353,11 +375,21 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                   {form.kind === "internal"
                     ? "Cliente Volund, sem contrato."
                     : form.kind === "proposal"
-                      ? "Cria um contrato em Proposta — datas/valor editáveis depois em Finanças."
-                      : "Cria um contrato Ativo — datas abaixo viram a vigência inicial."}
+                      ? "Cria um contrato em Proposta — vigência, valor e equipe são configurados no S&OP."
+                      : "Cria um contrato Ativo — vigência, valor e equipe são configurados no S&OP."}
                 </Field.Hint>
               </Field>
             )}
+
+            <Field name="project-name" required>
+              <Field.Label>Nome</Field.Label>
+              <Field.Control>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </Field.Control>
+            </Field>
 
             <Field name="project-client" required>
               <Field.Label>Cliente</Field.Label>
@@ -414,58 +446,6 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
               </Field.Control>
             </Field>
 
-            <Field name="project-team">
-              <Field.Label>Equipe (dos contratos)</Field.Label>
-              <Field.Hint>
-                Derivada das alocações de contrato (app Finanças). Read-only — não
-                edita aqui.
-              </Field.Hint>
-              <div className="flex min-h-[40px] flex-wrap gap-1.5 rounded-md border bg-muted/30 p-3">
-                {project ? (
-                  team.length > 0 ? (
-                    team.map((m) => (
-                      <Badge key={m.id} variant="outline" className="text-xs">
-                        {m.name ?? "—"}
-                        <span className="ml-1 text-[10px] text-muted-foreground">
-                          {roleLabel(m.role)}
-                        </span>
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      Sem equipe alocada ainda — aloque no app Finanças.
-                    </span>
-                  )
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    A equipe é definida pelas alocações de contrato após criar o
-                    projeto.
-                  </span>
-                )}
-              </div>
-            </Field>
-
-            <Field name="project-name" required>
-              <Field.Label>Nome</Field.Label>
-              <Field.Control>
-                <Input
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-              </Field.Control>
-            </Field>
-
-            <Field name="project-repo">
-              <Field.Label>Repo URL</Field.Label>
-              <Field.Control>
-                <Input
-                  value={form.repoUrl}
-                  onChange={(e) => setForm({ ...form, repoUrl: e.target.value })}
-                  placeholder="https://github.com/..."
-                />
-              </Field.Control>
-            </Field>
-
             <Field name="project-drive-folder">
               <Field.Label>Pasta do Google Drive</Field.Label>
               <Field.Control>
@@ -478,6 +458,44 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
               <Field.Hint>
                 Aba Drive lista os arquivos desta pasta. Quem salvar vira o dono do sync.
               </Field.Hint>
+            </Field>
+
+            {/* Criação = enxuto (identidade). Contrato, datas, equipe e infra
+                vivem no S&OP (Finanças) — só aparecem na EDIÇÃO, read-through. */}
+            {project && (
+              <>
+            <Field name="project-team">
+              <Field.Label>Equipe</Field.Label>
+              <Field.Hint>
+                PM (gestor) + builders alocados. Read-only — aloque no app Finanças (S&OP).
+              </Field.Hint>
+              <div className="flex min-h-[40px] flex-wrap gap-1.5 rounded-md border bg-muted/30 p-3">
+                {team.length > 0 ? (
+                  team.map((m) => (
+                    <Badge key={m.id} variant="outline" className="text-xs">
+                      {m.name ?? "—"}
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        {roleLabel(m.role)}
+                      </span>
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Sem equipe alocada ainda — aloque no app Finanças.
+                  </span>
+                )}
+              </div>
+            </Field>
+
+            <Field name="project-repo">
+              <Field.Label>Repo URL</Field.Label>
+              <Field.Control>
+                <Input
+                  value={form.repoUrl}
+                  onChange={(e) => setForm({ ...form, repoUrl: e.target.value })}
+                  placeholder="https://github.com/..."
+                />
+              </Field.Control>
             </Field>
 
             <Field.Row cols={3}>
@@ -605,6 +623,8 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                 <Field.Hint>Billable fatura; interno/não-billable saem do faturável.</Field.Hint>
               </Field>
             </Field.Row>
+              </>
+            )}
           </FormBody>
         </ResponsiveSheetBody>
 
@@ -618,5 +638,7 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
         </ResponsiveSheetFooter>
       </ResponsiveSheetContent>
     </ResponsiveSheet>
+      <ConfirmDialog state={handoff} onClose={() => setHandoff(null)} />
+    </>
   );
 }

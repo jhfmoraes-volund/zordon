@@ -69,17 +69,20 @@ function ProjectCardMobile({
   p,
   onEdit,
   onDelete,
+  canManage,
 }: {
   p: Project;
   onEdit: () => void;
   onDelete: () => void;
+  canManage: boolean;
 }) {
   return (
     <Link
       href={`/projects/${p.id}`}
       className="surface block p-4 space-y-3 relative active:bg-accent/40 transition-colors"
     >
-      {/* Menu 3-dots — absolute, stops propagation */}
+      {/* Menu 3-dots — absolute, stops propagation. Admin-only. */}
+      {canManage && (
       <div
         className="absolute top-2 right-2"
         onClick={(e) => {
@@ -105,6 +108,7 @@ function ProjectCardMobile({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      )}
 
       {/* Header: name + client */}
       <div className="pr-10 space-y-0.5">
@@ -142,6 +146,9 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
   // já filtra a query). Sem toggle "Meus / Todos" — é tudo "dele" por
   // definição. Também esconde botão "Novo Projeto".
   const isGuest = !hasMinAccessLevel(effectiveAccessLevel, "builder");
+  // Abertura/edição de projeto é centralizada no admin (contrato, equipe e tudo
+  // que toca dinheiro é admin-only). Manager/builder só visualizam.
+  const isAdmin = hasMinAccessLevel(effectiveAccessLevel, "admin");
   const projectsCollection = useOptimisticCollection<Project>(initial.projects);
   const projects = projectsCollection.items;
   const setProjects = projectsCollection.setCommitted;
@@ -298,7 +305,7 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
       <div className="space-y-6">
         <PageHeader
           title="Projetos"
-          onAdd={isGuest ? undefined : openNew}
+          onAdd={isAdmin ? openNew : undefined}
           addLabel="Novo Projeto"
         />
 
@@ -347,6 +354,7 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
             p={p}
             onEdit={() => openEdit(p)}
             onDelete={() => remove(p.id)}
+            canManage={isAdmin}
           />
         ))}
         {visibleProjects.length === 0 && (
@@ -399,14 +407,16 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
                 </TableCell>
                 <TableCell>{p.taskCount}</TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => remove(p.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => remove(p.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
