@@ -77,6 +77,7 @@ import { useTaxonomyActions } from "./_hooks/use-taxonomy-actions";
 import { useSprintActions } from "./_hooks/use-sprint-actions";
 import { useStoryActions } from "./_hooks/use-story-actions";
 import { useTaskActions } from "./_hooks/use-task-actions";
+import { ProjectContractPeriods } from "@/components/apps/finance/project-contract-periods";
 import { SprintsTab } from "./_tabs/sprints-tab";
 import { SettingsTab } from "./_tabs/settings-tab";
 import { AppsTab } from "./_tabs/apps-tab";
@@ -662,7 +663,9 @@ export default function ProjectDetailPage({
           onDeleteStory={storyActions.handleDeleteStory}
         />
       ) : activeTab === "sprints" ? (
-        <SprintsTab
+        <div className="space-y-4">
+          <ProjectContractPeriods projectId={id} />
+          <SprintsTab
           sprints={sprints}
           tasks={tasks}
           backlogTasks={backlogTasks}
@@ -703,7 +706,8 @@ export default function ProjectDetailPage({
           handleBulkDuplicate={taskActions.handleBulkDuplicate}
           handleBulkAddTag={taskActions.handleBulkAddTag}
           handleBulkRemoveTag={taskActions.handleBulkRemoveTag}
-        />
+          />
+        </div>
       ) : activeTab === "apps" ? (
         <AppsTab
           projectId={id}

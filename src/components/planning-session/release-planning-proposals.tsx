@@ -1,17 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
+import { ChevronDown, RotateCcw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TASK_STATUS } from "@/lib/status-chips";
-import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { MeetingTaskActionSheet } from "@/components/meetings/meeting-task-action-sheet";
 import type { MeetingTaskAction } from "@/components/meetings/meeting-task-action-sheet";
 import { TaskSheetByRef } from "@/components/task-sheet-by-ref";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
-import { toast } from "sonner";
 import type { PlanningAction } from "@/components/planning/proposal-card";
 
 /** PlanningAction com o embed de sprint destino que o GET /actions devolve. */
@@ -91,17 +89,12 @@ export function ReleasePlanningProposals({
   planningCeremonyId,
   projectId,
   refreshKey,
-  onApplied,
   onStateChange,
   readOnly = false,
-  agentBusy = false,
 }: {
   planningCeremonyId: string | null;
   projectId: string;
   refreshKey: number;
-  /** Resultado do apply — a página decide o que fazer (ex: só reseta o chat se
-   *  algo foi aplicado de fato). */
-  onApplied: (result: { applied: number; failed: number; skipped: number }) => void;
   /** Reporta os counts — a página deriva a fase do header e o empty-state.
    *  `planCount` = tasks no board vivo; `doneCount` = quantas dessas done. */
   onStateChange?: (s: {
@@ -110,15 +103,9 @@ export function ReleasePlanningProposals({
     doneCount: number;
   }) => void;
   readOnly?: boolean;
-  /** Vitoria ainda gerando no background (turno em vôo). Enquanto isso, o
-   *  staging pode estar meio-escrito (tool propose_* no meio do lote) — trava o
-   *  "Aplicar" pra não commitar um batch incompleto. */
-  agentBusy?: boolean;
 }) {
   const [actions, setActions] = useState<ProposalRow[]>([]);
   const [boardTasks, setBoardTasks] = useState<BoardTask[]>([]);
-  const [applying, setApplying] = useState(false);
-  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [openAction, setOpenAction] = useState<ProposalRow | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   // Sprints colapsadas (por sprintId / NONE_KEY). Vazio = tudo expandido.
@@ -229,8 +216,6 @@ export function ReleasePlanningProposals({
     [planningCeremonyId, actions],
   );
 
-  const pendingCount = actions.filter((a) => a.decision !== "rejected").length;
-
   // ── Agrupa propostas + tasks do board por sprint ────────────────────────
   const groups = useMemo<SprintGroup[]>(() => {
     const map = new Map<string, SprintGroup>();
@@ -278,86 +263,13 @@ export function ReleasePlanningProposals({
     return arr;
   }, [actions, boardTasks]);
 
-  const handleApply = useCallback(() => {
-    if (!planningCeremonyId || pendingCount === 0 || agentBusy) return;
-    setConfirmState({
-      title: `Aplicar ${pendingCount} proposta${pendingCount === 1 ? "" : "s"}?`,
-      description:
-        "As propostas não-descartadas viram Tasks de verdade (com PFV, sprint e — no backfill — já concluídas). As descartadas são ignoradas. Você pode re-planejar a qualquer momento — o board vivo é a base.",
-      confirmLabel: "Aplicar",
-      onConfirm: async () => {
-        setApplying(true);
-        try {
-          // Timeout generoso: o apply em lote roda em ~2-3s, mas se o request
-          // pendurar (server travado/conexão caída) o AbortController dispara,
-          // o botão reseta e um toast claro aparece — em vez de congelar até o
-          // usuário dar hard refresh (sintoma original).
-          const res = await fetchOrThrow(
-            `/api/planning/${planningCeremonyId}/complete`,
-            { method: "POST" },
-            { timeoutMs: 90_000 },
-          );
-          const result = (await res.json()) as {
-            applied?: { applied?: number; failed?: number; skipped?: number };
-          };
-          const applied = result.applied?.applied ?? 0;
-          const failed = result.applied?.failed ?? 0;
-          const skipped = result.applied?.skipped ?? 0;
-          // Mostra TODAS as contagens — sem isto, propostas puladas (D4/duplicata)
-          // somem da tela sem explicação e o PM acha que bugou (achado #1).
-          const parts = [`${applied} aplicada${applied === 1 ? "" : "s"}`];
-          if (skipped) parts.push(`${skipped} pulada${skipped === 1 ? "" : "s"} (trabalho em curso ou duplicata)`);
-          if (failed) parts.push(`${failed} falhou`);
-          const msg = parts.join(" · ");
-          if (failed && !applied) toast.error(msg);
-          else if (skipped || failed) toast.warning(msg);
-          else toast.success(msg);
-          onApplied({ applied, failed, skipped });
-        } catch (err) {
-          showErrorToast(err, { label: "Falha ao aplicar propostas" });
-        } finally {
-          setApplying(false);
-        }
-      },
-    });
-  }, [planningCeremonyId, pendingCount, onApplied, agentBusy]);
-
   if (actions.length === 0 && boardTasks.length === 0) return null;
-
-  const planCount = boardTasks.length;
-  const isStaging = pendingCount > 0;
 
   return (
     // Chromeless: a folha do <CanvasStage bleed> é a superfície (bg-card + raio +
     // sombra). Renderiza o board direto nela, de borda a borda — sem card próprio.
+    // O header (título + Aplicar) vive na toolbar do canvas (página), não aqui.
     <div>
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Sparkles className="size-4 text-muted-foreground" />
-          {isStaging ? "Propostas de tasks" : "Plano (board vivo)"}
-          <Badge variant="secondary">{isStaging ? pendingCount : planCount}</Badge>
-        </div>
-        {!readOnly && isStaging && (
-          <Button
-            size="sm"
-            onClick={handleApply}
-            disabled={applying || agentBusy}
-            title={
-              agentBusy
-                ? "Aguarde a Vitoria terminar de montar o plano"
-                : undefined
-            }
-          >
-            {applying || agentBusy ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Check className="size-4" />
-            )}
-            {agentBusy ? "Vitoria montando…" : `Aplicar ${pendingCount}`}
-          </Button>
-        )}
-      </div>
-
       <div>
         {groups.map((g) => {
           const key = g.sprintId ?? NONE_KEY;
@@ -532,8 +444,6 @@ export function ReleasePlanningProposals({
         onClose={() => setOpenTaskId(null)}
         onAfterChange={loadAll}
       />
-
-      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );
 }

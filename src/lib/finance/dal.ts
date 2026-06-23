@@ -17,6 +17,7 @@ import type {
   ContractInput,
   ContractMonthOverride,
   ContractMonthOverrideInput,
+  ContractPeriod,
   ContractClause,
   ContractClauseInput,
   Invoice,
@@ -620,6 +621,30 @@ export async function listContracts(projectId: string): Promise<Contract[]> {
     .order("seq", { ascending: true });
   if (res.error) throw new Error(res.error.message);
   return ((res.data ?? []) as Record<string, unknown>[]).map(mapContract);
+}
+
+/**
+ * Períodos legíveis por quem vê o projeto (Slice 3 · view v_contract_period).
+ * A view filtra por can_view_project OR is_admin (boundary no DB) e projeta SÓ
+ * período/identidade — sem valores. Usado fora do app admin (tab do projeto).
+ */
+export async function listContractPeriods(projectId: string): Promise<ContractPeriod[]> {
+  const { fin } = await finance();
+  const res = await fin
+    .from("v_contract_period")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("seq", { ascending: true });
+  if (res.error) throw new Error(res.error.message);
+  return ((res.data ?? []) as Record<string, unknown>[]).map((r) => ({
+    contractId: String(r.contract_id),
+    projectId: String(r.project_id),
+    label: String(r.label),
+    seq: Number(r.seq),
+    effectiveFrom: String(r.effective_from),
+    effectiveTo: (r.effective_to as string | null) ?? null,
+    billingType: (r.billing_type as ContractPeriod["billingType"]) ?? "squad",
+  }));
 }
 
 /** Vigências não podem se sobrepor no mesmo projeto (1 contrato por período). */

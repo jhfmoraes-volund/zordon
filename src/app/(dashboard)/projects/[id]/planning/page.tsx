@@ -10,8 +10,9 @@ import {
 } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Sparkles } from "lucide-react";
+import { Check, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { PageTitle } from "@/components/app-shell";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { ConversationFab } from "@/components/ui/conversation/conversation-fab";
@@ -27,6 +28,7 @@ import { ReleasePlanningRibbon } from "@/components/planning-session/release-pla
 import { ReleasePlanningSheet } from "@/components/planning-session/release-planning-sheet";
 import { ReleasePlanningContextSheet } from "@/components/planning-session/context-sheet";
 import { ReleasePlanningProposals } from "@/components/planning-session/release-planning-proposals";
+import { ReleasePlanningStories } from "@/components/planning-session/release-planning-stories";
 import {
   CronogramaRail,
   type CronogramaBlock,
@@ -71,6 +73,15 @@ export default function PlanningSessionPage({
   const [threadId, setThreadId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [input, setInput] = useState("");
+  // Lente do canvas: board de tasks por sprint OU todas as user stories (por
+  // módulo, sem sprint). Toggle vive na toolbar do canvas.
+  const [view, setView] = useState<"tasks" | "stories">("tasks");
+  const [storyCount, setStoryCount] = useState(0);
+  // Smart-refresh: a Vitoria mexe no board via tools; em vez de recarregar a
+  // cada turno (reordena sob o usuário), sinalizamos "novo conteúdo" e o usuário
+  // puxa pelo ⟳. Auto-pull só quando o board está vazio (nada a atrapalhar).
+  const [hasNewContent, setHasNewContent] = useState(false);
+  const [applyBusy, setApplyBusy] = useState(false);
   // Hidratando o histórico do thread no mount → spinner no corpo do chat.
   const [chatHydrating, setChatHydrating] = useState(true);
   // Bump pra re-fetchar as propostas de task (companion ceremony) quando um turno
@@ -233,15 +244,28 @@ export default function PlanningSessionPage({
       onError: (err) => showErrorToast(err, { label: "Vitoria falhou" }),
     });
 
-  // Hidrata histórico do thread + recarrega o board quando o turno termina
-  // (Vitoria pode ter mexido nos PRDs via tools).
+  // Smart-refresh: quando o turno termina, a Vitoria pode ter mexido no board
+  // via tools. Recarregar na cara reordena sob o usuário (perde scroll/colapso/
+  // descartes). Então: recarrega só a SESSÃO (meta, barato, não toca o board) e
+  // — se o board está vazio (nada a atrapalhar) — puxa direto; senão sinaliza
+  // "novo conteúdo" e o usuário recarrega pelo ⟳ quando quiser.
+  // Espelha "board vazio" num ref (atualizado fora do render) pra o efeito de
+  // fim-de-turno não precisar depender de planState — depender de state + setState
+  // no mesmo efeito dispara o alerta de cascata.
+  const boardEmptyRef = useRef(true);
+  useEffect(() => {
+    boardEmptyRef.current =
+      planState.planCount === 0 && planState.pendingCount === 0;
+  }, [planState.planCount, planState.pendingCount]);
+
   const prevStatusRef = useRef(status);
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = status;
     if ((prev === "streaming" || prev === "submitted") && status === "ready") {
       void loadSession();
-      setActionsRefresh((n) => n + 1);
+      if (boardEmptyRef.current) setActionsRefresh((n) => n + 1);
+      else setHasNewContent(true);
     }
   }, [status, loadSession]);
 
@@ -366,6 +390,57 @@ export default function PlanningSessionPage({
     },
     [sessionId, exitHistory, loadSession, setMessages],
   );
+
+  // "Aplicar" agora mora na toolbar do canvas (página), não no board. Conclui a
+  // companion ceremony → propostas viram tasks reais (auto-aprova + cascata).
+  const handleApplyBoard = useCallback(() => {
+    const ceremonyId = session?.planningCeremonyId ?? null;
+    const agentBusy = status === "streaming" || status === "submitted";
+    if (!ceremonyId || planState.pendingCount === 0 || agentBusy) return;
+    setConfirmState({
+      title: `Aplicar ${planState.pendingCount} proposta${planState.pendingCount === 1 ? "" : "s"}?`,
+      description:
+        "As propostas não-descartadas viram Tasks de verdade (com PFV, sprint e — no backfill — já concluídas). As descartadas são ignoradas. Você pode re-planejar a qualquer momento — o board vivo é a base.",
+      confirmLabel: "Aplicar",
+      onConfirm: async () => {
+        setApplyBusy(true);
+        try {
+          const res = await fetchOrThrow(
+            `/api/planning/${ceremonyId}/complete`,
+            { method: "POST" },
+            { timeoutMs: 90_000 },
+          );
+          const result = (await res.json()) as {
+            applied?: { applied?: number; failed?: number; skipped?: number };
+          };
+          const applied = result.applied?.applied ?? 0;
+          const failed = result.applied?.failed ?? 0;
+          const skipped = result.applied?.skipped ?? 0;
+          // Mostra TODAS as contagens — propostas puladas (duplicata) somem da
+          // tela sem explicação e o PM acha que bugou.
+          const parts = [`${applied} aplicada${applied === 1 ? "" : "s"}`];
+          if (skipped) parts.push(`${skipped} pulada${skipped === 1 ? "" : "s"} (trabalho em curso ou duplicata)`);
+          if (failed) parts.push(`${failed} falhou`);
+          const msg = parts.join(" · ");
+          if (failed && !applied) toast.error(msg);
+          else if (skipped || failed) toast.warning(msg);
+          else toast.success(msg);
+          await handleApplied({ applied, failed, skipped });
+        } catch (err) {
+          showErrorToast(err, { label: "Falha ao aplicar propostas" });
+        } finally {
+          setApplyBusy(false);
+        }
+      },
+    });
+  }, [session?.planningCeremonyId, planState.pendingCount, status, handleApplied]);
+
+  // ⟳ recarrega o canvas (board + stories) sob comando do usuário e limpa o
+  // indicador de "novo conteúdo" do smart-refresh.
+  const handleRefreshCanvas = useCallback(() => {
+    setActionsRefresh((n) => n + 1);
+    setHasNewContent(false);
+  }, []);
 
   // Click num bloco (mini-régua OU cronograma do sheet): seleciona a semana,
   // auto-abre a versão mais recente dela (API ordena desc) e abre o navegador.
@@ -569,12 +644,92 @@ export default function PlanningSessionPage({
     />
   );
 
-  // Canvas: plano (tasks/stories por sprint) OU canvas histórico read-only.
+  // Toolbar do canvas (header fixo na mesa, acima da folha): título + count,
+  // toggle Tasks⇄User Stories, ⟳ refresh (acende com "novo") e Aplicar (só em
+  // Tasks, com staging). Não aparece em modo histórico (canvas congelado).
+  const isStaging = planState.pendingCount > 0;
+  const canvasTitle =
+    view === "stories"
+      ? "User Stories"
+      : isStaging
+        ? "Propostas de tasks"
+        : "Plano (board vivo)";
+  const canvasCount =
+    view === "stories"
+      ? storyCount
+      : isStaging
+        ? planState.pendingCount
+        : planState.planCount;
+
+  const toolbar = (
+    <div className="flex w-full items-center gap-2">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <Sparkles className="size-4 text-muted-foreground" />
+        {canvasTitle}
+        <Badge variant="secondary">{canvasCount}</Badge>
+      </div>
+
+      <div className="ml-1 inline-flex rounded-lg border bg-muted/40 p-0.5 text-xs">
+        {(["tasks", "stories"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            className={cn(
+              "rounded-md px-2.5 py-1 transition-colors",
+              view === v
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {v === "tasks" ? "Tasks" : "User Stories"}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1" />
+
+      <Button
+        variant="outline"
+        size="icon-sm"
+        onClick={handleRefreshCanvas}
+        title={hasNewContent ? "Novo conteúdo — recarregar" : "Recarregar canvas"}
+        className="relative"
+      >
+        <RotateCcw className="size-4" />
+        {hasNewContent && (
+          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary ring-2 ring-[var(--canvas-stage)]" />
+        )}
+      </Button>
+
+      {view === "tasks" && !isApproved && isStaging && (
+        <Button
+          size="sm"
+          onClick={handleApplyBoard}
+          disabled={applyBusy || busy}
+          title={busy ? "Aguarde a Vitoria terminar de montar o plano" : undefined}
+        >
+          {applyBusy || busy ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Check className="size-4" />
+          )}
+          {busy ? "Vitoria montando…" : `Aplicar ${planState.pendingCount}`}
+        </Button>
+      )}
+    </div>
+  );
+
+  // Canvas: board de tasks OU vista de user stories OU canvas histórico read-only.
   // PRD↔sprint board saiu (2026-06-19) — a planning lê fontes e produz tasks.
-  // Board vivo (proposals) ocupa a folha de borda a borda → bleed. Empty-state e
-  // canvas histórico são mensagens/cards menores → folha com padding de leitura.
+  // Conteúdo "board/lista" ocupa a folha de borda a borda → bleed; empty-state
+  // (mensagem centrada) usa folha com padding de leitura.
+  const showEmptyPlan = view === "tasks" && !hasPlan;
   const canvas = (
-    <CanvasStage bleed={!historyMode && hasPlan}>
+    <CanvasStage
+      header={historyMode ? undefined : toolbar}
+      bleed={!historyMode && !showEmptyPlan}
+    >
       {historyMode ? (
         // Canvas HISTÓRICO (read-only) da versão selecionada. Sem versão na
         // semana → estado vazio (bloco passado sem atividade).
@@ -585,6 +740,12 @@ export default function PlanningSessionPage({
             Nenhuma versão do plano nesta semana.
           </div>
         )
+      ) : view === "stories" ? (
+        <ReleasePlanningStories
+          projectId={projectId}
+          refreshKey={actionsRefresh}
+          onCountChange={setStoryCount}
+        />
       ) : (
         <>
           <ReleasePlanningProposals
@@ -592,9 +753,7 @@ export default function PlanningSessionPage({
             projectId={projectId}
             refreshKey={actionsRefresh}
             readOnly={isApproved}
-            agentBusy={busy}
             onStateChange={setPlanState}
-            onApplied={handleApplied}
           />
           {!hasPlan && (
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">

@@ -143,6 +143,22 @@ export type ContractInput = {
 };
 export type ContractsResponse = { contracts: Contract[] };
 
+/**
+ * Período do contrato legível por quem vê o projeto (Slice 3 · view
+ * finance.v_contract_period). SÓ período/identidade — NUNCA valores (RLS:
+ * can_view_project OR is_admin). Edição segue admin-only (Q3).
+ */
+export type ContractPeriod = {
+  contractId: string;
+  projectId: string;
+  label: string;
+  seq: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  billingType: BillingType;
+};
+export type ContractPeriodsResponse = { periods: ContractPeriod[] };
+
 // ─── Cláusulas do contrato (1-N; agent-fill + manual) ───────────────────────
 
 export type ClauseKind = "sla" | "penalty" | "ip" | "confidentiality" | "readjust" | "warranty" | "other";

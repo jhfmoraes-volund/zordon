@@ -72,16 +72,16 @@ export function AppDesktop({
               aria-label={app.name}
               className={cn(
                 "relative flex flex-1 flex-col items-center gap-1 rounded-md px-1 py-1.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-full md:flex-none",
-                active && "bg-muted text-foreground",
+                active &&
+                  "bg-[var(--accent-red-tint-hover)] text-foreground ring-1 ring-inset ring-[var(--accent-red-ring)]",
               )}
             >
-              {active && (
-                <span
-                  aria-hidden
-                  className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-primary md:bottom-auto md:left-0 md:top-1/2 md:h-5 md:w-0.5 md:translate-x-0 md:-translate-y-1/2"
-                />
-              )}
-              <app.icon className="size-[22px]" />
+              <app.icon
+                className={cn(
+                  "size-[22px] transition-transform",
+                  active && "scale-[1.08] text-primary",
+                )}
+              />
               <span className="line-clamp-2 text-center text-[10px] leading-tight">
                 {app.name}
               </span>
