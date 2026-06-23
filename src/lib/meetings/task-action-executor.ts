@@ -61,10 +61,18 @@ export async function applyApprovedActions(
 }
 
 /**
- * Staging-commit: ao Concluir uma planning, todas as MeetingTaskAction
- * pendentes são auto-aprovadas e aplicadas em cascata. Sem aprovação por
- * card — discordâncias acontecem via chat (Vitoria apaga a action) antes do
- * commit.
+ * Staging-commit: ao Concluir uma planning, toda MeetingTaskAction AINDA
+ * ACIONÁVEL (execution='pending' e NÃO rejeitada) é commitada em cascata — as
+ * pendentes são auto-aprovadas, as já aprovadas entram como estão.
+ *
+ * Por que `decision IN (pending, approved)` e não só `pending`: o sheet de
+ * proposta da planning expõe "Aprovar"/"Rejeitar" por card (PUT decision sem
+ * mexer em execution). Uma action pré-aprovada pelo PM (decision='approved',
+ * execution='pending') era INVISÍVEL ao conclude — nem auto-aprovada (filtro
+ * decision='pending') nem carregada — então sumia silenciosamente enquanto a
+ * phase fechava limpa, orfanando a proposta pra sempre e fazendo o retry do
+ * "Aplicar" 409-ar (phase já closed). O gate de commit é só `rejected`, nunca
+ * o estado intermediário de aprovação.
  */
 export async function applyPendingActionsForPlanning(
   supabase: Supabase,
@@ -75,7 +83,7 @@ export async function applyPendingActionsForPlanning(
     .from("MeetingTaskAction")
     .select("*")
     .eq("planningCeremonyId", planningCeremonyId)
-    .eq("decision", "pending")
+    .in("decision", ["pending", "approved"])
     .eq("execution", "pending");
 
   if (error) throw new Error(`Failed to load planning actions: ${error.message}`);
@@ -94,21 +102,25 @@ export async function applyPendingActionsForPlanning(
   if (planningErr) throw new Error(`Failed to load planning sprint: ${planningErr.message}`);
 
   // Auto-aprova em batch antes de aplicar — applyActions assume action.decision já
-  // resolvido (e usa decidedById em apply create pra carimbar createdById).
+  // resolvido (e usa decidedById em apply create pra carimbar createdById). Só
+  // carimba as que estavam pending; as já aprovadas por card preservam o decider.
   const nowIso = new Date().toISOString();
   const { error: approveErr } = await supabase
     .from("MeetingTaskAction")
     .update({ decision: "approved", decidedAt: nowIso, decidedById, updatedAt: nowIso })
     .eq("planningCeremonyId", planningCeremonyId)
-    .eq("decision", "pending");
+    .eq("decision", "pending")
+    .eq("execution", "pending");
   if (approveErr) throw new Error(`Auto-approve failed: ${approveErr.message}`);
 
-  const refreshed = list.map((a) => ({
-    ...a,
-    decision: "approved" as const,
-    decidedAt: nowIso,
-    decidedById,
-  }));
+  // As pendentes herdam o concluder; as já aprovadas por card mantêm decidedById/
+  // decidedAt originais (senão um create pré-aprovado teria createdById reescrito
+  // pra quem concluiu, não pra quem aprovou).
+  const refreshed = list.map((a) =>
+    a.decision === "pending"
+      ? { ...a, decision: "approved" as const, decidedAt: nowIso, decidedById }
+      : a,
+  );
 
   const result = await applyActions(supabase, refreshed, planning.sprintId);
 

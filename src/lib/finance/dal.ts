@@ -435,13 +435,31 @@ export async function createAllocation(
   input: AllocationInput,
 ): Promise<{ allocation: Allocation; warning: string | null }> {
   const warning = await checkAllocation(input);
-  const { fin } = await finance();
+  const { sb, fin } = await finance();
   const res = await fin
     .from("labor_allocation")
     .insert(allocRow(input, await currentMemberId()))
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
+  // D13: builder spot ganha ProjectAccess contributor PERMANENTE (acesso de
+  // builder, não expira). Idempotente; nunca rebaixa um acesso já existente.
+  if ((input.kind ?? "standing") === "spot") {
+    const m = await sb.from("Member").select("userId").eq("id", input.memberId).maybeSingle();
+    const userId = (m.data?.userId as string | null | undefined) ?? null;
+    if (userId) {
+      const existing = await sb
+        .from("ProjectAccess")
+        .select("id")
+        .eq("projectId", input.projectId)
+        .eq("userId", userId)
+        .maybeSingle();
+      if (!existing.data)
+        await sb
+          .from("ProjectAccess")
+          .insert({ userId, projectId: input.projectId, role: "contributor" });
+    }
+  }
   return { allocation: res.data as Allocation, warning };
 }
 

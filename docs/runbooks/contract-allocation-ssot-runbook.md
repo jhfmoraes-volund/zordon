@@ -84,3 +84,5 @@ Resumo (detalhar quando chegarmos). **Modelo spot REVISADO 2026-06-23 — D11/D1
 | 2026-06-23 | **F2.1 fundação spot** | ✅ migration 20260624j PROD (labor_allocation +kind +days, percent nullable, CHECK forma 0<days≤60, 35 linhas=standing). |
 | 2026-06-23 | F2.2 v_contract_roster +kind/days | ✅ migration 20260624k PROD (CREATE OR REPLACE, anexa kind/days no fim). |
 | 2026-06-23 | F2.3 código kind-aware | ✅ types (AllocationKind, Allocation/Input/ContractRosterMember), dal (checkAllocation branch spot, allocRow, listContractRoster mapper). POST /api/finance/allocations já cria spot. tsc 0, eslint limpo. |
+| 2026-06-23 | **F2.4 UI spot + acesso permanente** | ✅ contract sheet: botão "⚡ Pontual", campo Dias (8h, cap 60), branch save, linha "⚡ pontual · Xd", hint. createAllocation concede ProjectAccess contributor PERMANENTE (idempotente, não rebaixa). CHECK validado em prod (5d ok / 61d bloq / spot+% bloq). tsc 0, eslint limpo. |
+| | **Falta na Fase 2** | Custo: branch kind='spot' nas views (dias × custo-dia) — spot ainda contribui 0. Converg. roster: v_project_team + 3 readers + backfill + member box read-only. RLS audit. |

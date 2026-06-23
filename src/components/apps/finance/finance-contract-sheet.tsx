@@ -42,6 +42,7 @@ import { positionLabel } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import type {
   AllocationItem,
+  AllocationKind,
   BillingType,
   ClauseKind,
   Contract,
@@ -630,7 +631,15 @@ function ContractTeamEditor({
   squadMemberIds: string[];
   onChanged: () => void;
 }) {
-  type AllocForm = { id: string | null; memberId: string; percent: string; from: string; to: string };
+  type AllocForm = {
+    id: string | null;
+    kind: AllocationKind;
+    memberId: string;
+    percent: string;
+    days: string;
+    from: string;
+    to: string;
+  };
   const [form, setForm] = useState<AllocForm | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
@@ -646,13 +655,18 @@ function ContractTeamEditor({
   }, [members, squadMemberIds]);
 
   function openAdd() {
-    setForm({ id: null, memberId: "", percent: "", from: firstOfMonthISO(), to: "" });
+    setForm({ id: null, kind: "standing", memberId: "", percent: "", days: "", from: firstOfMonthISO(), to: "" });
+  }
+  function openAddSpot() {
+    setForm({ id: null, kind: "spot", memberId: "", percent: "", days: "", from: firstOfMonthISO(), to: "" });
   }
   function openEdit(a: AllocationItem) {
     setForm({
       id: a.id,
+      kind: a.kind,
       memberId: a.member_id,
-      percent: String(a.percent),
+      percent: a.percent != null ? String(a.percent) : "",
+      days: a.days != null ? String(a.days) : "",
       from: a.effective_from,
       to: a.effective_to ?? "",
     });
@@ -660,8 +674,11 @@ function ContractTeamEditor({
 
   async function save() {
     if (!form) return;
+    const isSpot = form.kind === "spot";
     const percent = parseFloat(form.percent.replace(",", "."));
-    if (!form.memberId || !(percent > 0 && percent <= 100) || !form.from) return;
+    const days = parseFloat(form.days.replace(",", "."));
+    if (!form.memberId || !form.from) return;
+    if (isSpot ? !(days > 0 && days <= 60) : !(percent > 0 && percent <= 100)) return;
     setBusy(true);
     try {
       const res = await fetchOrThrow(
@@ -672,7 +689,8 @@ function ContractTeamEditor({
           body: JSON.stringify({
             memberId: form.memberId,
             projectId,
-            percent,
+            kind: form.kind,
+            ...(isSpot ? { days } : { percent }),
             effectiveFrom: form.from,
             effectiveTo: form.to || null,
             contractId,
@@ -681,6 +699,7 @@ function ContractTeamEditor({
       );
       const { warning } = (await res.json().catch(() => ({}))) as { warning?: string | null };
       if (warning) toast.warning(warning);
+      if (isSpot && !form.id) toast.success("Participação pontual criada — acesso de builder concedido");
       setForm(null);
       onChanged();
     } catch (e) {
@@ -698,7 +717,8 @@ function ContractTeamEditor({
         body: JSON.stringify({
           memberId: a.member_id,
           projectId,
-          percent: a.percent,
+          kind: a.kind,
+          ...(a.kind === "spot" ? { days: a.days } : { percent: a.percent }),
           effectiveFrom: a.effective_from,
           effectiveTo: a.effective_to,
           contractId,
@@ -734,9 +754,14 @@ function ContractTeamEditor({
           Equipe nesta vigência
         </p>
         {!form && (
-          <Button size="sm" variant="outline" onClick={openAdd}>
-            <Plus className="size-3.5" /> Membro
-          </Button>
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="outline" onClick={openAdd}>
+              <Plus className="size-3.5" /> Membro
+            </Button>
+            <Button size="sm" variant="outline" onClick={openAddSpot}>
+              ⚡ Pontual
+            </Button>
+          </div>
         )}
       </div>
 
@@ -764,20 +789,37 @@ function ContractTeamEditor({
                   </Select>
                 </Field.Control>
               </Field>
-              <Field name="percent" required>
-                <Field.Label>Alocação (%)</Field.Label>
-                <Field.Control>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={form.percent}
-                    onChange={(e) => setForm((f) => (f ? { ...f, percent: e.target.value } : f))}
-                    placeholder="ex: 50"
-                  />
-                </Field.Control>
-              </Field>
+              {form.kind === "spot" ? (
+                <Field name="days" required>
+                  <Field.Label>Dias (8h)</Field.Label>
+                  <Field.Control>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="60"
+                      step="0.5"
+                      value={form.days}
+                      onChange={(e) => setForm((f) => (f ? { ...f, days: e.target.value } : f))}
+                      placeholder="ex: 5"
+                    />
+                  </Field.Control>
+                </Field>
+              ) : (
+                <Field name="percent" required>
+                  <Field.Label>Alocação (%)</Field.Label>
+                  <Field.Control>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={form.percent}
+                      onChange={(e) => setForm((f) => (f ? { ...f, percent: e.target.value } : f))}
+                      placeholder="ex: 50"
+                    />
+                  </Field.Control>
+                </Field>
+              )}
             </Field.Row>
             <Field.Row cols={2}>
               <Field name="from" required>
@@ -794,6 +836,12 @@ function ContractTeamEditor({
               </Field>
             </Field.Row>
           </FormBody>
+          {form.kind === "spot" && (
+            <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+              Participação pontual: dias de ajuda (1 dia = 8h), teto 60. Custo entra no mês do
+              início. O builder ganha acesso permanente ao projeto.
+            </p>
+          )}
           <div className="mt-2 flex justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => setForm(null)} disabled={busy}>
               Cancelar
@@ -814,9 +862,13 @@ function ContractTeamEditor({
           {mine.map((a) => (
             <div key={a.id} className="group flex items-center gap-3 px-3 py-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{a.memberName}</p>
+                <p className="truncate text-sm font-medium">
+                  {a.memberName}
+                  {a.kind === "spot" && <span className="ml-1.5 text-[10px] text-amber-600">⚡ pontual</span>}
+                </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {a.percent}% · {fmtDate(a.effective_from)} → {a.effective_to ? fmtDate(a.effective_to) : "atual"}
+                  {a.kind === "spot" ? `${a.days}d` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
+                  {a.effective_to ? fmtDate(a.effective_to) : "atual"}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -855,7 +907,8 @@ function ContractTeamEditor({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{a.memberName}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {a.percent}% · {fmtDate(a.effective_from)} → {a.effective_to ? fmtDate(a.effective_to) : "atual"}
+                    {a.kind === "spot" ? `${a.days}d` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
+                    {a.effective_to ? fmtDate(a.effective_to) : "atual"}
                   </p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => assign(a)}>

@@ -357,7 +357,31 @@ export async function concludePlanning(
   // voltaram pra pending no executor (retentáveis no staging) e a companion fica
   // viva — fechar reciclaria a companion e orfanaria as falhas (re-conclude só
   // pega pending). Fecha só no apply LIMPO.
-  if (applied.failed > 0) {
+  let keepOpen = applied.failed > 0;
+
+  // Guard TOCTOU: o executor carrega o set de actions no INÍCIO; uma aprovação/
+  // criação de card que chegue DURANTE a janela do apply não entra nesse load e
+  // ficaria execution='pending' órfã se a phase fechasse aqui. Re-checa o que
+  // sobrou acionável (execution='pending', não-rejeitada) e mantém a phase aberta
+  // se houver — o próximo "Aplicar" varre o leftover (load já inclui approved).
+  // Só roda no apply limpo; no apply com falha já decidimos não fechar.
+  if (!keepOpen) {
+    const { count: leftover, error: leftoverErr } = await supabase
+      .from("MeetingTaskAction")
+      .select("id", { count: "exact", head: true })
+      .eq("planningCeremonyId", id)
+      .eq("execution", "pending")
+      .neq("decision", "rejected");
+    if (leftoverErr) throw leftoverErr;
+    if ((leftover ?? 0) > 0) {
+      console.warn(
+        `[concludePlanning] ${leftover} action(s) acionáveis surgiram durante o apply (ceremony=${id}); phase mantida aberta pra não orfanar.`,
+      );
+      keepOpen = true;
+    }
+  }
+
+  if (keepOpen) {
     const { data: open, error: openErr } = await supabase
       .from("PlanningCeremony")
       .select("*")
