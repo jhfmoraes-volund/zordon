@@ -11,20 +11,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogFooter,
-  ResponsiveDialogBody,
-} from "@/components/ui/responsive-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { MemberEditSheet } from "@/components/members/member-edit-sheet";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -33,16 +24,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Wand2, Copy, Gauge, Sparkles, MoreVertical, icons as lucideIcons, Star } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Gauge, Sparkles, MoreVertical, icons as lucideIcons, Star } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import {
   hasMinLevel, ADMIN,
   hasMinAccessLevel,
-  SPECIALTIES, SPECIALTY_LABELS, specialtyLabel,
-  POSITIONS, POSITION_LABELS, positionLabel,
-  MEMBER_ACCESS_LEVELS, ACCESS_LEVEL_LABELS, mapPositionToAccessLevel,
-  type AccessLevel,
+  positionLabel,
 } from "@/lib/roles";
 import { SkillProfileSheet } from "@/components/skill-assessment/skill-profile-sheet";
 import { PixelBar, pixelTone, PixelHud } from "@/components/ui/pixel-bar";
@@ -52,15 +40,6 @@ import {
   towerLabel,
   type Tower,
 } from "@/lib/memberSkills";
-
-function generatePassword(length = 14): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  let out = "";
-  for (let i = 0; i < length; i++) out += alphabet[bytes[i] % alphabet.length];
-  return out;
-}
 
 // Member = MembersListItem (vem do loader). Re-export como type local
 // pra minimizar diff no resto do arquivo.
@@ -307,23 +286,6 @@ export function MembersView({ initial }: { initial: Member[] }) {
   const memberMutate = membersCollection.mutate;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
-  const [form, setForm] = useState<{
-    name: string;
-    email: string;
-    position: string;
-    accessLevel: AccessLevel;
-    specialty: string;
-    githubUsername: string;
-    fpCapacity: string;
-    password: string;
-    isExternal: boolean;
-  }>({
-    name: "", email: "", position: "product-builder", accessLevel: "builder",
-    specialty: "fullstack",
-    githubUsername: "", fpCapacity: "50", password: "", isExternal: false,
-  });
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [skillSheetMemberId, setSkillSheetMemberId] = useState<string | null>(null);
   const [filter, setFilter] = useState<MemberFilter>("all");
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
@@ -354,83 +316,12 @@ export function MembersView({ initial }: { initial: Member[] }) {
 
   const openNew = () => {
     setEditing(null);
-    setSaveError(null);
-    setForm({
-      name: "",
-      email: "",
-      position: "product-builder",
-      accessLevel: "builder",
-      specialty: "fullstack",
-      githubUsername: "",
-      fpCapacity: "50",
-      password: generatePassword(),
-      isExternal: false,
-    });
     setOpen(true);
   };
 
   const openEdit = (m: Member) => {
     setEditing(m);
-    setSaveError(null);
-    const memberPosition = (m.position ?? m.role) as string;
-    setForm({
-      name: m.name,
-      email: m.email || "",
-      position: memberPosition,
-      // Edit defaults: derive accessLevel from position. The UI doesn't load
-      // the user's real `app_metadata.access_level` (that lives in auth.users),
-      // so an admin who promoted someone manually will see the derived value
-      // here. Submitting only changes accessLevel if the admin picks a different
-      // value — see the PUT handler.
-      accessLevel: mapPositionToAccessLevel(memberPosition),
-      specialty: m.specialty || "fullstack",
-      githubUsername: m.githubUsername || "",
-      fpCapacity: String(m.fpCapacity),
-      password: "",
-      isExternal: m.isExternal,
-    });
     setOpen(true);
-  };
-
-  const save = async () => {
-    setSaving(true);
-    setSaveError(null);
-    const baseBody: Record<string, unknown> = {
-      name: form.name,
-      email: form.email || null,
-      position: form.position,
-      accessLevel: form.accessLevel,
-      specialty: form.specialty || null,
-      githubUsername: form.githubUsername || null,
-      fpCapacity: parseInt(form.fpCapacity) || 50,
-      isExternal: form.isExternal,
-    };
-    try {
-      let res: Response;
-      if (editing) {
-        const body = form.password ? { ...baseBody, password: form.password } : baseBody;
-        res = await fetch(`/api/members/${editing.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-      } else {
-        res = await fetch("/api/members", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...baseBody, password: form.password }),
-        });
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setSaveError(err.error ?? `Erro ${res.status}`);
-        return;
-      }
-      setOpen(false);
-      reload();
-    } finally {
-      setSaving(false);
-    }
   };
 
   const remove = (id: string) => {
@@ -672,194 +563,12 @@ export function MembersView({ initial }: { initial: Member[] }) {
         onOpenChange={(o) => { if (!o) setSkillSheetMemberId(null); }}
       />
 
-      <ResponsiveDialog open={open} onOpenChange={setOpen}>
-        <ResponsiveDialogContent>
-          <ResponsiveDialogHeader>
-            <ResponsiveDialogTitle>{editing ? "Editar membro" : "Adicionar membro"}</ResponsiveDialogTitle>
-            {!editing && (
-              <p className="text-xs text-muted-foreground">
-                A senha sera definida agora. Compartilhe com o membro fora do sistema (Slack, etc).
-              </p>
-            )}
-          </ResponsiveDialogHeader>
-          <ResponsiveDialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Nome</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div className="grid gap-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                disabled={!!editing}
-              />
-              {editing && (
-                <p className="text-[10px] text-muted-foreground">
-                  Email nao pode ser alterado depois da criacao.
-                </p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label>
-                Senha {editing && <span className="text-muted-foreground font-normal">(opcional — preencher so pra resetar)</span>}
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="font-mono"
-                  placeholder={editing ? "Deixe em branco pra manter a senha atual" : ""}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  title="Gerar senha"
-                  onClick={() => setForm({ ...form, password: generatePassword() })}
-                >
-                  <Wand2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  title="Copiar"
-                  disabled={!form.password}
-                  onClick={() => navigator.clipboard.writeText(form.password)}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="isExternal"
-                checked={form.isExternal}
-                onChange={(e) => setForm({ ...form, isExternal: e.target.checked })}
-                className="h-4 w-4 rounded border-input accent-orange-500"
-              />
-              <Label htmlFor="isExternal" className="cursor-pointer">
-                Membro externo <span className="text-muted-foreground font-normal">(cedido por outra empresa, ex: Extreme Group)</span>
-              </Label>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Cargo</Label>
-                <Select
-                  value={form.position}
-                  onValueChange={(v) =>
-                    v &&
-                    setForm({
-                      ...form,
-                      position: v,
-                      // Auto-suggest accessLevel from cargo, but only when the
-                      // admin hasn't picked a non-derived value yet (i.e., it
-                      // still matches the prior position's mapping).
-                      accessLevel:
-                        form.accessLevel ===
-                        mapPositionToAccessLevel(form.position)
-                          ? mapPositionToAccessLevel(v)
-                          : form.accessLevel,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue>
-                      {(value: string | null) => positionLabel(value)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {POSITIONS.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {POSITION_LABELS[p]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Nível de acesso</Label>
-                <Select
-                  value={form.accessLevel}
-                  onValueChange={(v) =>
-                    v && setForm({ ...form, accessLevel: v as AccessLevel })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue>
-                      {(value: string | null) =>
-                        value ? ACCESS_LEVEL_LABELS[value as AccessLevel] : "—"
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MEMBER_ACCESS_LEVELS.map((al) => (
-                      <SelectItem key={al} value={al}>
-                        {ACCESS_LEVEL_LABELS[al]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground">
-              Cargo é o título do membro; nível de acesso controla o que ele pode
-              fazer na plataforma. Por padrão sugerimos um nível baseado no
-              cargo, mas você pode promover (ex: dar admin a um Principal Engineer).
-            </p>
-            <div className="grid gap-2">
-              <Label>Especialidade declarada <span className="text-muted-foreground font-normal text-[10px]">(legacy — preenchido no onboarding)</span></Label>
-              <Select value={form.specialty} onValueChange={(v) => v && setForm({ ...form, specialty: v })}>
-                <SelectTrigger>
-                  <SelectValue>
-                    {(value: string | null) => specialtyLabel(value)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {SPECIALTIES.map((s) => (
-                    <SelectItem key={s} value={s}>{SPECIALTY_LABELS[s]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>GitHub Username</Label>
-                <Input value={form.githubUsername} onChange={(e) => setForm({ ...form, githubUsername: e.target.value })} />
-              </div>
-              <div className="grid gap-2">
-                <Label>PFV Capacity por Sprint</Label>
-                <Input
-                  type="number"
-                  value={form.fpCapacity}
-                  onChange={(e) => setForm({ ...form, fpCapacity: e.target.value })}
-                />
-              </div>
-            </div>
-            {saveError && (
-              <p className="text-xs text-destructive">{saveError}</p>
-            )}
-          </ResponsiveDialogBody>
-          <ResponsiveDialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button
-              onClick={save}
-              disabled={
-                saving ||
-                !form.name ||
-                !form.email ||
-                (!editing && form.password.length < 6)
-              }
-            >
-              {saving ? "Salvando..." : editing ? "Salvar" : "Criar membro"}
-            </Button>
-          </ResponsiveDialogFooter>
-        </ResponsiveDialogContent>
-      </ResponsiveDialog>
+      <MemberEditSheet
+        open={open}
+        onOpenChange={setOpen}
+        member={editing}
+        onSaved={reload}
+      />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       </div>
