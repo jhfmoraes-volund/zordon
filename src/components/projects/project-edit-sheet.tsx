@@ -105,12 +105,13 @@ const EMPTY_FORM = {
   githubRepoName: "",
   githubDefaultBranch: "main",
   driveFolder: "",
-  memberIds: [] as string[],
 };
 
 /**
  * Editor único de projeto (criar + editar). Side sheet no desktop, bottom no
- * mobile. Sincroniza membros por delta — preserva `fpAllocation` dos que ficam.
+ * mobile. A equipe é READ-ONLY (F2.9): roster é derivado das alocações de
+ * contrato (`finance.labor_allocation` → `v_project_team`), escrito só no app
+ * Finanças (admin). O sheet não escreve mais `ProjectMember`.
  */
 function formFromProject(project: ProjectEditInitial | null): typeof EMPTY_FORM {
   if (!project) return EMPTY_FORM;
@@ -130,7 +131,6 @@ function formFromProject(project: ProjectEditInitial | null): typeof EMPTY_FORM 
     githubRepoName: project.githubRepoName ?? "",
     githubDefaultBranch: project.githubDefaultBranch ?? "main",
     driveFolder: project.driveFolderId ?? "",
-    memberIds: project.memberIds,
   };
 }
 
@@ -138,6 +138,11 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
   const { member } = useAuth();
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [members, setMembers] = useState<MemberOption[]>([]);
+  // Equipe derivada (read-only) — roster canônico via /api/projects/[id]/members
+  // (getProjectTeam → v_project_team). Só na edição; criação ainda não tem roster.
+  const [team, setTeam] = useState<
+    { id: string; name: string | null; role: string | null }[]
+  >([]);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   // Editar: datas/engajamento são read-through do contrato (D2). Saber se há
@@ -153,6 +158,7 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
     setPrevFormKey(formKey);
     setForm(formFromProject(project));
     setHasContract(false); // reabre limpo; o effect reconfirma na edição
+    setTeam([]); // equipe derivada recarrega no effect quando há projeto
   }
 
   // Carrega clientes/membros (sistema externo) quando abre.
@@ -183,6 +189,21 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
     };
   }, [open, project]);
 
+  // Editar: carrega a equipe derivada (read-only) da fonte canônica.
+  useEffect(() => {
+    if (!open || !project) return; // reset acontece no bloco de render acima
+    let alive = true;
+    fetchOrThrow(`/api/projects/${project.id}/members`)
+      .then((r) => r.json())
+      .then((rows: { id: string; name: string | null; role: string | null }[]) => {
+        if (alive) setTeam(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [open, project]);
+
   /** Preset de kind (só criação): define category/phase e, p/ interno, cliente Volund. */
   function applyKind(kind: ProjectKind) {
     const preset = KIND_PRESET[kind];
@@ -193,15 +214,6 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
       category: preset.category,
       phase: preset.phase,
       clientId: kind === "internal" ? volundId : f.clientId === volundId ? "" : f.clientId,
-    }));
-  }
-
-  function toggleMember(memberId: string) {
-    setForm((f) => ({
-      ...f,
-      memberIds: f.memberIds.includes(memberId)
-        ? f.memberIds.filter((m) => m !== memberId)
-        : [...f.memberIds, memberId],
     }));
   }
 
@@ -268,33 +280,8 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
         projectId = data.id;
       }
 
-      // Sync de membros por delta — preserva fpAllocation dos que permanecem.
-      const { data: existing } = await supabase
-        .from("ProjectMember")
-        .select("memberId")
-        .eq("projectId", projectId);
-      const existingIds = new Set((existing ?? []).map((m) => m.memberId));
-      const nextIds = new Set(form.memberIds);
-      const toRemove = [...existingIds].filter((m) => !nextIds.has(m));
-      const toAdd = [...nextIds].filter((m) => !existingIds.has(m));
-
-      if (toRemove.length > 0) {
-        await supabase
-          .from("ProjectMember")
-          .delete()
-          .eq("projectId", projectId)
-          .in("memberId", toRemove);
-      }
-      if (toAdd.length > 0) {
-        await supabase.from("ProjectMember").insert(
-          toAdd.map((memberId) => ({
-            id: crypto.randomUUID(),
-            projectId,
-            memberId,
-            fpAllocation: 0,
-          })),
-        );
-      }
+      // Equipe NÃO é escrita aqui (F2.9): roster = alocações de contrato
+      // (admin, app Finanças). O sheet não toca mais ProjectMember.
 
       // Kind proposal/contracted (só criação): cria o contrato junto (verdade
       // comercial, D1/D4). Interno não tem contrato. Datas/engajamento do form
@@ -328,7 +315,6 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
   }
 
   const pmEligible = members.filter((m) => isPmEligible(m.position));
-  const allocatable = members.filter((m) => !isPmEligible(m.position));
 
   return (
     <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
@@ -429,28 +415,33 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
               </Field.Control>
             </Field>
 
-            <Field name="project-members">
-              <Field.Label>Membros Alocados</Field.Label>
-              <Field.Hint>Clique para alocar/desalocar membros do projeto</Field.Hint>
-              <div className="flex min-h-[40px] flex-wrap gap-1.5 rounded-md border p-3">
-                {allocatable.map((m) => {
-                  const isSelected = form.memberIds.includes(m.id);
-                  return (
-                    <Badge
-                      key={m.id}
-                      variant={isSelected ? "default" : "outline"}
-                      className={`cursor-pointer text-xs transition-colors ${
-                        isSelected ? "" : "opacity-50 hover:opacity-80"
-                      }`}
-                      onClick={() => toggleMember(m.id)}
-                    >
-                      {m.name}
-                      <span className="ml-1 text-[10px]">{roleLabel(m.position)}</span>
-                    </Badge>
-                  );
-                })}
-                {allocatable.length === 0 && (
-                  <span className="text-xs text-muted-foreground">Nenhum membro cadastrado</span>
+            <Field name="project-team">
+              <Field.Label>Equipe (dos contratos)</Field.Label>
+              <Field.Hint>
+                Derivada das alocações de contrato (app Finanças). Read-only — não
+                edita aqui.
+              </Field.Hint>
+              <div className="flex min-h-[40px] flex-wrap gap-1.5 rounded-md border bg-muted/30 p-3">
+                {project ? (
+                  team.length > 0 ? (
+                    team.map((m) => (
+                      <Badge key={m.id} variant="outline" className="text-xs">
+                        {m.name ?? "—"}
+                        <span className="ml-1 text-[10px] text-muted-foreground">
+                          {roleLabel(m.role)}
+                        </span>
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Sem equipe alocada ainda — aloque no app Finanças.
+                    </span>
+                  )
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    A equipe é definida pelas alocações de contrato após criar o
+                    projeto.
+                  </span>
                 )}
               </div>
             </Field>
