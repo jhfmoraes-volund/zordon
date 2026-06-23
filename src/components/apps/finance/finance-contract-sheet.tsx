@@ -499,7 +499,7 @@ export function FinanceContractSheet({
           </Button>
           {contract?.status === "proposed" && (
             <Button variant="outline" onClick={winProposal} disabled={saving}>
-              🏆 Ganhar proposta
+              Ganhar proposta
             </Button>
           )}
           <Button onClick={saveContract} disabled={saving || !form.label.trim() || !form.from}>
@@ -759,7 +759,7 @@ function ContractTeamEditor({
               <Plus className="size-3.5" /> Membro
             </Button>
             <Button size="sm" variant="outline" onClick={openAddSpot}>
-              ⚡ Pontual
+              Pontual
             </Button>
           </div>
         )}
@@ -864,7 +864,7 @@ function ContractTeamEditor({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {a.memberName}
-                  {a.kind === "spot" && <span className="ml-1.5 text-[10px] text-amber-600">⚡ pontual</span>}
+                  {a.kind === "spot" && <span className="ml-1.5 text-[10px] text-amber-600">pontual</span>}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {a.kind === "spot" ? `${a.days}d` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}

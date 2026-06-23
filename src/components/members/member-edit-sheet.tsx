@@ -655,7 +655,7 @@ function MemberEditForm({
                       <div className="flex-1 min-w-0">
                         <FieldLabelSm>Projeto</FieldLabelSm>
                         <Select
-                          value={row.projectId || undefined}
+                          value={row.projectId || null}
                           onValueChange={(v) => {
                             if (!v) return;
                             updateRow(row.key, { projectId: v, contractId: "" });

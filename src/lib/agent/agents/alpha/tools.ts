@@ -401,9 +401,9 @@ export function assembleAlphaTools(
         isPM: boolean;
         isExternal: boolean | null;
         dedicationPercent: number | null;
-        source: "allocated" | "access";
       };
 
+      // Equipe = PM (gestor) + builders alocados (executores). Guest/viewer não entra.
       const members: Out[] = team
         .map((m) => ({
           memberId: m.memberId,
@@ -414,7 +414,6 @@ export function assembleAlphaTools(
           isPM: m.isPM,
           isExternal: m.isExternal,
           dedicationPercent: m.dedicationPercent,
-          source: m.source,
         }))
         .sort((a, b) => {
           if (a.isPM !== b.isPM) return a.isPM ? -1 : 1;

@@ -53,11 +53,11 @@ function DerivedDate({ value }: { value: string }) {
 
 const KIND_PRESET: Record<
   ProjectKind,
-  { label: string; icon: string; desc: string; category: string; phase: string }
+  { label: string; desc: string; category: string; phase: string }
 > = {
-  internal:   { label: "Interno",    icon: "🏠", desc: "Sem cliente externo, sem contrato.", category: "internal", phase: "ops" },
-  proposal:   { label: "Proposta",   icon: "📝", desc: "Comercial — cria contrato em proposta.", category: "billable", phase: "commercial" },
-  contracted: { label: "Contratado", icon: "🤝", desc: "Engajamento ativo — contrato ativo.", category: "billable", phase: "immersion" },
+  internal:   { label: "Interno",    desc: "Sem cliente externo, sem contrato.", category: "internal", phase: "ops" },
+  proposal:   { label: "Proposta",   desc: "Comercial — cria contrato em proposta.", category: "billable", phase: "commercial" },
+  contracted: { label: "Contratado", desc: "Engajamento ativo — contrato ativo.", category: "billable", phase: "immersion" },
 };
 
 /** Forma de entrada na edição. `null` em `project` → modo criação. */
@@ -343,7 +343,6 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                             : "hover:border-foreground/20"
                         }`}
                       >
-                        <span className="text-base leading-none">{p.icon}</span>
                         <span className="text-xs font-semibold">{p.label}</span>
                         <span className="text-[10px] leading-tight text-muted-foreground">{p.desc}</span>
                       </button>

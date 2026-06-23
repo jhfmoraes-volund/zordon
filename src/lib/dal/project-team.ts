@@ -5,22 +5,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { db } from "@/lib/db";
 
 /**
- * Roster canônico do projeto (F2.8 — convergência de alocação SSOT).
+ * Equipe canônica do projeto (`finance.v_project_team`).
  *
- * UMA fonte (`finance.v_project_team`) pros 3 readers que antes faziam UNIONs
- * divergentes: `api/projects/[id]/members`, vitoria `loadProjectMembers`, alpha
- * `get_allocated_project_members`. Roster = alocados (`labor_allocation` vigente,
- * incl. spot) ∪ acesso-only (`ProjectAccess` sem alocação: guests/viewers + PMs
- * backfilled). Squad NÃO entra (pool/contexto, não membership — D9).
+ * EQUIPE = PM (gestor, derivado de `Project.pmId`) + Builders (executores,
+ * `labor_allocation` vigente, incl. spot). Guest/viewer (`ProjectAccess` sem
+ * alocação) NÃO é membro — é só visibilidade, fora da equipe. Squad também não
+ * entra (pool/contexto — D9). Fonte única dos readers: `api/projects/[id]/members`,
+ * vitoria `loadProjectMembers`, alpha `get_allocated_project_members`, task sheets.
  *
- * `fpAllocation` (teto PFV de planning, vem de ProjectMember) ≠ `percent`/`days`
- * (custo, vem de labor_allocation) — D10, não fundir.
+ * `isPM` distingue gestor de executor. `fpAllocation` (teto PFV de planning, vem de
+ * ProjectMember) ≠ `percent`/`days` (custo, vem de labor_allocation) — D10, não fundir.
  */
 export type ProjectTeamMember = {
   projectId: string;
   memberId: string;
   userId: string | null;
-  source: "allocated" | "access";
   name: string | null;
   /** Member.role (cargo bruto). Pra display preferir `position ?? role`. */
   role: string | null;
@@ -28,20 +27,20 @@ export type ProjectTeamMember = {
   fpCapacity: number | null;
   dedicationPercent: number | null;
   isExternal: boolean | null;
+  /** true = PM (gestor); false = Builder (executor). */
   isPM: boolean;
   fpAllocation: number | null;
+  /** Alocação do builder (null no PM sem alocação própria). */
   kind: "standing" | "spot" | null;
   percent: number | null;
   days: number | null;
   contractId: string | null;
-  accessRole: string | null;
 };
 
 type Row = {
   project_id: string;
   member_id: string | null;
   user_id: string | null;
-  source: string;
   name: string | null;
   role: string | null;
   position: string | null;
@@ -54,7 +53,6 @@ type Row = {
   percent: number | string | null;
   days: number | string | null;
   contract_id: string | null;
-  access_role: string | null;
 };
 
 function mapRow(r: Row): ProjectTeamMember {
@@ -62,7 +60,6 @@ function mapRow(r: Row): ProjectTeamMember {
     projectId: r.project_id,
     memberId: r.member_id as string,
     userId: r.user_id,
-    source: r.source === "access" ? "access" : "allocated",
     name: r.name,
     role: r.role,
     position: r.position,
@@ -75,16 +72,15 @@ function mapRow(r: Row): ProjectTeamMember {
     percent: r.percent == null ? null : Number(r.percent),
     days: r.days == null ? null : Number(r.days),
     contractId: r.contract_id,
-    accessRole: r.access_role,
   };
 }
 
 /**
- * Roster de um projeto pela view canônica `finance.v_project_team`. Usa service-role
- * (a view tem escape `auth.uid() IS NULL` pra esse caso); os callers já fazem a
- * própria checagem de acesso (rotas via `requireMinLevelApi`; agentes são backend
- * confiável). Linhas de acesso sem `Member` resolvido (sem member_id) são
- * filtradas — não são membros de equipe.
+ * Equipe de um projeto pela view canônica `finance.v_project_team` (PM + builders
+ * alocados). Usa service-role (a view tem escape `auth.uid() IS NULL` pra esse caso);
+ * os callers fazem a própria checagem de acesso (rotas via `requireProjectViewApi`;
+ * agentes são backend confiável). `member_id` nunca é null aqui (PM e alocados sempre
+ * têm Member), mas o filtro fica como guarda defensiva.
  */
 export async function getProjectTeam(
   projectId: string,
