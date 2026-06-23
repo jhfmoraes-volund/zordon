@@ -1,6 +1,7 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { getProjectTeam } from "@/lib/dal/project-team";
 import { suggestFunctionPoints, OPEN_STATUSES } from "@/lib/function-points";
 import { TASK_STATUSES, TASK_TYPES, SCOPES, COMPLEXITIES } from "@/lib/task-constants";
 import { isOverdue } from "@/lib/date-utils";
@@ -380,25 +381,16 @@ export function assembleAlphaTools(
     execute: async ({ projectName }) => {
       const { data: project } = await supabase
         .from("Project")
-        .select("id, name, status, pmId, pm:Member!Project_pmId_fkey(id, name, role, position, fpCapacity)")
+        .select("id, name, status, pmId, pm:Member!Project_pmId_fkey(name)")
         .ilike("name", `%${projectName}%`)
         .limit(1)
         .maybeSingle();
 
       if (!project) return { error: `Projeto "${projectName}" não encontrado.` };
 
-      const { data: pmRows } = await supabase
-        .from("ProjectMember")
-        .select("memberId, fpAllocation, member:Member(id, name, role, position, fpCapacity, isExternal, dedicationPercent)")
-        .eq("projectId", project.id);
-
-      type Mb = { id: string; name: string; role: string; position: string | null; fpCapacity: number };
-      const pm = (project.pm as Mb | null) ?? null;
-      const explicitRows = (pmRows || []) as Array<{
-        memberId: string;
-        fpAllocation: number;
-        member: (Mb & { isExternal: boolean; dedicationPercent: number }) | null;
-      }>;
+      // Roster canônico (finance.v_project_team): alocados ∪ acesso-only; squad
+      // não entra (D9). Substitui o UNION antigo Project.pmId + ProjectMember.
+      const team = await getProjectTeam(project.id);
 
       type Out = {
         memberId: string;
@@ -409,69 +401,42 @@ export function assembleAlphaTools(
         isPM: boolean;
         isExternal: boolean | null;
         dedicationPercent: number | null;
-        source: "project_pm" | "project_member" | "both";
+        source: "allocated" | "access";
       };
 
-      const byId = new Map<string, Out>();
-
-      // 1) PM (Project.pmId)
-      if (pm) {
-        byId.set(pm.id, {
-          memberId: pm.id,
-          name: pm.name,
-          role: pm.position ?? pm.role,
-          fpCapacity: pm.fpCapacity,
-          fpAllocation: null,
-          isPM: true,
-          isExternal: null,
-          dedicationPercent: null,
-          source: "project_pm",
+      const members: Out[] = team
+        .map((m) => ({
+          memberId: m.memberId,
+          name: m.name ?? "",
+          role: m.position ?? m.role ?? "",
+          fpCapacity: m.fpCapacity ?? 0,
+          fpAllocation: m.fpAllocation,
+          isPM: m.isPM,
+          isExternal: m.isExternal,
+          dedicationPercent: m.dedicationPercent,
+          source: m.source,
+        }))
+        .sort((a, b) => {
+          if (a.isPM !== b.isPM) return a.isPM ? -1 : 1;
+          return a.name.localeCompare(b.name);
         });
-      }
 
-      // 2) ProjectMembers — merge ou cria
-      for (const row of explicitRows) {
-        const m = row.member;
-        if (!m) continue;
-        const existing = byId.get(m.id);
-        if (existing) {
-          existing.fpAllocation = row.fpAllocation;
-          existing.isExternal = m.isExternal;
-          existing.dedicationPercent = m.dedicationPercent;
-          existing.source = "both";
-        } else {
-          byId.set(m.id, {
-            memberId: m.id,
-            name: m.name,
-            role: m.position ?? m.role,
-            fpCapacity: m.fpCapacity,
-            fpAllocation: row.fpAllocation,
-            isPM: false,
-            isExternal: m.isExternal,
-            dedicationPercent: m.dedicationPercent,
-            source: "project_member",
-          });
-        }
-      }
-
-      const members = Array.from(byId.values()).sort((a, b) => {
-        if (a.isPM !== b.isPM) return a.isPM ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-
-      const orphanPM = pm && !explicitRows.some((r) => r.memberId === pm.id);
+      const pmName = (project.pm as { name: string } | null)?.name ?? null;
+      const pmMissing = !!project.pmId && !members.some((m) => m.isPM);
 
       return {
         project: {
           id: project.id,
           name: project.name,
           status: project.status,
-          pmName: pm?.name ?? null,
+          pmName,
         },
         members,
         count: members.length,
-        ...(orphanPM
-          ? { warning: `PM ${pm.name} não está em ProjectMember (órfão). Tool usou UNION pra incluí-lo mesmo assim.` }
+        ...(pmMissing
+          ? {
+              warning: `PM ${pmName ?? ""} não está no roster (sem alocação nem ProjectAccess). Aloque/conceda acesso no app Finanças.`,
+            }
           : {}),
       };
     },

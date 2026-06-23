@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { addContextNote } from "@/lib/dal/planning";
 import { createCommentAs } from "@/lib/dal/task-comments";
+import { getProjectTeam } from "@/lib/dal/project-team";
 import {
   getNextSprintDefaults,
   mondayOf,
@@ -84,7 +85,7 @@ function validateCreatePayload(
  * `propose_tasks` pra validar `assigneeIds` em lote (D14: o piso é integridade —
  * assignee inexistente vira FK-fail no conclude; pegar cedo devolve erro por-linha
  * pro agente se corrigir). NÃO valida "está no squad do projeto": a calibração do
- * eval mostrou que membership vive fora de ProjectSquad (contribuidor de backfill
+ * eval mostrou que membership vive fora do squad (contribuidor de backfill
  * pode não estar no squad atual). O agente descobre os IDs válidos via
  * list_project_members; aqui só barramos ID que não é Member nenhum.
  */
@@ -128,67 +129,21 @@ type ProjectMemberRow = {
 };
 
 /**
- * Membros de um projeto, unindo as TRÊS fontes que coexistem no schema (dedup por
- * id, PM ganha do resto):
- *   1. `Project.pmId`            — o PM (pode NÃO ter linha em ProjectMember).
- *   2. `ProjectMember`           — contribuidores explícitos.
- *   3. `ProjectSquad→SquadMember`— squad linkada, quando existe.
- *
- * O join SÓ-squad anterior regredia metade da carteira (8/16 projetos sem
- * ProjectSquad) — incl. SILFAE, onde João (pmId) e Davi (ProjectMember) sumiam e
- * a Vitoria devolvia squad vazio no Release Planning. UNION é o piso correto;
- * espelha o que o Alpha já faz em get_allocated_project_members.
+ * Membros de um projeto pela fonte canônica `finance.v_project_team` (alocados ∪
+ * acesso-only; squad NÃO entra — D9). Substitui o UNION antigo de Project.pmId +
+ * ProjectMember + squad linkada. PMs/órfãos sem alocação seguem no
+ * roster via ProjectAccess (backfill F2.7), então a carteira não regride.
+ * Mesma fonte que o Alpha (get_allocated_project_members) e a rota /members.
  */
 async function loadProjectMembers(projectId: string): Promise<ProjectMemberRow[]> {
-  const supabase = db();
-  const byId = new Map<string, ProjectMemberRow>();
-
-  type MemberFields = {
-    id: string;
-    name: string;
-    fpCapacity: number;
-    dedicationPercent: number;
-  };
-
-  // 1) PM (Project.pmId) — fonte primária; frequentemente fora de ProjectMember.
-  const { data: project } = await supabase
-    .from("Project")
-    .select(
-      "pm:Member!Project_pmId_fkey(id, name, fpCapacity, dedicationPercent)",
-    )
-    .eq("id", projectId)
-    .maybeSingle();
-  const pm = (project?.pm ?? null) as MemberFields | null;
-  if (pm) byId.set(pm.id, { ...pm, isPM: true });
-
-  // 2) ProjectMember — contribuidores explícitos.
-  const { data: pmRows } = await supabase
-    .from("ProjectMember")
-    .select("member:Member(id, name, fpCapacity, dedicationPercent)")
-    .eq("projectId", projectId);
-  for (const row of (pmRows ?? []) as Array<{ member: MemberFields | null }>) {
-    if (row.member && !byId.has(row.member.id))
-      byId.set(row.member.id, { ...row.member, isPM: false });
-  }
-
-  // 3) Squad linkada (quando existe) — complementa, nunca substitui.
-  const { data: ps } = await supabase
-    .from("ProjectSquad")
-    .select("squadId")
-    .eq("projectId", projectId);
-  const squadIds = (ps ?? []).map((r) => r.squadId);
-  if (squadIds.length > 0) {
-    const { data: smRows } = await supabase
-      .from("SquadMember")
-      .select("member:Member(id, name, fpCapacity, dedicationPercent)")
-      .in("squadId", squadIds);
-    for (const row of (smRows ?? []) as Array<{ member: MemberFields | null }>) {
-      if (row.member && !byId.has(row.member.id))
-        byId.set(row.member.id, { ...row.member, isPM: false });
-    }
-  }
-
-  return Array.from(byId.values());
+  const team = await getProjectTeam(projectId);
+  return team.map((m) => ({
+    id: m.memberId,
+    name: m.name ?? "",
+    fpCapacity: m.fpCapacity ?? 0,
+    dedicationPercent: m.dedicationPercent ?? 0,
+    isPM: m.isPM,
+  }));
 }
 
 export function buildVitoriaTools(
@@ -1439,8 +1394,8 @@ export function buildVitoriaTools(
           .is("dismissedAt", null);
         if (tErr) return { ok: false, error: tErr.message };
 
-        // Members do projeto (PM + ProjectMembers + squad) — mesma fonte que
-        // list_project_members; só-squad regredia projetos sem ProjectSquad.
+        // Members do projeto — roster canônico (v_project_team), mesma fonte que
+        // list_project_members.
         const members = await loadProjectMembers(projectId);
 
         // PFV planejado por member
