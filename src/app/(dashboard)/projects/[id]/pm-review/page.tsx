@@ -139,10 +139,10 @@ export default function ProjectPMReviewPage({
         indicator: sprint ? shortName(sprint.name) : undefined,
         dateLabel: fmtDayMonth(w),
         kind: w === currentMonday ? "current" : w > currentMonday ? "future" : "past",
-        // logCount>0 = "tem review" (borda sólida); 0 = vazia (tracejada). Sinal
-        // visual = borda; a contagem de notes some do chip (irrelevante na régua).
-        logCount: review ? 1 : 0,
-        // Tooltip limpo (sem o "N logs" legado): sprint · semana · status da review.
+        // Chips uniformes: o único sinal é o dot verde. `silent` = sem review (sem
+        // dot). Sem contagem de notes/logs no chip (irrelevante na régua).
+        silent: !review,
+        // Tooltip limpo: sprint · semana · status da review.
         title: [
           sprint?.name,
           `Semana de ${fmtDayMonth(w)}`,

@@ -308,12 +308,12 @@ export function Cronograma({
         {visible.map((nb) => {
           const isSelected = selectedKey === nb.key;
           // `tone` explícito (Finanças/delivery) ⇒ cor é o sinal, renderiza colorido.
-          // Sem tone (modo atividade: PM Review/semanas) ⇒ chip NEUTRO; a cor fica
-          // reservada ao indicador da semana atual + à barra de seleção (idioma quieto).
+          // Sem tone (modo atividade: PM Review/semanas) ⇒ chips UNIFORMES; o único
+          // sinal é um dot verde quando a célula tem atividade (`!silent`). Seleção =
+          // underline de acento (sem halo neon).
           const explicit = !!nb.tone;
           const tone = nb.tone ?? activityTone(nb.state);
-          const empty = !explicit && (nb.silent || nb.state === "future"); // sem atividade → tracejado
-          const isCurrent = !explicit && nb.state === "current";
+          const activeDot = !explicit && !nb.silent;
           return (
             <span
               key={nb.key}
@@ -328,27 +328,19 @@ export function Cronograma({
                 title={nb.title}
                 className={cn(
                   "relative flex h-[30px] min-w-[58px] items-center gap-1.5 rounded-[7px] border pl-1.5 pr-2.5 font-mono tabular-nums transition-colors",
-                  explicit
-                    ? cn(tone.border, tone.band)
-                    : empty
-                      ? "border-dashed border-muted-foreground/30 bg-transparent"
-                      : "border-border bg-transparent",
-                  !explicit && nb.state === "future" && "opacity-60",
+                  explicit ? cn(tone.border, tone.band) : "border-border bg-transparent",
                   isSelected && (explicit ? "bg-foreground/[0.04]" : "bg-foreground/[0.06]"),
                   interactive && "cursor-pointer hover:bg-foreground/[0.05]",
                 )}
               >
+                {activeDot && (
+                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+                )}
                 {nb.indicator != null && (
                   <span
                     className={cn(
                       "grid size-[18px] shrink-0 place-items-center rounded-[4px] text-[10px] font-bold",
-                      explicit
-                        ? cn(tone.band, tone.text)
-                        : isCurrent
-                          ? "text-primary"
-                          : empty
-                            ? "text-muted-foreground"
-                            : "text-foreground/80",
+                      explicit ? cn(tone.band, tone.text) : "text-foreground/80",
                     )}
                   >
                     {nb.indicator}
@@ -362,7 +354,6 @@ export function Cronograma({
                     {nb.value}
                   </span>
                 )}
-                {/* Seleção = underline de acento (sem halo neon). */}
                 {isSelected && (
                   <span
                     aria-hidden
