@@ -1,4 +1,4 @@
-# RUNBOOK — Finance Billing · RB2 Superfície (B2 read + B3 write)
+# RUNBOOK — Finance Billing · RB2 Superfície (hub no canvas + sheets focados)
 
 > 2º de 3 ([RB1 schema](finance-contract-billing-rb1-schema.md) · RB2 superfície · [RB3 automação](finance-contract-billing-rb3-automation.md)).
 > Plano: [contract-billing-and-agent-fill-plan.md](../features/finance/contract-billing-and-agent-fill-plan.md). Mock fiel (a UI alvo): [contract-canvas-sandbox.html](../features/finance/mockups/contract-canvas-sandbox.html) (V2 Dashboard).
@@ -22,7 +22,7 @@
 
 ### Fase 2.1 — Detalhe migra pro canvas (de modal → janela)
 `FinanceApp`: selecionar projeto **renderiza a view de detalhe na janela do `AppDesktop`** (não abre o `FinanceProjectSheet` modal). Extrair o corpo do `FinanceProjectSheet` num `FinanceProjectView` montado no canvas (remontado por `key={projectId}`). Manter fetch de `getProjectDetail`. Passar **`windowSubtitle` dinâmico = nome do projeto** (o host hardcoda `'Overview'` em `overview-apps-desktop.tsx:58`).
-**Verify:** abre no canvas (não modal); responsivo (dock vira barra no mobile); título da janela = projeto; dados reais.
+**Verify:** abre no canvas (não modal); responsivo (dock vira barra no mobile); subtítulo da janela = nome do projeto (não o `'Overview'` hardcoded); dados reais.
 
 ### Fase 2.2 — Segmentado de escopo substitui o dropdown
 Trocar o `<Select>` de escopo por segmentado `Global · <contratos> · +` (re-escopa `getProjectDetail` pela vigência, igual `selectScope` faz hoje). `+` abre o sheet de contrato novo.
@@ -41,7 +41,7 @@ Trocar o `<Select>` de escopo por segmentado `Global · <contratos> · +` (re-es
 ### Fase 2.5 — Widget **Notas Fiscais** (read)
 Tira de meses (status dot 🟢 recebido / 🟠 ação / ⚪ bloqueado-futuro) + 3 passos por mês (**Condição → NF emitida → Recebido** — copy "NF emitida", NUNCA "Faturado", §6 do plano), lendo `invoice` (RB1 Fase 1.4) por contrato. Header rollup `recebido / total`.
 - **Aging:** `issued && !received && due_at < hoje` = vencido (o output mais valioso).
-- **Indicador soft** (visibilidade, não constraint): Σ(invoice.amount do mês) vs `v_contract_revenue_month` do (project,month) — divergência é esperada por design (D9), só sinalizar.
+- **Indicador soft** (visibilidade, não constraint): Σ(invoice.amount do mês) vs `v_contract_revenue_month` do (project,month) — divergência é esperada por design (D9 do plano §6), só sinalizar.
 - **`cancelled` fica FORA** dos rollups billed/received.
 **Verify:** Contrato 1 (recebido) × Contrato 2 (gates variados) refletem `invoice` real; mês vencido aparece; NF cancelada some do rollup.
 
@@ -69,7 +69,7 @@ O épico decidiu isso e é **segurança** — não pode sumir silenciosamente. M
 - Aditivo **não-billable** (Slice 2) muda custo/equipe mas **não** entra em `v_contract_revenue_month` — conferir que a UI não soma na receita.
 
 ## 4. COMMIT (cadência 2–3 fases)
-- `bash scripts/sync-main.sh`. Commit A = 2.1–2.4 (read no canvas); B = 2.5 (NF read); C = 2.6–2.8 (sheets write + limpeza).
+- `bash scripts/sync-main.sh`. Commit A = 2.1–2.4 (read no canvas); B = 2.5 (NF read); C = 2.6–2.8 (sheets write + limpeza). **D = 2.9 (Batch B)** só após o Q3 e separado (segurança).
 - **Smoke browser aprovado pelo dono** antes de fechar cada bloco (Q5).
 
 ## 5. REFERÊNCIAS

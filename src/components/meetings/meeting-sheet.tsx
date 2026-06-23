@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetBody,
+  ResponsiveSheetFooter,
+} from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { showErrorToast, fetchOrThrow } from "@/lib/optimistic/toast";
 import { Plus, X, Download, Lock } from "lucide-react";
@@ -66,7 +72,6 @@ export function MeetingSheet({
   defaultVisibility,
   onSaved,
 }: Props) {
-  const isMobile = useIsMobile();
   const { member: currentMember } = useAuth();
   const [saving, setSaving] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -248,28 +253,15 @@ export function MeetingSheet({
   const isLegacyKind = mode === "edit" && LEGACY_KIND_LABELS[kind] !== undefined;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={isMobile ? "bottom" : "right"}
-        className={
-          isMobile
-            ? "h-[90dvh] max-h-[90dvh] gap-0 rounded-t-xl p-0 flex flex-col"
-            : "w-full sm:max-w-xl gap-0 p-0 flex flex-col"
-        }
-      >
-        {isMobile && (
-          <div
-            aria-hidden="true"
-            className="absolute top-2 left-1/2 -translate-x-1/2 h-1.5 w-12 rounded-full bg-muted z-10"
-          />
-        )}
-        <div className="shrink-0 border-b px-6 pt-6 pb-4">
-          <h2 className="font-heading text-base font-medium">
+    <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+      <ResponsiveSheetContent size="md">
+        <ResponsiveSheetHeader>
+          <ResponsiveSheetTitle className="font-heading text-base font-medium">
             {mode === "create" ? "Nova Reunião" : "Editar Reunião"}
-          </h2>
-        </div>
+          </ResponsiveSheetTitle>
+        </ResponsiveSheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <ResponsiveSheetBody className="space-y-4">
           {/* Visibilidade */}
           <div className="grid gap-2">
             <Label>
@@ -493,9 +485,9 @@ export function MeetingSheet({
               rows={3}
             />
           </div>
-        </div>
+        </ResponsiveSheetBody>
 
-        <div className="shrink-0 sticky bottom-0 border-t bg-popover px-6 py-3 pb-safe flex flex-wrap items-center justify-end gap-2">
+        <ResponsiveSheetFooter className="flex-wrap sm:items-center">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
@@ -523,7 +515,7 @@ export function MeetingSheet({
                 ? "Criar reunião"
                 : "Salvar"}
           </Button>
-        </div>
+        </ResponsiveSheetFooter>
 
         {mode === "create" && (
           <ImportMeetingModal
@@ -536,7 +528,7 @@ export function MeetingSheet({
             projectIds={Array.from(projectIds)}
           />
         )}
-      </SheetContent>
-    </Sheet>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }

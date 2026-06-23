@@ -17,6 +17,10 @@ import type {
   ContractInput,
   ContractMonthOverride,
   ContractMonthOverrideInput,
+  ContractClause,
+  ContractClauseInput,
+  Invoice,
+  InvoiceInput,
   Entry,
   Dre,
   EntryInput,
@@ -397,6 +401,7 @@ function allocRow(input: AllocationInput, createdBy: string | null) {
     effective_from: input.effectiveFrom,
     effective_to: input.effectiveTo ?? null,
     note: input.note ?? null,
+    contract_id: input.contractId ?? null,
     created_by: createdBy,
   };
 }
@@ -599,6 +604,9 @@ function mapContract(r: Record<string, unknown>): Contract {
     contractedFp: num(r.contracted_fp),
     contractedSprints: num(r.contracted_sprints),
     note: (r.note as string | null) ?? null,
+    warranty: (r.warranty as string | null) ?? null,
+    proposalRef: (r.proposal_ref as string | null) ?? null,
+    provenance: (r.provenance as Record<string, unknown>) ?? {},
   };
 }
 
@@ -647,6 +655,8 @@ function toContractRow(input: ContractInput) {
     contracted_fp: input.contractedFp ?? null,
     contracted_sprints: input.contractedSprints ?? null,
     note: input.note ?? null,
+    warranty: input.warranty ?? null,
+    proposal_ref: input.proposalRef ?? null,
   };
 }
 
@@ -819,7 +829,7 @@ export async function getProjectDetail(
   const { sb, fin } = await finance();
   const { from, to } = monthBounds(fromMonth, toMonth);
 
-  const [monthsRes, laborRes, nameRes, allocations, squad, eff, sprintRes, contracts, fpRes] =
+  const [monthsRes, laborRes, nameRes, allocations, squad, eff, sprintRes, contracts, fpRes, clauses, invoices] =
     await Promise.all([
     fin
       .from("v_project_month")
@@ -850,6 +860,8 @@ export async function getProjectDetail(
       .eq("project_id", projectId)
       .gte("month", from)
       .lte("month", to),
+    listClausesByProject(projectId),
+    listInvoices({ projectId }),
   ]);
   if (monthsRes.error) throw new Error(monthsRes.error.message);
   if (laborRes.error) throw new Error(laborRes.error.message);
@@ -933,6 +945,8 @@ export async function getProjectDetail(
     sprintCount: sprints.length,
     engagementType: (nameRes.data?.engagementType as string | null) ?? null,
     contracts,
+    clauses,
+    invoices,
     fpDeliveredTotal: fpRows.reduce((s, r) => s + Number(r.fp_delivered), 0),
     fpRevenueCents: fpRows.reduce((s, r) => s + Number(r.revenue_cents), 0),
     overheadCents,
@@ -940,4 +954,172 @@ export async function getProjectDetail(
     assumptions: a,
     assumptionsIsOverride: eff.isOverride,
   };
+}
+
+// ─── Cláusulas do contrato (1-N) ────────────────────────────────────────────
+
+function mapClause(r: Record<string, unknown>): ContractClause {
+  return {
+    id: String(r.id),
+    contractId: String(r.contract_id),
+    kind: (r.kind as ContractClause["kind"]) ?? "other",
+    text: String(r.text),
+    sort: Number(r.sort ?? 0),
+    source: (r.source as string) ?? "manual",
+  };
+}
+
+export async function listClauses(contractId: string): Promise<ContractClause[]> {
+  const { fin } = await finance();
+  const res = await fin
+    .from("contract_clause")
+    .select("*")
+    .eq("contract_id", contractId)
+    .order("sort", { ascending: true });
+  if (res.error) throw new Error(res.error.message);
+  return ((res.data ?? []) as Record<string, unknown>[]).map(mapClause);
+}
+
+/** Todas as cláusulas dos contratos de um projeto (1 query; agrupar por contractId na UI). */
+export async function listClausesByProject(projectId: string): Promise<ContractClause[]> {
+  const { fin } = await finance();
+  const cs = await fin.from("contract").select("id").eq("project_id", projectId);
+  const ids = ((cs.data ?? []) as { id: string }[]).map((c) => c.id);
+  if (!ids.length) return [];
+  const res = await fin
+    .from("contract_clause")
+    .select("*")
+    .in("contract_id", ids)
+    .order("sort", { ascending: true });
+  if (res.error) throw new Error(res.error.message);
+  return ((res.data ?? []) as Record<string, unknown>[]).map(mapClause);
+}
+
+export async function createClause(input: ContractClauseInput): Promise<ContractClause> {
+  if (!input.text?.trim()) throw new Error("Cláusula precisa de texto");
+  const { fin } = await finance();
+  const res = await fin
+    .from("contract_clause")
+    .insert({
+      contract_id: input.contractId,
+      kind: input.kind ?? "other",
+      text: input.text.trim(),
+      sort: input.sort ?? 0,
+      source: "manual",
+    })
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return mapClause(res.data);
+}
+
+export async function updateClause(
+  id: string,
+  changes: Partial<Pick<ContractClauseInput, "kind" | "text" | "sort">>,
+): Promise<ContractClause> {
+  const { fin } = await finance();
+  const row: Record<string, unknown> = {};
+  if (changes.kind !== undefined) row.kind = changes.kind;
+  if (changes.text !== undefined) row.text = changes.text.trim();
+  if (changes.sort !== undefined) row.sort = changes.sort;
+  const res = await fin.from("contract_clause").update(row).eq("id", id).select("*").single();
+  if (res.error) throw new Error(res.error.message);
+  return mapClause(res.data);
+}
+
+export async function deleteClause(id: string): Promise<void> {
+  const { fin } = await finance();
+  const res = await fin.from("contract_clause").delete().eq("id", id);
+  if (res.error) throw new Error(res.error.message);
+}
+
+// ─── Invoice / NF (cobrança operacional; Q4: NÃO toca receita) ──────────────
+
+function mapInvoice(r: Record<string, unknown>): Invoice {
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
+  return {
+    id: String(r.id),
+    contractId: String(r.contract_id),
+    competenceMonth: String(r.competence_month),
+    amountCents: Number(r.amount_cents),
+    receivedNetCents: num(r.received_net_cents),
+    number: str(r.number),
+    status: (r.status as Invoice["status"]) ?? "pending",
+    issuedAt: str(r.issued_at),
+    receivedAt: str(r.received_at),
+    dueAt: str(r.due_at),
+    conditionKind: (r.condition_kind as Invoice["conditionKind"]) ?? null,
+    conditionMet: Boolean(r.condition_met),
+    createdBy: str(r.created_by),
+    provenance: (r.provenance as Record<string, unknown>) ?? {},
+  };
+}
+
+export async function listInvoices(filter: {
+  contractId?: string;
+  projectId?: string;
+}): Promise<Invoice[]> {
+  const { fin } = await finance();
+  let q = fin.from("invoice").select("*").order("competence_month", { ascending: true });
+  if (filter.contractId) q = q.eq("contract_id", filter.contractId);
+  if (filter.projectId) {
+    const cs = await fin.from("contract").select("id").eq("project_id", filter.projectId);
+    const ids = ((cs.data ?? []) as { id: string }[]).map((c) => c.id);
+    if (!ids.length) return [];
+    q = q.in("contract_id", ids);
+  }
+  const res = await q;
+  if (res.error) throw new Error(res.error.message);
+  return ((res.data ?? []) as Record<string, unknown>[]).map(mapInvoice);
+}
+
+/** Linha do banco a partir de campos presentes (PATCH-safe; mês normalizado p/ 1º dia). */
+function invoiceRow(input: Partial<InvoiceInput>) {
+  const month = input.competenceMonth ? `${input.competenceMonth.slice(0, 7)}-01` : undefined;
+  const row: Record<string, unknown> = {};
+  if (input.contractId !== undefined) row.contract_id = input.contractId;
+  if (month !== undefined) row.competence_month = month;
+  if (input.amountCents !== undefined) row.amount_cents = input.amountCents;
+  if (input.receivedNetCents !== undefined) row.received_net_cents = input.receivedNetCents;
+  if (input.number !== undefined) row.number = input.number;
+  if (input.status !== undefined) row.status = input.status;
+  if (input.issuedAt !== undefined) row.issued_at = input.issuedAt;
+  if (input.receivedAt !== undefined) row.received_at = input.receivedAt;
+  if (input.dueAt !== undefined) row.due_at = input.dueAt;
+  if (input.conditionKind !== undefined) row.condition_kind = input.conditionKind;
+  if (input.conditionMet !== undefined) row.condition_met = input.conditionMet;
+  return row;
+}
+
+export async function createInvoice(input: InvoiceInput): Promise<Invoice> {
+  if (!input.contractId) throw new Error("NF precisa de contrato");
+  if (!input.competenceMonth) throw new Error("NF precisa de mês de competência");
+  if (!(input.amountCents >= 0)) throw new Error("Valor da NF não pode ser negativo");
+  const { fin } = await finance();
+  const res = await fin
+    .from("invoice")
+    .insert({ ...invoiceRow(input), created_by: await currentMemberId() })
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return mapInvoice(res.data);
+}
+
+export async function updateInvoice(id: string, changes: Partial<InvoiceInput>): Promise<Invoice> {
+  const { fin } = await finance();
+  const res = await fin
+    .from("invoice")
+    .update({ ...invoiceRow(changes), updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return mapInvoice(res.data);
+}
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const { fin } = await finance();
+  const res = await fin.from("invoice").delete().eq("id", id);
+  if (res.error) throw new Error(res.error.message);
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetBody,
+} from "@/components/ui/responsive-sheet";
 import {
   CATEGORY_LABEL,
   SEVERITY_LABEL,
@@ -72,15 +73,12 @@ export function BriefingSheet({ open, onClose, allData }: Props) {
   const outItems = priorityItems.filter((i) => i.bucket === "out");
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent
-        side="right"
-        className="!max-w-5xl w-full sm:!max-w-5xl overflow-y-auto p-6"
-      >
-        <SheetHeader className="px-0">
-          <SheetTitle>Briefing Consolidado</SheetTitle>
-        </SheetHeader>
-        <div className="space-y-6 text-sm pt-2">
+    <ResponsiveSheet open={open} onOpenChange={(next) => !next && onClose()}>
+      <ResponsiveSheetContent size="xl">
+        <ResponsiveSheetHeader>
+          <ResponsiveSheetTitle>Briefing Consolidado</ResponsiveSheetTitle>
+        </ResponsiveSheetHeader>
+        <ResponsiveSheetBody className="space-y-6 text-sm">
           <section>
             <h3 className="font-semibold mb-2">1. Visao do Produto</h3>
             <div className="space-y-1 pl-4">
@@ -379,8 +377,8 @@ export function BriefingSheet({ open, onClose, allData }: Props) {
               </div>
             </section>
           )}
-        </div>
-      </SheetContent>
-    </Sheet>
+        </ResponsiveSheetBody>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }

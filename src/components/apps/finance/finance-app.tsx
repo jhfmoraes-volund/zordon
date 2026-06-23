@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 import { FinanceAssumptionsForm } from "./finance-assumptions-form";
 import { FinanceCategorySheet } from "./finance-category-sheet";
 import { FinanceEntryForm } from "./finance-entry-form";
-import { FinanceProjectSheet } from "./finance-project-sheet";
+import { FinanceProjectView } from "./finance-project-view";
 
 type NamedRef = { id: string; name: string };
 
@@ -89,7 +89,12 @@ async function fetchFinance(yr: number): Promise<FinanceData> {
   };
 }
 
-export function FinanceApp() {
+export function FinanceApp({
+  onSelectedProjectChange,
+}: {
+  /** Reporta o projeto aberto pro host (vira o subtítulo da janela do canvas). */
+  onSelectedProjectChange?: (name: string | null) => void;
+} = {}) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [data, setData] = useState<FinanceData | null>(null);
@@ -100,9 +105,28 @@ export function FinanceApp() {
   const [members, setMembers] = useState<MemberRef[]>([]);
 
   const [drill, setDrill] = useState<CategoryTotal | null>(null);
-  const [projectDrill, setProjectDrill] = useState<ProjectFinanceRow | null>(null);
+  // Projeto aberto no hub (canvas) — substitui o antigo modal de drill.
+  const [selected, setSelected] = useState<{ id: string; name: string } | null>(null);
   const [appForm, setAppForm] = useState<{ kind: FinanceKind; key: number } | null>(null);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+
+  // Ao desmontar (app fechado), zera o subtítulo da janela — senão "Overview"
+  // fica preso no nome de um projeto que não está mais aberto.
+  useEffect(() => {
+    return () => onSelectedProjectChange?.(null);
+  }, [onSelectedProjectChange]);
+
+  const openProject = useCallback(
+    (p: { id: string; name: string }) => {
+      setSelected(p);
+      onSelectedProjectChange?.(p.name);
+    },
+    [onSelectedProjectChange],
+  );
+  const backToOverview = useCallback(() => {
+    setSelected(null);
+    onSelectedProjectChange?.(null);
+  }, [onSelectedProjectChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +195,22 @@ export function FinanceApp() {
 
   const loading = data === null;
   const hasData = (data?.months.length ?? 0) > 0;
+
+  // Projeto aberto → o hub financeiro toma a janela inteira do canvas (read).
+  // Remontado por `key` pra resetar escopo/fetch ao trocar de projeto.
+  if (selected) {
+    return (
+      <FinanceProjectView
+        key={selected.id}
+        projectId={selected.id}
+        projectName={selected.name}
+        year={year}
+        members={members}
+        onChanged={reload}
+        onBack={backToOverview}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -354,7 +394,7 @@ export function FinanceApp() {
                     </span>
                   }
                   meta={brlFromCents(p.marginTeamCents)}
-                  onOpen={() => setProjectDrill(p)}
+                  onOpen={() => openProject({ id: p.projectId, name: p.name })}
                 />
               );
             })}
@@ -401,20 +441,6 @@ export function FinanceApp() {
           projects={projects}
           members={members}
           onSaved={reload}
-        />
-      )}
-      {projectDrill && (
-        <FinanceProjectSheet
-          key={projectDrill.projectId}
-          open
-          onOpenChange={(o) => {
-            if (!o) setProjectDrill(null);
-          }}
-          projectId={projectDrill.projectId}
-          projectName={projectDrill.name}
-          year={year}
-          members={members}
-          onChanged={reload}
         />
       )}
       {assumptionsOpen && (

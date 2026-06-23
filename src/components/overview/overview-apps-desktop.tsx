@@ -6,7 +6,7 @@
  * próprias (org-level). openAppKey sincroniza com ?app= na URL.
  */
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AppDesktop } from "@/components/apps/app-desktop";
@@ -24,6 +24,8 @@ export function OverviewAppsDesktop({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const openAppKey = searchParams.get("app");
+  // Subtítulo da janela = projeto aberto no Finanças (reportado pelo FinanceApp).
+  const [financeProject, setFinanceProject] = useState<string | null>(null);
 
   const apps = OVERVIEW_APP_REGISTRY.filter(
     (a) => !a.minAccessLevel || hasMinAccessLevel(accessLevel, a.minAccessLevel),
@@ -43,7 +45,7 @@ export function OverviewAppsDesktop({
   function renderSurface(app: AppDef) {
     switch (app.key) {
       case "finance":
-        return <FinanceApp />;
+        return <FinanceApp onSelectedProjectChange={setFinanceProject} />;
       default:
         return null;
     }
@@ -55,7 +57,7 @@ export function OverviewAppsDesktop({
       openAppKey={openAppKey}
       onOpenAppKeyChange={onOpenAppKeyChange}
       renderSurface={renderSurface}
-      windowSubtitle="Overview"
+      windowSubtitle={financeProject ?? "Overview"}
     />
   );
 }

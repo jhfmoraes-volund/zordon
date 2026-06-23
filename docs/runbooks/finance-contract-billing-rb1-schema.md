@@ -9,8 +9,8 @@
 - **Toda migration via `psql`** (regra do repo): `source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql "$DIRECT_URL" -f supabase/migrations/<arquivo>.sql`. Nunca Dashboard.
 - **psql ANTES/junto do push, nunca depois.** `sync-main.sh` empurra pra prod+staging por default e o Cloud Build auto-deploya; se o código subir antes do schema, os endpoints novos dão 500 (e `tsc` **não pega** — finance é cast `.schema("finance")` sem tipo). Aplicar via psql em **prod E staging** antes de (ou na mesma operação que) o push. Toda fase aditiva tem **down-migration idempotente** (`drop … if exists`).
 - **1 migration atômica por arquivo** (1 CREATE TABLE ou 1 ALTER coeso). Exceção deliberada: a Slice 2 (swap do override) é **uma transação** que troca tabela+view+consumidores junta (ver §3).
-- **Dry-run obrigatório** (`BEGIN; … ROLLBACK;`) em toda migration que **recria view** ou **migra dado** (só a Slice 2). E o dry-run tem que ser **seedado** (ver §3) — baseline em banco vazio prova `0==0`.
-- **`src/lib/finance/types.ts` é hand-authored** (finance fora de `database.types.ts`). Atualizar **na mesma fase**. Verify de tabela = `\d` + RLS smoke + (Slice 1.5) curl/psql; **tsc não substitui** o smoke pra finance.
+- **Dry-run obrigatório** (`BEGIN; … ROLLBACK;`) na Slice 2 (recria view + migra dado). **Baseline = receita HITz REAL viva** (`v_contract_revenue_month` ≈ **R$345.465,64 / 4 meses** jun–set, squad R$86.366,41/mês — HITz já backfillado em `20260623j/k`) **+ seed sintético** de overrides (replace/add/non-billable) pra exercitar a lógica nova (comparar só o que já existe não cobre os caminhos de override).
+- **`src/lib/finance/types.ts` é hand-authored** (finance fora de `database.types.ts`). Atualizar **na mesma fase**. Verify de tabela = `\d` + RLS smoke + (Fase 1.5) curl/psql; **tsc não substitui** o smoke pra finance.
 - **RLS admin-only** em toda tabela nova: `enable row level security` + `create policy admin_all … for all to authenticated using (is_admin()) with check (is_admin())` + `grant`. (O período legível por viewer = Slice 3/Batch B, gated — não aqui.)
 - **Q4/D9:** `invoice` é **só operacional** — **NÃO** entra em view de receita. O motor de receita só muda na Slice 2 (override billable), com baseline seedado provado.
 - **Procedência:** `provenance jsonb not null default '{}'` onde há agent-fill; PATCH faz **deep-merge** (`provenance || jsonb_build_object(...)`, nunca substitui o mapa); sticky em 1 SQL com `WHERE` no source atual (plano §2 P1).
@@ -19,6 +19,8 @@
 - `finance.contract` — temporal (20260623d), gera receita (e), anti-overlap EXCLUDE (g), SSOT do período via trigger (h), `price_per_fp_cents` GENERATED (i).
 - `finance.contract_month_override` (20260623e) — `(contract_id, month, amount_cents, note)`, UNIQUE(contract,month), **alimenta `v_contract_revenue_month`**. Os **5 consumidores vivos**: `dal.ts` (~708-758), `/api/finance/contract-override/route.ts` + `[id]/route.ts`, `types.ts` (`ContractMonthOverride*`), `MonthOverrides` em `finance-contracts.tsx`. → só mexe na Slice 2.
 - `finance.labor_allocation` (20260622d) — sem `contract_id`. Dependentes de receita: `v_contract_revenue_month` → `v_project_month` → `v_org_month` (cadeia confirmada; labor views são **irmãs upstream**, não dependentes — não precisam recriação).
+- `finance.v_fp_delivery_month` (20260623c, **existe** — verificado no DB) = receita fixed_scope (fp × preço/FP); entra em `v_project_month`. A NF (operacional, Q4) **não** a substitui — não mexer.
+- **HITz já backfillado** (`20260623j/k`): squad fee R$86.366,41/mês live (jun–set) → `v_contract_revenue_month` ≈ R$345.465,64 (4 meses). Op Especial = fixed_scope. `contract_month_override` existe (vazia; o 3º-mês é o 1º override real — Slice 2).
 - RLS pattern: `admin_all … using (is_admin())`. Migrations vão até `20260623i` → novas usam `20260624{a..}`.
 
 ---
@@ -78,7 +80,7 @@ create table finance.invoice (
   issued_at date, received_at date, due_at date,                -- due_at → aging/vencido
   condition_kind text check (condition_kind in ('pf_sheet','sow','none')),
   condition_met boolean not null default false,
-  created_by uuid,                                              -- → Member (confirmar FK target; entry.created_by usa o mesmo)
+  created_by uuid references public."Member"(id) on delete set null,  -- mesmo padrão de entry/labor_allocation.created_by
   provenance jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -103,7 +105,8 @@ create index invoice_due_idx on finance.invoice (due_at) where status = 'issued'
 
 > 🚩 Gatilho: builder adicional HITz (+R$24.632) ou 3º-mês part-time. **Recria a cadeia de views de receita.** Confirmar com o dono antes.
 
-### Fase 2.1 — `contract_month_override` → `contract_override` — `20260624e_finance_contract_override.sql` (1 transação)
+### Fase 2.1 — `contract_month_override` → `contract_override` — `<YYYYMMDD>_finance_contract_override.sql` (1 transação)
+*(prefixo = data REAL do ship da Slice 2 — **não** pré-alocar `20260624e`; outras migrations podem entrar antes.)*
 **Atômica DB+código:** o `drop table` e a reescrita dos 5 consumidores (dal/2 rotas/types/MonthOverrides UI) vão **no mesmo commit** — OU deixar `contract_month_override` como **view de compat** sobre `contract_override` até o cutover do RB2. Senão, entre o drop e a reescrita, `/api/finance/contract-override` dá 500 (tsc não pega).
 1. Ler defs vivas: `\sf+ finance.v_contract_revenue_month v_project_month v_org_month` (só esses 3 — labor views NÃO dependem; ver §1).
 2. Migration:
@@ -113,24 +116,26 @@ create index invoice_due_idx on finance.invoice (due_at) where status = 'issued'
    - **recria** `v_contract_revenue_month` (base=fee; `replace` billable substitui o mês; `add` billable soma; não-billable ignorado) **mantendo as MESMAS colunas de saída** (`project_id, month, revenue_cents`) → `CREATE OR REPLACE` basta, dependentes intocados. Composição: override conta no mês que a vigência **intersecta** (datas já snapadas a mês na escrita).
    - `drop table contract_month_override` (após a view recriada).
    - **view de auditoria multi-fonte** anti-double-count (entries+fp+contrato por project/month; alerta se >1 fonte no mesmo mês).
-3. **Dry-run SEEDADO** (banco está vazio de valores hoje — baseline real é 0):
+3. **Dry-run = HITz real + seed sintético** (HITz já tem valores: receita ≈ **R$345.465,64 / 4 meses**):
 ```sql
 BEGIN;
   -- …todo o passo 2…
+  -- (a) baseline real: a receita do HITz NÃO pode mudar (migração = replace-de-fee, billable=true)
+  select project_id, month, revenue_cents from finance.v_contract_revenue_month order by 1,2;  -- == baseline pré-migração
+  -- (b) seed sintético p/ exercitar a lógica nova:
   insert into finance.contract (…) values (…squad sintético…);  -- fee + 1 replace + 1 add + 1 non-billable
-  -- asserts por mês: mês normal = fee; mês replace = valor substituto; mês add = fee+add; mês non-billable = fee (inalterado)
-  select * from finance.v_contract_revenue_month where project_id = '<sintético>';
+  -- asserts: mês normal=fee · replace=substituto · add=fee+add · non-billable=fee (inalterado)
 ROLLBACK;
 ```
-Só troca `ROLLBACK`→`COMMIT` quando a aritmética seedada bate. `types.ts`: `ContractOverride` + input. **Verify:** asserts seedados + view de auditoria vazia p/ casos sãos + `\d` + curl no endpoint reescrito.
+Só `ROLLBACK`→`COMMIT` quando (a) receita HITz **idêntica** E (b) aritmética seedada bate. `types.ts`: `ContractOverride` + input. **Verify:** baseline HITz idêntico + asserts seedados + view de auditoria vazia p/ casos sãos + `\d` + curl no endpoint reescrito.
 
-### Fase 2.2 — Backfill HITz (DEPOIS da 2.1, ordem fixa) — script SQL transacional
-1 transação: `delete` entry recorrente `6b8cac38` → `update contract set monthly_fee_cents` → `insert contract_override` (3º-mês part-time R$72.640 replace + builder adicional add) → `COMMIT`. O trigger 20260623h ressincroniza o prazo. **Cross-ref [contract-ssot-handoff.md](../features/finance/contract-ssot-handoff.md) §6.** ⚠️ O double-count estrutural vai live no instante que um fee é setado com o entry recorrente presente → por isso delete+set na MESMA tx.
+### Fase 2.2 — Override 3º-mês HITz (o 1º consumidor real — gatilho da Slice 2)
+⚠️ **O backfill base do HITz JÁ FOI FEITO** (sessão paralela, `20260623j/k` / ZRD-JM-215): entry blended deletado, squad fee R$86.366,41/mês (jun–set) live, Op Especial = fixed_scope, double-count resolvido. **O que resta** = aplicar a cláusula do **3º mês part-time → R$72.640,92** como `contract_override` (`mode='replace'`, billable) no mês certo, quando o dono confirmar — é o **primeiro `contract_override` real**, justamente o gatilho da Slice 2. (Builder adicional +R$24.632,87 = `mode='add'` se/quando contratado.) **Cross-ref [contract-ssot-handoff.md](../features/finance/contract-ssot-handoff.md) §6.**
 
 ---
 
 ## 4. GOTCHAS
-- **Slice 2 é a única arriscada.** Swap atômico DB+código (ou view compat). Dry-run **seedado** (vazio prova nada). `CREATE OR REPLACE` da view preserva colunas → dependentes intocados.
+- **Slice 2 é a única arriscada.** Swap atômico DB+código (ou view compat). Dry-run = **baseline HITz real (R$345k) + seed sintético** dos caminhos de override. `CREATE OR REPLACE` da view preserva colunas → dependentes intocados.
 - `contract_override`: `add` pode sobrepor (aditivo); **mas 2 `replace` billable sobrepostos somam em silêncio** → EXCLUDE parcial só pra esse caso.
 - `labor_allocation.contract_id` nullable — legado fica null; refina na UI (RB2).
 - finance fora de `database.types.ts` → editar `types.ts` à mão; **verify de finance é curl/psql, não tsc**.

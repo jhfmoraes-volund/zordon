@@ -1,8 +1,14 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetBody,
+  ResponsiveSheetFooter,
+} from "@/components/ui/responsive-sheet";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -106,23 +112,9 @@ export function TodoSheet({
   projectReviews,
   defaultAssigneeId,
 }: TodoSheetProps) {
-  const isMobile = useIsMobile();
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={isMobile ? "bottom" : "right"}
-        className={
-          isMobile
-            ? "h-[90dvh] max-h-[90dvh] gap-0 rounded-t-xl p-0"
-            : "w-full !sm:max-w-[520px] gap-0 p-0"
-        }
-      >
-        {isMobile && (
-          <div
-            aria-hidden="true"
-            className="absolute top-2 left-1/2 -translate-x-1/2 h-1.5 w-12 rounded-full bg-muted z-10"
-          />
-        )}
+    <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+      <ResponsiveSheetContent size="md">
         {open && (
           <TodoSheetBody
             key={`${todo?.id ?? "new"}-${open}`}
@@ -135,8 +127,8 @@ export function TodoSheet({
             defaultAssigneeId={defaultAssigneeId}
           />
         )}
-      </SheetContent>
-    </Sheet>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }
 
@@ -327,7 +319,10 @@ function TodoSheetBody({
   return (
     <>
       {/* Header */}
-      <div className="shrink-0 border-b px-6 pt-6 pb-4 space-y-3">
+      <ResponsiveSheetHeader className="space-y-3">
+        <ResponsiveSheetTitle className="sr-only">
+          {isCreate ? "Novo to-do" : "Editar to-do"}
+        </ResponsiveSheetTitle>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -360,10 +355,10 @@ function TodoSheetBody({
           className="text-base font-medium border-none shadow-none bg-transparent dark:bg-transparent px-0 focus-visible:ring-0 resize-none"
           autoFocus={isCreate}
         />
-      </div>
+      </ResponsiveSheetHeader>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+      <ResponsiveSheetBody className="space-y-5">
         <FieldBlock label="Status">
           <StatusChipSelect
             variant="input"
@@ -457,10 +452,10 @@ function TodoSheetBody({
             </div>
           </FieldBlock>
         )}
-      </div>
+      </ResponsiveSheetBody>
 
       {/* Footer */}
-      <div className="shrink-0 sticky bottom-0 border-t bg-popover px-6 py-3 pb-safe flex items-center justify-between">
+      <ResponsiveSheetFooter className="flex-row items-center justify-between sm:justify-between">
         {isCreate && !todo ? (
           <>
             <Button variant="ghost" size="sm" onClick={onClose}>
@@ -489,7 +484,7 @@ function TodoSheetBody({
             </Button>
           </>
         )}
-      </div>
+      </ResponsiveSheetFooter>
 
       <ConfirmDialog
         state={confirmState}

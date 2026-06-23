@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { Star, Sparkles } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetDescription,
+  ResponsiveSheetBody,
+} from "@/components/ui/responsive-sheet";
 import { Badge } from "@/components/ui/badge";
 import { SkillBars } from "@/components/skill-assessment/skill-bars";
 import {
@@ -71,23 +72,33 @@ export function SkillProfileSheet({ memberId, open, onOpenChange }: Props) {
   }, [open, memberId]);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-xl w-full overflow-y-auto">
+    <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+      <ResponsiveSheetContent size="md">
         {loading && (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            Carregando...
-          </div>
+          <>
+            <ResponsiveSheetTitle className="sr-only">
+              Perfil de skills
+            </ResponsiveSheetTitle>
+            <ResponsiveSheetBody className="py-12 text-center text-sm text-muted-foreground">
+              Carregando...
+            </ResponsiveSheetBody>
+          </>
         )}
 
         {!loading && data && <SheetBody data={data} />}
 
         {!loading && !data && (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            Não foi possível carregar.
-          </div>
+          <>
+            <ResponsiveSheetTitle className="sr-only">
+              Perfil de skills
+            </ResponsiveSheetTitle>
+            <ResponsiveSheetBody className="py-12 text-center text-sm text-muted-foreground">
+              Não foi possível carregar.
+            </ResponsiveSheetBody>
+          </>
         )}
-      </SheetContent>
-    </Sheet>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }
 
@@ -122,17 +133,17 @@ function SheetBody({ data }: { data: SkillResponse }) {
 
   return (
     <>
-      <SheetHeader className="space-y-2">
-        <SheetTitle className="text-xl flex items-center gap-2">
+      <ResponsiveSheetHeader className="space-y-2">
+        <ResponsiveSheetTitle className="text-xl flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
           {data.member.name}
-        </SheetTitle>
-        <SheetDescription>
+        </ResponsiveSheetTitle>
+        <ResponsiveSheetDescription>
           {roleLabel(data.member.position)}
-        </SheetDescription>
-      </SheetHeader>
+        </ResponsiveSheetDescription>
+      </ResponsiveSheetHeader>
 
-      <div className="px-4 pb-6 space-y-6">
+      <ResponsiveSheetBody className="space-y-6">
         {!hasAnswered && (
           <div className="rounded-lg border border-dashed border-foreground/10 p-6 text-center text-sm text-muted-foreground">
             Esse membro ainda não fez a auto-avaliação.
@@ -197,7 +208,7 @@ function SheetBody({ data }: { data: SkillResponse }) {
             )}
           </>
         )}
-      </div>
+      </ResponsiveSheetBody>
     </>
   );
 }

@@ -70,6 +70,7 @@ import type {
   ProjectStats,
   ProjectTeamMember,
   PMReviewNoteLite,
+  PMReviewDigestEntry,
   ReguaSegment,
   RitualKind,
 } from "@/lib/dal/project-overview";
@@ -459,7 +460,9 @@ function reguaSummaryParts(stats: ProjectStats) {
     { one: "parcial", many: "parciais", n: c.parcial, tone: "text-yellow-500" },
     { one: "baixa", many: "baixas", n: c.baixa, tone: "text-red-400" },
     { one: "desligada", many: "desligadas", n: c.desligada, tone: "text-yellow-500" },
-    { one: "corrente", many: "correntes", n: c.corrente, tone: "text-primary" },
+    // "corrente" sai do breakdown — sempre 1 (redundante); a espinha já marca a
+    // sprint corrente em vermelho. `c.corrente` segue contado só p/ não cair nos
+    // baldes de entrega.
     { one: "futura", many: "futuras", n: c.futura, tone: undefined },
   ].filter((p) => p.n > 0);
 }
@@ -502,21 +505,45 @@ function segmentValueTone(g: ReguaSegment): string {
 }
 
 /**
- * Timeline expandida da régua (sheet em tela cheia): mesma semântica e cores
- * da Regua, com uma coluna por sprint — barra + entrega + segunda da semana.
- * O breakdown que no modo compacto vive em tooltip vira legenda inline; o
- * tooltip por célula (segmentTitle) continua valendo.
+ * Espinha de sprints do drawer — navegação-only no idioma da régua: chip
+ * uniforme (nº da sprint + segunda), dot verde quando a semana tem PM Review,
+ * corrente em destaque, seleção por underline. A ENTREGA **não** colore o chip
+ * (decisão de minimalismo): vive na linha de breakdown abaixo + no painel da
+ * sprint selecionada. Clicar troca o painel. (`segToBlock`/`Regua` — o ribbon
+ * do board — seguem coloridos por entrega; idiomas distintos por contexto.)
  */
-function SprintTimeline({ stats }: { stats: ProjectStats }) {
+function SprintSpine({
+  stats,
+  reviewMondays,
+  selectedMonday,
+  onSelect,
+}: {
+  stats: ProjectStats;
+  reviewMondays: Set<string>;
+  selectedMonday: string | null;
+  onSelect: (monday: string) => void;
+}) {
   if (stats.segments.length === 0) return null;
+  const blocks: CronogramaBlock[] = stats.segments.map((g, i) => ({
+    key: g.monday,
+    indicator: stats.mode === "contract" ? String(i + 1) : undefined,
+    dateLabel: fmtDayMonth(g.monday),
+    kind: g.kind === "current" ? "current" : g.kind === "future" ? "future" : "past",
+    // silent = sem PM Review → sem dot verde (chip uniforme). Sem `tone` ⇒ o
+    // Cronograma cai no idioma de atividade (dot/underline), não no colorido.
+    silent: !reviewMondays.has(g.monday),
+    title: segmentTitle(g),
+  }));
   return (
     <div>
       <Cronograma
         shape="chip"
-        layout="wrap"
-        blocks={stats.segments.map((g, i) => segToBlock(g, i, stats.milestoneIndex))}
+        layout="scroll"
+        blocks={blocks}
+        selectedKey={selectedMonday}
+        onSelect={onSelect}
       />
-      <div className="mt-4 text-[11px] text-muted-foreground">
+      <div className="mt-3 text-[11px] text-muted-foreground">
         <ReguaSummaryLine stats={stats} />
       </div>
     </div>
@@ -1344,116 +1371,154 @@ function DigestCard({
   );
 }
 
-/** Seção PM Review do drawer: chips de semana + 4 slots fixos. */
-function PMReviewSection({ p }: { p: ProjectOverview }) {
-  // Tela cheia: Riscos e Próximos passos dividem a linha (a largura permite).
-  const expanded = useResponsiveSheetExpanded();
-  // Chips navegam entre as semanas da janela. null = default (semana corrente
-  // ou última). Troca de projeto se auto-corrige: id que não existe na janela
-  // nova cai no default via `?? p.pmReview`.
-  const [weekId, setWeekId] = useState<string | null>(null);
-  const shownReview = p.weeks.find((w) => w.review?.id === weekId)?.review ?? p.pmReview;
+/** Estado da sprint selecionada → rótulo + tom do chip-tag (ecoa a régua). */
+function sprintStateTag(kind: ReguaSegment["kind"]): { label: string; cls: string } {
+  if (kind === "current") return { label: "corrente", cls: "bg-primary/15 text-primary" };
+  if (kind === "future") return { label: "futura", cls: "bg-muted text-muted-foreground" };
+  if (kind === "hole") return { label: "desligada", cls: "bg-yellow-500/15 text-yellow-500" };
+  return { label: "entregue", cls: "bg-emerald-500/15 text-emerald-500" };
+}
+
+/** Sub-linha do painel — entrega/estado da sprint em uma frase. */
+function sprintSubLabel(g: ReguaSegment): string {
+  if (g.kind === "current") return g.sprintId ? "sprint em curso" : "semana corrente, sem sprint ativa";
+  if (g.kind === "future") return "ainda não começou";
+  if (g.kind === "hole") return "contrato queimou sem produção nesta semana";
+  return g.deliveryPct === null ? "fechada — sem PFV lançado" : `entregue ${g.deliveryPct}% do planejado`;
+}
+
+/** Digest do PM Review (Panorama + Riscos/Próximos + Decisões) — slots fixos. */
+function ReviewDigest({
+  p,
+  review,
+  expanded,
+  className,
+}: {
+  p: ProjectOverview;
+  review: PMReviewDigestEntry;
+  expanded: boolean;
+  className?: string;
+}) {
   // Cards leem o digest: curado pela Vitoria quando existir, senão fallback
   // mecânico nas notes detail. priority desc = mais importante primeiro.
-  const digest = shownReview?.digestByKind ?? {};
+  const digest = review.digestByKind ?? {};
   const decisions = [...(digest.open_decision ?? []), ...(digest.need ?? [])].sort(
     (a, b) => b.priority - a.priority,
   );
+  return (
+    <div className={cn("space-y-2", className)}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          PM Review
+          {review.publishedAt && (
+            <span className="ml-1.5 font-normal normal-case text-muted-foreground/70">
+              · feita {fmtDate(new Date(review.publishedAt))}
+            </span>
+          )}
+        </span>
+        <Link
+          href={`/projects/${p.id}/pm-review?week=${review.referenceWeek}`}
+          className="shrink-0 text-xs font-medium text-primary hover:underline"
+        >
+          Abrir →
+        </Link>
+      </div>
+      <PanoramaCard notes={digest} />
+      <div className={cn(expanded ? "grid gap-2 lg:grid-cols-2" : "space-y-2")}>
+        <DigestCard title="Riscos" items={digest.risk ?? []} emptyText="Sem riscos esta semana." />
+        <DigestCard title="Próximos passos" items={digest.next_step ?? []} emptyText="Sem próximos passos." />
+      </div>
+      <DigestCard
+        title="Decisões / Precisa"
+        items={decisions}
+        emptyText="Nada aguardando decisão."
+        showKindLabel
+      />
+    </div>
+  );
+}
+
+/**
+ * Painel da sprint selecionada — dirigido pela espinha (substitui os chips de
+ * semana do PM Review, que eram o MESMO eixo). Mostra estado + entrega da sprint,
+ * atalhos pros rituais (Planning / PM Review) já com a semana no deep-link, e o
+ * digest do PM Review daquela semana (ou o vazio + atalho pra criar).
+ */
+function SelectedSprintPanel({
+  p,
+  monday,
+  review,
+}: {
+  p: ProjectOverview;
+  monday: string | null;
+  review: PMReviewDigestEntry | null;
+}) {
+  const expanded = useResponsiveSheetExpanded();
+  // Sem cronograma (fase comercial / sem sprint): cai no digest da review default.
+  if (!monday) {
+    return review ? <ReviewDigest p={p} review={review} expanded={expanded} /> : null;
+  }
+  const segments = p.stats.segments;
+  const idx = segments.findIndex((g) => g.monday === monday);
+  const seg = idx >= 0 ? segments[idx] : null;
+  const tag = seg ? sprintStateTag(seg.kind) : null;
+  const sprintNo = idx >= 0 && p.stats.mode === "contract" ? idx + 1 : null;
+  const isFuture = seg?.kind === "future";
 
   return (
     <section>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          PM Review
-          {shownReview && (
-            <span className="font-normal normal-case text-muted-foreground/80">
-              · semana {fmtDate(new Date(shownReview.referenceWeek))}
-              {shownReview.isCurrentWeek
-                ? ""
-                : shownReview.id === p.pmReview?.id
-                  ? " (última)"
-                  : ""}
-              {shownReview.publishedAt && (
-                <span className="text-muted-foreground/50">
-                  {" "}· feita {fmtDate(new Date(shownReview.publishedAt))}
-                </span>
-              )}
-            </span>
-          )}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h4 className="text-sm font-semibold">
+          {sprintNo ? `Sprint ${sprintNo}` : "Semana"}
+          <span className="ml-1.5 font-normal text-muted-foreground">· {fmtDayMonth(monday)}</span>
         </h4>
-        {shownReview && (
-          <Link
-            href={`/projects/${p.id}/pm-review?week=${shownReview.referenceWeek}`}
-            className="shrink-0 text-xs font-medium text-primary hover:underline"
+        {tag && (
+          <span
+            className={cn(
+              "rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+              tag.cls,
+            )}
           >
-            Abrir →
+            {tag.label}
+          </span>
+        )}
+      </div>
+      {seg && <p className="mt-1 text-xs text-muted-foreground">{sprintSubLabel(seg)}</p>}
+
+      {/* Atalhos pros rituais — já com a semana no deep-link. */}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link
+          href={`/projects/${p.id}/planning`}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
+        >
+          <Compass className="h-3.5 w-3.5" /> Planning
+          <ArrowUpRight className="h-3.5 w-3.5 opacity-60" />
+        </Link>
+        {!isFuture && (
+          <Link
+            href={`/projects/${p.id}/pm-review?week=${monday}`}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                review ? "bg-emerald-500" : "bg-muted-foreground/40",
+              )}
+            />
+            PM Review
+            <ArrowUpRight className="h-3.5 w-3.5 opacity-60" />
           </Link>
         )}
       </div>
 
-      {/* Janela fixa: chip por semana, desabilitado quando não há review */}
-      <div className="mb-2 flex flex-wrap gap-1">
-        {p.weeks.map((w) => {
-          const review = w.review;
-          const label = fmtDate(new Date(w.week));
-          if (!review) {
-            return (
-              <span
-                key={w.week}
-                title="Sem PM Review nesta semana"
-                className="cursor-default rounded-full border border-dashed border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground/50"
-              >
-                {label}
-              </span>
-            );
-          }
-          const active = review.id === shownReview?.id;
-          return (
-            <button
-              key={w.week}
-              type="button"
-              title={
-                review.publishedAt
-                  ? `Feita em ${fmtDate(new Date(review.publishedAt))}`
-                  : undefined
-              }
-              onClick={() => setWeekId(review.id)}
-              className={cn(
-                "rounded-full border px-2 py-0.5 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active
-                  ? "border-primary/40 bg-primary/10 font-medium text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {!shownReview ? (
-        <p className="text-sm text-muted-foreground">Sem PM Review registrado.</p>
+      {review ? (
+        <ReviewDigest p={p} review={review} expanded={expanded} className="mt-4" />
       ) : (
-        // 1 card por linha (mesmo no desktop): largura inteira por frase —
-        // o clamp de 2 linhas segura a ideia completa, fonte maior. Exceção:
-        // sheet expandida emparelha Riscos + Próximos na coluna de leitura.
-        <div className="space-y-2">
-          <PanoramaCard notes={digest} />
-          <div className={cn(expanded ? "grid gap-2 lg:grid-cols-2" : "space-y-2")}>
-            <DigestCard title="Riscos" items={digest.risk ?? []} emptyText="Sem riscos esta semana." />
-            <DigestCard
-              title="Próximos passos"
-              items={digest.next_step ?? []}
-              emptyText="Sem próximos passos."
-            />
-          </div>
-          <DigestCard
-            title="Decisões / Precisa"
-            items={decisions}
-            emptyText="Nada aguardando decisão."
-            showKindLabel
-          />
-        </div>
+        <p className="mt-4 text-sm text-muted-foreground">
+          {isFuture
+            ? "Sprint futura — a review acontece quando a semana chegar."
+            : "Sem PM Review nesta semana ainda."}
+        </p>
       )}
     </section>
   );
@@ -1619,7 +1684,19 @@ function ritmoSub(s: ProjectStats): string {
  * Dossiê de STATS: régua grande + PRAZO / MARCO / RITMO + projeção.
  * Fórmulas: docs/features/overview/stats-dictionary.md (gerado do registry).
  */
-function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
+function StatsSection({
+  p,
+  ui,
+  reviewMondays,
+  selectedMonday,
+  onSelectMonday,
+}: {
+  p: ProjectOverview;
+  ui: RegistryUi;
+  reviewMondays: Set<string>;
+  selectedMonday: string | null;
+  onSelectMonday: (monday: string) => void;
+}) {
   const s = p.stats;
   const producing = PRODUCING_PHASES.includes(p.phase);
   // Accordion dos 3 campos: um aberto por vez. `lastColKey` retém o último campo
@@ -1706,10 +1783,14 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
           )}
         </div>
 
-        {/* Cronograma (chips) — fonte única da régua: data + estado + entrega,
-            com o breakdown ("N entregues · …") no rodapé. Sem glance + toggle
-            redundantes: o próprio componente já carrega tudo. */}
-        <SprintTimeline stats={s} />
+        {/* Espinha de sprints — navegação-only (data + dot de review). Clicar
+            troca o painel da sprint abaixo. Entrega vive no breakdown + painel. */}
+        <SprintSpine
+          stats={s}
+          reviewMondays={reviewMondays}
+          selectedMonday={selectedMonday}
+          onSelect={onSelectMonday}
+        />
 
         {/* Campos (accordion): label + valor sempre; o texto + explicação abrem
             no drawer abaixo da linha, um campo por vez. */}
@@ -1751,6 +1832,15 @@ function StatsSection({ p, ui }: { p: ProjectOverview; ui: RegistryUi }) {
 
 // ─── Drawer ───────────────────────────────────────────────
 
+/** Sprint aberta por default: a corrente, senão a última review, senão a última sprint. */
+function resolveDefaultMonday(p: ProjectOverview): string | null {
+  const current = p.stats.segments.find((g) => g.kind === "current");
+  if (current) return current.monday;
+  if (p.pmReview) return p.pmReview.referenceWeek;
+  const segs = p.stats.segments;
+  return segs.length > 0 ? segs[segs.length - 1].monday : null;
+}
+
 function ProjectDrawer({
   p,
   index,
@@ -1769,6 +1859,20 @@ function ProjectDrawer({
   onEdit: () => void;
 }) {
   const chips = signalChips(p);
+  // PM Reviews com digest pré-carregado (janela + a última) keyadas por segunda.
+  // Dirigem o dot verde na espinha e o digest do painel. (Instância remontada por
+  // projeto via `key={p.id}` — a seleção reseta sozinha ao navegar prev/next.)
+  const reviewByMonday = useMemo(() => {
+    const m = new Map<string, PMReviewDigestEntry>();
+    for (const w of p.weeks) if (w.review) m.set(w.review.referenceWeek, w.review);
+    if (p.pmReview) m.set(p.pmReview.referenceWeek, p.pmReview);
+    return m;
+  }, [p]);
+  const reviewMondays = useMemo(() => new Set(reviewByMonday.keys()), [reviewByMonday]);
+  const defaultMonday = useMemo(() => resolveDefaultMonday(p), [p]);
+  const [selectedMonday, setSelectedMonday] = useState<string | null>(null);
+  const monday = selectedMonday ?? defaultMonday;
+  const selectedReview = monday ? (reviewByMonday.get(monday) ?? null) : null;
   return (
     <>
       <ResponsiveSheetHeader>
@@ -1834,8 +1938,14 @@ function ProjectDrawer({
       </ResponsiveSheetHeader>
 
       <ResponsiveSheetBody className="space-y-5">
-        <StatsSection p={p} ui={ui} />
-        <PMReviewSection p={p} />
+        <StatsSection
+          p={p}
+          ui={ui}
+          reviewMondays={reviewMondays}
+          selectedMonday={monday}
+          onSelectMonday={setSelectedMonday}
+        />
+        <SelectedSprintPanel p={p} monday={monday} review={selectedReview} />
 
         {/* Rodapé quieto: sinais + time, sem caixas */}
         <section className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
@@ -2286,6 +2396,7 @@ export function ProjetosBoard({
         <ResponsiveSheetContent size="3xl" expandable>
           {selected && (
             <ProjectDrawer
+              key={selected.id}
               p={selected}
               index={selectedIndex}
               total={visibleFlat.length}

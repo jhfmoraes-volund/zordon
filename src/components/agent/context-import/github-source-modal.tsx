@@ -2,9 +2,15 @@
 
 import { useState } from "react";
 import { GitBranch, Loader2, CheckCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetDescription,
+  ResponsiveSheetBody,
+  ResponsiveSheetFooter,
+} from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -36,7 +42,6 @@ const KIND_LABEL: Record<NonNullable<DetectedKind>, string> = {
 };
 
 export function GitHubSourceModal({ open, onOpenChange, onImported, apiUrl, projectId }: Props) {
-  const isMobile = useIsMobile();
   const [url, setUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,38 +104,25 @@ export function GitHubSourceModal({ open, onOpenChange, onImported, apiUrl, proj
   };
 
   return (
-    <Sheet
+    <ResponsiveSheet
       open={open}
       onOpenChange={(o) => {
         onOpenChange(o);
         if (!o) reset();
       }}
     >
-      <SheetContent
-        side={isMobile ? "bottom" : "right"}
-        className={cn(
-          "flex flex-col gap-0 p-0",
-          isMobile ? "max-h-[90vh] rounded-t-xl" : "w-full sm:max-w-lg",
-        )}
-      >
-        {isMobile && (
-          <div
-            aria-hidden="true"
-            className="mx-auto mt-2 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted"
-          />
-        )}
-
-        <div className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
-          <SheetTitle className="flex items-center gap-2">
+      <ResponsiveSheetContent size="md">
+        <ResponsiveSheetHeader>
+          <ResponsiveSheetTitle className="flex items-center gap-2">
             <GitBranch className="h-4 w-4" />
             Importar do GitHub
-          </SheetTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
+          </ResponsiveSheetTitle>
+          <ResponsiveSheetDescription>
             Repositório, Pull Request ou Issue como contexto
-          </p>
-        </div>
+          </ResponsiveSheetDescription>
+        </ResponsiveSheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 space-y-4">
+        <ResponsiveSheetBody className="space-y-4">
           <Field name="github-url" required>
             <Field.Label>URL do GitHub</Field.Label>
             <Field.Control>
@@ -170,9 +162,9 @@ export function GitHubSourceModal({ open, onOpenChange, onImported, apiUrl, proj
               {error}
             </div>
           )}
-        </div>
+        </ResponsiveSheetBody>
 
-        <div className="shrink-0 flex flex-col-reverse gap-2 border-t bg-popover px-4 py-3 sm:px-6 sm:flex-row sm:justify-end pb-safe">
+        <ResponsiveSheetFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={importing}>
             Cancelar
           </Button>
@@ -180,8 +172,8 @@ export function GitHubSourceModal({ open, onOpenChange, onImported, apiUrl, proj
             {importing && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
             Importar
           </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </ResponsiveSheetFooter>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }

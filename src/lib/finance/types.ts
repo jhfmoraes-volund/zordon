@@ -124,6 +124,9 @@ export type Contract = {
   contractedFp: number | null;
   contractedSprints: number | null;
   note: string | null;
+  warranty: string | null; // P1 agent-fill (garantia)
+  proposalRef: string | null; // vínculo à proposta (doc em contract_document)
+  provenance: Record<string, unknown>; // P1 procedência por campo
 };
 export type ContractInput = {
   label: string;
@@ -135,8 +138,64 @@ export type ContractInput = {
   contractedFp?: number | null;
   contractedSprints?: number | null;
   note?: string | null;
+  warranty?: string | null;
+  proposalRef?: string | null;
 };
 export type ContractsResponse = { contracts: Contract[] };
+
+// ─── Cláusulas do contrato (1-N; agent-fill + manual) ───────────────────────
+
+export type ClauseKind = "sla" | "penalty" | "ip" | "confidentiality" | "readjust" | "warranty" | "other";
+export type ContractClause = {
+  id: string;
+  contractId: string;
+  kind: ClauseKind;
+  text: string;
+  sort: number;
+  source: string;
+};
+export type ContractClauseInput = {
+  contractId: string;
+  kind?: ClauseKind;
+  text: string;
+  sort?: number;
+};
+export type ContractClausesResponse = { clauses: ContractClause[] };
+
+// ─── Invoice / NF (cobrança operacional por mês; Q4: NÃO reconcilia receita) ──
+
+export type InvoiceStatus = "pending" | "issued" | "received" | "cancelled";
+export type InvoiceConditionKind = "pf_sheet" | "sow" | "none";
+export type Invoice = {
+  id: string;
+  contractId: string;
+  competenceMonth: string; // YYYY-MM-DD (1º dia)
+  amountCents: number; // bruto
+  receivedNetCents: number | null; // líquido na conta
+  number: string | null;
+  status: InvoiceStatus; // issued=NF emitida · received=pago · cancelled=fora dos rollups
+  issuedAt: string | null;
+  receivedAt: string | null;
+  dueAt: string | null; // vencimento → aging
+  conditionKind: InvoiceConditionKind | null;
+  conditionMet: boolean;
+  createdBy: string | null;
+  provenance: Record<string, unknown>;
+};
+export type InvoiceInput = {
+  contractId: string;
+  competenceMonth: string;
+  amountCents: number;
+  receivedNetCents?: number | null;
+  number?: string | null;
+  status?: InvoiceStatus;
+  issuedAt?: string | null;
+  receivedAt?: string | null;
+  dueAt?: string | null;
+  conditionKind?: InvoiceConditionKind | null;
+  conditionMet?: boolean;
+};
+export type InvoicesResponse = { invoices: Invoice[] };
 
 /** Override de valor de um mês específico (substitui a mensalidade base só naquele mês). */
 export type ContractMonthOverride = {
@@ -214,6 +273,7 @@ export type Allocation = {
   effective_from: string;
   effective_to: string | null;
   note: string | null;
+  contract_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -230,6 +290,7 @@ export type AllocationInput = {
   effectiveFrom: string;
   effectiveTo?: string | null;
   note?: string | null;
+  contractId?: string | null;
 };
 
 export type AllocationsResponse = { allocations: AllocationItem[] };
@@ -279,6 +340,8 @@ export type ProjectDetail = {
   sprintCount: number;
   engagementType: string | null;
   contracts: Contract[]; // todos os contratos do projeto, por vigência
+  clauses: ContractClause[]; // cláusulas de todos os contratos (agrupar por contractId na UI)
+  invoices: Invoice[]; // NFs de todos os contratos (operacional; Q4: NÃO toca receita)
   fpDeliveredTotal: number; // FP entregues no período
   fpRevenueCents: number; // receita de FP no período
   overheadCents: number; // custos indiretos por pessoa (premissas) no período

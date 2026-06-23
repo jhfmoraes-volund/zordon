@@ -2,13 +2,19 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetDescription,
+  ResponsiveSheetBody,
+  ResponsiveSheetFooter,
+} from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/auth-context";
 import {
   STEP_CATALOG,
@@ -54,7 +60,6 @@ export function SuperSessionModal({
   onCreated?: () => void;
 }) {
   const router = useRouter();
-  const isMobile = useIsMobile();
   const { member: currentMember } = useAuth();
   const [title, setTitle] = useState(`Inception ${projectName}`);
   const [selected, setSelected] = useState<string[]>(PRESETS.completa.keys);
@@ -136,33 +141,18 @@ export function SuperSessionModal({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={isMobile ? "bottom" : "right"}
-        className={cn(
-          "flex flex-col gap-0 p-0",
-          isMobile
-            ? "max-h-[90vh] rounded-t-xl"
-            : "w-full sm:max-w-xl",
-        )}
-      >
-        {isMobile && (
-          <div
-            aria-hidden="true"
-            className="mx-auto mt-2 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted"
-          />
-        )}
-
-        <div className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
-          <SheetTitle>Nova Inception</SheetTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
+    <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+      <ResponsiveSheetContent size="md">
+        <ResponsiveSheetHeader>
+          <ResponsiveSheetTitle>Nova Inception</ResponsiveSheetTitle>
+          <ResponsiveSheetDescription>
             Sessão de imersão para investigar e validar novos produtos ou
             funcionalidades robustas. Escolha quais steps a sessão vai ter e
             em que ordem — Vitor enxergará apenas estes.
-          </p>
-        </div>
+          </ResponsiveSheetDescription>
+        </ResponsiveSheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 space-y-5">
+        <ResponsiveSheetBody className="space-y-5">
           <div className="grid gap-2">
             <Label htmlFor="super-title">Titulo</Label>
             <Input
@@ -263,9 +253,9 @@ export function SuperSessionModal({
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
-        </div>
+        </ResponsiveSheetBody>
 
-        <div className="shrink-0 flex flex-col-reverse gap-2 border-t bg-popover px-4 py-3 sm:px-6 sm:flex-row sm:justify-end pb-safe">
+        <ResponsiveSheetFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancelar
           </Button>
@@ -273,9 +263,9 @@ export function SuperSessionModal({
             {submitting && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
             Criar
           </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </ResponsiveSheetFooter>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }
 

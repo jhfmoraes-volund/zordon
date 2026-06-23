@@ -6,7 +6,8 @@
 
 ## 0. INVARIANTES
 - **Procedência sticky:** manual > integration > agent. Re-rodar o agente **nunca** sobrescreve campo `source='manual'` (salvo `force` explícito).
-- **Endpoints provenance-aware** já existem (RB1.8) — o agente **chama as mesmas APIs** com `source='agent'` + `runId`/`confidence`. Não criar caminho de escrita paralelo.
+- **⚠️ Auth do agente (resolver no início do B6 — contradição que o audit pegou):** o router de tools roda como `service_role` (bypassa RLS) e **sem** checagem admin. Finance é admin-only → tool de finance **ou** roteia pelas `/api/finance/*` (preserva o gate) **ou** checa `is_admin()`/actor-admin dentro do `execute()` antes de escrever. "Endpoints viram tools" (3.3) é OK **só** com essa auth garantida; **não** herdar o padrão sem-auth das tools de leitura do Alpha. Procedência `source='agent'`+`runId` server-side.
+- **Tabelas `contract_planned_role` + `contract_document` nascem AQUI** (Slice 4), não no RB1 — só quando o agente existe pra preenchê-las. (⚠️ `contract_planned_role` = previsão senioridade+headcount extraída do contrato pelo agente, **≠** `labor_allocation` = equipe real por nome — não confundir nem duplicar.)
 - **Storage-agnóstico:** UI fala com `contract_document (provider+external_ref)`; cada provider é um adapter. Doc com casa oficial = **vincular** (referência, não copia).
 - **Tool de agente vive em 2 repos** (monorepo executa + `zordon-daemon` anuncia schema) — toda tool nova edita os dois ([[project_daemon_tool_advertisement]]).
 
@@ -20,15 +21,17 @@
 
 ### Fase 3.2 (B5) — Selos de procedência + regra sticky
 - Ler `provenance` (jsonb) e renderizar badge por campo/seção: *"preenchido pela IA"* (com `confidence`) vs *"editado por você"*.
-- **PATCH** de qualquer campo seta `provenance[campo].source='manual'` e **gruda**; o coletor (3.3) respeita.
+- **PATCH** faz **deep-merge** (`provenance || jsonb_build_object(campo,…)`, nunca substitui o mapa) e seta `source='manual'` no campo. **Sticky em 1 SQL** com `WHERE` no source atual (não SELECT-depois-UPDATE — race): o coletor (3.3) só escreve campo cujo source ≠ 'manual' salvo `force`.
 - Aplica em contrato (termos/cláusulas), planned-role, e onde o agente preenche.
-**Verify:** editar um campo IA → vira "editado"; re-rodar agente (3.3) **não** sobrescreve.
+**Verify automatizável:** set campo manual → roda agente → asserta inalterado (sem isso regride silencioso).
 
 ### Fase 3.3 (B6) — Agente coletor (contrato/proposta → preenche)
-- Endpoints de escrita (RB1.8) viram **tools** (ToolDescriptor) nos **2 repos**; execução proxied, schema anunciado pelo daemon.
-- Pipeline: lê `contract_document` (proposta/contrato/SOW) → extrai termos/valores/cláusulas/condição-NF/**time planejado (senioridade+headcount)** → escreve com `source='agent'` + `confidence`. **Nomes de pessoas continuam manuais** (P3).
-- Doc lido do Drive → **referência** (`provider='gdrive'`), não copia (anti-duplicação).
-**Verify:** rodar contra um contrato real → campos preenchidos com selo IA; manual anterior preservado; CLI de calibração verde se aplicável.
+- **Cria** `contract_planned_role` + `contract_document` (migrations adiadas do RB1 até aqui).
+- **`contract_document` REUSA a máquina do ContextSource** (`extractTextFromBuffer` + adapter Drive) e **cacheia `full_text`** — a tabela sozinha só guarda `external_ref`/`url`, então sem o texto extraído o agente **não tem o que ler**. RLS **admin** (NÃO a tabela do ContextSource, que é `can_view_project`; espelhar a policy `is_admin()` do bucket member-photos).
+- Endpoints de escrita viram **tools** (ToolDescriptor) nos **2 repos** (auth: ver §0); execução proxied.
+- Pipeline: lê o `full_text` → extrai termos/valores/cláusulas/condição-NF/**time planejado (senioridade+headcount)** → escreve `source='agent'`+`confidence`. **Nomes de pessoas = manuais** (P3). **Emissão de NF = humana** (agente NÃO cria `invoice` — Q1 sem unique = risco de dup).
+- Doc do Drive → **referência** (`provider='gdrive'`), não copia.
+**Verify:** roda contra contrato real → campos com selo IA; manual preservado; **nenhuma `invoice` criada pelo agente**; CLI calibração verde.
 
 ### Fase 3.4 (B7) — Integração de storage (Drive / SharePoint / ERP)
 - Adapter por `provider`: `gdrive` (Composio googledrive — **já existe**, [[project_drive_integration]]), `sharepoint` (novo), `erp` (NF XML, novo). `resolve(external_ref) → url/stream`.

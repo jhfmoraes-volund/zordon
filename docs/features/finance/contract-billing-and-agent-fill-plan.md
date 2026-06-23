@@ -36,7 +36,7 @@ Documentos do faturamento e do contrato entram por uma abstração única; o pro
 - **Nada no core referencia um provider específico** — só `provider + external_ref`. A integração (fase tardia) implementa um adapter `resolve(external_ref) → url/stream`. Espelha o padrão `ContextSource` (memory [[project_context_source_pool]]) e a integração Drive/Notion já existentes.
 - **Onde o usuário coloca (UX, 1 slot por entidade):** seção **"Documentos"** no sheet de contrato (proposta · SOW · contrato · planilha de PF) e **"Anexo da NF"** (XML+PDF) no sheet de Emitir NF. Cada slot = **"Enviar arquivo"** (Supabase) **ou** **"Vincular do Drive/SharePoint"**.
 - **Os 3 caminhos coexistem (não é ou/ou):** `provider='upload'` → Supabase Storage (bucket privado `finance-documents`); `'gdrive'|'sharepoint'` → só referência (arquivo fica lá, SSOT do cliente, anti-duplicação); `'erp'` → XML da NF vindo do emissor. **Política:** doc com casa oficial (proposta/contrato no Drive) = **vincular** (não copiar); doc sem casa (NF avulsa) = **enviar** pro storage.
-- **MVP (B3):** só **upload Supabase** (zero integração, "onde colocar" óbvio). **B7:** Drive (já existe via Composio [[project_drive_integration]]) / SharePoint (novo) / ERP plugam no mesmo slot — `contract_document` não muda.
+- **Faseamento (pós-audit):** `contract_document` + upload = **Slice 4** (deferido — o MVP de NF não precisa de storage; ver §5). Quando vier: começa por **upload Supabase** (zero integração); Drive (Composio, já existe [[project_drive_integration]]) / SharePoint / ERP plugam no mesmo slot sem mudar a tabela.
 
 ### P3 — Time planejado × real
 - **Planejado** (o agente extrai do contrato/proposta: *senioridade + quantidade*, sem nomes): `finance.contract_planned_role` → `{ contract_id, seniority, count, monthly_cost_cents?, note, source }`.
@@ -48,7 +48,7 @@ Documentos do faturamento e do contrato entram por uma abstração única; o pro
 - Generaliza `finance.contract_month_override` (hoje só por mês, só receita) → **`finance.contract_override`** período-based: `{ contract_id, effective_from, effective_to, amount_cents, mode ('replace'|'add'), billable boolean, note, source }`. **Autorado por sprint** (preenche datas, padrão D2 do épico), faturado por mês.
 - **`billable=true`** → entra na receita do período (`v_contract_revenue_month` soma fee + overrides billable ativos no mês). **`billable=false`** → só registra (aditivo de pessoas interno / custo), **NÃO** fatura. Vocabulário `billable`/`non_billable` **reusado** de `project_category` (já existe no repo).
 - Edição **no sheet do contrato** (junto com termos/cláusulas/docs/equipe) — superfície única.
-- **⚠️ Decisão p/ B1:** migrar o `contract_month_override` existente (em prod, alimenta a view) → `contract_override`, OU adicionar tabela nova e manter month_override? *Recomendo migrar (1 conceito só).*
+- **⚠️ Decisão (Slice 2):** migrar o `contract_month_override` (em prod, alimenta a view) → `contract_override` (1 conceito só, **recomendado**) com swap atômico DB+código — ver RB1 §3.
 
 ---
 
@@ -60,7 +60,7 @@ Sobre o que já existe (`finance.contract` com `total_value_cents`/`price_per_fp
 finance.contract  (estende)
   + warranty           text            -- garantia (P1: agent-fill)
   + proposal_ref       text            -- vínculo à proposta (doc em contract_document)
-  + provenance         jsonb default '{}'  -- P1
+  + provenance         jsonb not null default '{}'  -- P1
 
 finance.contract_clause            -- cláusulas (1-N; agent-fill + manual)
   id · contract_id · kind (text: 'sla'|'penalty'|'ip'|'confidentiality'|'readjust'|'other')
@@ -127,7 +127,7 @@ O ouro: **"emitiu NF? recebeu?" por mês não existe hoje** (motivação declara
 
 ### Slice 2 — Aditivos billable + HITz (a fase ARRISCADA — só quando um aditivo real pedir)
 Gatilho: o builder adicional do HITz (+R$24.632) ou o 3º-mês part-time. **Inclui `mode='add'`** (modela o aditivo aditivo limpo); o que se adia de fato é o caminho `billable=false`.
-- `contract_month_override` → `contract_override` (período + billable + mode): **recria a cadeia de views de receita** com dry-run **seedado** (não no banco vazio — ver §3), **EXCLUDE-replace**, e **migra os 5 consumidores no MESMO commit** (ou via view compat) — ver RB1 fase tardia.
+- `contract_month_override` → `contract_override` (período + billable + mode): **recria a cadeia de views de receita** com dry-run **(baseline HITz real R$345k + seed sintético, ver §3)**, **EXCLUDE-replace**, e **migra os 5 consumidores no MESMO commit** (ou via view compat) — ver RB1 fase tardia.
 - **Depois (ordem fixa):** backfill HITz como 1 transação (delete entry recorrente → set fee → insert override 3º-mês → COMMIT) + **view de auditoria multi-fonte** anti-double-count (o único guard estrutural).
 - → RB1 fase tardia.
 
@@ -149,9 +149,9 @@ Não pode sumir silenciosamente (o audit pegou isso). Ou se constrói, ou se dec
 ## 6. Decisões (resolvidas pelo dono 2026-06-22)
 
 - **Q1 — NF por mês = N** (entidade `invoice` livre, **sem** `UNIQUE`). Dono sem preferência → escolha de menor risco: N representa o caso comum (1/mês) E parcial+complemento, custo zero; travar em 1 custaria migration se errado.
-- **Q2 — 3 estados:** `pending` (NF não emitida) → `issued` = **Faturado** (NF emitida, aguarda pgto) → `received` = **Recebido** (na conta). O 3º passo do widget é **Recebido**, não "Faturado".
+- **Q2 — 4 estados** (3 do fluxo feliz + cancelamento): `pending` → `issued` (**NF emitida**, aguarda pgto) → `received` (**Recebido**) · + `cancelled` (NF cancelada, fora dos rollups). Carta-de-correção/substituta é não-objetivo da Fase 1, mas o status `cancelled` já existe. Copy: **"NF emitida", nunca "Faturado"**.
 - **Q3 — Condição por MÊS:** `condition_kind`/`condition_met` vivem na `invoice` (cada NF mensal tem seu gate), squad inclusive. Sem propagação contrato→meses.
-- **Q4 — `invoice` = SÓ cobrança/caixa; NÃO reconhece receita.** A receita da DRE segue das views atuais (termos do contrato); invoice é camada operacional (emitiu? recebeu?). Competência ≠ caixa → não acopla o P&L a um checkbox. **Não bloqueia o B1** (a tabela é igual; Q4 só decide se as views leem invoice — e a resposta é não).
+- **Q4 — `invoice` = SÓ cobrança/caixa; NÃO reconhece receita.** A receita da DRE segue das views atuais (termos do contrato); invoice é camada operacional (emitiu? recebeu?). Competência ≠ caixa → não acopla o P&L a um checkbox. **Não bloqueia a Slice 1** (a tabela é igual; Q4 só decide se as views leem invoice — e a resposta é não).
 
 ### Mapa de nomes (anti-colisão — confirmado 2026-06-22)
 - **"Faturamento" (categoria)** = bucket do ledger (`finance.category`, lançamentos `entry`) — fica como está, no `FinanceCategorySheet`.

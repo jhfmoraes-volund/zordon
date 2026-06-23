@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetDescription,
+  ResponsiveSheetBody,
+  ResponsiveSheetFooter,
+} from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,7 +26,6 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { useAlphaChat } from "@/components/alpha-chat";
 import type {
@@ -100,7 +107,6 @@ function groupByDay(items: ImportableMeeting[]): { day: string; sample: string; 
 
 export function ImportMeetingModal(props: Props) {
   const { open, onOpenChange } = props;
-  const isMobile = useIsMobile();
   const router = useRouter();
   const { kickoffIngest } = useAlphaChat();
 
@@ -252,32 +258,19 @@ export function ImportMeetingModal(props: Props) {
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={isMobile ? "bottom" : "right"}
-        className={cn(
-          "flex flex-col gap-0 p-0",
-          isMobile ? "max-h-[90vh] rounded-t-xl" : "w-full sm:max-w-xl",
-        )}
-      >
-        {isMobile && (
-          <div
-            aria-hidden="true"
-            className="mx-auto mt-2 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted"
-          />
-        )}
-
+    <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+      <ResponsiveSheetContent size="md">
         {/* Header */}
-        <div className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
-          <SheetTitle className="flex items-center gap-2">
+        <ResponsiveSheetHeader>
+          <ResponsiveSheetTitle className="flex items-center gap-2">
             <Mic className="h-4 w-4" />
             {isPrivate ? "Importar do Granola" : "Importar reunião"}
-          </SheetTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
+          </ResponsiveSheetTitle>
+          <ResponsiveSheetDescription>
             {isPrivate
               ? "Reunião privada — só você verá. Alpha gera notes + To-dos a partir da transcrição."
               : "Escolha a fonte e a reunião. Alpha cria/preenche o conteúdo automaticamente."}
-          </p>
+          </ResponsiveSheetDescription>
 
           {/* Tabs (escondido pra private — só Granola) */}
           <div
@@ -322,10 +315,10 @@ export function ImportMeetingModal(props: Props) {
               );
             })}
           </div>
-        </div>
+        </ResponsiveSheetHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 space-y-4">
+        <ResponsiveSheetBody className="space-y-4">
           {loading && <LoadingSkeleton />}
 
           {!loading && loadError && (
@@ -395,10 +388,10 @@ export function ImportMeetingModal(props: Props) {
               )}
             </>
           )}
-        </div>
+        </ResponsiveSheetBody>
 
         {/* Footer */}
-        <div className="shrink-0 flex flex-col-reverse gap-2 border-t bg-popover px-4 py-3 sm:px-6 sm:flex-row sm:justify-end pb-safe">
+        <ResponsiveSheetFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancelar
           </Button>
@@ -406,9 +399,9 @@ export function ImportMeetingModal(props: Props) {
             {submitting && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
             Criar e ingerir
           </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </ResponsiveSheetFooter>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }
 

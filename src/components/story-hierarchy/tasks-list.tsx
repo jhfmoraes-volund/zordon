@@ -26,11 +26,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetBody,
+  ResponsiveSheetFooter,
+} from "@/components/ui/responsive-sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { TASK_STATUS } from "@/lib/status-chips";
@@ -558,23 +560,20 @@ export function TasksList({
       )}
 
       {/* Mobile filters bottom sheet ─────────────────────────────────── */}
-      <Sheet open={filtersSheetOpen && isMobile} onOpenChange={setFiltersSheetOpen}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[85dvh] rounded-t-xl"
-        >
-          <SheetHeader className="border-b pb-4">
-            <SheetTitle className="text-base">
+      <ResponsiveSheet open={filtersSheetOpen && isMobile} onOpenChange={setFiltersSheetOpen}>
+        <ResponsiveSheetContent>
+          <ResponsiveSheetHeader>
+            <ResponsiveSheetTitle className="text-base">
               Filtros
               {activeFilterCount > 0 && (
                 <span className="ml-2 font-mono text-xs text-muted-foreground tabular-nums">
                   {activeFilterCount} ativo{activeFilterCount === 1 ? "" : "s"}
                 </span>
               )}
-            </SheetTitle>
-          </SheetHeader>
+            </ResponsiveSheetTitle>
+          </ResponsiveSheetHeader>
 
-          <div className="flex-1 overflow-y-auto px-6 pb-2">
+          <ResponsiveSheetBody>
             <TasksFilters
               layout="stacked"
               modules={modules}
@@ -589,9 +588,9 @@ export function TasksList({
               onStatusChange={setStatusFilter}
               onAssigneeChange={setAssigneeFilter}
             />
-          </div>
+          </ResponsiveSheetBody>
 
-          <div className="flex items-center justify-between gap-3 border-t p-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
+          <ResponsiveSheetFooter className="flex-row items-center justify-between gap-3">
             <Button
               variant="ghost"
               onClick={clearAllFilters}
@@ -604,9 +603,9 @@ export function TasksList({
             <Button onClick={() => setFiltersSheetOpen(false)}>
               Ver {filtered.length} task{filtered.length === 1 ? "" : "s"}
             </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </ResponsiveSheetFooter>
+        </ResponsiveSheetContent>
+      </ResponsiveSheet>
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   );

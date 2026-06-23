@@ -155,6 +155,7 @@ export function Cronograma({
   onSelect,
   shape,
   layout = "wrap",
+  gridCols,
   collapsible,
   size = "md",
   variant,
@@ -163,7 +164,9 @@ export function Cronograma({
   selectedKey?: string | null;
   onSelect?: (key: string) => void;
   shape?: Shape;
-  layout?: "scroll" | "wrap";
+  layout?: "scroll" | "wrap" | "grid";
+  /** Nº de colunas quando `layout="grid"` (default 3). Grade fixa N-por-linha. */
+  gridCols?: number;
   collapsible?: { previewCount: number };
   /** Densidade do `ribbon`: sm (board) / md (rail, default) / lg (tooltip da régua). */
   size?: "sm" | "md" | "lg";
@@ -299,26 +302,36 @@ export function Cronograma({
     <div>
       <div
         className={cn(
-          "flex gap-1.5",
-          layout === "scroll"
-            ? "overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            : "flex-wrap",
+          "gap-1.5",
+          layout === "grid"
+            ? "grid"
+            : layout === "scroll"
+              ? "flex overflow-x-auto pb-0.5 no-scrollbar"
+              : "flex flex-wrap",
         )}
+        style={
+          layout === "grid"
+            ? { gridTemplateColumns: `repeat(${gridCols ?? 3}, minmax(0, 1fr))` }
+            : undefined
+        }
       >
         {visible.map((nb) => {
           const isSelected = selectedKey === nb.key;
           // `tone` explícito (Finanças/delivery) ⇒ cor é o sinal, renderiza colorido.
-          // Sem tone (modo atividade: PM Review/semanas) ⇒ chips UNIFORMES; o único
-          // sinal é um dot verde quando a célula tem atividade (`!silent`). Seleção =
-          // underline de acento (sem halo neon).
+          // Sem tone (modo atividade: PM Review/semanas) ⇒ chips UNIFORMES; dot verde
+          // = tem atividade (`!silent`). Dois eixos ORTOGONAIS de marcação:
+          //   • barra vermelha (underline) = a célula CORRENTE ("agora", âncora fixa);
+          //   • contraste cinza (fill) = a célula SELECIONADA (o que se está vendo).
+          // (No modo explícito a barra segue a seleção — preserva o realce do Finanças.)
           const explicit = !!nb.tone;
           const tone = nb.tone ?? activityTone(nb.state);
           const activeDot = !explicit && !nb.silent;
+          const showBar = explicit ? isSelected : nb.state === "current";
           return (
             <span
               key={nb.key}
               ref={isSelected ? selectedChipRef : undefined}
-              className={cn("relative shrink-0", nb.flagged && "mt-3")}
+              className={cn("relative", layout !== "grid" && "shrink-0", nb.flagged && "mt-3")}
             >
               {nb.flagged && <Flag />}
               <Cell
@@ -328,9 +341,14 @@ export function Cronograma({
                 title={nb.title}
                 className={cn(
                   "relative flex h-[30px] min-w-[58px] items-center gap-1.5 rounded-[7px] border pl-1.5 pr-2.5 font-mono tabular-nums transition-colors",
+                  layout === "grid" && "w-full",
                   explicit ? cn(tone.border, tone.band) : "border-border bg-transparent",
-                  isSelected && (explicit ? "bg-foreground/[0.04]" : "bg-foreground/[0.06]"),
-                  interactive && "cursor-pointer hover:bg-foreground/[0.05]",
+                  !explicit && nb.state === "future" && "opacity-55",
+                  // Seleção = contraste cinza (fill + borda mais forte no modo atividade).
+                  isSelected &&
+                    (explicit ? "bg-foreground/[0.04]" : "border-foreground/25 bg-foreground/[0.08]"),
+                  interactive && "cursor-pointer",
+                  interactive && !isSelected && "hover:bg-foreground/[0.05]",
                 )}
               >
                 {activeDot && (
@@ -354,7 +372,7 @@ export function Cronograma({
                     {nb.value}
                   </span>
                 )}
-                {isSelected && (
+                {showBar && (
                   <span
                     aria-hidden
                     className="pointer-events-none absolute inset-x-2 bottom-[3px] h-[2px] rounded-full bg-primary"

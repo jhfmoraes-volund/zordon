@@ -5,6 +5,7 @@
 > e listar com sinceridade as **dúvidas + opções** que precisam de decisão pra destravar.
 > Leia inteiro antes de tocar código. Confie nos fatos abaixo, mas **confirme no DB/código** antes de editar.
 > Última atualização: 2026-06-22.
+> **▸ A camada billing(NF) + hub no canvas + agent-fill saiu pra [contract-billing-and-agent-fill-plan.md](contract-billing-and-agent-fill-plan.md)** (fonte VIVA dessa camada; re-sequenciada por valor pós-audit + 3 runbooks). Este doc = SSOT do épico período/termos/receita.
 
 ---
 
@@ -31,7 +32,7 @@ Tudo isso atendendo os **3 requisitos do dono** (ver §7) e **sem duplicação d
 | Cronograma de blocos | 🔵 **unificado por outra sessão** num componente único `src/components/timeline/cronograma.tsx` — `finance-contracts.tsx` já renderiza `<Cronograma>` por contrato; `finance-sprint-timeline.tsx` **deletado de propósito**. **Fora desta lane.** |
 | Requisito #1 (cronograma empilhado/dedicado) | ✅ entregue (e agora absorvido pela unificação) |
 | Requisito #2 (valores/condições no contrato) | ✅ schema+UI; falta só o **backfill HITz** (na fila) |
-| Requisito #3 (preço/FP inferido do valor global) | 🟡 **Batch C — camada de dados ✅** (`20260623i`: `total_value_cents` + `price_per_fp_cents` GENERATED + 3 views recriadas; `dal.ts`/`types.ts`; receita inalterada, derivação provada). **UI do form pendente** (arquivo `finance-contracts.tsx` disputado pela sessão de cronograma; o input "Preço/FP" virou dead input transitório — encomenda não persiste valor até o swap pra "Valor global"). |
+| Requisito #3 (preço/FP inferido do valor global) | ✅ **Batch C completo** — dados (`20260623i`: `total_value_cents` + `price_per_fp_cents` GENERATED + 3 views) **+ UI** (`finance-contracts.tsx`: input "Valor global do contrato" + preço/FP derivado ao vivo; `tsc`/`eslint` limpos). **Falta só smoke em browser.** |
 | HITz — montar contratos com dados reais das propostas | 🔵 **na fila** do dono ("tem outras coisas") |
 | **Batches C → B → D** | ⬜ prontos, decididos, na ordem |
 
@@ -93,12 +94,9 @@ Tudo isso atendendo os **3 requisitos do dono** (ver §7) e **sem duplicação d
 
 ## 6. Trabalho restante — Batches
 
-### Batch C — Preço/FP invertido (requisito #3) · **decidido**
-- **Migration atômica:** `ADD total_value_cents bigint CHECK(>=0)` → `DROP VIEW v_org_month, v_project_month, v_fp_delivery_month` → `DROP COLUMN price_per_fp_cents` → `ADD price_per_fp_cents GENERATED ALWAYS AS ((total_value_cents / NULLIF(contracted_fp,0))::bigint) STORED` → **recriar as 3 views** (sem mudar a lógica delivery-based de D6). `contracted_fp` JÁ existe. Backfill = no-op (todos NULL hoje).
-- **DAL:** remover `price_per_fp_cents` de `toContractRow`/INSERT/UPDATE (é gerada); adicionar `total_value_cents`.
-- **types.ts:** `totalValueCents` editável; `pricePerFpCents` read-only (derivado).
-- **UI (`finance-contracts.tsx` — coordenar):** form encomenda com campo **"Valor global do contrato"** + "FP contratado"; mostrar preço/FP derivado + progresso entregue/contratado.
-- **Risco:** médio-alto (recria 3 views vivas). Dry-run `BEGIN/ROLLBACK` + validar receita inalterada antes do COMMIT.
+### Batch C — Preço/FP invertido (requisito #3) · ✅ **COMPLETO** (dados + UI)
+- **Dados:** `20260623i` — `total_value_cents` (campo aberto) + `price_per_fp_cents` GENERATED (valor÷FP) + 3 views recriadas (receita inalterada, derivação provada). DAL (`toContractRow` sem price, +total_value) + `types.ts` ajustados.
+- **UI:** `finance-contracts.tsx` — form encomenda com **"Valor global do contrato"** + preço/FP derivado ao vivo (`tsc`/`eslint` limpos). **Falta só smoke em browser.**
 
 ### Batch B — RLS-split + contratos no tab do projeto · **decidido (D5/D8), mas tem dúvida aberta (ver §8)**
 - **Migration:** `finance.v_contract_period` expondo só `project_id/label/seq/effective_from/effective_to/billing_type` com gate `can_view_project(project_id) OR is_admin()`; valores ficam na tabela admin-only.
@@ -107,7 +105,7 @@ Tudo isso atendendo os **3 requisitos do dono** (ver §7) e **sem duplicação d
 
 ### Batch D — Equipe por contrato · **decidido (reuso), com 1 sub-decisão**
 - Reusar `finance.labor_allocation` escopada ao período do contrato; componente pré-preenche vigência = datas do contrato.
-- **Sub-decisão:** precisa de **identidade por contrato** (FK `contract_id` nullable) ou basta "custo muda quando o período muda" (só convenção de datas)? Contratos contíguos do mesmo membro ficam indistinguíveis sem FK.
+- **Sub-decisão RESOLVIDA (2026-06-22) → SIM:** FK `contract_id` nullable em `labor_allocation` (a alocação pertence ao contrato; editável no sheet do contrato). Owner: **RB1 Fase 1.3** do [billing plan](contract-billing-and-agent-fill-plan.md).
 - Enforcement `Σ% ≤ 100` por (membro, período) no DAL (espelha `validateContract`).
 
 ### Fila — HITz (backfill exato, **só HITz**)
@@ -188,5 +186,5 @@ Nada foi verificado em browser ainda.
 - **Cronograma (lane vizinha):** [docs/platform/cronograma-unification-plan.md](../../platform/cronograma-unification-plan.md)
 - **Propostas HITz:** `.assets/Proposta Hitz. final.pdf` (lida) · `.assets/Proposta_Volund_OperacaoEspecial_Hitz_Gulf 2 (1).pdf` (NÃO lida)
 - **Código:** `src/lib/finance/{types,dal}.ts` · `src/components/apps/finance/*` · `src/app/api/finance/*`
-- **Migrations:** `supabase/migrations/20260623{d,e,g,h}_*.sql`
+- **Migrations:** `supabase/migrations/20260623{d,e,g,h,i,j,k}_*.sql` (i=preço/FP GENERATED · j/k=backfill HITz + fix FP fixed_scope)
 - **Memória:** `project_finance_app` (estado vivo + fila HITz + decisões)

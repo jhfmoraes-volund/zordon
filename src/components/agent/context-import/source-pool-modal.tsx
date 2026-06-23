@@ -12,9 +12,15 @@ import {
   File as FileIcon,
   Check,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetDescription,
+  ResponsiveSheetBody,
+  ResponsiveSheetFooter,
+} from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -72,7 +78,6 @@ export function SourcePoolModal({
   linkedSourceIds,
   onLink,
 }: Props) {
-  const isMobile = useIsMobile();
   const [sources, setSources] = useState<PoolSource[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,33 +126,20 @@ export function SourcePoolModal({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={isMobile ? "bottom" : "right"}
-        className={cn(
-          "flex flex-col gap-0 p-0",
-          isMobile ? "max-h-[90vh] rounded-t-xl" : "w-full sm:max-w-lg",
-        )}
-      >
-        {isMobile && (
-          <div
-            aria-hidden="true"
-            className="mx-auto mt-2 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted"
-          />
-        )}
-
-        <div className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
-          <SheetTitle className="flex items-center gap-2">
+    <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+      <ResponsiveSheetContent size="md">
+        <ResponsiveSheetHeader>
+          <ResponsiveSheetTitle className="flex items-center gap-2">
             <Library className="h-4 w-4" />
             Linkar do pool do projeto
-          </SheetTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
+          </ResponsiveSheetTitle>
+          <ResponsiveSheetDescription>
             Qualquer insumo já importado no projeto (Drive, Notion, planilha,
             documento, GitHub) pode virar contexto deste ritual.
-          </p>
-        </div>
+          </ResponsiveSheetDescription>
+        </ResponsiveSheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 space-y-3">
+        <ResponsiveSheetBody className="space-y-3">
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Carregando pool…
@@ -197,14 +189,14 @@ export function SourcePoolModal({
               })}
             </ul>
           )}
-        </div>
+        </ResponsiveSheetBody>
 
-        <div className="shrink-0 flex justify-end border-t bg-popover px-4 py-3 sm:px-6 pb-safe">
+        <ResponsiveSheetFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </ResponsiveSheetFooter>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }

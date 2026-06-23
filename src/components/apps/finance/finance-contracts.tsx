@@ -12,7 +12,7 @@
  * tornando explícita a relação contrato→sprints.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -82,30 +82,31 @@ function coveredSprints(contract: Contract, contracts: Contract[], sprints: Spri
   return sprints.filter((s) => contractForDate(contracts, s.startDate)?.id === contract.id);
 }
 
-export function FinanceContracts({
-  projectId,
-  contracts,
-  sprints,
-  engagementType,
-  selectedContractId,
-  onSelectContract,
-  onChanged,
-}: {
-  projectId: string;
-  contracts: Contract[];
-  sprints: SprintLite[];
-  engagementType: string | null;
-  selectedContractId: string | null;
-  onSelectContract: (id: string | null) => void;
-  onChanged: () => void;
-}) {
+/** Ações imperativas expostas ao hub (ex.: o segmentado `+` abre a criação). */
+export type FinanceContractsHandle = { openCreate: () => void };
+
+export const FinanceContracts = forwardRef<
+  FinanceContractsHandle,
+  {
+    projectId: string;
+    contracts: Contract[];
+    sprints: SprintLite[];
+    engagementType: string | null;
+    selectedContractId: string | null;
+    onSelectContract: (id: string | null) => void;
+    onChanged: () => void;
+  }
+>(function FinanceContracts(
+  { projectId, contracts, sprints, engagementType, selectedContractId, onSelectContract, onChanged },
+  ref,
+) {
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   const defaultBilling: BillingType = engagementType === "fixed_scope" ? "fixed_scope" : "squad";
 
-  function openAdd() {
+  const openAdd = useCallback(() => {
     onSelectContract(null);
     setForm({
       id: null,
@@ -119,7 +120,9 @@ export function FinanceContracts({
       contractedSprints: "",
       note: "",
     });
-  }
+  }, [contracts.length, defaultBilling, onSelectContract]);
+
+  useImperativeHandle(ref, () => ({ openCreate: openAdd }), [openAdd]);
   function openEdit(c: Contract) {
     setForm({
       id: c.id,
@@ -312,7 +315,7 @@ export function FinanceContracts({
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </div>
   );
-}
+});
 
 function ContractForm({
   form,

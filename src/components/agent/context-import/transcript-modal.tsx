@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+  ResponsiveSheet,
+  ResponsiveSheetContent,
+  ResponsiveSheetHeader,
+  ResponsiveSheetTitle,
+  ResponsiveSheetDescription,
+  ResponsiveSheetBody,
+  ResponsiveSheetFooter,
+} from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,7 +27,6 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 /**
  * Shape leve do "transcript importado" devolvido pelos endpoints de listagem
@@ -114,7 +121,6 @@ export function TranscriptModal({
   onImported: (t: ImportedTranscript) => void;
   subtitle?: string;
 }) {
-  const isMobile = useIsMobile();
   const router = useRouter();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -213,29 +219,16 @@ export function TranscriptModal({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={isMobile ? "bottom" : "right"}
-        className={cn(
-          "flex flex-col gap-0 p-0",
-          isMobile ? "max-h-[90vh] rounded-t-xl" : "w-full sm:max-w-xl",
-        )}
-      >
-        {isMobile && (
-          <div
-            aria-hidden="true"
-            className="mx-auto mt-2 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted"
-          />
-        )}
-
-        <div className="shrink-0 border-b px-4 py-4 sm:px-6 sm:py-5">
-          <SheetTitle className="flex items-center gap-2">
+    <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
+      <ResponsiveSheetContent size="md">
+        <ResponsiveSheetHeader>
+          <ResponsiveSheetTitle className="flex items-center gap-2">
             <Mic className="h-4 w-4" />
             Importar transcrição
-          </SheetTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
+          </ResponsiveSheetTitle>
+          <ResponsiveSheetDescription>
             {subtitle ?? "Vitor vai usar a transcrição como contexto da sessão."}
-          </p>
+          </ResponsiveSheetDescription>
 
           <div
             role="tablist"
@@ -276,9 +269,9 @@ export function TranscriptModal({
               );
             })}
           </div>
-        </div>
+        </ResponsiveSheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 space-y-4">
+        <ResponsiveSheetBody className="space-y-4">
           {loading && (
             <div className="space-y-3">
               <Skeleton className="h-9 w-full" />
@@ -371,9 +364,9 @@ export function TranscriptModal({
           )}
 
           {importError && <p className="text-sm text-destructive">{importError}</p>}
-        </div>
+        </ResponsiveSheetBody>
 
-        <div className="shrink-0 flex flex-col-reverse gap-2 border-t bg-popover px-4 py-3 sm:px-6 sm:flex-row sm:justify-end pb-safe">
+        <ResponsiveSheetFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={importing}>
             Cancelar
           </Button>
@@ -381,9 +374,9 @@ export function TranscriptModal({
             {importing && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
             Importar transcrição
           </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </ResponsiveSheetFooter>
+      </ResponsiveSheetContent>
+    </ResponsiveSheet>
   );
 }
 

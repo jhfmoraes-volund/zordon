@@ -49,17 +49,20 @@ export function MessageList({
   const isWaiting = status === "streaming" || status === "submitted";
   const lastMsg = messages[messages.length - 1];
   const lastIsAssistant = lastMsg?.role === "assistant";
-  // O proxy cria a mensagem do assistant cedo (chunk `start`), antes de
-  // qualquer conteúdo. Por isso o indicador não pode sumir só porque existe
-  // uma mensagem do assistant — ele fica até aparecer conteúdo visível
-  // (resposta OU raciocínio streamando). Quando o raciocínio começa, o
-  // disclosure "Pensando…" assume e o indicador some.
+  // Enquanto o agente trabalha (streaming/submitted) o turno não acabou:
+  // ele pode estar pensando, escrevendo ou rodando ferramentas. Mantemos um
+  // indicador de atividade vivo no rodapé o tempo todo — só o suprimimos
+  // durante o "Pensando…" vivo, onde o ReasoningDisclosure já pulsa e
+  // duplicar ficaria ruidoso. Assim o cue não morre quando os tools rodam
+  // depois do texto (era o caso difícil de perceber).
   const lastAnswer =
     lastIsAssistant && lastMsg ? extractText(lastMsg) : "";
   const lastReasoning =
-    lastIsAssistant && lastMsg ? extractReasoning(lastMsg).text : "";
-  const showThinking =
-    isWaiting && lastAnswer.length === 0 && lastReasoning.length === 0;
+    lastIsAssistant && lastMsg
+      ? extractReasoning(lastMsg)
+      : { text: "", streaming: false };
+  const reasoningLive = lastReasoning.streaming && lastAnswer.length === 0;
+  const showThinking = isWaiting && !reasoningLive;
 
   const itemCount = messages.length + (showThinking ? 1 : 0);
 
