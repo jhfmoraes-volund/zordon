@@ -19,7 +19,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
   try {
-    return NextResponse.json({ allocation: await updateAllocation(id, body) });
+    const { allocation, warning } = await updateAllocation(id, body);
+    return NextResponse.json({ allocation, warning });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });
   }

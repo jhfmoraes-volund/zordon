@@ -13,6 +13,17 @@ import { getStepData } from "@/lib/agent/context";
 import { applyMarkdownMutation } from "@/lib/agent/tools/_markdown";
 import { createReadContextSourceTool } from "@/lib/agent/tools/read-context-source";
 import { getSprintOutcomes } from "@/lib/dal/sprint-outcomes";
+import {
+  listModulesForOpsTool,
+  listStoriesForOpsTool,
+  getStoryForOpsTool,
+  manageStoryAcForOpsTool,
+} from "@/lib/agent/tools/alpha-hierarchy";
+import {
+  getStoryByReference,
+  getModulesForProject,
+  updateStory,
+} from "@/lib/dal/story-hierarchy";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 type MeetingTaskActionUpdate = Database["public"]["Tables"]["MeetingTaskAction"]["Update"];
@@ -805,6 +816,98 @@ export function buildVitoriaTools(
           title: data.title,
           hint: "Use storyId em payload.userStoryId dos propose_task_action pra pendurar as tasks.",
         };
+      },
+    }),
+
+    // ── Camada Story (Module → UserStory → AC) ──────────────────────────────
+    // Reuso das tools de hierarquia project-scoped do Alpha (alpha-hierarchy.ts):
+    // mesma leitura/escrita, projectId vem do closure (D2). Fecha a lacuna do
+    // diagnóstico — a Vitoria lia `userStoryId` sem título/módulo e só sabia
+    // CRIAR story (propose_story duplicaria as que já estão no board). Agora LÊ
+    // a árvore e CARIMBA módulo/AC numa US existente.
+    // Fronteira Vitor/Vitoria: personaId e refinementStatus continuam exclusivos
+    // do Vitor (Inception) — update_story abaixo NÃO os expõe.
+    list_project_modules: listModulesForOpsTool(projectId),
+    list_project_stories: listStoriesForOpsTool(projectId),
+    get_story_detail: getStoryForOpsTool(projectId),
+    manage_story_ac: manageStoryAcForOpsTool(projectId),
+
+    update_story: tool({
+      description:
+        "Atualiza uma User Story que JÁ existe (write direto, live — D6, igual propose_story/propose_sprint). " +
+        "Use pra CARIMBAR módulo numa story que está sem módulo, ou ajustar título/want/soThat. " +
+        "NUNCA use propose_story quando a US já está no board (duplicaria) — use esta. " +
+        "moduleId XOR proposedModuleName: passe moduleId (resolva via list_project_modules) quando o módulo já existe; " +
+        "proposedModuleName (string crua) só pra propor módulo novo. " +
+        "NÃO mexe em AC (use manage_story_ac), persona nem refinementStatus (domínio do Vitor na Inception).",
+      inputSchema: z.object({
+        reference: z
+          .string()
+          .min(3)
+          .describe("Reference da story (ex: 'VLD-US-012') — obtida via list_project_stories."),
+        title: z.string().min(3).optional().describe("Novo título (opcional)."),
+        want: z.string().min(3).optional().describe("Novo 'quero' da story (opcional)."),
+        soThat: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("Novo 'para que' (passe null pra limpar)."),
+        moduleId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("UUID de Module existente (de list_project_modules). XOR com proposedModuleName."),
+        proposedModuleName: z
+          .string()
+          .optional()
+          .describe("Nome de módulo NOVO a propor (string crua). XOR com moduleId. Não use se o módulo já existe."),
+      }),
+      execute: async ({ reference, title, want, soThat, moduleId, proposedModuleName }) => {
+        if (moduleId && proposedModuleName) {
+          return { ok: false, error: "moduleId XOR proposedModuleName — passe apenas um." };
+        }
+        const story = await getStoryByReference(reference);
+        if (!story) return { ok: false, error: `story ${reference} não encontrada` };
+        if (story.projectId !== projectId) {
+          return { ok: false, error: "story pertence a outro projeto" };
+        }
+
+        const patch: Parameters<typeof updateStory>[1] = {};
+        if (title !== undefined) patch.title = title;
+        if (want !== undefined) patch.want = want;
+        if (soThat !== undefined) patch.soThat = soThat;
+        if (moduleId !== undefined) {
+          const modules = await getModulesForProject(projectId);
+          if (!modules.find((m) => m.id === moduleId)) {
+            return { ok: false, error: "moduleId não pertence ao projeto" };
+          }
+          // XOR — carimbar módulo real limpa o proposto (mirror create_user_story).
+          patch.moduleId = moduleId;
+          patch.proposedModuleName = null;
+        } else if (proposedModuleName !== undefined) {
+          // Cru (não normalizado) — espelha propose_story; o board agrupa por
+          // string e normalizar aqui divergiria das stories já criadas.
+          patch.proposedModuleName = proposedModuleName;
+          patch.moduleId = null;
+        }
+
+        if (Object.keys(patch).length === 0) {
+          return { ok: false, error: "nenhum campo passado pra atualizar" };
+        }
+
+        try {
+          const updated = await updateStory(story.id, patch);
+          return {
+            ok: true,
+            storyId: updated.id,
+            reference: updated.reference,
+            title: updated.title,
+            moduleId: updated.moduleId,
+            proposedModuleName: updated.proposedModuleName,
+          };
+        } catch (e) {
+          return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
       },
     }),
 

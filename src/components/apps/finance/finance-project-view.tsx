@@ -20,11 +20,14 @@ import {
   Tooltip,
   XAxis,
 } from "recharts";
+import { useRouter } from "next/navigation";
 import {
   CalendarRange,
   ChevronLeft,
+  Map as MapIcon,
   Paperclip,
   Plus,
+  Repeat,
   Scale,
   Shield,
   SlidersHorizontal,
@@ -33,7 +36,9 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Cronograma } from "@/components/timeline/cronograma";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { brtMonday } from "@/lib/pm-review/week";
 import { brlFromCents, pct } from "@/lib/format-currency";
 import { fmtDate, fmtDayMonth } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
@@ -73,6 +78,7 @@ export function FinanceProjectView({
   onBack: () => void;
 }) {
   const isMobile = useIsMobile();
+  const router = useRouter();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
@@ -331,17 +337,33 @@ export function FinanceProjectView({
           shape="chip"
           layout={isMobile ? "scroll" : "grid"}
           gridCols={3}
-          blocks={cronoSprints.map((s) => {
-            const c = contractForDate(detail.contracts, s.startDate);
-            const pal = c ? paletteFor(c.seq) : null;
-            return {
-              key: s.id,
-              indicator: shortName(s.name),
-              dateLabel: fmtDayMonth(s.startDate),
-              tone: pal ? { border: pal.border, band: pal.band, text: pal.text } : undefined,
-              title: `${s.name} · ${fmtDate(s.startDate)} → ${fmtDate(s.endDate)}`,
-            };
-          })}
+          plain
+          blocks={cronoSprints.map((s) => ({
+            key: s.id,
+            indicator: shortName(s.name),
+            dateLabel: fmtDayMonth(s.startDate),
+            title: `${s.name} · ${fmtDate(s.startDate)} → ${fmtDate(s.endDate)}`,
+          }))}
+          chipMenu={(sprintId) => {
+            const s = detail.sprints.find((x) => x.id === sprintId);
+            // BRT noon evita o shift de -3h jogar a data pro domingo anterior.
+            const week = s ? brtMonday(new Date(`${s.startDate.slice(0, 10)}T12:00:00Z`)) : null;
+            return (
+              <>
+                <DropdownMenuItem
+                  onClick={() => router.push(`/projects/${projectId}/planning?sprint=${sprintId}`)}
+                >
+                  <MapIcon className="size-3.5" /> Ver no Planning
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!week}
+                  onClick={() => week && router.push(`/projects/${projectId}/pm-review?week=${week}`)}
+                >
+                  <Repeat className="size-3.5" /> Ver no PM Review
+                </DropdownMenuItem>
+              </>
+            );
+          }}
         />
       </div>
     </div>

@@ -378,13 +378,15 @@
     background-color: var(--canvas-paper);
     box-shadow: var(--canvas-paper-shadow);
   }
-  /* Header fixo no topo da mesa — fade pra ela embaixo (some sob o conteúdo). */
+  /* Header plugado no topo do canvas — barra sólida na cor da folha (distinta da
+     mesa) com linha divisória dura embaixo. No dark a linha é branca a 16% pra
+     ler como separador firme. Hard header, sem fade. */
   .canvas-stage-head {
-    background: linear-gradient(
-      var(--canvas-stage),
-      var(--canvas-stage) 72%,
-      transparent
-    );
+    background-color: var(--canvas-paper);
+    border-bottom: 1px solid var(--border);
+  }
+  .dark .canvas-stage-head {
+    border-bottom-color: oklch(1 0 0 / 16%);
   }
 
   /* Shimmer text animation for AI processing indicators */

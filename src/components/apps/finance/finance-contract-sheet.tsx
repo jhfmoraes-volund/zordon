@@ -30,6 +30,8 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
+import { toast } from "sonner";
+
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { brlFromCents } from "@/lib/format-currency";
 import { fmtDate } from "@/lib/date-utils";
@@ -588,18 +590,23 @@ function ContractTeamEditor({
     if (!form.memberId || !(percent > 0 && percent <= 100) || !form.from) return;
     setBusy(true);
     try {
-      await fetchOrThrow(form.id ? `/api/finance/allocations/${form.id}` : "/api/finance/allocations", {
-        method: form.id ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          memberId: form.memberId,
-          projectId,
-          percent,
-          effectiveFrom: form.from,
-          effectiveTo: form.to || null,
-          contractId,
-        }),
-      });
+      const res = await fetchOrThrow(
+        form.id ? `/api/finance/allocations/${form.id}` : "/api/finance/allocations",
+        {
+          method: form.id ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            memberId: form.memberId,
+            projectId,
+            percent,
+            effectiveFrom: form.from,
+            effectiveTo: form.to || null,
+            contractId,
+          }),
+        },
+      );
+      const { warning } = (await res.json().catch(() => ({}))) as { warning?: string | null };
+      if (warning) toast.warning(warning);
       setForm(null);
       onChanged();
     } catch (e) {

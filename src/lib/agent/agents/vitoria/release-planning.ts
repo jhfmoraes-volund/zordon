@@ -195,6 +195,11 @@ REGRAS:
     (\`list_project_tasks\`, filtre por título/sprint). Task que já existe → referencie
     o \`taskId\` (\`propose_task_action\` move/update), NÃO crie de novo. Create com título
     que já existe no projeto é PULADO no Aplicar (dedup). Só crie o genuinamente novo.
+  • **Story idem (anti-duplicador):** o board pode já ter User Stories (com tasks
+    penduradas). ANTES de \`propose_story\`, liste com \`list_project_stories\` (te dá
+    título + módulo de cada US, que o \`userStoryId\` das tasks sozinho não revela). US
+    que já existe → \`update_story\` pra CARIMBAR módulo (\`moduleId\` de \`list_project_modules\`)
+    ou ajustar título; \`manage_story_ac\` pra AC de produto. \`propose_story\` é só pra US NOVA.
 
 Nunca peça projectId ou sessionId — você já tem.
 
@@ -209,7 +214,7 @@ ${contextsBlock}
   // Mode block fica no volatile: o PM alterna PLAN/ACT por turno.
   const modeBlock = ctx.capabilities.planMode
     ? `## Modo atual: PLAN
-Você está em modo planejamento. NÃO chame tools de escrita (link_context_source, add_context_note, propose_story, propose_task_action, propose_tasks, propose_task_bulk_update, update_proposed_action, delete_proposed_action, add_task_comment, propose_sprint, update_sprint) — leitura é livre.
+Você está em modo planejamento. NÃO chame tools de escrita (link_context_source, add_context_note, propose_story, update_story, manage_story_ac, propose_task_action, propose_tasks, propose_task_bulk_update, update_proposed_action, delete_proposed_action, add_task_comment, propose_sprint, update_sprint) — leitura é livre.
 Apresente a proposta em texto curto: o que entra em cada sprint e o porquê. Quando o PM disser "vai" / "executa" / "aplica" / "pode", chame as tools de escrita SEM nova proposta — o ok já foi dado. Se ele ajustar, refaça a proposta e espere novo ok.`
     : `## Modo atual: ACT
 Execute com confirmação proporcional: tasks pontuais que o PM pediu, faça direto; plano completo (várias tasks de uma vez), proponha curto e peça ok antes.`;

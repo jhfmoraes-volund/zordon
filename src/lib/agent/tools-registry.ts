@@ -243,9 +243,14 @@ const VITORIA_SHARED_READ_NAMES: VitoriaToolName[] = [
   "list_active_design_sessions",
   "read_design_session_memory",
   "read_design_session_step",
+  "list_project_modules", // hierarquia: módulos do projeto (reuse alpha-hierarchy)
+  "list_project_stories", // hierarquia: US com título/módulo/persona/acCount
+  "get_story_detail", // hierarquia: 1 story com AC inteiros
 ];
 const VITORIA_PLANNING_PROJECT_NAMES: VitoriaToolName[] = [
   "propose_story",
+  "update_story", // write direto live (D6) — carimba módulo/edita US existente
+  "manage_story_ac", // write direto live — add/edit/remove AC de produto da US
   "append_project_memory",
   "add_task_comment", // write direto live (D7) — needs:[], autor via ctx.memberId
   "propose_sprint", // write direto live (D6) — needs:[], só projectId (invariante)

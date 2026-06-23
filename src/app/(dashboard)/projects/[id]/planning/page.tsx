@@ -29,6 +29,7 @@ import { ReleasePlanningSheet } from "@/components/planning-session/release-plan
 import { ReleasePlanningContextSheet } from "@/components/planning-session/context-sheet";
 import { ReleasePlanningProposals } from "@/components/planning-session/release-planning-proposals";
 import { ReleasePlanningStories } from "@/components/planning-session/release-planning-stories";
+import { StoryDetailSheet } from "@/components/planning-session/story-detail-sheet";
 import {
   CronogramaRail,
   type CronogramaBlock,
@@ -77,6 +78,8 @@ export default function PlanningSessionPage({
   // módulo, sem sprint). Toggle vive na toolbar do canvas.
   const [view, setView] = useState<"tasks" | "stories">("tasks");
   const [storyCount, setStoryCount] = useState(0);
+  // Story aberta no side sheet de detalhe (vista User Stories).
+  const [openStoryRef, setOpenStoryRef] = useState<string | null>(null);
   // Smart-refresh: a Vitoria mexe no board via tools; em vez de recarregar a
   // cada turno (reordena sob o usuário), sinalizamos "novo conteúdo" e o usuário
   // puxa pelo ⟳. Auto-pull só quando o board está vazio (nada a atrapalhar).
@@ -108,12 +111,21 @@ export default function PlanningSessionPage({
   // `historyBlockKey` = bloco/semana selecionada (sprintId ou "__none__");
   // `historyEventId` = versão aberta no canvas. Em modo histórico, canvas + chat
   // ficam read-only.
-  const [historyBlockKey, setHistoryBlockKey] = useState<string | null>(null);
+  // Deep-link `?sprint=<id>` (cronograma do Finanças) → abre já em modo histórico
+  // naquela sprint. Lido 1× no mount (SSR-safe, sem useSearchParams/Suspense) e
+  // semeado no ESTADO INICIAL (sem setState-in-effect). A versão exibida cai na
+  // mais recente do bloco via `effectiveHistoryEventId` (derivada no render).
+  const [initialSprintParam] = useState<string | null>(() =>
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("sprint")
+      : null,
+  );
+  const [historyBlockKey, setHistoryBlockKey] = useState<string | null>(initialSprintParam);
   const [historyEventId, setHistoryEventId] = useState<string | null>(null);
   // Sheet do navegador de versões. Separado do historyMode: fechar o sheet NÃO
   // sai do histórico (o canvas segue congelado pra você vê-lo); reabrir = clicar
   // um bloco na mini-régua. Sair de vez é o "Ao vivo".
-  const [historySheetOpen, setHistorySheetOpen] = useState(false);
+  const [historySheetOpen, setHistorySheetOpen] = useState(!!initialSprintParam);
   const historyMode = historyBlockKey !== null;
 
   const threadIdRef = useRef<string | null>(null);
@@ -459,6 +471,10 @@ export default function PlanningSessionPage({
   const drawerEvents = historyBlockKey ? eventsByBlock.get(historyBlockKey) ?? [] : [];
   const selectedBlockLabel =
     blocks.find((b) => b.key === historyBlockKey)?.label ?? null;
+  // Versão efetiva exibida: a escolhida pelo usuário, senão a mais recente do
+  // bloco (deep-link `?sprint=` cai direto na última versão, sem clique extra).
+  const effectiveHistoryEventId =
+    historyEventId ?? (historyBlockKey ? eventsByBlock.get(historyBlockKey)?.[0]?.id ?? null : null);
 
   const handleSubmit = useCallback(() => {
     const text = input.trim();
@@ -694,12 +710,14 @@ export default function PlanningSessionPage({
         size="icon-sm"
         onClick={handleRefreshCanvas}
         title={hasNewContent ? "Novo conteúdo — recarregar" : "Recarregar canvas"}
-        className="relative"
+        className={cn(
+          "transition-colors",
+          hasNewContent
+            ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+            : "text-muted-foreground",
+        )}
       >
         <RotateCcw className="size-4" />
-        {hasNewContent && (
-          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary ring-2 ring-[var(--canvas-stage)]" />
-        )}
       </Button>
 
       {view === "tasks" && !isApproved && isStaging && (
@@ -745,6 +763,7 @@ export default function PlanningSessionPage({
           projectId={projectId}
           refreshKey={actionsRefresh}
           onCountChange={setStoryCount}
+          onOpenStory={setOpenStoryRef}
         />
       ) : (
         <>
@@ -871,6 +890,11 @@ export default function PlanningSessionPage({
         onUpdated={loadSession}
         onDeleted={loadSession}
         onSprintsGenerated={loadSprints}
+      />
+
+      <StoryDetailSheet
+        storyRef={openStoryRef}
+        onClose={() => setOpenStoryRef(null)}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />

@@ -32,7 +32,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
   try {
-    return NextResponse.json({ allocation: await createAllocation(body) }, { status: 201 });
+    const { allocation, warning } = await createAllocation(body);
+    return NextResponse.json({ allocation, warning }, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });
   }

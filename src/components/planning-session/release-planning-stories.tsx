@@ -25,10 +25,13 @@ export function ReleasePlanningStories({
   projectId,
   refreshKey,
   onCountChange,
+  onOpenStory,
 }: {
   projectId: string;
   refreshKey: number;
   onCountChange?: (n: number) => void;
+  /** Click numa story → abre o side sheet de detalhe (página controla). */
+  onOpenStory?: (ref: string) => void;
 }) {
   const [stories, setStories] = useState<StoryWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,13 +106,18 @@ export function ReleasePlanningStories({
             {g.rows.map((s) => {
               const ov = s.overview;
               return (
-                <div key={s.id} className="flex items-start gap-3 px-3 py-2.5">
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onOpenStory?.(s.reference)}
+                  className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+                >
                   <span className="mt-0.5 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
                     {s.reference}
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 space-y-1">
                     <div className="text-sm">{s.title}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                       <RefinementChip status={s.refinementStatus as RefinementStatus} />
                       {ov?.computedStatus && (
                         <ComputedStatusChip status={ov.computedStatus as ComputedStatus} />
@@ -127,7 +135,7 @@ export function ReleasePlanningStories({
                       )}
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </section>

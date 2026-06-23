@@ -35,12 +35,15 @@ export function CanvasStage({
 }) {
   return (
     <div className={cn("canvas-stage h-full min-h-0 overflow-y-auto", className)}>
+      {/* Header plugado no topo (top-0), full-width, barra sólida na cor da folha
+          com linha divisória dura embaixo. Cobre o conteúdo que rola por baixo —
+          sem fresta acima, sem fade. */}
       {header && (
-        <div className="canvas-stage-head sticky top-0 z-10 px-3 pb-2.5 pt-3">
+        <div className="canvas-stage-head sticky top-0 z-10 flex items-center px-4 py-2.5">
           {header}
         </div>
       )}
-      <div className={cn("px-3", header ? "pb-3" : "py-3")}>
+      <div className="px-3 py-3">
         <div
           className={cn(
             "canvas-paper",

@@ -8,6 +8,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 /**
@@ -156,6 +161,8 @@ export function Cronograma({
   shape,
   layout = "wrap",
   gridCols,
+  plain,
+  chipMenu,
   collapsible,
   size = "md",
   variant,
@@ -167,6 +174,10 @@ export function Cronograma({
   layout?: "scroll" | "wrap" | "grid";
   /** Nº de colunas quando `layout="grid"` (default 3). Grade fixa N-por-linha. */
   gridCols?: number;
+  /** Chip mode: neutro + clicável — sem cor/dot de atividade/barra de corrente (só hover/seleção). */
+  plain?: boolean;
+  /** Chip mode: menu por chip (DropdownMenu) — recebe a key, retorna os itens. O chip vira o trigger. */
+  chipMenu?: (key: string) => ReactNode;
   collapsible?: { previewCount: number };
   /** Densidade do `ribbon`: sm (board) / md (rail, default) / lg (tooltip da régua). */
   size?: "sm" | "md" | "lg";
@@ -195,7 +206,7 @@ export function Cronograma({
   const visible = collapsed ? norm.slice(0, collapsible.previewCount) : norm;
   const hiddenCount = collapsible != null ? norm.length - collapsible.previewCount : 0;
 
-  const interactive = !!onSelect;
+  const interactive = !!onSelect || !!chipMenu;
   const Cell = interactive ? "button" : "span";
   const hasFlag = visible.some((b) => b.flagged);
 
@@ -323,10 +334,57 @@ export function Cronograma({
           //   • barra vermelha (underline) = a célula CORRENTE ("agora", âncora fixa);
           //   • contraste cinza (fill) = a célula SELECIONADA (o que se está vendo).
           // (No modo explícito a barra segue a seleção — preserva o realce do Finanças.)
-          const explicit = !!nb.tone;
+          // `plain` (Finanças navegável) ⇒ neutro: sem cor/dot de atividade/barra.
+          const explicit = !plain && !!nb.tone;
           const tone = nb.tone ?? activityTone(nb.state);
-          const activeDot = !explicit && !nb.silent;
-          const showBar = explicit ? isSelected : nb.state === "current";
+          const activeDot = !plain && !explicit && !nb.silent;
+          const showBar = !plain && (explicit ? isSelected : nb.state === "current");
+          const chip = (
+            <Cell
+              {...(interactive ? { type: "button" as const, "aria-pressed": isSelected } : {})}
+              {...(onSelect ? { onClick: () => onSelect(nb.key) } : {})}
+              title={nb.title}
+              className={cn(
+                "relative flex h-[30px] min-w-[58px] items-center gap-1.5 rounded-[7px] border pl-1.5 pr-2.5 font-mono tabular-nums transition-colors",
+                layout === "grid" && "w-full",
+                explicit ? cn(tone.border, tone.band) : "border-border bg-transparent",
+                !explicit && !plain && nb.state === "future" && "opacity-55",
+                // Seleção = contraste cinza (fill + borda mais forte no modo atividade).
+                isSelected &&
+                  (explicit ? "bg-foreground/[0.04]" : "border-foreground/25 bg-foreground/[0.08]"),
+                interactive && "cursor-pointer",
+                interactive && !isSelected && "hover:bg-foreground/[0.05]",
+              )}
+            >
+              {activeDot && (
+                <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+              )}
+              {nb.indicator != null && (
+                <span
+                  className={cn(
+                    "grid size-[18px] shrink-0 place-items-center rounded-[4px] text-[10px] font-bold",
+                    explicit ? cn(tone.band, tone.text) : "text-foreground/80",
+                  )}
+                >
+                  {nb.indicator}
+                </span>
+              )}
+              {nb.dateLabel && (
+                <span className="text-[11px] font-normal text-muted-foreground">{nb.dateLabel}</span>
+              )}
+              {nb.value && (
+                <span className={cn("ml-0.5 text-[10px] font-semibold", explicit ? tone.text : "text-muted-foreground")}>
+                  {nb.value}
+                </span>
+              )}
+              {showBar && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-2 bottom-[3px] h-[2px] rounded-full bg-primary"
+                />
+              )}
+            </Cell>
+          );
           return (
             <span
               key={nb.key}
@@ -334,51 +392,14 @@ export function Cronograma({
               className={cn("relative", layout !== "grid" && "shrink-0", nb.flagged && "mt-3")}
             >
               {nb.flagged && <Flag />}
-              <Cell
-                {...(interactive
-                  ? { type: "button" as const, "aria-pressed": isSelected, onClick: () => onSelect!(nb.key) }
-                  : {})}
-                title={nb.title}
-                className={cn(
-                  "relative flex h-[30px] min-w-[58px] items-center gap-1.5 rounded-[7px] border pl-1.5 pr-2.5 font-mono tabular-nums transition-colors",
-                  layout === "grid" && "w-full",
-                  explicit ? cn(tone.border, tone.band) : "border-border bg-transparent",
-                  !explicit && nb.state === "future" && "opacity-55",
-                  // Seleção = contraste cinza (fill + borda mais forte no modo atividade).
-                  isSelected &&
-                    (explicit ? "bg-foreground/[0.04]" : "border-foreground/25 bg-foreground/[0.08]"),
-                  interactive && "cursor-pointer",
-                  interactive && !isSelected && "hover:bg-foreground/[0.05]",
-                )}
-              >
-                {activeDot && (
-                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
-                )}
-                {nb.indicator != null && (
-                  <span
-                    className={cn(
-                      "grid size-[18px] shrink-0 place-items-center rounded-[4px] text-[10px] font-bold",
-                      explicit ? cn(tone.band, tone.text) : "text-foreground/80",
-                    )}
-                  >
-                    {nb.indicator}
-                  </span>
-                )}
-                {nb.dateLabel && (
-                  <span className="text-[11px] font-normal text-muted-foreground">{nb.dateLabel}</span>
-                )}
-                {nb.value && (
-                  <span className={cn("ml-0.5 text-[10px] font-semibold", explicit ? tone.text : "text-muted-foreground")}>
-                    {nb.value}
-                  </span>
-                )}
-                {showBar && (
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-2 bottom-[3px] h-[2px] rounded-full bg-primary"
-                  />
-                )}
-              </Cell>
+              {chipMenu ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger render={chip} />
+                  <DropdownMenuContent align="start">{chipMenu(nb.key)}</DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                chip
+              )}
             </span>
           );
         })}

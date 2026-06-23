@@ -1,6 +1,7 @@
 -- finance.labor_allocation — alocação financeira manual de membro→projeto (D12).
--- percent × vigência; independe do PFV. Σpercent/membro/período ≤ 100 (API);
--- o resto é overhead da operação.
+-- percent × vigência; independe do PFV. Σpercent/membro/período > 100 gera
+-- AVISO na API (soft, não bloqueia) — over-allocation transitória acontece e
+-- estabiliza. O resto da capacidade é overhead da operação.
 -- NÃO aplicada ainda; ver docs/features/finance/finance-app-plan.md §7.4.
 
 create table finance.labor_allocation (

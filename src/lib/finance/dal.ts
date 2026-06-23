@@ -368,8 +368,17 @@ export async function listAllocations(filter: {
   return attachAllocationNames(sb, (res.data ?? []) as Allocation[]);
 }
 
-/** Σ% do membro em períodos que sobrepõem o novo ≤ 100 (resto = overhead). */
-async function validateAllocation(input: AllocationInput, excludeId?: string) {
+/**
+ * Hard check (lança): percent fora de (0,100].
+ * Soft check (retorna aviso, NÃO bloqueia): Σ% do membro em períodos que
+ * sobrepõem o novo > 100. Over-allocation transitória acontece (ramp-up de
+ * contrato, transição entre projetos) e estabiliza em semanas — então
+ * registramos e avisamos, mas deixamos salvar. O resto da capacidade = overhead.
+ */
+async function checkAllocation(
+  input: AllocationInput,
+  excludeId?: string,
+): Promise<string | null> {
   if (!(input.percent > 0 && input.percent <= 100))
     throw new Error("Percentual deve estar entre 0 e 100");
   const { fin } = await finance();
@@ -387,11 +396,11 @@ async function validateAllocation(input: AllocationInput, excludeId?: string) {
       a.effective_to,
     ),
   );
-  const sum = overlapping.reduce((s, a) => s + Number(a.percent), 0) + input.percent;
-  if (sum > 100)
-    throw new Error(
-      `Alocação excede 100% no período (membro já tem ${sum - input.percent}% sobreposto)`,
-    );
+  const prior = overlapping.reduce((s, a) => s + Number(a.percent), 0);
+  const sum = prior + input.percent;
+  return sum > 100
+    ? `Alocação passa de 100% no período: ${prior}% já alocado + ${input.percent}% = ${sum}%. Salvo mesmo assim — ajuste quando a operação estabilizar.`
+    : null;
 }
 
 function allocRow(input: AllocationInput, createdBy: string | null) {
@@ -407,8 +416,10 @@ function allocRow(input: AllocationInput, createdBy: string | null) {
   };
 }
 
-export async function createAllocation(input: AllocationInput): Promise<Allocation> {
-  await validateAllocation(input);
+export async function createAllocation(
+  input: AllocationInput,
+): Promise<{ allocation: Allocation; warning: string | null }> {
+  const warning = await checkAllocation(input);
   const { fin } = await finance();
   const res = await fin
     .from("labor_allocation")
@@ -416,14 +427,14 @@ export async function createAllocation(input: AllocationInput): Promise<Allocati
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
-  return res.data as Allocation;
+  return { allocation: res.data as Allocation, warning };
 }
 
 export async function updateAllocation(
   id: string,
   input: AllocationInput,
-): Promise<Allocation> {
-  await validateAllocation(input, id);
+): Promise<{ allocation: Allocation; warning: string | null }> {
+  const warning = await checkAllocation(input, id);
   const { fin } = await finance();
   const { created_by: _drop, ...patch } = allocRow(input, null);
   void _drop;
@@ -434,7 +445,7 @@ export async function updateAllocation(
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
-  return res.data as Allocation;
+  return { allocation: res.data as Allocation, warning };
 }
 
 export async function deleteAllocation(id: string): Promise<void> {
