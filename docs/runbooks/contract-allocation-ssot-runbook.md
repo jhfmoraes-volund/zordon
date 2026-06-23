@@ -55,17 +55,53 @@ Sequência (cada step só começa com o anterior verificado):
 
 ---
 
-## FASE 2 — Convergência de alocação + participação pontual (depois)
+## FASE 2 — Convergência de alocação + participação pontual
 
-Resumo (detalhar quando chegarmos). **Modelo spot REVISADO 2026-06-23 — D11/D12/D13: dias (não %/sprint), teto 60d/entrada, acesso contributor permanente.**
-- Migration `labor_allocation` + `kind` (standing/spot) + **`days numeric`** (spot; 1 dia=8h, fracionável) + CHECK `kind='spot' ⇒ days IS NOT NULL AND days <= 60` + data de competência (effective_from = início da entrada). Standing continua com `percent`.
-- View `v_project_team` = alocados (labor_allocation vigente) ∪ access-only (ProjectAccess).
-- **Backfill órfãos** (ProjectAccess p/ ProjectMember sem allocation) ANTES do cutover.
-- Apontar os 3 readers (api members, vitoria, alpha) pra `v_project_team`; remover squad do UNION.
-- Member box do project sheet → read-only "Equipe (dos contratos)".
-- Redirect members API + Alpha (insert→update-only).
-- **UI participação pontual:** admin informa membro + quantidade de dias (cap 60/entrada) + quando (data/mês); custo = `days × custo-dia`. Spot ganha `ProjectAccess` **contributor PERMANENTE** (não expira — builder normal). Chips de spot no sprint/Planning view.
-- Custo: branch `kind='spot'` nas views de custo (dias × custo-dia, atribuído ao mês de início). RLS audit admin-only.
+Modelo spot (D11–D14): dias (não %/sprint), teto 60d/entrada, acesso contributor permanente.
+
+### ✅ Concluído (F2.1–F2.4)
+- F2.1 `labor_allocation` +kind +days, percent nullable, CHECK forma (migration 20260624j).
+- F2.2 `v_contract_roster` +kind/days (20260624k).
+- F2.3 código kind-aware (types + dal checkAllocation/allocRow/listContractRoster).
+- F2.4 UI spot no contract sheet (botão Pontual, dias, cap 60) + grant ProjectAccess contributor permanente no createAllocation.
+
+### ⏳ Pontas restantes (executar em ordem)
+
+Cada migration roda via psql com aprovação humana; cada step verifica com `npx tsc --noEmit` + a checagem listada.
+
+**F2.5 — Custo do spot (alimenta cálculo)** · migration `20260624l_v_allocation_labor_month_spot.sql`
+- Reescrever `finance.v_allocation_labor_month` como **UNION ALL**:
+  - **standing**: lógica atual — `round(comp_mês × percent/100 × fração_dias_do_mês)`.
+  - **spot**: 1 linha no mês de `effective_from`; `labor_cents = round(comp_mês × days / 22.0)` (22 = dias úteis/mês padrão; 1 dia = 8h). Sem spread por vigência.
+  - `comp_mês` = reusar a CTE `rate` (entry feeds_labor) ou join `v_member_comp_month`.
+- `v_project_member_labor_month` / `v_project_labor_month` herdam (agregam essa base) — não mudam.
+- **Verify:** criar spot de N dias num projeto → aparece em `v_project_labor_month` SÓ no mês do início, `labor_cents>0`; uma alocação standing existente mantém o mesmo `labor_cents` de antes.
+
+**F2.6 — Leitor canônico `v_project_team`** · migration `20260624m_v_project_team.sql`
+- `CREATE VIEW finance.v_project_team` = 
+  - **alocados**: `member_id` distinto de `labor_allocation` vigente (`effective_to IS NULL OR >= current_date`), incl. `contract_id` null; `source='allocated'` + kind/percent/days.
+  - **∪ access-only**: linhas de `ProjectAccess` cujo `Member.userId` não está nos alocados; `source='access'` + role.
+  - Gating: `can_view_project(project_id) OR is_admin()`.
+- **Verify:** projeto com 1 alocado + 1 só-acesso (guest) retorna 2 linhas com `source` certo.
+
+**F2.7 — Backfill órfãos (ANTES do cutover)** · migration `20260624n_backfill_roster.sql`
+- Pra cada `ProjectMember` sem `labor_allocation` vigente E sem `ProjectAccess`, criar `ProjectAccess` viewer (resolve `Member.userId`; pula quem não tem userId — registra no log).
+- **Verify:** `select count(*)` de ProjectMember órfão (sem allocation E sem ProjectAccess com userId resolvido) = 0.
+
+**F2.8 — Apontar 3 readers pra `v_project_team` + remover squad (D9)**
+- Helper `getProjectTeam(projectId)` em `src/lib/dal/project-team.ts` lê `v_project_team`.
+- Trocar nos 3: `src/app/api/projects/[id]/members/route.ts`, `src/lib/agent/agents/vitoria/tools.ts` (loadProjectMembers), `src/lib/agent/agents/alpha/tools.ts` (get_allocated_project_members). Remover `ProjectSquad` do UNION (squad = pool, não roster).
+- **Verify:** `! grep -rn 'ProjectSquad' nos 3 arquivos`; tsc 0; reuniões/agentes ainda listam equipe (smoke).
+
+**F2.9 — Member box do project sheet read-only**
+- `src/components/projects/project-edit-sheet.tsx`: trocar o seletor de membros por "Equipe (dos contratos)" read-only via `getProjectTeam`. Sheet para de escrever `ProjectMember` (delta sync sai).
+- **Verify:** criar/editar projeto não insere `ProjectMember`; equipe aparece derivada read-only; tsc 0.
+
+**F2.10 — RLS audit (write admin-only em `labor_allocation`)** · migration `20260624o_labor_allocation_rls.sql` (se faltar)
+- Garantir POLICY explícita de INSERT/UPDATE/DELETE exigindo `is_admin()`.
+- **Verify:** `select count(*) from pg_policies where schemaname='finance' and tablename='labor_allocation' and cmd in ('INSERT','UPDATE','DELETE')` ≥ 3.
+
+**Gate Fase 2:** alocação (standing + spot) é SSOT único do roster; `v_project_team` é o leitor único; spot entra no custo; nada escreve roster fora do contrato/Finanças (admin).
 
 ---
 

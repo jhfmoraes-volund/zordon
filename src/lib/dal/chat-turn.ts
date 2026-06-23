@@ -111,6 +111,13 @@ export async function getChatTurn(id: string): Promise<ChatTurnRow | null> {
 }
 
 const ACTIVE_TURN_STATUSES = ["queued", "running"] as const;
+const TERMINAL_JOB_STATUSES = ["done", "failed", "cancelled"] as const;
+
+// createChatTurn e enqueueChatJob são chamadas separadas (o SSE proxy subscreve
+// o broadcast ENTRE elas), então há uma janela curta onde o turn existe sem job.
+// Só tratamos "sem job" como órfão depois dessa graça pra não reapar um turn
+// que está prestes a rodar.
+const ORPHAN_GRACE_MS = 90_000;
 
 export type ActiveChatTurn = { id: string; status: string };
 
@@ -119,20 +126,79 @@ export type ActiveChatTurn = { id: string; status: string };
  * de histórico pra o cliente saber, ao remontar a página, que há uma geração em
  * andamento (e disparar o resume). O daemon serializa turns por thread, então
  * há no máximo um turn ativo por vez.
+ *
+ * Reconcilia contra o ForgeJob pareado antes de devolver: um turn só está
+ * GENUINAMENTE em voo enquanto o job dele está queued/running. Se o executor
+ * (exec-chat-turn) foi morto/crashou antes de finalizar — o job já virou
+ * terminal (done/failed/cancelled) mas o turn ficou preso em queued/running —
+ * o GET reportaria esse órfão como activeTurn pra sempre, e a UI ficaria em
+ * "Analisando…" em todo refresh (resumeStream pollando 5min e re-armando). Um
+ * processo morto não roda o próprio finally, então a cura tem que vir daqui:
+ * detecta o órfão, marca `error` (auto-cura) e devolve null.
  */
 export async function getActiveChatTurnForThread(
   threadId: string,
 ): Promise<ActiveChatTurn | null> {
-  const { data, error } = await db()
+  const supabase = db();
+  const { data, error } = await supabase
     .from("ChatTurn")
-    .select("id, status")
+    .select("id, status, createdAt, startedAt")
     .eq("threadId", threadId)
     .in("status", ACTIVE_TURN_STATUSES as unknown as string[])
     .order("createdAt", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data ? { id: data.id, status: data.status } : null;
+  if (!data) return null;
+
+  const orphanReason = await classifyOrphanedTurn(
+    data.id,
+    data.startedAt ?? data.createdAt,
+  );
+  if (orphanReason) {
+    await failChatTurn(data.id, { errorReason: `orphaned: ${orphanReason}` });
+    return null;
+  }
+
+  return { id: data.id, status: data.status };
+}
+
+/**
+ * Decide se um turn não-terminal está órfão (executor terminou/morreu sem
+ * transicionar o turn). Sinal autoritativo = status do ForgeJob pareado
+ * (meta.chatTurnId):
+ *   - job terminal (done/failed/cancelled) → órfão (`job_<status>`);
+ *   - sem job + turn mais velho que a graça → órfão (`no_job`);
+ *   - job queued/running, ou turn dentro da graça → ativo (null).
+ */
+async function classifyOrphanedTurn(
+  turnId: string,
+  sinceIso: string,
+): Promise<string | null> {
+  const { data: job, error } = await db()
+    .from("ForgeJob")
+    .select("status")
+    .eq("meta->>chatTurnId", turnId)
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Fail-safe: na dúvida NUNCA reapa. Se o lookup do job errar, devolver "no_job"
+  // marcaria todo turn vivo >90s como órfão (data=null indistinguível de "sem
+  // job"). Tratar erro como ativo só posterga a cura de um órfão real — sem
+  // regressão; reapar um turn vivo mataria o "Analisando…" legítimo.
+  if (error) {
+    console.warn(`[chat-turn] classifyOrphaned(${turnId}) job lookup failed:`, error);
+    return null;
+  }
+
+  if (job && (TERMINAL_JOB_STATUSES as readonly string[]).includes(job.status)) {
+    return `job_${job.status}`;
+  }
+  if (!job && Date.now() - new Date(sinceIso).getTime() > ORPHAN_GRACE_MS) {
+    return "no_job";
+  }
+  return null;
 }
 
 /**
