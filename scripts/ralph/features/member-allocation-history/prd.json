@@ -72,7 +72,8 @@
       "touches": [
         "src/lib/finance/dal.ts",
         "src/app/api/members/[id]/allocations/route.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "MAH-004",

@@ -31,3 +31,35 @@ NOTE (operador 2026-06-24): convenção de migration same-day = SUFIXO DE LETRA 
 iter 2026-06-24T00:15:00Z: PASS MAH-002
   files: supabase/migrations/20260624u_exclude_voids_from_views.sql, src/lib/supabase/database.types.ts
   learnings: Migration M2 executada—DROP+CREATE de 7 views (cascade completa: v_allocation_labor_month + dependentes v_project_member_labor_month/v_project_labor_month/v_project_month/v_contract_month + v_contract_roster/v_project_team). Filtro `la.voided_at IS NULL` propagado. Check SQL confirmou: void→não aparece no billing. Sufixo de migration same-day=letra (20260624u).
+---
+
+## Iteration Summary
+
+**Story selected:** MAH-002 - "Excluir voids das views de billing e roster"
+
+**Verification results:**
+- ✅ SQL check: Transaction confirming that voided allocations (voided_at IS NOT NULL) are excluded from v_allocation_labor_month returned count=0 as expected
+- ✅ Views recreated: Successfully dropped and recreated 7 views with the void filter propagated:
+  - v_allocation_labor_month (base, added `WHERE la.voided_at IS NULL`)
+  - v_project_member_labor_month (inherits filter)
+  - v_contract_roster (added `WHERE la.voided_at IS NULL`)
+  - v_project_team (added `WHERE la.voided_at IS NULL` in allocated CTE)
+  - v_project_labor_month (recreated from dependencies)
+  - v_contract_month (recreated from dependencies)
+  - v_project_month (recreated from dependencies)
+- ✅ TypeScript types regenerated successfully (9297 lines)
+
+**Commit:** `7112531` - "ralph(member-allocation-history): MAH-002 Exclude voids from billing and roster views"
+
+**Files touched:**
+- Created: `supabase/migrations/20260624u_exclude_voids_from_views.sql` (325 lines)
+- Updated: `src/lib/supabase/database.types.ts` (regenerated via npm run db:types)
+- Updated: `scripts/ralph/features/member-allocation-history/prd.json` (MAH-002 passes=true)
+- Updated: `scripts/ralph/features/member-allocation-history/progress.txt`
+
+**Learning:** Views with dependencies require full cascade DROP+CREATE. Migration naming convention for same-day: use letter suffix (20260624u, not bare 20260624) to maintain correct sort order.
+
+**Next step:** The next eligible stories are MAH-003, MAH-004, and MAH-005 (all depend on MAH-001 which now passes). MAH-007 is also eligible (no dependencies). MAH-003 is next lexicographically.
+iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS MAH-003
+  files: src/lib/finance/dal.ts, src/app/api/members/[id]/allocations/route.ts, src/app/api/finance/allocations/[id]/route.ts
+  learnings: Alocação agora é temporal-honest (D2): updateAllocation() só edita note/effectiveTo/closedBy; closeAllocation() helper pra fechar períodos; route /members/[id]/allocations usa close+create ao invés de delete/overwrite; DELETE endpoint removido de /api/finance/allocations/[id] (será substituído por void em MAH-004). UI que chamava DELETE quebrará até MAH-006 implementar void/restore.

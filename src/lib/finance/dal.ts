@@ -465,22 +465,43 @@ export async function createAllocation(
   return { allocation: res.data as Allocation, warning };
 }
 
+/**
+ * Edita campos NÃO-TEMPORAIS de uma alocação (D2: valor do período é imutável).
+ * Permite alterar APENAS: `note`, `effective_to` (fechar período), `closed_by`.
+ * Para mudar percent/days/contract/período: closeAllocation + createAllocation.
+ * Para corrigir erro: void (MAH-004) + createAllocation.
+ */
 export async function updateAllocation(
   id: string,
-  input: AllocationInput,
-): Promise<{ allocation: Allocation; warning: string | null }> {
-  const warning = await checkAllocation(input, id);
+  input: { note?: string | null; effectiveTo?: string | null; closedBy?: string | null },
+): Promise<Allocation> {
   const { fin } = await finance();
-  const { created_by: _drop, ...patch } = allocRow(input, null);
-  void _drop;
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.note !== undefined) patch.note = input.note;
+  if (input.effectiveTo !== undefined) patch.effective_to = input.effectiveTo;
+  if (input.closedBy !== undefined) patch.closed_by = input.closedBy;
   const res = await fin
     .from("labor_allocation")
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    .update(patch)
     .eq("id", id)
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
-  return { allocation: res.data as Allocation, warning };
+  return res.data as Allocation;
+}
+
+/**
+ * Fecha um período de alocação (seta effective_to + closed_by), respeitando D2.
+ * Para mudar período: closeAllocation(old) + createAllocation(new).
+ */
+export async function closeAllocation(
+  id: string,
+  effectiveTo: string,
+): Promise<Allocation> {
+  return updateAllocation(id, {
+    effectiveTo,
+    closedBy: await currentMemberId(),
+  });
 }
 
 export async function deleteAllocation(id: string): Promise<void> {

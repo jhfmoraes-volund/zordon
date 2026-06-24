@@ -5,8 +5,7 @@ import { requireMinAccessLevelApi } from "@/lib/dal";
 import {
   listAllocations,
   createAllocation,
-  updateAllocation,
-  deleteAllocation,
+  closeAllocation,
   listContracts,
 } from "@/lib/finance/dal";
 
@@ -250,49 +249,55 @@ export async function PUT(
       }
     }
 
-    // ── % (finance.labor_allocation) ───────────────────────────────────────
-    // Aplica em ordem de delta crescente (reduções/remoções antes de aumentos)
-    // pra nunca estourar 100% num passo intermediário — createAllocation/
-    // updateAllocation validam Σ%≤100 lendo o estado do banco.
+    // ── % (finance.labor_allocation) — temporal-honest (D2) ────────────────
+    // Nunca deleta nem sobrescreve valor. Remoção = fechar período. Mudança de
+    // período = fechar + criar novo. Operações em ordem de delta crescente
+    // (reduções antes de aumentos) pra nunca estourar 100% num passo intermediário.
     type Op =
-      | { kind: "delete"; allocationId: string; delta: number }
-      | { kind: "upsert"; row: DesiredRow; delta: number };
+      | { kind: "close"; allocationId: string; delta: number }
+      | { kind: "create"; row: DesiredRow; delta: number };
     const ops: Op[] = [];
 
     for (const d of desired) {
       const pct = d.percent == null ? 0 : Number(d.percent);
       const current = currentAllocByProject.get(d.projectId);
       if (pct > 0) {
-        ops.push({ kind: "upsert", row: d, delta: pct - (current?.percent ?? 0) });
+        if (current) {
+          // Existe alocação vigente: fechar + criar nova (D2: período é imutável).
+          ops.push({ kind: "close", allocationId: current.id, delta: -current.percent });
+          ops.push({ kind: "create", row: d, delta: pct });
+        } else {
+          // Não existe: criar.
+          ops.push({ kind: "create", row: d, delta: pct });
+        }
       } else if (current) {
-        // percentual zerado → remove a alocação vigente.
-        ops.push({ kind: "delete", allocationId: current.id, delta: -current.percent });
+        // Percentual zerado → fechar a alocação vigente (effective_to=hoje).
+        ops.push({ kind: "close", allocationId: current.id, delta: -current.percent });
       }
     }
     for (const [projectId, current] of currentAllocByProject) {
       if (!desiredProjects.has(projectId)) {
-        ops.push({ kind: "delete", allocationId: current.id, delta: -current.percent });
+        // Projeto saiu da lista desejada → fechar alocação.
+        ops.push({ kind: "close", allocationId: current.id, delta: -current.percent });
       }
     }
 
     ops.sort((a, b) => a.delta - b.delta);
 
+    const today = new Date().toISOString().slice(0, 10);
     for (const op of ops) {
-      if (op.kind === "delete") {
-        await deleteAllocation(op.allocationId);
+      if (op.kind === "close") {
+        await closeAllocation(op.allocationId, today);
       } else {
         const d = op.row;
-        const input = {
+        await createAllocation({
           memberId,
           projectId: d.projectId,
           percent: Number(d.percent),
           effectiveFrom: d.effectiveFrom!,
           effectiveTo: d.effectiveTo ?? null,
           contractId: d.contractId ?? null,
-        };
-        const existingId = d.allocationId ?? currentAllocByProject.get(d.projectId)?.id ?? null;
-        if (existingId) await updateAllocation(existingId, input);
-        else await createAllocation(input);
+        });
       }
     }
   } catch (e) {
