@@ -1,9 +1,9 @@
 {
   "feature": "member-allocation-history",
   "title": "Histórico & Movimentação de Membro/Alocação",
-  "prd": "docs/prd/backlog/prd-member-allocation-history.md",
-  "status": "backlog",
-  "stories": [
+  "prdPath": ".docs/prd/ready/prd-member-allocation-history.md",
+  "status": "ready",
+  "userStories": [
     {
       "id": "MAH-001",
       "title": "Adicionar colunas de void + closed_by em labor_allocation",
@@ -13,11 +13,18 @@
         "Índice parcial labor_alloc_live_idx (WHERE voided_at IS NULL) criado"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "\\d finance.labor_allocation", "expected": "voided_at, voided_reason, voided_by, closed_by presentes" }
+        {
+          "kind": "sql",
+          "command_or_query": "\\d finance.labor_allocation",
+          "expected": "voided_at, voided_reason, voided_by, closed_by presentes"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 15,
-      "touches": ["supabase/migrations"]
+      "touches": [
+        "supabase/migrations"
+      ],
+      "passes": true
     },
     {
       "id": "MAH-002",
@@ -28,11 +35,19 @@
         "Σ labor_cents inalterado quando não há voids"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "BEGIN; UPDATE finance.labor_allocation SET voided_at=now() WHERE id=(SELECT id FROM finance.labor_allocation LIMIT 1); SELECT count(*) FROM v_allocation_labor_month WHERE allocation_id IN (SELECT id FROM finance.labor_allocation WHERE voided_at IS NOT NULL); ROLLBACK;", "expected": "0" }
+        {
+          "kind": "sql",
+          "command_or_query": "BEGIN; UPDATE finance.labor_allocation SET voided_at=now() WHERE id=(SELECT id FROM finance.labor_allocation LIMIT 1); SELECT count(*) FROM v_allocation_labor_month WHERE allocation_id IN (SELECT id FROM finance.labor_allocation WHERE voided_at IS NOT NULL); ROLLBACK;",
+          "expected": "0"
+        }
       ],
-      "dependsOn": ["MAH-001"],
+      "dependsOn": [
+        "MAH-001"
+      ],
       "estimateMinutes": 25,
-      "touches": ["supabase/migrations"]
+      "touches": [
+        "supabase/migrations"
+      ]
     },
     {
       "id": "MAH-003",
@@ -43,11 +58,20 @@
         "updateAllocation não altera percent/days/effective_from/contract_id de linha existente"
       ],
       "verifiable": [
-        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "0 erros" }
+        {
+          "kind": "typecheck",
+          "command_or_query": "npx tsc --noEmit",
+          "expected": "0 erros"
+        }
       ],
-      "dependsOn": ["MAH-001"],
+      "dependsOn": [
+        "MAH-001"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/finance/dal.ts", "src/app/api/members/[id]/allocations/route.ts"]
+      "touches": [
+        "src/lib/finance/dal.ts",
+        "src/app/api/members/[id]/allocations/route.ts"
+      ]
     },
     {
       "id": "MAH-004",
@@ -58,11 +82,19 @@
         "não-admin recebe 403"
       ],
       "verifiable": [
-        { "kind": "http", "command_or_query": "POST /api/finance/allocations/<id>/void {reason:'teste'} como admin", "expected": "200 e voided_at preenchido" }
+        {
+          "kind": "http",
+          "command_or_query": "POST /api/finance/allocations/<id>/void {reason:'teste'} como admin",
+          "expected": "200 e voided_at preenchido"
+        }
       ],
-      "dependsOn": ["MAH-001"],
+      "dependsOn": [
+        "MAH-001"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/app/api/finance/allocations"]
+      "touches": [
+        "src/app/api/finance/allocations"
+      ]
     },
     {
       "id": "MAH-005",
@@ -73,11 +105,19 @@
         "Reativar não reabre alocações"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM finance.labor_allocation WHERE member_id=<id> AND effective_to IS NULL AND voided_at IS NULL", "expected": "0" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM finance.labor_allocation WHERE member_id=<id> AND effective_to IS NULL AND voided_at IS NULL",
+          "expected": "0"
+        }
       ],
-      "dependsOn": ["MAH-001"],
+      "dependsOn": [
+        "MAH-001"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/app/api/members/[id]/status/route.ts"]
+      "touches": [
+        "src/app/api/members/[id]/status/route.ts"
+      ]
     },
     {
       "id": "MAH-006",
@@ -88,11 +128,19 @@
         "Remover pede motivo e chama .../void"
       ],
       "verifiable": [
-        { "kind": "manual_browser", "command_or_query": "Abrir side sheet de um contrato, remover (erro) um período, ligar toggle, restaurar", "expected": "período some/reaparece riscado/volta; nada apagado do banco" }
+        {
+          "kind": "manual_browser",
+          "command_or_query": "Abrir side sheet de um contrato, remover (erro) um período, ligar toggle, restaurar",
+          "expected": "período some/reaparece riscado/volta; nada apagado do banco"
+        }
       ],
-      "dependsOn": ["MAH-004"],
+      "dependsOn": [
+        "MAH-004"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/components/finance"]
+      "touches": [
+        "src/components/finance"
+      ]
     },
     {
       "id": "MAH-007",
@@ -102,11 +150,17 @@
         "Tabela e índices existem; authenticated não consegue INSERT/UPDATE/DELETE"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT has_table_privilege('authenticated','\"MemberMovementEvent\"','INSERT')", "expected": "f" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT has_table_privilege('authenticated','\"MemberMovementEvent\"','INSERT')",
+          "expected": "f"
+        }
       ],
       "dependsOn": [],
       "estimateMinutes": 20,
-      "touches": ["supabase/migrations"]
+      "touches": [
+        "supabase/migrations"
+      ]
     },
     {
       "id": "MAH-008",
@@ -116,11 +170,21 @@
         "Cada ação grava 1 evento com kind+actor+refs+payload(before/after)"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT kind FROM \"MemberMovementEvent\" ORDER BY \"createdAt\" DESC LIMIT 1", "expected": "allocation_voided" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT kind FROM \"MemberMovementEvent\" ORDER BY \"createdAt\" DESC LIMIT 1",
+          "expected": "allocation_voided"
+        }
       ],
-      "dependsOn": ["MAH-007", "MAH-004"],
+      "dependsOn": [
+        "MAH-007",
+        "MAH-004"
+      ],
       "estimateMinutes": 30,
-      "touches": ["src/lib/dal", "src/app/api/finance/allocations"]
+      "touches": [
+        "src/lib/dal",
+        "src/app/api/finance/allocations"
+      ]
     },
     {
       "id": "MAH-009",
@@ -131,11 +195,19 @@
         "não-super-admin recebe 403"
       ],
       "verifiable": [
-        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"MemberMovementEvent\" WHERE kind='allocation_purged'", "expected": ">= 1" }
+        {
+          "kind": "sql",
+          "command_or_query": "SELECT count(*) FROM \"MemberMovementEvent\" WHERE kind='allocation_purged'",
+          "expected": ">= 1"
+        }
       ],
-      "dependsOn": ["MAH-008"],
+      "dependsOn": [
+        "MAH-008"
+      ],
       "estimateMinutes": 25,
-      "touches": ["src/app/api/finance/allocations"]
+      "touches": [
+        "src/app/api/finance/allocations"
+      ]
     }
   ]
 }

@@ -1,0 +1,3 @@
+iter 2026-06-24T00:00:00Z: PASS MAH-001
+  files: supabase/migrations/20260624_labor_allocation_void_columns.sql, src/lib/supabase/database.types.ts
+  learnings: Migration M1 executed successfully via psql; all 4 columns (voided_at, voided_reason, voided_by, closed_by) and partial index (labor_alloc_live_idx) created as specified; types regenerated with no typecheck errors.
