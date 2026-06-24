@@ -504,6 +504,53 @@ export async function closeAllocation(
   });
 }
 
+/**
+ * Marca uma alocação como erro (void), com motivo + autor (MAH-004 D4).
+ * O período some da billing/roster (views filtr am voided_at IS NULL).
+ * Reversível via restoreAllocation.
+ */
+export async function voidAllocation(
+  id: string,
+  reason: string,
+): Promise<Allocation> {
+  if (!reason?.trim()) throw new Error("Remoção requer motivo");
+  const { fin } = await finance();
+  const res = await fin
+    .from("labor_allocation")
+    .update({
+      voided_at: new Date().toISOString(),
+      voided_reason: reason.trim(),
+      voided_by: await currentMemberId(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return res.data as Allocation;
+}
+
+/**
+ * Restaura alocação marcada como erro (limpa void_*, MAH-004 D5).
+ * Reaparece nas views de billing/roster.
+ */
+export async function restoreAllocation(id: string): Promise<Allocation> {
+  const { fin } = await finance();
+  const res = await fin
+    .from("labor_allocation")
+    .update({
+      voided_at: null,
+      voided_reason: null,
+      voided_by: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return res.data as Allocation;
+}
+
 export async function deleteAllocation(id: string): Promise<void> {
   const { fin } = await finance();
   const res = await fin.from("labor_allocation").delete().eq("id", id);

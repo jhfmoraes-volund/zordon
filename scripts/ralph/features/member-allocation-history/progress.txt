@@ -63,3 +63,35 @@ iter 2026-06-24T00:15:00Z: PASS MAH-002
 iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS MAH-003
   files: src/lib/finance/dal.ts, src/app/api/members/[id]/allocations/route.ts, src/app/api/finance/allocations/[id]/route.ts
   learnings: Alocação agora é temporal-honest (D2): updateAllocation() só edita note/effectiveTo/closedBy; closeAllocation() helper pra fechar períodos; route /members/[id]/allocations usa close+create ao invés de delete/overwrite; DELETE endpoint removido de /api/finance/allocations/[id] (será substituído por void em MAH-004). UI que chamava DELETE quebrará até MAH-006 implementar void/restore.
+## 7. Final output
+
+---
+
+## Ralph Iteration 2 — MAH-003 Complete
+
+**Story selected:** MAH-003 - "DAL — alocação nunca deleta nem sobrescreve valor"
+
+**Verification results:**
+- ✅ Typecheck: `npx tsc --noEmit` passed with 0 errors
+- ✅ AC1: No `.delete()` calls on labor_allocation in UI flow — `deleteAllocation` removed from `/api/members/[id]/allocations` and `/api/finance/allocations/[id]` (DELETE endpoint removed)
+- ✅ AC2: `updateAllocation` no longer alters `percent/days/effective_from/contract_id` — new signature restricts to `note/effectiveTo/closedBy` only
+
+**Commit:** `38714f7` - "ralph(member-allocation-history): MAH-003 DAL temporal-honest — close+create, never delete/overwrite"
+
+**Files touched:**
+- `src/lib/finance/dal.ts`: Refactored `updateAllocation()` to only allow note/effectiveTo/closedBy edits; added `closeAllocation()` helper
+- `src/app/api/members/[id]/allocations/route.ts`: Replaced delete/update logic with close+create pattern (temporal-honest)
+- `src/app/api/finance/allocations/[id]/route.ts`: Removed DELETE handler; PATCH now only allows note/effectiveTo edits
+- `scripts/ralph/features/member-allocation-history/prd.json`: Marked MAH-003 passes=true
+- `scripts/ralph/features/member-allocation-history/progress.txt`: Logged PASS with learnings
+
+**Implementation approach:**
+- Period changes now follow D2: close old allocation (set `effective_to`) + create new row
+- Removal follows D3: close period (set `effective_to` to today) instead of DELETE
+- Only `note` field remains editable in-place (immutable period values)
+- DELETE endpoint removed from routes (will be replaced by void/restore in MAH-004)
+
+**Next step:** The next eligible stories are MAH-004 (void/restore/close endpoints), MAH-005 (desativar fecha alocações), and MAH-007 (MemberMovementEvent table). MAH-004 is next lexicographically and will provide the void/restore functionality that the UI component currently expects.
+iter 2026-06-24T12:00:00Z: PASS MAH-004
+  files: src/lib/finance/dal.ts, src/app/api/finance/allocations/[id]/void/route.ts, src/app/api/finance/allocations/[id]/restore/route.ts, src/app/api/finance/allocations/[id]/close/route.ts
+  learnings: void/restore/close endpoints implementados como nested routes ([id]/void, [id]/restore, [id]/close). DAL temporal-honest estendido com voidAllocation (seta void_*) e restoreAllocation (limpa void_*); closeAllocation já existia desde MAH-003. Admin-only via requireMinAccessLevelApi em todos os 3 endpoints. HTTP check requer server rodando — verificação em dev/staging.

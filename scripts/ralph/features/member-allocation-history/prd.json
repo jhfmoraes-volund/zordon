@@ -96,7 +96,8 @@
       "estimateMinutes": 30,
       "touches": [
         "src/app/api/finance/allocations"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "MAH-005",
