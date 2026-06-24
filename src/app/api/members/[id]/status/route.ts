@@ -114,6 +114,14 @@ export async function PATCH(
   // effective_to IS NULL) do membro, em transação — preserva o período até hoje,
   // para de custear daqui pra frente. Reativar NÃO reabre — re-alocação é explícita.
   const financeClient = (await createClient() as unknown as SupabaseClient).schema("finance");
+  // Lê as alocações abertas antes de fechar (pra emitir no evento)
+  const { data: openAllocations } = await financeClient
+    .from("labor_allocation")
+    .select("id")
+    .eq("member_id", id)
+    .is("voided_at", null)
+    .is("effective_to", null);
+  const closedAllocationIds = (openAllocations ?? []).map((a: { id: string }) => a.id);
   const { error: allocError } = await financeClient
     .from("labor_allocation")
     .update({
@@ -149,6 +157,10 @@ export async function PATCH(
     });
     if (authErr) console.error("[members status] ban failed:", authErr.message);
   }
+
+  // MAH-008: Emitir evento de desativação (com lista de alocações fechadas)
+  const { recordMemberDeactivated } = await import("@/lib/dal/member-movement-recorder");
+  void recordMemberDeactivated(id, reason, closedAllocationIds);
 
   return NextResponse.json(member);
 }

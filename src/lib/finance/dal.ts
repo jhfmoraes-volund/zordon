@@ -448,6 +448,7 @@ export async function createAllocation(
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
+  const allocation = res.data as Allocation;
   // D13: builder spot ganha ProjectAccess contributor PERMANENTE (acesso de
   // builder, não expira). Idempotente; nunca rebaixa um acesso já existente.
   if ((input.kind ?? "standing") === "spot") {
@@ -466,7 +467,10 @@ export async function createAllocation(
           .insert({ userId, projectId: input.projectId, role: "contributor" });
     }
   }
-  return { allocation: res.data as Allocation, warning };
+  // MAH-008: Emitir evento de criação
+  const { recordAllocationCreated } = await import("@/lib/dal/member-movement-recorder");
+  void recordAllocationCreated(allocation);
+  return { allocation, warning };
 }
 
 /**
@@ -502,10 +506,18 @@ export async function closeAllocation(
   id: string,
   effectiveTo: string,
 ): Promise<Allocation> {
-  return updateAllocation(id, {
+  const { fin } = await finance();
+  // Lê before pra diff do evento
+  const before = await fin.from("labor_allocation").select("*").eq("id", id).single();
+  if (before.error) throw new Error(before.error.message);
+  const after = await updateAllocation(id, {
     effectiveTo,
     closedBy: await currentMemberId(),
   });
+  // MAH-008: Emitir evento de close
+  const { recordAllocationClosed } = await import("@/lib/dal/member-movement-recorder");
+  void recordAllocationClosed(before.data as Allocation, after);
+  return after;
 }
 
 /**
@@ -519,6 +531,9 @@ export async function voidAllocation(
 ): Promise<Allocation> {
   if (!reason?.trim()) throw new Error("Remoção requer motivo");
   const { fin } = await finance();
+  // Lê o before pra emitir diff no evento
+  const before = await fin.from("labor_allocation").select("*").eq("id", id).single();
+  if (before.error) throw new Error(before.error.message);
   const res = await fin
     .from("labor_allocation")
     .update({
@@ -531,7 +546,11 @@ export async function voidAllocation(
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
-  return res.data as Allocation;
+  const after = res.data as Allocation;
+  // MAH-008: Emitir evento de void
+  const { recordAllocationVoided } = await import("@/lib/dal/member-movement-recorder");
+  void recordAllocationVoided(before.data as Allocation, after);
+  return after;
 }
 
 /**
@@ -552,7 +571,11 @@ export async function restoreAllocation(id: string): Promise<Allocation> {
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
-  return res.data as Allocation;
+  const allocation = res.data as Allocation;
+  // MAH-008: Emitir evento de restore
+  const { recordAllocationRestored } = await import("@/lib/dal/member-movement-recorder");
+  void recordAllocationRestored(allocation);
+  return allocation;
 }
 
 export async function deleteAllocation(id: string): Promise<void> {

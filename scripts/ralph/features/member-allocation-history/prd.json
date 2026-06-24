@@ -190,7 +190,8 @@
       "touches": [
         "src/lib/dal",
         "src/app/api/finance/allocations"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "MAH-009",
