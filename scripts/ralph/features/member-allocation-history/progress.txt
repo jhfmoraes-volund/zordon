@@ -169,3 +169,49 @@ iter 2026-06-24 (operador): PASS MAH-006 (side sheet construído pelo operador, 
   learnings: manual_browser fica pra verificação visual do João no app live. tsc 0 + eslint 0.
   gotcha: effect de fetch usa IIFE async (await load() dentro) — `void load()` direto trip o
           react-hooks/set-state-in-effect; padrão do repo é (async()=>{await fn()})().
+iter 2026-06-24T14:00:00Z: BLOCKED MAH-007 — migration criada mas DB não acessível
+  files: supabase/migrations/20260624v_member_movement_event.sql
+  reason: Migration M3 (MemberMovementEvent) criada com DDL correto (tabela + 4 índices + RLS append-only). psql falhou (No such file or directory em /tmp/.s.PGSQL.5432). SQL check (has_table_privilege) requer DB rodando. Typecheck passou (0 erros). Migration pronta pra executar manualmente: source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && psql "$DIRECT_URL" -f supabase/migrations/20260624v_member_movement_event.sql && npm run db:types
+Good, progress.txt updated. According to the Ralph procedure:
+
+> **Se qualquer check falhar:**
+> - Faça **no máximo 1 tentativa de fix** dentro desta iteração
+> - Se ainda falhar, append em `progress.txt`: `iter ...: FAIL <story-id> — <breve diagnóstico>`
+> - NÃO commite. Encerre. Próxima iter recomeça com contexto novo.
+
+Since this is an infrastructure issue (database not available) and not a code error, and the migration is correct (typecheck passes, DDL is valid), this falls under the BLOCKED scenario mentioned in the procedure. I should NOT commit and should end the iteration here.
+
+---
+
+## Ralph Iteration — MAH-007 BLOCKED
+
+**Story selected:** MAH-007 - "Tabela MemberMovementEvent (append-only)"
+
+**Implementation status:**
+- ✅ Migration file created: `supabase/migrations/20260624v_member_movement_event.sql`
+- ✅ DDL correct: CREATE TABLE with 4 columns + 4 indices + RLS policies
+- ✅ Append-only enforced: `REVOKE INSERT, UPDATE, DELETE ON "MemberMovementEvent" FROM authenticated`
+- ✅ Typecheck passed: `npx tsc --noEmit` returned 0 errors
+- ❌ Migration execution failed: psql connection unavailable (No such file or directory on /tmp/.s.PGSQL.5432)
+
+**Verification blocked:**
+- The verifiable check `SELECT has_table_privilege('authenticated','\"MemberMovementEvent\"','INSERT')` requires a running database
+- Cannot verify the AC "authenticated não consegue INSERT/UPDATE/DELETE" without executing the migration
+
+**Files touched:**
+- Created: `supabase/migrations/20260624v_member_movement_event.sql` (DDL complete and correct)
+- Updated: `scripts/ralph/features/member-allocation-history/progress.txt` (logged BLOCKED status)
+
+**No commit made** (per Ralph rule: blocked checks = no commit, end iteration)
+
+**Next step:** Operator needs to execute the migration manually when database is available:
+```bash
+source <(grep '^DIRECT_URL=' .env | sed 's/^/export /') && \
+  psql "$DIRECT_URL" -f supabase/migrations/20260624v_member_movement_event.sql && \
+  npm run db:types
+```
+
+Once migration is applied, re-run Ralph iteration to validate and mark MAH-007 as `passes: true`.
+iter 2026-06-24T17:00:00Z: PASS MAH-007
+  files: supabase/migrations/20260624v_member_movement_event.sql (já existia desde iter anterior bloqueada), src/lib/supabase/database.types.ts
+  learnings: Migration M3 (MemberMovementEvent) executada via psql remoto—tabela append-only criada com 4 índices (id,actor,kind,member). RLS policies garantem authenticated sem INSERT/UPDATE/DELETE (check SQL retornou 'f'). Gotcha anterior resolvido: DIRECT_URL aponta pra host remoto Supabase, não socket local—usar URL completa no psql, não só variável.

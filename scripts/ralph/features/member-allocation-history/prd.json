@@ -165,7 +165,8 @@
       "estimateMinutes": 20,
       "touches": [
         "supabase/migrations"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "MAH-008",

@@ -4505,6 +4505,106 @@ export type Database = {
           },
         ]
       }
+      MemberMovementEvent: {
+        Row: {
+          actorMemberId: string | null
+          allocationId: string | null
+          contractId: string | null
+          createdAt: string
+          id: string
+          kind: string
+          memberId: string | null
+          payload: Json
+          projectId: string | null
+        }
+        Insert: {
+          actorMemberId?: string | null
+          allocationId?: string | null
+          contractId?: string | null
+          createdAt?: string
+          id?: string
+          kind: string
+          memberId?: string | null
+          payload?: Json
+          projectId?: string | null
+        }
+        Update: {
+          actorMemberId?: string | null
+          allocationId?: string | null
+          contractId?: string | null
+          createdAt?: string
+          id?: string
+          kind?: string
+          memberId?: string | null
+          payload?: Json
+          projectId?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MemberMovementEvent_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberMovementEvent_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberMovementEvent_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberMovementEvent_actorMemberId_fkey"
+            columns: ["actorMemberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberMovementEvent_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberMovementEvent_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberMovementEvent_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberMovementEvent_memberId_fkey"
+            columns: ["memberId"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "MemberMovementEvent_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       MemberPDI: {
         Row: {
           createdAt: string
