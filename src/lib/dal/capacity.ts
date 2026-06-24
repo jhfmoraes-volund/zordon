@@ -223,7 +223,11 @@ export async function getBuilderAllocation(): Promise<{ allocated: number; total
   const supabase = db();
   const [{ data: builders, error: bErr }, { data: allocations, error: aErr }] =
     await Promise.all([
-      supabase.from("Member").select("id").eq("position", "product-builder"),
+      supabase
+        .from("Member")
+        .select("id")
+        .eq("position", "product-builder")
+        .is("deactivatedAt", null),
       supabase
         .from("ProjectMember")
         .select("memberId, fpAllocation, member:Member(position), project:Project(status)")

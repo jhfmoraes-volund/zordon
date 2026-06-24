@@ -13,6 +13,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { brlFromCents, pct } from "@/lib/format-currency";
@@ -154,7 +155,7 @@ export function FinanceFpBilling({
               <Field name="month" required>
                 <Field.Label>Mês</Field.Label>
                 <Field.Control>
-                  <Input type="date" value={delMonth} onChange={(e) => setDelMonth(e.target.value)} />
+                  <DatePicker data-slot="button" value={delMonth} onChange={(iso) => setDelMonth(iso)} />
                 </Field.Control>
               </Field>
               <Field name="fp" required>

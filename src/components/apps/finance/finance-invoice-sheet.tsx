@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/responsive-sheet";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -262,7 +263,7 @@ export function FinanceInvoiceSheet({
               <Field name="dueAt">
                 <Field.Label>Vencimento</Field.Label>
                 <Field.Control>
-                  <Input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+                  <DatePicker data-slot="button" clearable value={dueAt} onChange={(iso) => setDueAt(iso)} />
                 </Field.Control>
               </Field>
             </Field.Row>
@@ -271,13 +272,13 @@ export function FinanceInvoiceSheet({
               <Field name="issuedAt">
                 <Field.Label>Data de emissão</Field.Label>
                 <Field.Control>
-                  <Input type="date" value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} />
+                  <DatePicker data-slot="button" clearable value={issuedAt} onChange={(iso) => setIssuedAt(iso)} />
                 </Field.Control>
               </Field>
               <Field name="receivedAt">
                 <Field.Label>Data de recebimento</Field.Label>
                 <Field.Control>
-                  <Input type="date" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
+                  <DatePicker data-slot="button" clearable value={receivedAt} onChange={(iso) => setReceivedAt(iso)} />
                 </Field.Control>
               </Field>
             </Field.Row>

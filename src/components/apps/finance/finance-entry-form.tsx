@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/responsive-sheet";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -303,20 +304,21 @@ export function FinanceEntryForm({
                 <Field name="from" required>
                   <Field.Label>Início</Field.Label>
                   <Field.Control>
-                    <Input
-                      type="date"
+                    <DatePicker
+                      data-slot="button"
                       value={effectiveFrom}
-                      onChange={(e) => setEffectiveFrom(e.target.value)}
+                      onChange={(iso) => setEffectiveFrom(iso)}
                     />
                   </Field.Control>
                 </Field>
                 <Field name="to">
                   <Field.Label>Fim (opcional)</Field.Label>
                   <Field.Control>
-                    <Input
-                      type="date"
+                    <DatePicker
+                      data-slot="button"
+                      clearable
                       value={effectiveTo}
-                      onChange={(e) => setEffectiveTo(e.target.value)}
+                      onChange={(iso) => setEffectiveTo(iso)}
                     />
                   </Field.Control>
                 </Field>
@@ -348,20 +350,21 @@ export function FinanceEntryForm({
                     <Field name="from" required>
                       <Field.Label>Início</Field.Label>
                       <Field.Control>
-                        <Input
-                          type="date"
+                        <DatePicker
+                          data-slot="button"
                           value={effectiveFrom}
-                          onChange={(e) => setEffectiveFrom(e.target.value)}
+                          onChange={(iso) => setEffectiveFrom(iso)}
                         />
                       </Field.Control>
                     </Field>
                     <Field name="to">
                       <Field.Label>Fim (opcional)</Field.Label>
                       <Field.Control>
-                        <Input
-                          type="date"
+                        <DatePicker
+                          data-slot="button"
+                          clearable
                           value={effectiveTo}
-                          onChange={(e) => setEffectiveTo(e.target.value)}
+                          onChange={(iso) => setEffectiveTo(iso)}
                         />
                       </Field.Control>
                     </Field>
@@ -370,10 +373,10 @@ export function FinanceEntryForm({
                   <Field name="date" required>
                     <Field.Label>Data</Field.Label>
                     <Field.Control>
-                      <Input
-                        type="date"
+                      <DatePicker
+                        data-slot="button"
                         value={occurredOn}
-                        onChange={(e) => setOccurredOn(e.target.value)}
+                        onChange={(iso) => setOccurredOn(iso)}
                       />
                     </Field.Control>
                   </Field>

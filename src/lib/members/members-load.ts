@@ -32,6 +32,10 @@ export type MembersListItem = {
   secondaryTower: TowerKey | null;
   /** Frontend ≥70 AND Backend ≥70. */
   fullstack: boolean;
+  /** Timestamp de desativação (soft-delete). Null = membro ativo. */
+  deactivatedAt: string | null;
+  /** Motivo da desativação ('terminated' | 'left' | 'other'). Null se ativo. */
+  deactivatedReason: string | null;
 };
 
 /**
@@ -112,6 +116,8 @@ export async function loadMembersList(supabase: SupabaseClient<any, any, any>): 
       primaryTower: primary,
       secondaryTower: secondary,
       fullstack: isFullstack(skills),
+      deactivatedAt: (m.deactivatedAt as string | null) ?? null,
+      deactivatedReason: (m.deactivatedReason as string | null) ?? null,
     };
   });
 }

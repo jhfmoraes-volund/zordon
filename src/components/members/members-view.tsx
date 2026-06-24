@@ -18,13 +18,26 @@ import {
 import { MemberEditSheet } from "@/components/members/member-edit-sheet";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogDescription,
+  ResponsiveDialogBody,
+  ResponsiveDialogFooter,
+} from "@/components/ui/responsive-dialog";
+import { Field, FormBody } from "@/components/ui/field";
+import { Switch } from "@/components/ui/switch";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Gauge, Sparkles, MoreVertical, icons as lucideIcons, Star } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronRight, Shield, Gauge, Sparkles, MoreVertical, icons as lucideIcons, Star, Ban, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -62,6 +75,14 @@ const MEMBER_FILTER_LABELS: Record<MemberFilter, string> = {
   internal: "Membros",
   guest: "Guests",
   external: "Externos",
+};
+
+// Motivo da desativação (soft-delete). Espelha o CHECK da coluna Member.deactivatedReason.
+type DeactivationReason = "terminated" | "left" | "other";
+const DEACTIVATION_REASON_LABELS: Record<DeactivationReason, string> = {
+  terminated: "Desligado",
+  left: "Saiu da empresa",
+  other: "Outro",
 };
 
 const roleDetails: Record<string, {
@@ -156,6 +177,8 @@ function MemberCardMobile({
   onOpenSkills,
   onEdit,
   onDelete,
+  onDeactivate,
+  onReactivate,
 }: {
   m: Member;
   isAdmin: boolean;
@@ -163,15 +186,19 @@ function MemberCardMobile({
   onOpenSkills: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onDeactivate: () => void;
+  onReactivate: () => void;
 }) {
   const usage = m.fpCapacity > 0 ? m.fpPlannedWeek / m.fpCapacity : 0;
   const pct = Math.min(usage * 100, 999);
   const tone = pixelTone(pct, "load");
+  const inactive = m.deactivatedAt != null;
 
   // Builder doesn't get to drill into the per-member capacity page; the card
   // renders as a non-clickable container in that case.
-  const wrapperClass =
-    "surface block p-4 space-y-3 relative active:bg-accent/40 transition-colors";
+  const wrapperClass = `surface block p-4 space-y-3 relative active:bg-accent/40 transition-colors${
+    inactive ? " opacity-60" : ""
+  }`;
 
   const inner = (
     <>
@@ -200,6 +227,18 @@ function MemberCardMobile({
                   <Pencil className="h-3.5 w-3.5 mr-2" />
                   Editar
                 </DropdownMenuItem>
+                {inactive ? (
+                  <DropdownMenuItem onClick={onReactivate}>
+                    <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                    Reativar
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={onDeactivate}>
+                    <Ban className="h-3.5 w-3.5 mr-2" />
+                    Desativar membro
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onClick={onDelete}>
                   <Trash2 className="h-3.5 w-3.5 mr-2" />
                   Excluir
@@ -214,6 +253,11 @@ function MemberCardMobile({
       <div className="pr-10 space-y-1.5">
         <h3 className="font-medium text-base leading-tight truncate">{m.name}</h3>
         <div className="flex flex-wrap items-center gap-1.5">
+          {inactive && (
+            <Badge variant="outline" className="text-[10px] border-muted-foreground/40 text-muted-foreground">
+              Inativo
+            </Badge>
+          )}
           <Badge variant="outline" className="text-[10px]">{positionLabel(m.position)}</Badge>
           {m.primaryTower && (
             <Badge variant="secondary" className="text-[10px]">
@@ -288,11 +332,20 @@ export function MembersView({ initial }: { initial: Member[] }) {
   const [editing, setEditing] = useState<Member | null>(null);
   const [skillSheetMemberId, setSkillSheetMemberId] = useState<string | null>(null);
   const [filter, setFilter] = useState<MemberFilter>("all");
+  const [showInactive, setShowInactive] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<Member | null>(null);
 
-  // Contagem por categoria (sempre sobre o conjunto completo, independente do
-  // filtro ativo) pra rotular as opções do Select.
-  const counts = members.reduce(
+  const inactiveCount = members.filter((m) => m.deactivatedAt != null).length;
+
+  // Inativos (desligados/saídos) ficam escondidos por default; o toggle revela.
+  const baseMembers = showInactive
+    ? members
+    : members.filter((m) => m.deactivatedAt == null);
+
+  // Contagem por categoria (sobre o conjunto respeitando o toggle de inativos)
+  // pra rotular as opções do Select.
+  const counts = baseMembers.reduce(
     (acc, m) => {
       acc.all += 1;
       acc[memberCategory(m)] += 1;
@@ -302,12 +355,12 @@ export function MembersView({ initial }: { initial: Member[] }) {
   );
 
   const visibleMembers =
-    filter === "all" ? members : members.filter((m) => memberCategory(m) === filter);
+    filter === "all" ? baseMembers : baseMembers.filter((m) => memberCategory(m) === filter);
 
-  // Roles e Torres descrevem a composição do time (interno + externos), não
-  // guests — que são stubs sem position/skill. Sempre excluem guests,
+  // Roles e Torres descrevem a composição do time ATIVO (interno + externos),
+  // não guests (stubs sem position/skill) nem inativos. Sempre excluem ambos,
   // independente do filtro da tabela.
-  const teamMembers = members.filter((m) => !m.isGuest);
+  const teamMembers = members.filter((m) => !m.isGuest && m.deactivatedAt == null);
 
   const reload = async () => {
     const supabase = createClient();
@@ -350,6 +403,32 @@ export function MembersView({ initial }: { initial: Member[] }) {
     });
   };
 
+  // Desativar (soft-delete) abre o dialog com select de motivo + guard de PM.
+  const openDeactivate = (m: Member) => setDeactivateTarget(m);
+
+  // Reativar é uma confirmação simples (sem motivo, sem guard).
+  const reactivate = (m: Member) => {
+    setConfirmState({
+      title: `Reativar ${m.name}?`,
+      description:
+        "O membro recupera o acesso de login e volta a contar em rosters e capacidade.",
+      confirmLabel: "Reativar",
+      onConfirm: async () => {
+        const res = await fetch(`/api/members/${m.id}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active: true }),
+        });
+        if (!res.ok) {
+          toast.error("Falha ao reativar membro.");
+          return;
+        }
+        toast.success(`${m.name} reativado.`);
+        await reload();
+      },
+    });
+  };
+
   return (
     <PageContainer>
       <div className="space-y-6">
@@ -359,8 +438,14 @@ export function MembersView({ initial }: { initial: Member[] }) {
           addLabel="Convidar membro"
         />
 
-      {/* Filtro por categoria (Membros / Guests / Externos) */}
-      <div className="flex justify-end">
+      {/* Filtro por categoria (Membros / Guests / Externos) + toggle de inativos */}
+      <div className="flex items-center justify-end gap-4">
+        {isAdmin && inactiveCount > 0 && (
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+            <Switch checked={showInactive} onCheckedChange={setShowInactive} />
+            Mostrar inativos ({inactiveCount})
+          </label>
+        )}
         <Select value={filter} onValueChange={(v) => v && setFilter(v as MemberFilter)}>
           <SelectTrigger className="w-[200px]">
             <SelectValue>
@@ -391,6 +476,8 @@ export function MembersView({ initial }: { initial: Member[] }) {
             onOpenSkills={() => setSkillSheetMemberId(m.id)}
             onEdit={() => openEdit(m)}
             onDelete={() => remove(m.id)}
+            onDeactivate={() => openDeactivate(m)}
+            onReactivate={() => reactivate(m)}
           />
         ))}
         {visibleMembers.length === 0 && (
@@ -417,10 +504,16 @@ export function MembersView({ initial }: { initial: Member[] }) {
           <TableBody>
             {visibleMembers.map((m) => {
               const usage = m.fpCapacity > 0 ? m.fpPlannedWeek / m.fpCapacity : 0;
+              const inactive = m.deactivatedAt != null;
               return (
-                <TableRow key={m.id}>
+                <TableRow key={m.id} className={inactive ? "opacity-60" : undefined}>
                   <TableCell className="font-medium">
                     {m.name}
+                    {inactive && (
+                      <Badge variant="outline" className="ml-2 text-[10px] border-muted-foreground/40 text-muted-foreground">
+                        Inativo
+                      </Badge>
+                    )}
                     {m.isGuest && (
                       <Badge variant="outline" className="ml-2 text-[10px] border-sky-400 text-sky-500">
                         Guest
@@ -494,10 +587,19 @@ export function MembersView({ initial }: { initial: Member[] }) {
                       )}
                       {isAdmin && (
                         <>
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(m)} title="Editar">
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => remove(m.id)}>
+                          {inactive ? (
+                            <Button variant="ghost" size="icon" onClick={() => reactivate(m)} title="Reativar membro">
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="icon" onClick={() => openDeactivate(m)} title="Desativar membro">
+                              <Ban className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" onClick={() => remove(m.id)} title="Excluir permanentemente">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </>
@@ -568,11 +670,148 @@ export function MembersView({ initial }: { initial: Member[] }) {
         onOpenChange={setOpen}
         member={editing}
         onSaved={reload}
+        isAdmin={isAdmin}
+        onDeactivate={(m) => {
+          setOpen(false);
+          openDeactivate(m);
+        }}
+        onReactivate={(m) => {
+          setOpen(false);
+          reactivate(m);
+        }}
+      />
+
+      <DeactivateMemberDialog
+        key={deactivateTarget?.id ?? "none"}
+        member={deactivateTarget}
+        onOpenChange={(o) => { if (!o) setDeactivateTarget(null); }}
+        onDone={reload}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       </div>
     </PageContainer>
+  );
+}
+
+// ─── Deactivate dialog (soft-delete com motivo + guard de PM) ──────────────
+
+function DeactivateMemberDialog({
+  member,
+  onOpenChange,
+  onDone,
+}: {
+  member: Member | null;
+  onOpenChange: (open: boolean) => void;
+  onDone: () => void | Promise<void>;
+}) {
+  const [reason, setReason] = useState<DeactivationReason | "">("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pmProjects, setPmProjects] = useState<{ id: string; name: string }[]>([]);
+
+  async function confirm() {
+    if (!member || !reason) return;
+    setBusy(true);
+    setError(null);
+    setPmProjects([]);
+    try {
+      const res = await fetch(`/api/members/${member.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: false, reason }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          pmProjects?: { id: string; name: string }[];
+        };
+        if (res.status === 409 && Array.isArray(data.pmProjects)) {
+          setPmProjects(data.pmProjects);
+        }
+        setError(data.error ?? "Falha ao desativar membro.");
+        return;
+      }
+      toast.success(`${member.name} desativado.`);
+      await onDone();
+      onOpenChange(false);
+    } catch {
+      setError("Sem conexão. A mudança não foi aplicada.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ResponsiveDialog open={!!member} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>
+            Desativar {member?.name ?? "membro"}?
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            O membro perde o acesso de login e sai dos rosters, capacidade e
+            headcount — mas todo o histórico de participação (tasks, comentários,
+            sessions, alocações passadas) é mantido. Reversível a qualquer momento.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody className="py-4">
+          <FormBody>
+            <Field name="deactivate-reason" required>
+              <Field.Label>Motivo</Field.Label>
+              <Field.Control>
+                <Select
+                  value={reason === "" ? null : reason}
+                  onValueChange={(v) => v && setReason(v as DeactivationReason)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar motivo">
+                      {(v: string | null) =>
+                        v ? (
+                          DEACTIVATION_REASON_LABELS[v as DeactivationReason]
+                        ) : (
+                          <span className="text-muted-foreground">Selecionar motivo</span>
+                        )
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(DEACTIVATION_REASON_LABELS) as DeactivationReason[]).map(
+                      (r) => (
+                        <SelectItem key={r} value={r}>
+                          {DEACTIVATION_REASON_LABELS[r]}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </Field.Control>
+            </Field>
+
+            {error && (
+              <div className="space-y-1.5 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                <p className="text-sm text-destructive">{error}</p>
+                {pmProjects.length > 0 && (
+                  <ul className="list-disc pl-4 text-sm text-destructive/90">
+                    {pmProjects.map((p) => (
+                      <li key={p.id}>{p.name}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </FormBody>
+        </ResponsiveDialogBody>
+        <ResponsiveDialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button variant="destructive" onClick={confirm} disabled={busy || !reason}>
+            {busy ? "Desativando…" : "Desativar membro"}
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }
 

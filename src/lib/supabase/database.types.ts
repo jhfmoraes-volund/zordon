@@ -4252,6 +4252,9 @@ export type Database = {
           dailyTodosLastSent: Json
           dailyTodosMorningEnabled: boolean
           dailyTodosMorningTime: string
+          deactivatedAt: string | null
+          deactivatedById: string | null
+          deactivatedReason: string | null
           dedicationPercent: number
           email: string | null
           fpCapacity: number
@@ -4284,6 +4287,9 @@ export type Database = {
           dailyTodosLastSent?: Json
           dailyTodosMorningEnabled?: boolean
           dailyTodosMorningTime?: string
+          deactivatedAt?: string | null
+          deactivatedById?: string | null
+          deactivatedReason?: string | null
           dedicationPercent?: number
           email?: string | null
           fpCapacity?: number
@@ -4316,6 +4322,9 @@ export type Database = {
           dailyTodosLastSent?: Json
           dailyTodosMorningEnabled?: boolean
           dailyTodosMorningTime?: string
+          deactivatedAt?: string | null
+          deactivatedById?: string | null
+          deactivatedReason?: string | null
           dedicationPercent?: number
           email?: string | null
           fpCapacity?: number
@@ -4341,7 +4350,36 @@ export type Database = {
           updatedAt?: string
           userId?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "Member_deactivatedById_fkey"
+            columns: ["deactivatedById"]
+            isOneToOne: false
+            referencedRelation: "Member"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Member_deactivatedById_fkey"
+            columns: ["deactivatedById"]
+            isOneToOne: false
+            referencedRelation: "member_capacity_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Member_deactivatedById_fkey"
+            columns: ["deactivatedById"]
+            isOneToOne: false
+            referencedRelation: "member_commitment_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "Member_deactivatedById_fkey"
+            columns: ["deactivatedById"]
+            isOneToOne: false
+            referencedRelation: "member_summary"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       MemberAssessment: {
         Row: {

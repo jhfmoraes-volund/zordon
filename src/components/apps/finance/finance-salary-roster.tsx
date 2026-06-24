@@ -15,6 +15,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { brlFromCents } from "@/lib/format-currency";
@@ -228,11 +229,11 @@ export function FinanceSalaryRoster({
                       <Field name="from" required>
                         <Field.Label>Vigente desde</Field.Label>
                         <Field.Control>
-                          <Input
-                            type="date"
+                          <DatePicker
+                            data-slot="button"
                             value={editing.from}
-                            onChange={(e) =>
-                              setEditing((s) => (s ? { ...s, from: e.target.value } : s))
+                            onChange={(iso) =>
+                              setEditing((s) => (s ? { ...s, from: iso } : s))
                             }
                           />
                         </Field.Control>

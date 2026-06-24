@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/responsive-sheet";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -287,13 +288,13 @@ export function FinanceContractSheet({
               <Field name="from" required>
                 <Field.Label>Início da vigência</Field.Label>
                 <Field.Control>
-                  <Input type="date" value={form.from} onChange={(e) => set({ from: e.target.value })} />
+                  <DatePicker data-slot="button" value={form.from} onChange={(iso) => set({ from: iso })} />
                 </Field.Control>
               </Field>
               <Field name="to">
                 <Field.Label>Fim (vazio = vigente)</Field.Label>
                 <Field.Control>
-                  <Input type="date" value={form.to} onChange={(e) => set({ to: e.target.value })} />
+                  <DatePicker data-slot="button" clearable value={form.to} onChange={(iso) => set({ to: iso })} />
                 </Field.Control>
               </Field>
             </Field.Row>
@@ -825,13 +826,13 @@ function ContractTeamEditor({
               <Field name="from" required>
                 <Field.Label>Início</Field.Label>
                 <Field.Control>
-                  <Input type="date" value={form.from} onChange={(e) => setForm((f) => (f ? { ...f, from: e.target.value } : f))} />
+                  <DatePicker data-slot="button" value={form.from} onChange={(iso) => setForm((f) => (f ? { ...f, from: iso } : f))} />
                 </Field.Control>
               </Field>
               <Field name="to">
                 <Field.Label>Fim (opcional)</Field.Label>
                 <Field.Control>
-                  <Input type="date" value={form.to} onChange={(e) => setForm((f) => (f ? { ...f, to: e.target.value } : f))} />
+                  <DatePicker data-slot="button" clearable value={form.to} onChange={(iso) => setForm((f) => (f ? { ...f, to: iso } : f))} />
                 </Field.Control>
               </Field>
             </Field.Row>
@@ -1017,7 +1018,7 @@ function MonthOverrides({ contractId, onChanged }: { contractId: string; onChang
           <Field name="ovMonth">
             <Field.Label>Mês</Field.Label>
             <Field.Control>
-              <Input type="date" value={month} onChange={(e) => setMonth(e.target.value)} />
+              <DatePicker data-slot="button" value={month} onChange={(iso) => setMonth(iso)} />
             </Field.Control>
           </Field>
           <Field name="ovAmount">

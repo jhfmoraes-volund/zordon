@@ -39,6 +39,12 @@ import type { MembersListItem } from "@/lib/members/members-load";
 
 // ─── helpers ─────────────────────────────────────────────
 
+const DEACTIVATION_REASON_LABELS: Record<string, string> = {
+  terminated: "Desligado",
+  left: "Saiu da empresa",
+  other: "Outro",
+};
+
 function generatePassword(length = 14): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
   const bytes = new Uint8Array(length);
@@ -127,11 +133,17 @@ export function MemberEditSheet({
   onOpenChange,
   member,
   onSaved,
+  isAdmin = false,
+  onDeactivate,
+  onReactivate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   member: MembersListItem | null;
   onSaved: () => void;
+  isAdmin?: boolean;
+  onDeactivate?: (member: MembersListItem) => void;
+  onReactivate?: (member: MembersListItem) => void;
 }) {
   return (
     <ResponsiveSheet open={open} onOpenChange={onOpenChange}>
@@ -144,6 +156,9 @@ export function MemberEditSheet({
             member={member}
             onOpenChange={onOpenChange}
             onSaved={onSaved}
+            isAdmin={isAdmin}
+            onDeactivate={onDeactivate}
+            onReactivate={onReactivate}
           />
         )}
       </ResponsiveSheetContent>
@@ -157,10 +172,16 @@ function MemberEditForm({
   member,
   onOpenChange,
   onSaved,
+  isAdmin,
+  onDeactivate,
+  onReactivate,
 }: {
   member: MembersListItem | null;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  isAdmin: boolean;
+  onDeactivate?: (member: MembersListItem) => void;
+  onReactivate?: (member: MembersListItem) => void;
 }) {
   const editing = !!member;
 
@@ -779,6 +800,45 @@ function MemberEditForm({
         </section>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {/* Zona de saída — desativar (soft-delete) ≠ excluir. Admin-only. */}
+        {editing && isAdmin && member && (
+          <section className="mt-2 border-t border-destructive/20 pt-4">
+            {member.deactivatedAt ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Inativo desde{" "}
+                  {new Date(member.deactivatedAt).toLocaleDateString("pt-BR")}
+                  {member.deactivatedReason
+                    ? ` · ${DEACTIVATION_REASON_LABELS[member.deactivatedReason] ?? member.deactivatedReason}`
+                    : ""}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onReactivate?.(member)}
+                >
+                  Reativar membro
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Desligado ou saiu da empresa? Desative — perde acesso e sai dos
+                  rosters, mas o histórico é mantido.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive shrink-0"
+                  onClick={() => onDeactivate?.(member)}
+                >
+                  Desativar membro
+                </Button>
+              </div>
+            )}
+          </section>
+        )}
       </ResponsiveSheetBody>
 
       <ResponsiveSheetFooter>
