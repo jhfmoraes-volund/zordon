@@ -328,6 +328,12 @@ export type Allocation = {
   contract_id: string | null;
   created_at: string;
   updated_at: string;
+  /** Período encerrado (effective_to setado): quem encerrou. */
+  closed_by: string | null;
+  /** Soft-delete (erro): marcado, some de billing/roster, reversível. Null = ativo. */
+  voided_at: string | null;
+  voided_reason: string | null;
+  voided_by: string | null;
 };
 
 export type AllocationItem = Allocation & {

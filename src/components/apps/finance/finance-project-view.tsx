@@ -59,6 +59,7 @@ import { FinanceAssumptionsForm } from "./finance-assumptions-form";
 import { FinanceFpBilling } from "./finance-fp-billing";
 import { FinanceContracts } from "./finance-contracts";
 import { FinanceContractSheet } from "./finance-contract-sheet";
+import { FinanceAllocationHistorySheet } from "./finance-allocation-history-sheet";
 import { FinanceNfWidget } from "./finance-nf-widget";
 import { FinanceInvoiceSheet } from "./finance-invoice-sheet";
 import { contractForDate, paletteFor } from "./contract-bands";
@@ -102,6 +103,7 @@ export function FinanceProjectView({
   });
   // Sheet de contrato rico (write) — { contract: null } = novo · { contract } = editar.
   const [contractSheet, setContractSheet] = useState<{ contract: Contract | null } | null>(null);
+  const [historySheet, setHistorySheet] = useState<{ contractId: string; label: string } | null>(null);
   // Sheet "Emitir NF" (write) — criar (invoice=null + mês) ou editar.
   const [invoiceSheet, setInvoiceSheet] = useState<{
     contract: Contract;
@@ -435,6 +437,7 @@ export function FinanceProjectView({
       onSelectContract={selectScope}
       onCreateContract={() => setContractSheet({ contract: null })}
       onEditContract={(c) => setContractSheet({ contract: c })}
+      onViewHistory={(c) => setHistorySheet({ contractId: c.id, label: c.label })}
       onChanged={reloadAndBubble}
     />
   );
@@ -673,6 +676,19 @@ export function FinanceProjectView({
           contract={invoiceSheet.contract}
           invoice={invoiceSheet.invoice}
           defaultMonth={invoiceSheet.month}
+          onChanged={reloadAndBubble}
+        />
+      )}
+
+      {historySheet && (
+        <FinanceAllocationHistorySheet
+          key={historySheet.contractId}
+          open
+          onOpenChange={(o) => {
+            if (!o) setHistorySheet(null);
+          }}
+          contractId={historySheet.contractId}
+          contractLabel={historySheet.label}
           onChanged={reloadAndBubble}
         />
       )}

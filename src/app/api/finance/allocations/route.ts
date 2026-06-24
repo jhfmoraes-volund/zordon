@@ -4,7 +4,7 @@ import { requireMinAccessLevelApi } from "@/lib/dal";
 import { createAllocation, listAllocations } from "@/lib/finance/dal";
 import type { AllocationInput } from "@/lib/finance/types";
 
-/** GET /api/finance/allocations?projectId=&memberId= — alocações. Admin-only. */
+/** GET /api/finance/allocations?projectId=&memberId=&contractId= — alocações. Admin-only. */
 export async function GET(req: Request) {
   const denied = await requireMinAccessLevelApi("admin");
   if (denied) return denied;
@@ -13,6 +13,7 @@ export async function GET(req: Request) {
     const allocations = await listAllocations({
       projectId: searchParams.get("projectId") || undefined,
       memberId: searchParams.get("memberId") || undefined,
+      contractId: searchParams.get("contractId") || undefined,
     });
     return NextResponse.json({ allocations });
   } catch (e) {

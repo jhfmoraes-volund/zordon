@@ -360,14 +360,18 @@ async function attachAllocationNames(
 export async function listAllocations(filter: {
   projectId?: string;
   memberId?: string;
+  contractId?: string;
 }): Promise<AllocationItem[]> {
   const { sb, fin } = await finance();
+  // Lê a TABELA (não as views) — então inclui períodos encerrados E voided, que o
+  // histórico do contrato precisa mostrar (views de billing/roster filtram voided).
   let q = fin
     .from("labor_allocation")
     .select("*")
     .order("effective_from", { ascending: false });
   if (filter.projectId) q = q.eq("project_id", filter.projectId);
   if (filter.memberId) q = q.eq("member_id", filter.memberId);
+  if (filter.contractId) q = q.eq("contract_id", filter.contractId);
   const res = await q;
   if (res.error) throw new Error(res.error.message);
   return attachAllocationNames(sb, (res.data ?? []) as Allocation[]);

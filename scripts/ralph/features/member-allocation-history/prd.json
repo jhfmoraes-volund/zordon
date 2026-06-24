@@ -144,7 +144,8 @@
       "estimateMinutes": 30,
       "touches": [
         "src/components/finance"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "MAH-007",

@@ -9,7 +9,7 @@
  */
 
 import { useState } from "react";
-import { CalendarRange, FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarRange, FileText, History, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
@@ -36,6 +36,7 @@ export function FinanceContracts({
   onSelectContract,
   onCreateContract,
   onEditContract,
+  onViewHistory,
   onChanged,
 }: {
   contracts: Contract[];
@@ -46,6 +47,7 @@ export function FinanceContracts({
   onSelectContract: (id: string | null) => void;
   onCreateContract: () => void;
   onEditContract: (c: Contract) => void;
+  onViewHistory: (c: Contract) => void;
   onChanged: () => void;
 }) {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
@@ -129,6 +131,18 @@ export function FinanceContracts({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      title="Histórico de alocação"
+                      aria-label="Histórico de alocação"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewHistory(c);
+                      }}
+                      className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                    >
+                      <History className="size-3.5" />
+                    </button>
                     <button
                       type="button"
                       title="Editar contrato"
