@@ -1,3 +1,33 @@
 iter 2026-06-24T00:00:00Z: PASS MAH-001
   files: supabase/migrations/20260624_labor_allocation_void_columns.sql, src/lib/supabase/database.types.ts
   learnings: Migration M1 executed successfully via psql; all 4 columns (voided_at, voided_reason, voided_by, closed_by) and partial index (labor_alloc_live_idx) created as specified; types regenerated with no typecheck errors.
+Perfect! 
+
+---
+
+## Iteration Summary
+
+**Story selected:** MAH-001 - "Adicionar colunas de void + closed_by em labor_allocation"
+
+**Verification results:**
+- ✅ SQL check: All 4 columns (voided_at, voided_reason, voided_by, closed_by) confirmed present in finance.labor_allocation
+- ✅ SQL check: Partial index labor_alloc_live_idx created with correct WHERE clause
+- ✅ Typecheck: `npx tsc --noEmit` passed with 0 errors
+
+**Commit:** `80050df` - "ralph(member-allocation-history): MAH-001 Add void + closed_by columns to labor_allocation"
+
+**Files touched:**
+- Created: `supabase/migrations/20260624_labor_allocation_void_columns.sql`
+- Updated: `src/lib/supabase/database.types.ts` (regenerated)
+- Updated: `scripts/ralph/features/member-allocation-history/prd.json` (marked MAH-001 passes=true)
+- Created: `scripts/ralph/features/member-allocation-history/progress.txt`
+
+**Next step:** The next eligible stories are MAH-002, MAH-003, MAH-004, and MAH-005 (all depend on MAH-001 which now passes). MAH-002 is the next in lexicographic order and continues the database migration work.
+
+NOTE (operador 2026-06-24): convenção de migration same-day = SUFIXO DE LETRA pra ordenar
+  corretamente. Última letra usada no repo: 20260624t. Próximas migrations DEVEM ser
+  20260624u_<nome>.sql, 20260624v_<nome>.sql, ... NUNCA "20260624_<nome>.sql" sem letra
+  (ordena ANTES de 20260624a e quebra replay; labor_allocation nasce em 20260624d).
+iter 2026-06-24T00:15:00Z: PASS MAH-002
+  files: supabase/migrations/20260624u_exclude_voids_from_views.sql, src/lib/supabase/database.types.ts
+  learnings: Migration M2 executada—DROP+CREATE de 7 views (cascade completa: v_allocation_labor_month + dependentes v_project_member_labor_month/v_project_labor_month/v_project_month/v_contract_month + v_contract_roster/v_project_team). Filtro `la.voided_at IS NULL` propagado. Check SQL confirmou: void→não aparece no billing. Sufixo de migration same-day=letra (20260624u).
