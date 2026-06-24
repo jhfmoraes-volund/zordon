@@ -280,3 +280,8 @@ iter $(date -u +%Y-%m-%dT%H:%M:%SZ): PASS MAH-008
 - SQL check requires running DB — validated via code review + typecheck
 
 **Next step:** MAH-009 is now eligible (depends on MAH-008 which now passes). It will implement the purge endpoint with logged hard deletion.
+
+iter 2026-06-24 (operador): DEFERRED MAH-009 (purge admin) — decisão João: soft-delete (void/restore)
+  cobre o dia a dia; purge é só LGPD/super-admin raro, construir sob demanda. Feature fechada em 8/9.
+  REGRESSÃO corrigida: MAH-002 dropou GRANT de v_project_member_labor_month → 20260624w re-grant.
+  LIÇÃO: checks tsc/sql do loop NÃO pegam regressão de permissão/RLS (só aparece em runtime).

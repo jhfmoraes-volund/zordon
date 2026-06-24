@@ -214,7 +214,8 @@
       "estimateMinutes": 25,
       "touches": [
         "src/app/api/finance/allocations"
-      ]
+      ],
+      "deferred": "LGPD/super-admin raro — construir sob demanda (decisão João 2026-06-24)"
     }
   ]
 }
