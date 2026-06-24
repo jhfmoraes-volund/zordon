@@ -31,6 +31,7 @@ function coveredSprints(contract: Contract, contracts: Contract[], sprints: Spri
 export function FinanceContracts({
   contracts,
   sprints,
+  category,
   selectedContractId,
   onSelectContract,
   onCreateContract,
@@ -39,6 +40,8 @@ export function FinanceContracts({
 }: {
   contracts: Contract[];
   sprints: SprintLite[];
+  /** Categoria do projeto — modula o empty-state (interno não precisa de contrato). */
+  category?: string;
   selectedContractId: string | null;
   onSelectContract: (id: string | null) => void;
   onCreateContract: () => void;
@@ -69,7 +72,7 @@ export function FinanceContracts({
     <div>
       <div className="mb-2 flex items-center justify-between px-1">
         <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          <FileText className="size-3.5" /> Contratos
+          <FileText className="size-3.5" /> Contratos deste projeto
         </p>
         <Button size="sm" variant="outline" onClick={onCreateContract}>
           <Plus className="size-3.5" /> Contrato
@@ -78,7 +81,9 @@ export function FinanceContracts({
 
       {contracts.length === 0 ? (
         <div className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">
-          Sem contrato — defina um pra registrar preço/condições por período.
+          {category === "internal"
+            ? "Projeto interno — não precisa de contrato."
+            : "Sem contrato — defina um pra registrar preço/condições por período (use + Contrato)."}
         </div>
       ) : (
         <div className="space-y-2">

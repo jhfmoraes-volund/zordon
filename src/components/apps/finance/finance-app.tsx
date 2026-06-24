@@ -91,9 +91,12 @@ async function fetchFinance(yr: number): Promise<FinanceData> {
 
 export function FinanceApp({
   onSelectedProjectChange,
+  initialProjectId,
 }: {
   /** Reporta o projeto aberto pro host (vira o subtítulo da janela do canvas). */
   onSelectedProjectChange?: (name: string | null) => void;
+  /** Deep-link (?fp=): abre direto este projeto (handoff pós-criação). */
+  initialProjectId?: string | null;
 } = {}) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -153,8 +156,15 @@ export function FinanceApp({
       ]);
       if (cancelled) return;
       if (cats?.categories) setCategories(cats.categories as Category[]);
-      if (Array.isArray(projs))
-        setProjects(projs.map((p: NamedRef) => ({ id: p.id, name: p.name })));
+      if (Array.isArray(projs)) {
+        const list = projs.map((p: NamedRef) => ({ id: p.id, name: p.name }));
+        setProjects(list);
+        // Deep-link (?fp=): abre o projeto direto (handoff de "configurar no S&OP").
+        if (initialProjectId) {
+          const hit = list.find((p) => p.id === initialProjectId);
+          if (hit) openProject(hit);
+        }
+      }
       if (Array.isArray(mems))
         setMembers(
           mems.map(
@@ -170,7 +180,7 @@ export function FinanceApp({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialProjectId, openProject]);
 
   const totals = data?.totals ?? EMPTY.totals;
   const marginPct = totals.revenueCents > 0 ? totals.netCents / totals.revenueCents : null;

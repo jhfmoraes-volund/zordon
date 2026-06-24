@@ -327,7 +327,8 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
             "Falta configurar vigência, valor e equipe no S&OP (Finanças). Quer ir agora?",
           confirmLabel: "Configurar no S&OP",
           cancelLabel: "Depois",
-          onConfirm: () => router.push(`/projects/${pid}?tab=apps&app=contract`),
+          // Abre o projeto direto no app Finanças (S&OP) do Overview via ?fp=.
+          onConfirm: () => router.push(`/?tab=apps&app=finance&fp=${pid}`),
         });
       }
     } finally {

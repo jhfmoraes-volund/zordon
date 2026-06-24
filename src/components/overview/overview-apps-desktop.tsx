@@ -45,7 +45,12 @@ export function OverviewAppsDesktop({
   function renderSurface(app: AppDef) {
     switch (app.key) {
       case "finance":
-        return <FinanceApp onSelectedProjectChange={setFinanceProject} />;
+        return (
+          <FinanceApp
+            onSelectedProjectChange={setFinanceProject}
+            initialProjectId={searchParams.get("fp")}
+          />
+        );
       default:
         return null;
     }

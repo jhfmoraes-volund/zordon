@@ -35,6 +35,18 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { StatusChip } from "@/components/ui/status-chip";
+import {
+  PROJECT_STATUS,
+  PROJECT_PHASE,
+  PROJECT_CATEGORY,
+  type ChipTone,
+} from "@/lib/status-chips";
+import { createClient } from "@/lib/supabase/client";
+import {
+  ProjectEditSheet,
+  type ProjectEditInitial,
+} from "@/components/projects/project-edit-sheet";
 import { Cronograma } from "@/components/timeline/cronograma";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -96,6 +108,32 @@ export function FinanceProjectView({
     invoice: Invoice | null;
     month?: string;
   } | null>(null);
+  // Identidade do projeto (zona PROJETO + Editar projeto) — fonte é a tabela
+  // Project (não o finance). phase/status/category são do projeto; o contrato
+  // nem tem essas colunas.
+  const [projectRow, setProjectRow] = useState<ProjectEditInitial | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+
+  const loadProjectRow = useCallback(async () => {
+    const sb = createClient();
+    const { data } = await sb
+      .from("Project")
+      .select(
+        "id, name, repoUrl, startDate, endDate, status, category, phase, engagementType, clientId, pmId, githubRepoOwner, githubRepoName, githubDefaultBranch",
+      )
+      .eq("id", projectId)
+      .single();
+    setProjectRow(data ? ({ ...data, memberIds: [] } as ProjectEditInitial) : null);
+  }, [projectId]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!cancelled) await loadProjectRow();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadProjectRow]);
 
   const reload = useCallback(async () => {
     // `contract` escopa os números a UM contrato (receita/equipe/despesa atribuídas
@@ -392,6 +430,7 @@ export function FinanceProjectView({
     <FinanceContracts
       contracts={detail.contracts}
       sprints={detail.sprints}
+      category={projectRow?.category}
       selectedContractId={scope.id}
       onSelectContract={selectScope}
       onCreateContract={() => setContractSheet({ contract: null })}
@@ -481,6 +520,34 @@ export function FinanceProjectView({
   return (
     <div className="space-y-4">
       {header}
+
+      {/* Zona PROJETO (identidade) — acima dos contratos. phase/status/category
+          são do projeto (o contrato nem tem); "Editar projeto" abre o sheet. */}
+      {projectRow && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Projeto
+            </span>
+            {(
+              [
+                PROJECT_PHASE[projectRow.phase as keyof typeof PROJECT_PHASE],
+                PROJECT_STATUS[projectRow.status as keyof typeof PROJECT_STATUS],
+                PROJECT_CATEGORY[projectRow.category as keyof typeof PROJECT_CATEGORY],
+              ] as ({ label: string; tone: ChipTone } | undefined)[]
+            )
+              .filter(Boolean)
+              .map((o, i) => (
+                <StatusChip key={i} tone={o!.tone}>
+                  {o!.label}
+                </StatusChip>
+              ))}
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+            Editar projeto
+          </Button>
+        </div>
+      )}
 
       {/* Premissas em uso */}
       <div className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
@@ -619,6 +686,18 @@ export function FinanceProjectView({
           projectId={projectId}
           scopeLabel="Premissas do projeto"
           onSaved={reloadAndBubble}
+        />
+      )}
+
+      {projectRow && (
+        <ProjectEditSheet
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          project={projectRow}
+          onSaved={() => {
+            void loadProjectRow();
+            reloadAndBubble();
+          }}
         />
       )}
     </div>

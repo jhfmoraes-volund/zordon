@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Pencil, Trash2, Users, MoreVertical, ListChecks } from "lucide-react";
+import { Trash2, Users, MoreVertical, ListChecks } from "lucide-react";
 import { hasMinAccessLevel } from "@/lib/roles";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PROJECT_STATUS, lookupChip } from "@/lib/status-chips";
@@ -67,12 +67,10 @@ export type ProjectsViewInitial = {
 
 function ProjectCardMobile({
   p,
-  onEdit,
   onDelete,
   canManage,
 }: {
   p: Project;
-  onEdit: () => void;
   onDelete: () => void;
   canManage: boolean;
 }) {
@@ -97,10 +95,6 @@ function ProjectCardMobile({
             <MoreVertical className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onEdit}>
-              <Pencil className="h-3.5 w-3.5 mr-2" />
-              Editar
-            </DropdownMenuItem>
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
               <Trash2 className="h-3.5 w-3.5 mr-2" />
               Excluir
@@ -205,27 +199,6 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
 
   const openNew = () => {
     setEditProject(null);
-    setOpen(true);
-  };
-
-  const openEdit = (p: Project) => {
-    setEditProject({
-      id: p.id,
-      name: p.name,
-      repoUrl: p.repoUrl,
-      startDate: p.startDate,
-      endDate: p.endDate,
-      status: p.status,
-      category: p.category,
-      phase: p.phase,
-      engagementType: p.engagementType,
-      clientId: p.clientId,
-      pmId: p.pmId,
-      githubRepoOwner: p.githubRepoOwner,
-      githubRepoName: p.githubRepoName,
-      githubDefaultBranch: p.githubDefaultBranch,
-      memberIds: p.projectMembers.map((pm) => pm.member.id),
-    });
     setOpen(true);
   };
 
@@ -352,7 +325,6 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
           <ProjectCardMobile
             key={p.id}
             p={p}
-            onEdit={() => openEdit(p)}
             onDelete={() => remove(p.id)}
             canManage={isAdmin}
           />
@@ -407,15 +379,11 @@ export function ProjectsView({ initial }: { initial: ProjectsViewInitial }) {
                 </TableCell>
                 <TableCell>{p.taskCount}</TableCell>
                 <TableCell>
+                  {/* Editar mudou pro S&OP (Finanças → projeto). Aqui só criar/excluir. */}
                   {isAdmin && (
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => remove(p.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => remove(p.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   )}
                 </TableCell>
               </TableRow>
