@@ -312,7 +312,7 @@ export type MemberRef = {
 
 // ─── Alocação financeira de mão-de-obra (D12) ───────────────────────────────
 
-/** standing = % contratual contínuo · spot = participação pontual em dias (D11). */
+/** standing = % contratual contínuo · spot = participação pontual em horas (D11). */
 export type AllocationKind = "standing" | "spot";
 
 export type Allocation = {
@@ -321,7 +321,7 @@ export type Allocation = {
   project_id: string;
   kind: AllocationKind;
   percent: number | null; // standing (spot = null)
-  days: number | null; // spot: dias de ajuda, 1 dia=8h (standing = null)
+  days: number | null; // spot: horas de ajuda; custo = salário-mês ÷ 160h × horas (standing = null)
   effective_from: string;
   effective_to: string | null;
   note: string | null;
@@ -348,7 +348,7 @@ export type AllocationInput = {
   projectId: string;
   kind?: AllocationKind; // default standing
   percent?: number | null; // standing
-  days?: number | null; // spot: dias (0 < d <= 60)
+  days?: number | null; // spot: horas (0 < h <= 160)
   effectiveFrom: string;
   effectiveTo?: string | null;
   note?: string | null;

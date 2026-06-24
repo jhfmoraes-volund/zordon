@@ -389,10 +389,11 @@ async function checkAllocation(
   excludeId?: string,
 ): Promise<string | null> {
   const kind = input.kind ?? "standing";
-  // Spot: medido em DIAS (0 < d <= 60). Não entra na conta de Σ% contínua.
+  // Spot: medido em HORAS (0 < h <= 160; coluna física segue `days`). Custo =
+  // salário-mês ÷ 160h × horas. Não entra na conta de Σ% contínua.
   if (kind === "spot") {
-    if (!(input.days != null && input.days > 0 && input.days <= 60))
-      throw new Error("Participação pontual: dias deve estar entre 0 e 60");
+    if (!(input.days != null && input.days > 0 && input.days <= 160))
+      throw new Error("Participação pontual: horas deve estar entre 0 e 160");
     return null;
   }
   const percent = input.percent;
@@ -474,20 +475,41 @@ export async function createAllocation(
 }
 
 /**
- * Edita campos NÃO-TEMPORAIS de uma alocação (D2: valor do período é imutável).
- * Permite alterar APENAS: `note`, `effective_to` (fechar período), `closed_by`.
- * Para mudar percent/days/contract/período: closeAllocation + createAllocation.
- * Para corrigir erro: void (MAH-004) + createAllocation.
+ * Edita campos de uma alocação.
+ * - Standing (D2): valor/período do período contínuo é IMUTÁVEL. Permite só
+ *   `note`, `effective_to` (fechar), `closed_by`. Mudar %: close/void + create.
+ * - Spot: participação pontual, sem timeline de % a preservar. Além dos acima,
+ *   permite corrigir `days` (horas) e `effectiveFrom` direto (caso de correção
+ *   de typo, ex: 2h → 16h). `days`/`effectiveFrom` em standing são IGNORADOS.
  */
 export async function updateAllocation(
   id: string,
-  input: { note?: string | null; effectiveTo?: string | null; closedBy?: string | null },
+  input: {
+    note?: string | null;
+    effectiveTo?: string | null;
+    closedBy?: string | null;
+    days?: number | null;
+    effectiveFrom?: string;
+  },
 ): Promise<Allocation> {
   const { fin } = await finance();
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.note !== undefined) patch.note = input.note;
   if (input.effectiveTo !== undefined) patch.effective_to = input.effectiveTo;
   if (input.closedBy !== undefined) patch.closed_by = input.closedBy;
+  // Correção direta de valor/início — só pra spot (standing é imutável).
+  if (input.days !== undefined || input.effectiveFrom !== undefined) {
+    const cur = await fin.from("labor_allocation").select("kind").eq("id", id).single();
+    if (cur.error) throw new Error(cur.error.message);
+    if ((cur.data as { kind: string }).kind === "spot") {
+      if (input.days !== undefined) {
+        if (!(input.days != null && input.days > 0 && input.days <= 160))
+          throw new Error("Participação pontual: horas deve estar entre 0 e 160");
+        patch.days = input.days;
+      }
+      if (input.effectiveFrom !== undefined) patch.effective_from = input.effectiveFrom;
+    }
+  }
   const res = await fin
     .from("labor_allocation")
     .update(patch)
@@ -863,7 +885,7 @@ function toContractRow(input: ContractInput) {
     total_value_cents: input.totalValueCents ?? null, // preço/FP é derivado (GENERATED) — não gravar
     contracted_fp: input.contractedFp ?? null,
     contracted_sprints: input.contractedSprints ?? null,
-    note: input.note ?? null,
+    note: input.note ? input.note.slice(0, 500) : null, // espelha o maxLength=500 do form (guard server-side)
     warranty: input.warranty ?? null,
     proposal_ref: input.proposalRef ?? null,
   };

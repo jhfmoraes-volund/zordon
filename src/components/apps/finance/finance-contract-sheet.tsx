@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/responsive-sheet";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
@@ -460,9 +461,18 @@ export function FinanceContractSheet({
             </Field.Row>
 
             <Field name="note">
-              <Field.Label>Nota</Field.Label>
+              <Field.Label addonAlign="end" addon={<span className="tabular-nums">{form.note.length}/500</span>}>
+                Nota
+              </Field.Label>
               <Field.Control>
-                <Input value={form.note} onChange={(e) => set({ note: e.target.value })} placeholder="condições, observações…" />
+                <Textarea
+                  value={form.note}
+                  onChange={(e) => set({ note: e.target.value })}
+                  maxLength={500}
+                  rows={4}
+                  className="min-h-24"
+                  placeholder="condições, observações…"
+                />
               </Field.Control>
             </Field>
           </FormBody>
@@ -679,7 +689,7 @@ function ContractTeamEditor({
     const percent = parseFloat(form.percent.replace(",", "."));
     const days = parseFloat(form.days.replace(",", "."));
     if (!form.memberId || !form.from) return;
-    if (isSpot ? !(days > 0 && days <= 60) : !(percent > 0 && percent <= 100)) return;
+    if (isSpot ? !(days > 0 && days <= 160) : !(percent > 0 && percent <= 100)) return;
     setBusy(true);
     try {
       const res = await fetchOrThrow(
@@ -792,16 +802,16 @@ function ContractTeamEditor({
               </Field>
               {form.kind === "spot" ? (
                 <Field name="days" required>
-                  <Field.Label>Dias (8h)</Field.Label>
+                  <Field.Label>Horas</Field.Label>
                   <Field.Control>
                     <Input
                       type="number"
                       min="0"
-                      max="60"
+                      max="160"
                       step="0.5"
                       value={form.days}
                       onChange={(e) => setForm((f) => (f ? { ...f, days: e.target.value } : f))}
-                      placeholder="ex: 5"
+                      placeholder="ex: 8"
                     />
                   </Field.Control>
                 </Field>
@@ -839,8 +849,8 @@ function ContractTeamEditor({
           </FormBody>
           {form.kind === "spot" && (
             <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-              Participação pontual: dias de ajuda (1 dia = 8h), teto 60. Custo entra no mês do
-              início. O builder ganha acesso permanente ao projeto.
+              Participação pontual: horas de ajuda (custo = salário-mês ÷ 160h × horas), teto 160h.
+              Custo entra no mês do início. O builder ganha acesso permanente ao projeto.
             </p>
           )}
           <div className="mt-2 flex justify-end gap-2">
@@ -868,7 +878,7 @@ function ContractTeamEditor({
                   {a.kind === "spot" && <span className="ml-1.5 text-[10px] text-amber-600">pontual</span>}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {a.kind === "spot" ? `${a.days}d` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
+                  {a.kind === "spot" ? `${a.days}h` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
                   {a.effective_to ? fmtDate(a.effective_to) : "atual"}
                 </p>
               </div>
@@ -908,7 +918,7 @@ function ContractTeamEditor({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{a.memberName}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {a.kind === "spot" ? `${a.days}d` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
+                    {a.kind === "spot" ? `${a.days}h` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
                     {a.effective_to ? fmtDate(a.effective_to) : "atual"}
                   </p>
                 </div>

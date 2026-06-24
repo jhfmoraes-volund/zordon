@@ -8,61 +8,79 @@
 const LOCALE = "pt-BR";
 const EMPTY = "—";
 
+// Uma string `YYYY-MM-DD` é uma DATA de calendário (sem fuso) — colunas `date`
+// do Postgres voltam assim via PostgREST. `new Date("2026-06-04")` parseia como
+// meia-noite UTC; renderizada num fuso a oeste de UTC (Brasil, UTC-3) sem
+// `timeZone: "UTC"`, vira 03/jun — o bug do "dia anterior". A correção é tratar
+// date-only como UTC ponta-a-ponta (parse E format). Timestamps completos
+// (created_at, eventos) seguem em fuso local — pra eles o instante importa.
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 type DateInput = string | Date | null | undefined;
 
-function toDate(d: DateInput): Date | null {
+function toDate(d: DateInput): { date: Date; dateOnly: boolean } | null {
   if (!d) return null;
-  return d instanceof Date ? d : new Date(d);
+  if (d instanceof Date) return { date: d, dateOnly: false };
+  const dateOnly = DATE_ONLY_RE.test(d);
+  return { date: new Date(dateOnly ? `${d}T00:00:00Z` : d), dateOnly };
+}
+
+/** `timeZone: "UTC"` só pra date-only (preserva o dia); timestamp → fuso local. */
+function tz(dateOnly: boolean): { timeZone?: "UTC" } {
+  return dateOnly ? { timeZone: "UTC" } : {};
 }
 
 /** "27 mai" — dia + mês curto. O formato mais usado (listas, cards). */
 export function fmtDate(d: DateInput): string {
-  const date = toDate(d);
-  if (!date) return EMPTY;
-  return date.toLocaleDateString(LOCALE, { day: "2-digit", month: "short" });
+  const r = toDate(d);
+  if (!r) return EMPTY;
+  return r.date.toLocaleDateString(LOCALE, { day: "2-digit", month: "short", ...tz(r.dateOnly) });
 }
 
 /** "27 mai 2026" — dia + mês curto + ano. Para contextos com histórico longo. */
 export function fmtDateLong(d: DateInput): string {
-  const date = toDate(d);
-  if (!date) return EMPTY;
-  return date.toLocaleDateString(LOCALE, {
+  const r = toDate(d);
+  if (!r) return EMPTY;
+  return r.date.toLocaleDateString(LOCALE, {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    ...tz(r.dateOnly),
   });
 }
 
 /** "27 mai 2026, 14:30" — data longa + hora. Para timelines com vários eventos/dia. */
 export function fmtDateTime(d: DateInput): string {
-  const date = toDate(d);
-  if (!date) return EMPTY;
-  return date.toLocaleString(LOCALE, {
+  const r = toDate(d);
+  if (!r) return EMPTY;
+  return r.date.toLocaleString(LOCALE, {
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    ...tz(r.dateOnly),
   });
 }
 
 /** "quarta-feira, 27 de maio de 2026" — por extenso. Header de detalhe. */
 export function fmtDateFull(d: DateInput): string {
-  const date = toDate(d);
-  if (!date) return EMPTY;
-  return date.toLocaleDateString(LOCALE, {
+  const r = toDate(d);
+  if (!r) return EMPTY;
+  return r.date.toLocaleDateString(LOCALE, {
     weekday: "long",
     day: "2-digit",
     month: "long",
     year: "numeric",
+    ...tz(r.dateOnly),
   });
 }
 
 /** "27/05" — dia/mês numérico. Para contextos densos (widgets, linhas compactas). */
 export function fmtDateNumeric(d: DateInput): string {
-  const date = toDate(d);
-  if (!date) return EMPTY;
-  return date.toLocaleDateString(LOCALE, { day: "2-digit", month: "2-digit" });
+  const r = toDate(d);
+  if (!r) return EMPTY;
+  return r.date.toLocaleDateString(LOCALE, { day: "2-digit", month: "2-digit", ...tz(r.dateOnly) });
 }
 
 const MONTHS_SHORT = [
@@ -113,13 +131,14 @@ export function fmtDayMonth(yyyyMmDd: string): string {
 
 /** "qua, 27 mai 2026" — weekday curto + data média. Lista de reuniões. */
 export function fmtWeekdayShort(d: DateInput): string {
-  const date = toDate(d);
-  if (!date) return EMPTY;
-  return date.toLocaleDateString(LOCALE, {
+  const r = toDate(d);
+  if (!r) return EMPTY;
+  return r.date.toLocaleDateString(LOCALE, {
     weekday: "short",
     day: "2-digit",
     month: "short",
     year: "numeric",
+    ...tz(r.dateOnly),
   });
 }
 

@@ -209,7 +209,7 @@ function milestoneChip(p: ProjectOverview): { label: string; tone: ChipTone } | 
   const days = daysUntil(p.milestone.dueAt);
   if (days > 14) return null;
   const tone: ChipTone = days < 0 ? "red" : "amber";
-  return { label: fmtDate(new Date(`${p.milestone.dueAt}T00:00:00`)), tone };
+  return { label: fmtDate(p.milestone.dueAt), tone };
 }
 
 /** "Renova ~ DD/MM" (squad) · "Fim ~ DD/MM" (encomenda) · "Contínuo" — horizonte. */
@@ -293,7 +293,7 @@ function RitualFreshnessChip({ p }: { p: ProjectOverview }) {
   const tooltip =
     days === null
       ? "Nenhum ritual registrado — sem contexto de status vivo"
-      : `Última movimentação de ritual: ${kind} · ${fmtDate(new Date(p.lastRitualAt!))} (há ${days}d)`;
+      : `Última movimentação de ritual: ${kind} · ${fmtDate(p.lastRitualAt!)} (há ${days}d)`;
 
   return (
     <span
@@ -355,7 +355,7 @@ function fmtAvg(v: number | null): string {
 // ─── Régua ────────────────────────────────────────────────
 
 function segmentTitle(g: ProjectStats["segments"][number]): string {
-  const sprint = `Sprint de ${fmtDate(new Date(`${g.monday}T00:00:00Z`))}`;
+  const sprint = `Sprint de ${fmtDate(g.monday)}`;
   if (g.kind === "hole") return `${sprint} — desligada: contrato queimou sem produção`;
   if (g.kind === "current")
     return g.sprintId ? `${sprint} — corrente` : `${sprint} — corrente, sem sprint ativa`;
@@ -1651,7 +1651,6 @@ function milestoneCol(p: ProjectOverview): StatColData {
   if (!p.milestone) {
     return { key: "marco", label: "Marco", value: "—", sub: "sem marco declarado", hint };
   }
-  const due = new Date(`${p.milestone.dueAt}T00:00:00`);
   const days = daysUntil(p.milestone.dueAt);
   const sub =
     days < 0
@@ -1662,7 +1661,7 @@ function milestoneCol(p: ProjectOverview): StatColData {
   return {
     key: "marco",
     label: "Marco",
-    value: fmtDate(due),
+    value: fmtDate(p.milestone.dueAt),
     sub,
     subTone: days < 0 ? "red" : days <= 14 ? "amber" : undefined,
     hint,
@@ -1778,7 +1777,7 @@ function StatsSection({
           </h4>
           {s.mode === "contract" && p.startDate && p.endDate && (
             <span className="text-[11px] tabular-nums text-muted-foreground">
-              {fmtDate(new Date(p.startDate))} → {fmtDate(new Date(p.endDate))}
+              {fmtDate(p.startDate)} → {fmtDate(p.endDate)}
             </span>
           )}
         </div>
@@ -2004,6 +2003,10 @@ export function ProjetosBoard({
   // após mount, num effect, pra primeira renderização casar com o server.
   const [view, setView] = useState<BoardView>("rows");
   useEffect(() => {
+    // Intencional (ver comentário acima): sincroniza a preferência client-only
+    // (localStorage/viewport) pós-mount pra casar com o HTML do server. Ler no
+    // init quebraria a hidratação — é o caso legítimo de setState em effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setView(readStoredView());
   }, []);
   // Drag no kanban muda a fase otimisticamente por cima dos props (o board é

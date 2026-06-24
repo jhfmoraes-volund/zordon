@@ -4,8 +4,9 @@ import { requireMinAccessLevelApi } from "@/lib/dal";
 import { updateAllocation } from "@/lib/finance/dal";
 
 /**
- * PATCH /api/finance/allocations/[id] — edita campos não-temporais (D2).
- * Permite APENAS: note, effectiveTo (fechar). Para mudar período/valor: close + create.
+ * PATCH /api/finance/allocations/[id] — edita campos da alocação.
+ * Standing (D2): só note, effectiveTo (fechar). Mudar período/valor: close + create.
+ * Spot: também aceita `days` (horas) e `effectiveFrom` — correção pontual direta.
  * DELETE removido (D4: remoção = void, implementado em MAH-004).
  * Admin-only.
  */
@@ -16,9 +17,14 @@ export async function PATCH(
   const denied = await requireMinAccessLevelApi("admin");
   if (denied) return denied;
   const { id } = await params;
-  let body: { note?: string | null; effectiveTo?: string | null };
+  let body: {
+    note?: string | null;
+    effectiveTo?: string | null;
+    days?: number | null;
+    effectiveFrom?: string;
+  };
   try {
-    body = (await req.json()) as { note?: string | null; effectiveTo?: string | null };
+    body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }

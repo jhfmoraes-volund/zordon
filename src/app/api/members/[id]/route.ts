@@ -118,7 +118,11 @@ export async function PUT(
 
   // Legacy `role` in body maps to position for cargo updates. New callers
   // should use `position`; we keep the alias so older clients keep working.
-  const newPosition: string | undefined = position ?? role;
+  // `position` presente no body (mesmo `null`) = intenção de setar — `null`
+  // limpa o cargo ("— Sem cargo"). O antigo `position ?? role` engolia o null
+  // e tornava IMPOSSÍVEL limpar (bug); por isso distinguimos presente×ausente.
+  const newPosition: string | null | undefined =
+    position !== undefined ? position : role !== undefined ? role : undefined;
 
   if (
     accessLevel !== undefined &&
@@ -145,8 +149,9 @@ export async function PUT(
   // keeps the intent clear and survives trigger removal in M2.
   const memberUpdate: MemberUpdate = { ...rest } as MemberUpdate;
   if (newPosition !== undefined) {
-    memberUpdate.position = newPosition;
-    memberUpdate.role = newPosition;
+    memberUpdate.position = newPosition; // null = sem cargo (coluna nullable)
+    // `role` é legado NOT NULL: só espelha cargo real; ao limpar, mantém o antigo.
+    if (newPosition !== null) memberUpdate.role = newPosition;
   }
 
   const { data: member, error: updateError } = await supabase
@@ -178,7 +183,7 @@ export async function PUT(
           | null) ?? {};
 
       const nextRole: string = positionChanged
-        ? newPosition!
+        ? (newPosition ?? existing.role ?? "guest")
         : currentMeta.role ?? existing.position ?? "guest";
       const nextAccessLevel: AccessLevel = accessLevelChanged
         ? (accessLevel as AccessLevel)

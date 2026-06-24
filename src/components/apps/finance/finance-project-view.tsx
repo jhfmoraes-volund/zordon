@@ -478,9 +478,16 @@ export function FinanceProjectView({
           {teamRows.map((a) => (
             <div key={a.id} className="flex items-center gap-3 px-3 py-2.5">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{a.memberName}</p>
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <span className="truncate">{a.memberName}</span>
+                  {a.kind === "spot" && (
+                    <span className="shrink-0 rounded-sm bg-muted px-1 py-px text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                      pontual
+                    </span>
+                  )}
+                </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {a.percent}% · {fmtDate(a.effective_from)} →{" "}
+                  {a.kind === "spot" ? `${a.days}h` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
                   {a.effective_to ? fmtDate(a.effective_to) : "atual"}
                 </p>
               </div>
