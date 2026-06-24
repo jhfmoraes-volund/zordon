@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser, getCurrentMember, requireRole, ForbiddenError } from "@/lib/dal";
 import { ADMIN_ROLE_NAMES } from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 
 const DEACTIVATION_REASONS = ["terminated", "left", "other"] as const;
 
@@ -106,6 +108,28 @@ export async function PATCH(
   }
 
   const actor = await getCurrentMember();
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // D7: Desativar fecha TODAS as alocações abertas (voided_at IS NULL AND
+  // effective_to IS NULL) do membro, em transação — preserva o período até hoje,
+  // para de custear daqui pra frente. Reativar NÃO reabre — re-alocação é explícita.
+  const financeClient = (await createClient() as unknown as SupabaseClient).schema("finance");
+  const { error: allocError } = await financeClient
+    .from("labor_allocation")
+    .update({
+      effective_to: today,
+      closed_by: actor?.id ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("member_id", id)
+    .is("voided_at", null)
+    .is("effective_to", null);
+  if (allocError)
+    return NextResponse.json(
+      { error: `Erro ao fechar alocações: ${allocError.message}` },
+      { status: 500 },
+    );
+
   const { data: member, error } = await supabase
     .from("Member")
     .update({

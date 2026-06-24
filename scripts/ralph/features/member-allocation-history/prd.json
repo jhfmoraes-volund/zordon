@@ -120,7 +120,8 @@
       "estimateMinutes": 25,
       "touches": [
         "src/app/api/members/[id]/status/route.ts"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "MAH-006",
