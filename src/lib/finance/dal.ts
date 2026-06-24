@@ -3,6 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getCurrentMember } from "@/lib/dal";
+import { db } from "@/lib/db";
+import { generateSprintGrid } from "@/lib/dal/generate-sprint-grid";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Allocation,
@@ -772,6 +774,27 @@ function toContractRow(input: ContractInput) {
   };
 }
 
+/**
+ * Seed automático da grade de sprints na ATIVAÇÃO do contrato (uma vez só, na
+ * transição pra "active + tem fim de vigência"). Best-effort: roda via
+ * service-role (mesmo caminho do endpoint manual) e NUNCA derruba a operação
+ * do contrato. As datas do projeto já vêm sincronizadas da vigência pelo
+ * trigger contract_sync_project_dates, então generateSprintGrid lê o prazo já
+ * atualizado. `missing_dates` é esperado quando outro contrato aberto zera o
+ * Project.endDate — nesse caso só não semeia. Daí em diante o PM é dono da grade.
+ */
+async function maybeSeedSprints(projectId: string): Promise<void> {
+  try {
+    const actorMemberId = await currentMemberId();
+    const res = await generateSprintGrid(db(), projectId, { actorMemberId });
+    if (!res.ok && res.reason !== "missing_dates") {
+      console.error("[finance] seed sprints on activation failed", res);
+    }
+  } catch (e) {
+    console.error("[finance] seed sprints on activation threw", e);
+  }
+}
+
 export async function createContract(
   projectId: string,
   input: ContractInput,
@@ -790,15 +813,29 @@ export async function createContract(
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
-  return mapContract(res.data);
+  const created = mapContract(res.data);
+  // Criado já ativo + com fim de vigência → semeia a grade (stub today→null não
+  // dispara: effectiveTo nulo). O trigger de datas já rodou no insert acima.
+  if (created.status === "active" && created.effectiveTo != null) {
+    await maybeSeedSprints(projectId);
+  }
+  return created;
 }
 
 export async function updateContract(id: string, input: ContractInput): Promise<Contract> {
   const { fin } = await finance();
-  const cur = await fin.from("contract").select("project_id, status").eq("id", id).maybeSingle();
+  const cur = await fin
+    .from("contract")
+    .select("project_id, status, effective_to")
+    .eq("id", id)
+    .maybeSingle();
   if (cur.error) throw new Error(cur.error.message);
   if (!cur.data) throw new Error("Contrato não encontrado");
-  const curRow = cur.data as { project_id: string; status: Contract["status"] };
+  const curRow = cur.data as {
+    project_id: string;
+    status: Contract["status"];
+    effective_to: string | null;
+  };
   // Máquina de estados: bloqueia transição inválida (ex.: ended→active).
   if (input.status && input.status !== curRow.status) {
     const allowed = CONTRACT_STATUS_NEXT[curRow.status] ?? [];
@@ -813,7 +850,19 @@ export async function updateContract(id: string, input: ContractInput): Promise<
     .select("*")
     .single();
   if (res.error) throw new Error(res.error.message);
-  return mapContract(res.data);
+  const updated = mapContract(res.data);
+  // Seed na TRANSIÇÃO pra "active + tem fim" (stub active→null que ganha
+  // effectiveTo, ou proposed→active já com fim). Não re-dispara em saves de um
+  // contrato que já estava active+bounded — evita ressuscitar sprint que o PM
+  // apagou.
+  const wasActiveBounded =
+    curRow.status === "active" && curRow.effective_to != null;
+  const isActiveBounded =
+    updated.status === "active" && updated.effectiveTo != null;
+  if (isActiveBounded && !wasActiveBounded) {
+    await maybeSeedSprints(String(curRow.project_id));
+  }
+  return updated;
 }
 
 export async function deleteContract(id: string): Promise<void> {
@@ -858,7 +907,13 @@ export async function winContract(id: string): Promise<Contract> {
       changedBy: await currentMemberId(),
     });
   }
-  return mapContract(upd.data);
+  const won = mapContract(upd.data);
+  // Ganhou a proposta com fim de vigência definido → semeia a grade de sprints
+  // do prazo (uma vez, aqui). O trigger de datas já rodou no update de status.
+  if (won.effectiveTo != null) {
+    await maybeSeedSprints(row.project_id);
+  }
+  return won;
 }
 
 // ─── Override de mês do contrato (valor especial de 1 mês) ──────────────────

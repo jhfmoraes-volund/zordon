@@ -9,8 +9,8 @@
  *
  * IMPORTANTE: importa tools-registry.ts → PRECISA rodar sob o eval-tsconfig
  * (aliasa `server-only`):
- *   npx tsx --tsconfig tsconfig.eval.json scripts/gen-agent-surface.ts --write docs/platform/agent-surface.manifest.json
- *   npx tsx --tsconfig tsconfig.eval.json scripts/gen-agent-surface.ts --check docs/platform/agent-surface.manifest.json
+ *   npx tsx --tsconfig tsconfig.eval.json scripts/gen-agent-surface.ts --write agent-surface/agent-surface.manifest.json
+ *   npx tsx --tsconfig tsconfig.eval.json scripts/gen-agent-surface.ts --check agent-surface/agent-surface.manifest.json
  *
  * NAME-ONLY por design: nomes anunciados por superfície, nada de needs/scope
  * (esses são internos ao monorepo; o daemon diverge legitimamente — ver runbook

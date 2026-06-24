@@ -28,8 +28,8 @@ jobs:
       # (A) advertised surface + (B) bind-smoke + (C/D) needs↔bind
       - run: pnpm exec tsx --tsconfig tsconfig.eval.json scripts/agent-surface.test.ts
       # manifest gerado == registry
-      - run: pnpm exec tsx --tsconfig tsconfig.eval.json scripts/gen-agent-surface.ts --check docs/platform/agent-surface.manifest.json
+      - run: pnpm exec tsx --tsconfig tsconfig.eval.json scripts/gen-agent-surface.ts --check agent-surface/agent-surface.manifest.json
       # matriz gerada == registry
-      - run: pnpm exec tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --check docs/platform/agent-capability-matrix.md
+      - run: pnpm exec tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --check agent-surface/agent-capability-matrix.md
       # drift cross-repo: daemon == (monorepo − exclusions)
       - run: pnpm exec tsx scripts/check-daemon-surface.ts

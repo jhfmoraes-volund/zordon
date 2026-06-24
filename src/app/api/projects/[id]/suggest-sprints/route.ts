@@ -197,11 +197,6 @@ export async function POST(
 
   // Capacidade: primeira escolha = soma empírica de PFV das últimas 3 sprints
   // (>0). Fallback = soma de SprintMember.fpAllocation. Fallback final = 40.
-  const lastSprintIds = (sprintsRes.data ?? []).slice(0, 3).map((s) => s.id);
-  const fpSums = lastSprintIds
-    .map((id) => fpBySprint.get(id) ?? 0)
-    .filter((v) => v > 0);
-
   const allocBySprint = new Map<string, number>();
   for (const sm of smRes.data ?? []) {
     allocBySprint.set(
@@ -209,6 +204,20 @@ export async function POST(
       (allocBySprint.get(sm.sprintId) ?? 0) + (sm.fpAllocation ?? 0),
     );
   }
+
+  // "Últimas 3" = as 3 sprints mais recentes que TIVERAM trabalho (PFV entregue
+  // ou alocação > 0), não as 3 por data crua. Sem esse filtro, a grade de
+  // sprints vazias semeada pela vigência do contrato vira o topo da ordenação
+  // por data (DESC) e zera a capacidade empírica (cairia no fallback 40).
+  const lastSprintIds = (sprintsRes.data ?? [])
+    .map((s) => s.id)
+    .filter(
+      (id) => (fpBySprint.get(id) ?? 0) > 0 || (allocBySprint.get(id) ?? 0) > 0,
+    )
+    .slice(0, 3);
+  const fpSums = lastSprintIds
+    .map((id) => fpBySprint.get(id) ?? 0)
+    .filter((v) => v > 0);
   const smSums = lastSprintIds
     .map((id) => allocBySprint.get(id) ?? 0)
     .filter((v) => v > 0);

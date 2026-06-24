@@ -3,8 +3,8 @@
  * partir do TOOL_REGISTRY (descriptors). Doc que NÃO drifta (D5 do runbook
  * agent-capability-unification). Importa o registry → roda sob eval-tsconfig:
  *
- *   npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write docs/platform/agent-capability-matrix.md
- *   npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --check docs/platform/agent-capability-matrix.md
+ *   npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write agent-surface/agent-capability-matrix.md
+ *   npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --check agent-surface/agent-capability-matrix.md
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -50,7 +50,7 @@ export function buildMatrix(): string {
     "> Gerada de `src/lib/agent/tools-registry.ts` (descriptors) por `scripts/gen-capability-matrix.ts`.",
   );
   lines.push(
-    "> Regenere: `npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write docs/platform/agent-capability-matrix.md`.",
+    "> Regenere: `npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write agent-surface/agent-capability-matrix.md`.",
   );
   lines.push(
     "> Pertencimento (`surfaces`) e escopo (`needs`) vivem no descriptor — esta tabela é projeção. Drift cross-repo: `scripts/check-daemon-surface.ts`.",

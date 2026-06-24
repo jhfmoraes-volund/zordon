@@ -28,7 +28,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "dummy-service-role-key-for-tests";
 
 const manifestPath = resolve(
   process.cwd(),
-  "docs/platform/agent-surface.manifest.json",
+  "agent-surface/agent-surface.manifest.json",
 );
 
 // ─── A. advertised surface == manifest committed ──────────────────────────

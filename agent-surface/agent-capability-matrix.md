@@ -1,7 +1,7 @@
 # Matriz de capacidades dos agentes — GERADA (não editar à mão)
 
 > Gerada de `src/lib/agent/tools-registry.ts` (descriptors) por `scripts/gen-capability-matrix.ts`.
-> Regenere: `npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write docs/platform/agent-capability-matrix.md`.
+> Regenere: `npx tsx --tsconfig tsconfig.eval.json scripts/gen-capability-matrix.ts --write agent-surface/agent-capability-matrix.md`.
 > Pertencimento (`surfaces`) e escopo (`needs`) vivem no descriptor — esta tabela é projeção. Drift cross-repo: `scripts/check-daemon-surface.ts`.
 
 **98 tools** · surfaces: vitor 41 · pm_review 20 · planning 30 · release_pl 34 · wiki 18 · alpha 26

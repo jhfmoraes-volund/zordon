@@ -1,0 +1,141 @@
+{
+  "feature": "member-allocation-history",
+  "title": "Histórico & Movimentação de Membro/Alocação",
+  "prd": "docs/prd/backlog/prd-member-allocation-history.md",
+  "status": "backlog",
+  "stories": [
+    {
+      "id": "MAH-001",
+      "title": "Adicionar colunas de void + closed_by em labor_allocation",
+      "description": "Migration M1 — voided_at/voided_reason/voided_by + closed_by + índice parcial live.",
+      "acceptanceCriteria": [
+        "Colunas voided_at, voided_reason, voided_by, closed_by existem em finance.labor_allocation",
+        "Índice parcial labor_alloc_live_idx (WHERE voided_at IS NULL) criado"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "\\d finance.labor_allocation", "expected": "voided_at, voided_reason, voided_by, closed_by presentes" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 15,
+      "touches": ["supabase/migrations"]
+    },
+    {
+      "id": "MAH-002",
+      "title": "Excluir voids das views de billing e roster",
+      "description": "CREATE OR REPLACE das v_*_labor_month + v_contract_roster + v_project_team com AND voided_at IS NULL.",
+      "acceptanceCriteria": [
+        "v_allocation_labor_month ignora linhas com voided_at",
+        "Σ labor_cents inalterado quando não há voids"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "BEGIN; UPDATE finance.labor_allocation SET voided_at=now() WHERE id=(SELECT id FROM finance.labor_allocation LIMIT 1); SELECT count(*) FROM v_allocation_labor_month WHERE allocation_id IN (SELECT id FROM finance.labor_allocation WHERE voided_at IS NOT NULL); ROLLBACK;", "expected": "0" }
+      ],
+      "dependsOn": ["MAH-001"],
+      "estimateMinutes": 25,
+      "touches": ["supabase/migrations"]
+    },
+    {
+      "id": "MAH-003",
+      "title": "DAL — alocação nunca deleta nem sobrescreve valor",
+      "description": "createAllocation=INSERT; mudança de período=close+insert; fix=void+insert; só note edita in-place. Remover deleteAllocation do caminho de UI.",
+      "acceptanceCriteria": [
+        "Nenhuma chamada .delete() de labor_allocation no fluxo de UI",
+        "updateAllocation não altera percent/days/effective_from/contract_id de linha existente"
+      ],
+      "verifiable": [
+        { "kind": "typecheck", "command_or_query": "npx tsc --noEmit", "expected": "0 erros" }
+      ],
+      "dependsOn": ["MAH-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/finance/dal.ts", "src/app/api/members/[id]/allocations/route.ts"]
+    },
+    {
+      "id": "MAH-004",
+      "title": "Endpoints void / restore / close",
+      "description": "POST .../void {reason}, POST .../restore, POST .../close {effectiveTo}. Admin-only.",
+      "acceptanceCriteria": [
+        "void seta voided_at/reason/by; restore limpa; close seta effective_to+closed_by",
+        "não-admin recebe 403"
+      ],
+      "verifiable": [
+        { "kind": "http", "command_or_query": "POST /api/finance/allocations/<id>/void {reason:'teste'} como admin", "expected": "200 e voided_at preenchido" }
+      ],
+      "dependsOn": ["MAH-001"],
+      "estimateMinutes": 30,
+      "touches": ["src/app/api/finance/allocations"]
+    },
+    {
+      "id": "MAH-005",
+      "title": "Desativar membro fecha alocações abertas",
+      "description": "PATCH /api/members/[id]/status active:false passa a setar effective_to=hoje nas labor_allocation abertas do membro, em transação.",
+      "acceptanceCriteria": [
+        "Após desativar, membro não tem labor_allocation com voided_at IS NULL AND effective_to IS NULL",
+        "Reativar não reabre alocações"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM finance.labor_allocation WHERE member_id=<id> AND effective_to IS NULL AND voided_at IS NULL", "expected": "0" }
+      ],
+      "dependsOn": ["MAH-001"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/members/[id]/status/route.ts"]
+    },
+    {
+      "id": "MAH-006",
+      "title": "Side sheet Histórico de alocação do contrato",
+      "description": "ResponsiveSheet admin-only; timeline de períodos; ações Encerrar/Editar-note/Remover(erro); toggle Mostrar removidos + Restaurar.",
+      "acceptanceCriteria": [
+        "Lista períodos ativos+encerrados; toggle revela voids riscados com Restaurar",
+        "Remover pede motivo e chama .../void"
+      ],
+      "verifiable": [
+        { "kind": "manual_browser", "command_or_query": "Abrir side sheet de um contrato, remover (erro) um período, ligar toggle, restaurar", "expected": "período some/reaparece riscado/volta; nada apagado do banco" }
+      ],
+      "dependsOn": ["MAH-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/components/finance"]
+    },
+    {
+      "id": "MAH-007",
+      "title": "Tabela MemberMovementEvent (append-only)",
+      "description": "Migration M3 + RLS append-only (REVOKE write de authenticated).",
+      "acceptanceCriteria": [
+        "Tabela e índices existem; authenticated não consegue INSERT/UPDATE/DELETE"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT has_table_privilege('authenticated','\"MemberMovementEvent\"','INSERT')", "expected": "f" }
+      ],
+      "dependsOn": [],
+      "estimateMinutes": 20,
+      "touches": ["supabase/migrations"]
+    },
+    {
+      "id": "MAH-008",
+      "title": "Emitir eventos nas mutações de alocação + desativação",
+      "description": "void/restore/close/createAllocation/desativar emitem MemberMovementEvent via recorder (espelha task-activity-recorder).",
+      "acceptanceCriteria": [
+        "Cada ação grava 1 evento com kind+actor+refs+payload(before/after)"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT kind FROM \"MemberMovementEvent\" ORDER BY \"createdAt\" DESC LIMIT 1", "expected": "allocation_voided" }
+      ],
+      "dependsOn": ["MAH-007", "MAH-004"],
+      "estimateMinutes": 30,
+      "touches": ["src/lib/dal", "src/app/api/finance/allocations"]
+    },
+    {
+      "id": "MAH-009",
+      "title": "Purge admin — hard delete logado",
+      "description": "DELETE .../purge super-admin; emite allocation_purged ANTES de apagar a linha.",
+      "acceptanceCriteria": [
+        "Evento allocation_purged persiste mesmo após a linha sumir",
+        "não-super-admin recebe 403"
+      ],
+      "verifiable": [
+        { "kind": "sql", "command_or_query": "SELECT count(*) FROM \"MemberMovementEvent\" WHERE kind='allocation_purged'", "expected": ">= 1" }
+      ],
+      "dependsOn": ["MAH-008"],
+      "estimateMinutes": 25,
+      "touches": ["src/app/api/finance/allocations"]
+    }
+  ]
+}

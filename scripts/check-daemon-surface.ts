@@ -6,9 +6,9 @@
  *   npx tsx scripts/check-daemon-surface.ts
  *
  * Inputs (committed):
- *   docs/platform/agent-surface.manifest.json          — surface do monorepo (SSOT)
- *   docs/platform/agent-surface.daemon.json            — surface do daemon (vendorizada)
- *   docs/platform/agent-surface.daemon-exclusions.json — { monorepoOnly: [...] }
+ *   agent-surface/agent-surface.manifest.json          — surface do monorepo (SSOT)
+ *   agent-surface/agent-surface.daemon.json            — surface do daemon (vendorizada)
+ *   agent-surface/agent-surface.daemon-exclusions.json — { monorepoOnly: [...] }
  *
  * Invariante: daemon == (monorepo − exclusions), nos NOMES (união de superfícies).
  *  • daemon ⊄ monorepo  → daemon anuncia tool que o app não executa (schema fantasma).
@@ -17,7 +17,7 @@
  *
  * Pra atualizar o lado daemon: no zordon-daemon rode
  *   npx tsx scripts/gen-agent-surface.ts --write agent-surface.daemon.json
- * e copie pra docs/platform/agent-surface.daemon.json (vendoring).
+ * e copie pra agent-surface/agent-surface.daemon.json (vendoring).
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -26,9 +26,9 @@ const root = process.cwd();
 const read = (p: string) =>
   JSON.parse(readFileSync(resolve(root, p), "utf8")) as Record<string, unknown>;
 
-const mono = read("docs/platform/agent-surface.manifest.json") as Record<string, string[]>;
-const daemon = read("docs/platform/agent-surface.daemon.json") as Record<string, string[]>;
-const excl = read("docs/platform/agent-surface.daemon-exclusions.json") as {
+const mono = read("agent-surface/agent-surface.manifest.json") as Record<string, string[]>;
+const daemon = read("agent-surface/agent-surface.daemon.json") as Record<string, string[]>;
+const excl = read("agent-surface/agent-surface.daemon-exclusions.json") as {
   monorepoOnly?: string[];
 };
 const exclusions = new Set(excl.monorepoOnly ?? []);
@@ -58,7 +58,7 @@ if (missingInDaemon.length) {
 
 if (failed) {
   console.error(
-    `\n  (regen do lado daemon: cd ../zordon-daemon && npx tsx scripts/gen-agent-surface.ts --write agent-surface.daemon.json && cp agent-surface.daemon.json ../zordon/docs/platform/)`,
+    `\n  (regen do lado daemon: cd ../zordon-daemon && npx tsx scripts/gen-agent-surface.ts --write agent-surface.daemon.json && cp agent-surface.daemon.json ../zordon/agent-surface/)`,
   );
   process.exit(1);
 }
