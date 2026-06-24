@@ -38,11 +38,16 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-type Status = "vigente" | "encerrado" | "removido";
-function statusOf(a: AllocationItem): Status {
+type Status = "removido" | "agendado" | "alocado" | "encerrado";
+
+// Eixo 1 (temporalidade) — derivado das datas vs hoje. effective_to no FUTURO
+// NÃO é "encerrado": a pessoa está alocada até aquela data. effective_from no
+// futuro = ainda nem começou (Agendado). Datas ISO (YYYY-MM-DD) comparam como string.
+function statusOf(a: AllocationItem, today: string): Status {
   if (a.voided_at) return "removido";
-  if (a.effective_to) return "encerrado";
-  return "vigente";
+  if (a.effective_from > today) return "agendado";
+  if (!a.effective_to || a.effective_to >= today) return "alocado";
+  return "encerrado";
 }
 
 export function FinanceAllocationHistorySheet({
@@ -182,7 +187,7 @@ export function FinanceAllocationHistorySheet({
           ) : (
             <div className="space-y-2">
               {visible.map((a) => {
-                const st = statusOf(a);
+                const st = statusOf(a, todayISO());
                 const removed = st === "removido";
                 const isBusy = busyId === a.id;
                 return (
@@ -272,7 +277,7 @@ export function FinanceAllocationHistorySheet({
                           </Button>
                         ) : (
                           <>
-                            {st === "vigente" && (
+                            {st === "alocado" && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -319,7 +324,8 @@ export function FinanceAllocationHistorySheet({
 
 function StatusChip({ status }: { status: Status }) {
   const map: Record<Status, { label: string; cls: string }> = {
-    vigente: { label: "Vigente", cls: "border-emerald-500/40 text-emerald-600" },
+    agendado: { label: "Agendado", cls: "border-sky-500/40 text-sky-600" },
+    alocado: { label: "Alocado", cls: "border-emerald-500/40 text-emerald-600" },
     encerrado: { label: "Encerrado", cls: "border-muted-foreground/40 text-muted-foreground" },
     removido: { label: "Removido", cls: "border-rose-500/40 text-rose-500" },
   };
