@@ -27,8 +27,10 @@ import type { ChipTone } from "@/lib/status-chips";
 import { ReleasePlanningRibbon } from "@/components/planning-session/release-planning-ribbon";
 import { ReleasePlanningSheet } from "@/components/planning-session/release-planning-sheet";
 import { ReleasePlanningContextSheet } from "@/components/planning-session/context-sheet";
-import { ReleasePlanningProposals } from "@/components/planning-session/release-planning-proposals";
+import { ReleasePlanningBoard } from "@/components/planning-session/release-planning-board";
+import { ReleasePlanningProposalsTab } from "@/components/planning-session/release-planning-proposals-tab";
 import { ReleasePlanningStories } from "@/components/planning-session/release-planning-stories";
+import { usePlanningCanvasData } from "@/components/planning-session/use-planning-canvas-data";
 import { StoryDetailSheet } from "@/components/planning-session/story-detail-sheet";
 import {
   CronogramaRail,
@@ -76,7 +78,7 @@ export default function PlanningSessionPage({
   const [input, setInput] = useState("");
   // Lente do canvas: board de tasks por sprint OU todas as user stories (por
   // módulo, sem sprint). Toggle vive na toolbar do canvas.
-  const [view, setView] = useState<"tasks" | "stories">("tasks");
+  const [view, setView] = useState<"tasks" | "stories" | "proposals">("tasks");
   const [storyCount, setStoryCount] = useState(0);
   // Story aberta no side sheet de detalhe (vista User Stories).
   const [openStoryRef, setOpenStoryRef] = useState<string | null>(null);
@@ -90,13 +92,19 @@ export default function PlanningSessionPage({
   // Bump pra re-fetchar as propostas de task (companion ceremony) quando um turno
   // da Vitoria termina — ela pode ter proposto/editado/descartado tasks via tool.
   const [actionsRefresh, setActionsRefresh] = useState(0);
-  // Counts do painel — derivam a fase do header e decidem o empty-state.
-  // `planCount` = tasks no board vivo (Fase 2.0); `doneCount` = quantas done.
-  const [planState, setPlanState] = useState({
-    pendingCount: 0,
-    planCount: 0,
-    doneCount: 0,
-  });
+  // Dados do canvas (board vivo + propostas) — fonte ÚNICA das 3 lentes
+  // (Tasks / User Stories / Propostas) + badge do toggle. Contagens derivam a
+  // fase do header e decidem o empty-state. `actionsRefresh` dispara o refetch.
+  const canvasData = usePlanningCanvasData(
+    session?.planningCeremonyId ?? null,
+    projectId,
+    actionsRefresh,
+  );
+  const planState = canvasData.counts;
+  const proposalsTotal =
+    canvasData.taskProposals.length +
+    canvasData.storyProposals.length +
+    canvasData.moduleProposals.length;
   // Planning Vivo Versionado: versões aplicadas (PlanningEvent) + sprints do
   // projeto alimentam o cronograma de blocos. O canvas só fica "Plano vazio" se
   // NÃO houver board, staging, NEM histórico.
@@ -369,6 +377,9 @@ export default function PlanningSessionPage({
   const handleApplied = useCallback(
     async (result: { applied: number; failed: number; skipped: number }) => {
       exitHistory();
+      // Propostas consumidas → mostra o resultado no board (lente Tasks), em vez
+      // de deixar o usuário na aba Propostas agora vazia.
+      setView("tasks");
       // Vira pro chat novo (próxima versão) só num apply LIMPO (aplicou algo E sem
       // falhas). Apply parcial/falho PRESERVA o papo — a companion fica viva com as
       // falhas retentáveis no staging, e é aí que o PM precisa do contexto pra pedir
@@ -654,16 +665,12 @@ export default function PlanningSessionPage({
   // toggle Tasks⇄User Stories, ⟳ refresh (acende com "novo") e Aplicar (só em
   // Tasks, com staging). Não aparece em modo histórico (canvas congelado).
   const isStaging = planState.pendingCount > 0;
-  const canvasTitle =
-    view === "stories"
-      ? "User Stories"
-      : isStaging
-        ? "Propostas de tasks"
-        : "Plano (board vivo)";
+  // Label fixo do canvas — "Canva", padrão em qualquer lente (Tasks/User Stories).
+  const canvasTitle = "Canva";
   const canvasCount =
     view === "stories"
       ? storyCount
-      : isStaging
+      : view === "proposals"
         ? planState.pendingCount
         : planState.planCount;
 
@@ -676,19 +683,25 @@ export default function PlanningSessionPage({
       </div>
 
       <div className="ml-1 inline-flex rounded-lg border bg-muted/40 p-0.5 text-xs">
-        {(["tasks", "stories"] as const).map((v) => (
+        {(["tasks", "stories", "proposals"] as const).map((v) => (
           <button
             key={v}
             type="button"
             onClick={() => setView(v)}
             className={cn(
-              "rounded-md px-2.5 py-1 transition-colors",
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors",
               view === v
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {v === "tasks" ? "Tasks" : "User Stories"}
+            {v === "tasks" ? "Tasks" : v === "stories" ? "User Stories" : "Propostas"}
+            {/* Badge no segmento Propostas — descoberta a partir das outras lentes. */}
+            {v === "proposals" && planState.pendingCount > 0 && (
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                {planState.pendingCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -710,7 +723,7 @@ export default function PlanningSessionPage({
         <RotateCcw className="size-4" />
       </Button>
 
-      {view === "tasks" && !isApproved && isStaging && (
+      {view === "proposals" && !isApproved && isStaging && (
         <Button
           size="sm"
           onClick={handleApplyBoard}
@@ -733,10 +746,11 @@ export default function PlanningSessionPage({
   // Conteúdo "board/lista" ocupa a folha de borda a borda → bleed; empty-state
   // (mensagem centrada) usa folha com padding de leitura.
   const showEmptyPlan = view === "tasks" && !hasPlan;
+  const showEmptyProposals = view === "proposals" && proposalsTotal === 0;
   const canvas = (
     <CanvasStage
       header={historyMode ? undefined : toolbar}
-      bleed={!historyMode && !showEmptyPlan}
+      bleed={!historyMode && !showEmptyPlan && !showEmptyProposals}
     >
       {historyMode ? (
         // Canvas HISTÓRICO (read-only) da versão selecionada. Sem versão na
@@ -751,20 +765,45 @@ export default function PlanningSessionPage({
       ) : view === "stories" ? (
         <ReleasePlanningStories
           projectId={projectId}
-          planningCeremonyId={session.planningCeremonyId}
           refreshKey={actionsRefresh}
-          readOnly={isApproved}
           onCountChange={setStoryCount}
           onOpenStory={setOpenStoryRef}
         />
-      ) : (
-        <>
-          <ReleasePlanningProposals
+      ) : view === "proposals" ? (
+        proposalsTotal > 0 ? (
+          <ReleasePlanningProposalsTab
+            taskProposals={canvasData.taskProposals}
+            storyProposals={canvasData.storyProposals}
+            moduleProposals={canvasData.moduleProposals}
+            sprints={sprints}
             planningCeremonyId={session.planningCeremonyId}
             projectId={projectId}
-            refreshKey={actionsRefresh}
             readOnly={isApproved}
-            onStateChange={setPlanState}
+            onDecision={canvasData.setDecision}
+            onReload={canvasData.reload}
+          />
+        ) : (
+          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            <p className="mb-4">
+              Nenhuma proposta pendente. As mudanças que a Vitoria propõe
+              (criar / alterar / remover) aparecem aqui pra você revisar e aplicar.
+            </p>
+            <Button
+              variant="magic"
+              size="sm"
+              onClick={handleKickoff}
+              disabled={isApproved || busy}
+            >
+              <Sparkles className="size-4" />
+              Montar plano
+            </Button>
+          </div>
+        )
+      ) : (
+        <>
+          <ReleasePlanningBoard
+            boardTasks={canvasData.boardTasks}
+            onReload={canvasData.reload}
           />
           {!hasPlan && (
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -791,11 +830,11 @@ export default function PlanningSessionPage({
   return (
     <>
       <PageTitle
-        title={session.projectName ?? session.title}
+        title={session.projectName ?? "Planning"}
         subtitle={
           sprints.length > 0
-            ? `${session.title} · ${sprints.length} sprint${sprints.length === 1 ? "" : "s"} no contrato`
-            : session.title
+            ? `Planning · ${sprints.length} sprint${sprints.length === 1 ? "" : "s"} no contrato`
+            : "Planning"
         }
       />
 
@@ -804,7 +843,7 @@ export default function PlanningSessionPage({
         ribbon={
           <>
             <ReleasePlanningRibbon
-              title={session.title}
+              title="Planning"
               phaseLabel={phase.label}
               phaseTone={phase.tone}
               scheduledFor={session.scheduledFor}
