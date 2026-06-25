@@ -126,12 +126,20 @@ export function RituaisFileView({
   projectId,
   projectName,
   canManage,
+  restrictToKinds,
 }: {
   projectId: string;
   projectName: string;
   canManage: boolean;
+  /**
+   * Modo grant_only: só estes kinds aparecem (o usuário chegou via grant de um
+   * ritual específico). null/undefined = lista completa + pills + "Novo ritual".
+   */
+  restrictToKinds?: ("release_planning" | "pm_review")[] | null;
 }) {
   const router = useRouter();
+
+  const restricted = !!restrictToKinds && restrictToKinds.length > 0;
 
   const [items, setItems] = useState<RitualItem[]>([]);
   const [canCreatePMReview, setCanCreatePMReview] = useState(false);
@@ -167,10 +175,13 @@ export function RituaisFileView({
     void load();
   }, [load]);
 
-  const visible = useMemo(
-    () => (filter === "all" ? items : items.filter((i) => i.kind === filter)),
-    [items, filter],
-  );
+  const visible = useMemo(() => {
+    // grant_only: a lista é travada nos kinds concedidos (ignora o filtro de pills).
+    const base = restrictToKinds
+      ? items.filter((i) => restrictToKinds.includes(i.kind))
+      : items;
+    return filter === "all" ? base : base.filter((i) => i.kind === filter);
+  }, [items, filter, restrictToKinds]);
 
   const handleEdit = useCallback((item: RitualItem) => {
     if (item.kind === "pm_review") {
@@ -327,36 +338,39 @@ export function RituaisFileView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setFilter(f.key)}
-              className={cn(
-                "rounded-full border px-2.5 py-1 text-xs transition-colors",
-                filter === f.key
-                  ? "border-foreground/20 bg-foreground/10 font-medium"
-                  : "border-border text-muted-foreground hover:bg-muted/60",
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
+      {/* grant_only: sem pills/settings/criar — só a lista do ritual concedido. */}
+      {!restricted && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                  filter === f.key
+                    ? "border-foreground/20 bg-foreground/10 font-medium"
+                    : "border-border text-muted-foreground hover:bg-muted/60",
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <RitualsSettingsSheet
+              projectId={projectId}
+              canConfigure={canManage || canCreatePMReview}
+            />
+            {(canManage || canCreatePMReview) && (
+              <Button size="sm" onClick={() => setPickerOpen(true)}>
+                <Plus className="size-3.5" /> Novo ritual
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <RitualsSettingsSheet
-            projectId={projectId}
-            canConfigure={canManage || canCreatePMReview}
-          />
-          {(canManage || canCreatePMReview) && (
-            <Button size="sm" onClick={() => setPickerOpen(true)}>
-              <Plus className="size-3.5" /> Novo ritual
-            </Button>
-          )}
-        </div>
-      </div>
+      )}
 
       {loading ? (
         <p className="px-1 py-8 text-center text-sm text-muted-foreground">Carregando…</p>

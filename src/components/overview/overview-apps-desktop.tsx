@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AppDesktop } from "@/components/apps/app-desktop";
 import { FinanceApp } from "@/components/apps/finance/finance-app";
+import { AccessApp } from "@/components/apps/access/access-app";
 import { OVERVIEW_APP_REGISTRY } from "@/lib/apps/overview-registry";
 import { type AppDef } from "@/lib/apps/registry";
 import { hasMinAccessLevel, type AccessLevel } from "@/lib/roles";
@@ -51,6 +52,8 @@ export function OverviewAppsDesktop({
             initialProjectId={searchParams.get("fp")}
           />
         );
+      case "access":
+        return <AccessApp />;
       default:
         return null;
     }

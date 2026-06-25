@@ -356,6 +356,63 @@ export const getAccessibleProjectIds = cache(async (): Promise<string[]> => {
 });
 
 /**
+ * Active capability grants (overrides) for the *acting* user — the net-new
+ * third authz axis (MemberAccessGrant). Só linhas ativas (revokedAt IS NULL).
+ * Catálogo de capabilityKey vive em src/lib/access/capabilities.ts.
+ * Cached per request. Honra impersonation via getActorUserId.
+ */
+export const getAccessGrantList = cache(
+  async (): Promise<{ capabilityKey: string; projectId: string | null }[]> => {
+    const userId = await getActorUserId();
+    if (!userId) return [];
+    const { data } = await db()
+      .from("MemberAccessGrant")
+      .select("capabilityKey, projectId")
+      .eq("userId", userId)
+      .is("revokedAt", null);
+    return (data ?? []) as {
+      capabilityKey: string;
+      projectId: string | null;
+    }[];
+  },
+);
+
+/**
+ * Project ids alcançáveis SÓ via grant (sem ProjectAccess). Mantido SEPARADO
+ * de getAccessibleProjectIds de propósito: um grant confere alcance VIEW-level
+ * (visibilidade do projeto + ler/chat no ritual concedido), NÃO o alcance
+ * edit-level que getAccessibleProjectIds implica (canEditSessions / listagem
+ * de design sessions). Misturar vazaria escrita além do ritual concedido.
+ */
+export const getGrantedProjectIds = cache(async (): Promise<string[]> => {
+  const grants = await getAccessGrantList();
+  return [
+    ...new Set(
+      grants.map((g) => g.projectId).filter((p): p is string => p !== null),
+    ),
+  ];
+});
+
+/**
+ * True iff o usuário ACTING tem grant ativo de `capabilityKey` (opcionalmente
+ * escopado a `projectId`; grant global — projectId null — casa qualquer projeto).
+ * Espelha o SQL has_access_grant().
+ */
+export async function hasAccessGrant(
+  capabilityKey: string,
+  projectId?: string,
+): Promise<boolean> {
+  const grants = await getAccessGrantList();
+  return grants.some(
+    (g) =>
+      g.capabilityKey === capabilityKey &&
+      (projectId === undefined ||
+        g.projectId === projectId ||
+        g.projectId === null),
+  );
+}
+
+/**
  * True iff the *acting* user can VIEW the project:
  *   - Manager (PM / head-ops / CEO / CRO): always yes
  *   - Anyone else: needs a ProjectAccess row (any role)
@@ -367,7 +424,10 @@ export async function canViewProject(projectId: string): Promise<boolean> {
   const level = await getEffectiveAccessLevel();
   if (hasMinAccessLevel(level, "manager")) return true;
   const ids = await getAccessibleProjectIds();
-  return ids.includes(projectId);
+  if (ids.includes(projectId)) return true;
+  // Override: um grant de capability project-scoped destrava a visibilidade
+  // mínima do projeto (espelho TS de can_view_project + has_any_project_grant).
+  return (await getGrantedProjectIds()).includes(projectId);
 }
 
 /**

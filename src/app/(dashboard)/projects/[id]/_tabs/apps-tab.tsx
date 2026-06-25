@@ -27,6 +27,7 @@ import { RituaisFileView } from "@/components/apps/rituais-file-view";
 import { SessionsFileView } from "@/components/apps/sessions-file-view";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { APP_REGISTRY, type AppDef } from "@/lib/apps/registry";
+import { type RitualKind } from "@/lib/access/capabilities";
 
 import { ForgeTab } from "./forge-tab";
 
@@ -41,6 +42,13 @@ type AppsTabProps = {
   /** Controlado pela page (sync com ?app= na URL — deep-link das ex-tabs). */
   openAppKey: string | null;
   onOpenAppKeyChange: (key: string | null) => void;
+  /**
+   * Modo grant_only: dock restrito a estes app keys (o usuário chegou só via
+   * MemberAccessGrant). null = sem restrição (acesso normal ao projeto).
+   */
+  restrictToApps?: string[] | null;
+  /** Modo grant_only: dentro do Rituais, só estes kinds. */
+  restrictToKinds?: RitualKind[] | null;
 };
 
 export function AppsTab({
@@ -51,6 +59,8 @@ export function AppsTab({
   onConfigureFolder,
   openAppKey,
   onOpenAppKeyChange,
+  restrictToApps,
+  restrictToKinds,
 }: AppsTabProps) {
   const isMobile = useIsMobile();
   const [createAppOpen, setCreateAppOpen] = useState(false);
@@ -60,8 +70,8 @@ export function AppsTab({
     () =>
       APP_REGISTRY.filter(
         (a) => !(a.minAccessLevel === "manager" && !canManage),
-      ),
-    [canManage],
+      ).filter((a) => !restrictToApps || restrictToApps.includes(a.key)),
+    [canManage, restrictToApps],
   );
 
   useEffect(() => {
@@ -115,6 +125,7 @@ export function AppsTab({
             projectId={projectId}
             projectName={projectName}
             canManage={canManage}
+            restrictToKinds={restrictToKinds}
           />
         );
       case "forge":
@@ -177,7 +188,7 @@ export function AppsTab({
         renderSurface={renderSurface}
         windowSubtitle={projectName}
         statusSlot={statusSlot}
-        onCreateApp={() => setCreateAppOpen(true)}
+        onCreateApp={restrictToApps ? undefined : () => setCreateAppOpen(true)}
       />
       <CreateAppDialog open={createAppOpen} onOpenChange={setCreateAppOpen} />
     </>

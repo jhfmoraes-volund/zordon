@@ -10,7 +10,7 @@
  * src/components/overview/overview-apps-desktop.tsx. A visibilidade por nível
  * de acesso é resolvida no server (apps-view.tsx) e refiltrada aqui no client.
  */
-import { Wallet } from "lucide-react";
+import { KeyRound, Wallet } from "lucide-react";
 
 import { type AppDef } from "./registry";
 
@@ -23,6 +23,19 @@ export const OVERVIEW_APP_REGISTRY: AppDef[] = [
       "Análise financeira da operação — receita e despesa por projeto e por mês, com margem de ganho. Dado sensível: visível só para admin.",
     icon: Wallet,
     dot: "bg-emerald-500",
+    window: "3xl",
+    produces: {},
+    minAccessLevel: "admin",
+    status: "installed",
+  },
+  {
+    key: "access",
+    name: "Acessos",
+    tagline: "Acesso efetivo e concessões por membro",
+    description:
+      "Visão do acesso efetivo de cada membro (nível global + projetos + concessões) e override por capability — libera/revoga apps e rituais por projeto. Admin-only.",
+    icon: KeyRound,
+    dot: "bg-rose-500",
     window: "3xl",
     produces: {},
     minAccessLevel: "admin",

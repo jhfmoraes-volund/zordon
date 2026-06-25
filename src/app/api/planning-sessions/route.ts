@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getUser, getMemberId, requireProjectEditTasksApi } from "@/lib/dal";
+import {
+  getUser,
+  getMemberId,
+  requireProjectViewApi,
+  requireProjectEditTasksApi,
+} from "@/lib/dal";
 import {
   createSession,
   listForProject,
@@ -84,6 +89,10 @@ export async function GET(req: NextRequest) {
       { status: 400 },
     );
   }
+
+  // db() bypassa RLS — gate explícito (grant-aware via canViewProject).
+  const denied = await requireProjectViewApi(projectId);
+  if (denied) return denied;
 
   try {
     const sessions = await listForProject(projectId);

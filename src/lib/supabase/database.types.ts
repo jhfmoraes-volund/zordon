@@ -4381,6 +4381,50 @@ export type Database = {
           },
         ]
       }
+      MemberAccessGrant: {
+        Row: {
+          capabilityKey: string
+          grantedAt: string
+          grantedBy: string | null
+          id: string
+          projectId: string | null
+          revokedAt: string | null
+          revokedBy: string | null
+          scope: string
+          userId: string
+        }
+        Insert: {
+          capabilityKey: string
+          grantedAt?: string
+          grantedBy?: string | null
+          id?: string
+          projectId?: string | null
+          revokedAt?: string | null
+          revokedBy?: string | null
+          scope: string
+          userId: string
+        }
+        Update: {
+          capabilityKey?: string
+          grantedAt?: string
+          grantedBy?: string | null
+          id?: string
+          projectId?: string | null
+          revokedAt?: string | null
+          revokedBy?: string | null
+          scope?: string
+          userId?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "MemberAccessGrant_projectId_fkey"
+            columns: ["projectId"]
+            isOneToOne: false
+            referencedRelation: "Project"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       MemberAssessment: {
         Row: {
           completedAt: string | null
@@ -9082,6 +9126,14 @@ export type Database = {
       get_my_access_level: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
+      has_access_grant: {
+        Args: { p_capability: string; p_project_id: string }
+        Returns: boolean
+      }
+      has_any_project_grant: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
       is_admin: { Args: never; Returns: boolean }
       is_allocated_to: { Args: { p_project_id: string }; Returns: boolean }
       is_guest: { Args: never; Returns: boolean }

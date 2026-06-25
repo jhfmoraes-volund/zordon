@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getUser, requireProjectEditSessionsApi } from "@/lib/dal";
+import {
+  getUser,
+  requireProjectViewApi,
+  requireProjectEditSessionsApi,
+} from "@/lib/dal";
 import {
   getSession,
   updateSession,
@@ -24,6 +28,11 @@ export async function GET(
         { status: 404 },
       );
     }
+    // db() bypassa RLS — gating explícito por projeto (grant-aware via
+    // canViewProject). Fecha o buraco de qualquer authed user ler qualquer
+    // planning; e destrava o builder com grant de Planning.
+    const denied = await requireProjectViewApi(session.projectId);
+    if (denied) return denied;
     return NextResponse.json({ session });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "get failed";

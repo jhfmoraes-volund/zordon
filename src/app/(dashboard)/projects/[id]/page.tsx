@@ -67,9 +67,14 @@ import {
 } from "@/components/sprint";
 import { useAuth } from "@/contexts/auth-context";
 import { hasMinAccessLevel } from "@/lib/roles";
+import {
+  appKeysForCapabilities,
+  ritualKindsForCapabilities,
+} from "@/lib/access/capabilities";
 
 import type { TabKey } from "./_types";
 import { useProjectMeta } from "./_hooks/use-project-meta";
+import { useMyProjectAccess } from "./_hooks/use-my-project-access";
 import { useStoryHierarchy } from "./_hooks/use-story-hierarchy";
 import { useTasksAndSprints } from "./_hooks/use-tasks-and-sprints";
 import { useProjectMembers } from "./_hooks/use-project-members";
@@ -105,11 +110,26 @@ export default function ProjectDetailPage({
   const { effectiveAccessLevel } = useAuth();
   const canManageSprint = hasMinAccessLevel(effectiveAccessLevel, "manager");
   const isGuest = !hasMinAccessLevel(effectiveAccessLevel, "builder");
-  // Settings é gerencial. Guest não vê. (Forge é gated dentro do tab Apps,
-  // via minAccessLevel do APP_REGISTRY.)
-  const visibleTabs = TABS.filter(
-    (tab) => !(isGuest && tab.key === "settings"),
+
+  // Acesso a ESTE projeto. grant_only = chegou só via MemberAccessGrant (sem
+  // ProjectAccess) → modo restrito: só a aba Apps, dock só o app concedido,
+  // Rituais filtrado ao ritual concedido. Ver memory access model.
+  const { via: accessVia, grantedCapabilities } = useMyProjectAccess(id);
+  const grantOnly = accessVia === "grant_only";
+  const restrictToApps = useMemo(
+    () => (grantOnly ? appKeysForCapabilities(grantedCapabilities) : null),
+    [grantOnly, grantedCapabilities],
   );
+  const restrictToKinds = useMemo(
+    () => (grantOnly ? ritualKindsForCapabilities(grantedCapabilities) : null),
+    [grantOnly, grantedCapabilities],
+  );
+
+  // Settings é gerencial. Guest não vê. grant_only só vê Apps. (Forge é gated
+  // dentro do tab Apps, via minAccessLevel do APP_REGISTRY.)
+  const visibleTabs = grantOnly
+    ? TABS.filter((tab) => tab.key === "apps")
+    : TABS.filter((tab) => !(isGuest && tab.key === "settings"));
 
   const router = useRouter();
   const pathname = usePathname();
@@ -150,6 +170,17 @@ export default function ProjectDetailPage({
   const [openAppKey, setOpenAppKey] = useState<string | null>(
     searchParams.get("app") ?? legacyAppKey ?? "drive",
   );
+
+  // grant_only: tab + app são DERIVADOS (não setState num effect — viola
+  // react-hooks/set-state-in-effect). Força a aba Apps e o app concedido; cai
+  // no normal pros demais usuários.
+  const effectiveTab: TabKey = grantOnly ? "apps" : activeTab;
+  const effectiveOpenApp =
+    grantOnly && restrictToApps && restrictToApps.length > 0
+      ? openAppKey && restrictToApps.includes(openAppKey)
+        ? openAppKey
+        : restrictToApps[0]
+      : openAppKey;
 
   // ─── Data hooks ────────────────────────────────────────────────────────────
   const { project, reload: loadProject } = useProjectMeta(id);
@@ -204,23 +235,23 @@ export default function ProjectDetailPage({
   // Allows deep-link from /profile, weekly-allocation widget, etc.
   useEffect(() => {
     const params = new URLSearchParams();
-    if (activeTab !== "stories") params.set("tab", activeTab);
-    if (activeTab === "sprints" && sprintView) {
+    if (effectiveTab !== "stories") params.set("tab", effectiveTab);
+    if (effectiveTab === "sprints" && sprintView) {
       if (sprintView === "backlog" || sprintView === "all") {
         params.set("view", sprintView);
       } else {
         params.set("sprint", sprintView);
       }
     }
-    if (activeTab === "apps" && openAppKey) {
-      params.set("app", openAppKey);
+    if (effectiveTab === "apps" && effectiveOpenApp) {
+      params.set("app", effectiveOpenApp);
     }
     const qs = params.toString();
     const next = qs ? `${pathname}?${qs}` : pathname;
     if (next !== window.location.pathname + window.location.search) {
       router.replace(next, { scroll: false });
     }
-  }, [activeTab, sprintView, openAppKey, pathname, router]);
+  }, [effectiveTab, sprintView, effectiveOpenApp, pathname, router]);
 
   // ─── Adapt ─────────────────────────────────────────────────────────────────
 
@@ -485,35 +516,39 @@ export default function ProjectDetailPage({
             </p>
           </div>
         </div>
-        {/* Desktop (md+): 3 botões com label. */}
-        <div className="hidden shrink-0 items-center gap-2 md:flex">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setWikiOpen(true)}
-          >
-            <FileText className="size-4" />
-            <span>Wiki</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil className="size-4" />
-            <span>Editar projeto</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAccessOpen(true)}
-          >
-            <Shield className="size-4" />
-            <span>Access</span>
-          </Button>
-        </div>
+        {/* Desktop (md+): 3 botões com label. grant_only não gerencia o
+            projeto — só consome o ritual concedido. */}
+        {!grantOnly && (
+          <div className="hidden shrink-0 items-center gap-2 md:flex">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setWikiOpen(true)}
+            >
+              <FileText className="size-4" />
+              <span>Wiki</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="size-4" />
+              <span>Editar projeto</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAccessOpen(true)}
+            >
+              <Shield className="size-4" />
+              <span>Access</span>
+            </Button>
+          </div>
+        )}
 
         {/* Mobile: as mesmas ações colapsadas num kebab (overflow menu). */}
+        {!grantOnly && (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -542,6 +577,7 @@ export default function ProjectDetailPage({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
 
         {/* O sentinel (renderizado por PageTitle) ancora no rodapé do hero: o
             título no header sticky só aparece quando o hero (nome + cliente)
@@ -597,8 +633,9 @@ export default function ProjectDetailPage({
         ) : null}
       </div>
 
-      {/* Sprint Ribbon — sticky, vale pra todas as tabs */}
-      {focused ? (
+      {/* Sprint Ribbon — sticky, vale pra todas as tabs. grant_only não vê
+          dado de sprint (só o ritual concedido). */}
+      {!grantOnly && focused ? (
         <SprintRibbon
           sprint={focused}
           sprints={sprints}
@@ -625,7 +662,7 @@ export default function ProjectDetailPage({
               onClick={() => setActiveTab(tab.key)}
               aria-label={tab.label}
               className={`flex flex-1 shrink-0 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap md:flex-none md:justify-start md:px-4 md:py-2 ${
-                activeTab === tab.key
+                effectiveTab === tab.key
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
@@ -650,7 +687,7 @@ export default function ProjectDetailPage({
       </div>
 
       {/* Tab content */}
-      {activeTab === "stories" ? (
+      {effectiveTab === "stories" ? (
         <StoriesList
           stories={stories}
           tasks={tasks}
@@ -661,7 +698,7 @@ export default function ProjectDetailPage({
           onCreateStory={storyActions.handleCreateStory}
           onDeleteStory={storyActions.handleDeleteStory}
         />
-      ) : activeTab === "sprints" ? (
+      ) : effectiveTab === "sprints" ? (
         <div className="space-y-4">
           <SprintsTab
           sprints={sprints}
@@ -706,17 +743,19 @@ export default function ProjectDetailPage({
           handleBulkRemoveTag={taskActions.handleBulkRemoveTag}
           />
         </div>
-      ) : activeTab === "apps" ? (
+      ) : effectiveTab === "apps" ? (
         <AppsTab
           projectId={id}
           projectName={project.name}
           canManage={canManageSprint}
           driveFolderId={project.driveFolderId}
           onConfigureFolder={() => setEditOpen(true)}
-          openAppKey={openAppKey}
+          openAppKey={effectiveOpenApp}
           onOpenAppKeyChange={setOpenAppKey}
+          restrictToApps={restrictToApps}
+          restrictToKinds={restrictToKinds}
         />
-      ) : activeTab === "settings" ? (
+      ) : effectiveTab === "settings" ? (
         <SettingsTab
           project={project}
           modules={modules}
