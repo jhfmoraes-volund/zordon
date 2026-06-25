@@ -334,6 +334,8 @@ export type Allocation = {
   voided_at: string | null;
   voided_reason: string | null;
   voided_by: string | null;
+  /** Vaga (função do contrato) que esta ocupação preenche. Null = sem vaga / spot. */
+  vaga_id: string | null;
 };
 
 export type AllocationItem = Allocation & {
@@ -353,9 +355,57 @@ export type AllocationInput = {
   effectiveTo?: string | null;
   note?: string | null;
   contractId?: string | null;
+  /** Vaga que esta alocação ocupa (atribuir pessoa a uma função do contrato). */
+  vagaId?: string | null;
 };
 
 export type AllocationsResponse = { allocations: AllocationItem[] };
+
+// ─── Vagas (staffing por função) ────────────────────────────────────────────
+
+/** Função demandada pelo contrato (1ª classe; existe vazia → buraco visível). */
+export type ContractVaga = {
+  id: string;
+  contract_id: string;
+  position: string; // vocabulário de Member.position
+  label: string | null;
+  seq: number;
+  expected_percent: number | null; // planejamento, NÃO é custo
+  effective_from: string;
+  effective_to: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ContractVagaInput = {
+  position: string;
+  label?: string | null;
+  expectedPercent?: number | null;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+};
+
+/** Vaga + estado de preenchimento. Ocupante vem das allocations (match por vaga_id). */
+export type VagaWithFill = ContractVaga & { filled: boolean };
+
+/** Resumo previsto × preenchido (inclui o PM derivado de pmId). */
+export type VagaSummary = { total: number; filled: number; empty: number };
+
+/** PM derivado (não é contract_vaga): ocupante = Project.pmId; hasCost = tem alocação. */
+export type PmVaga = {
+  memberId: string | null;
+  memberName: string | null;
+  /** Tem labor_allocation de custo neste contrato? (false = "PM sem custo alocado") */
+  hasCost: boolean;
+  /** allocationId do PM neste contrato, se houver (pra mostrar % / editar). */
+  allocationId: string | null;
+};
+
+export type VagasResponse = {
+  vagas: VagaWithFill[];
+  pm: PmVaga;
+  summary: VagaSummary;
+};
 
 // ─── Detalhe por projeto (drill de análise) ─────────────────────────────────
 

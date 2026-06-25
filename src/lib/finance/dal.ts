@@ -18,6 +18,12 @@ import type {
   CategoryTotal,
   Contract,
   ContractInput,
+  ContractVaga,
+  ContractVagaInput,
+  VagaWithFill,
+  VagaSummary,
+  PmVaga,
+  VagasResponse,
   ContractMonthOverride,
   ContractMonthOverrideInput,
   ContractMonthRow,
@@ -434,6 +440,7 @@ function allocRow(input: AllocationInput, createdBy: string | null) {
     effective_to: input.effectiveTo ?? null,
     note: input.note ?? null,
     contract_id: input.contractId ?? null,
+    vaga_id: kind === "spot" ? null : input.vagaId ?? null, // spot nunca preenche vaga
     created_by: createdBy,
   };
 }
@@ -604,6 +611,162 @@ export async function deleteAllocation(id: string): Promise<void> {
   const { fin } = await finance();
   const res = await fin.from("labor_allocation").delete().eq("id", id);
   if (res.error) throw new Error(res.error.message);
+}
+
+// ─── Vagas (staffing por função) ────────────────────────────────────────────
+
+/**
+ * Vagas do contrato + preenchimento + a vaga PM derivada (Project.pmId).
+ * O ocupante de cada vaga vem das allocations (match por vaga_id na UI). O PM
+ * NÃO é contract_vaga — deriva de pmId; hasCost = tem labor_allocation no contrato.
+ * Summary inclui o PM (sempre demandado) pra o previsto × preenchido fechar.
+ */
+export async function listVagas(contractId: string): Promise<VagasResponse> {
+  const { sb, fin } = await finance();
+
+  const cRes = await fin
+    .from("contract")
+    .select("project_id")
+    .eq("id", contractId)
+    .maybeSingle();
+  if (cRes.error) throw new Error(cRes.error.message);
+  const projectId = (cRes.data?.project_id as string | undefined) ?? null;
+
+  const [vRes, fillRes] = await Promise.all([
+    fin
+      .from("contract_vaga")
+      .select("*")
+      .eq("contract_id", contractId)
+      .order("position", { ascending: true })
+      .order("seq", { ascending: true }),
+    fin.from("v_contract_vaga_fill").select("vaga_id, filled").eq("contract_id", contractId),
+  ]);
+  if (vRes.error) throw new Error(vRes.error.message);
+  const fillMap = new Map<string, boolean>();
+  for (const f of (fillRes.data ?? []) as { vaga_id: string; filled: boolean }[]) {
+    fillMap.set(f.vaga_id, f.filled);
+  }
+  const vagas: VagaWithFill[] = ((vRes.data ?? []) as ContractVaga[]).map((v) => ({
+    ...v,
+    filled: fillMap.get(v.id) ?? false,
+  }));
+
+  // PM derivado de Project.pmId (não é contract_vaga).
+  let pm: PmVaga = { memberId: null, memberName: null, hasCost: false, allocationId: null };
+  if (projectId) {
+    const pRes = await sb.from("Project").select("pmId").eq("id", projectId).maybeSingle();
+    const pmId = (pRes.data?.pmId as string | null | undefined) ?? null;
+    if (pmId) {
+      const [mRes, aRes] = await Promise.all([
+        sb.from("Member").select("name").eq("id", pmId).maybeSingle(),
+        fin
+          .from("labor_allocation")
+          .select("id")
+          .eq("contract_id", contractId)
+          .eq("member_id", pmId)
+          .is("voided_at", null)
+          .is("effective_to", null)
+          .limit(1),
+      ]);
+      const alloc = ((aRes.data ?? [])[0] as { id: string } | undefined) ?? null;
+      pm = {
+        memberId: pmId,
+        memberName: (mRes.data?.name as string) ?? null,
+        hasCost: !!alloc,
+        allocationId: alloc?.id ?? null,
+      };
+    }
+  }
+
+  const builderFilled = vagas.filter((v) => v.filled).length;
+  const total = vagas.length + 1; // +1 = PM (sempre demandado)
+  const filled = builderFilled + (pm.memberId ? 1 : 0);
+  const summary: VagaSummary = { total, filled, empty: total - filled };
+
+  return { vagas, pm, summary };
+}
+
+export async function createVaga(
+  contractId: string,
+  input: ContractVagaInput,
+): Promise<ContractVaga> {
+  const { fin } = await finance();
+  // seq = próximo dentro de (contract, position) — "2 Builders" = seq 1,2.
+  const sRes = await fin
+    .from("contract_vaga")
+    .select("seq")
+    .eq("contract_id", contractId)
+    .eq("position", input.position)
+    .order("seq", { ascending: false })
+    .limit(1);
+  if (sRes.error) throw new Error(sRes.error.message);
+  const nextSeq = (((sRes.data ?? [])[0] as { seq: number } | undefined)?.seq ?? 0) + 1;
+  const res = await fin
+    .from("contract_vaga")
+    .insert({
+      contract_id: contractId,
+      position: input.position,
+      label: input.label ?? null,
+      seq: nextSeq,
+      expected_percent: input.expectedPercent ?? null,
+      effective_from: input.effectiveFrom,
+      effective_to: input.effectiveTo ?? null,
+      created_by: await currentMemberId(),
+    })
+    .select("*")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return res.data as ContractVaga;
+}
+
+export async function updateVaga(
+  id: string,
+  input: { label?: string | null; expectedPercent?: number | null; effectiveTo?: string | null },
+): Promise<ContractVaga> {
+  const { fin } = await finance();
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.label !== undefined) patch.label = input.label;
+  if (input.expectedPercent !== undefined) patch.expected_percent = input.expectedPercent;
+  if (input.effectiveTo !== undefined) patch.effective_to = input.effectiveTo;
+  const res = await fin.from("contract_vaga").update(patch).eq("id", id).select("*").single();
+  if (res.error) throw new Error(res.error.message);
+  return res.data as ContractVaga;
+}
+
+/** Remove a vaga. As ocupações sobrevivem (vaga_id vira null) — o custo é sagrado. */
+export async function deleteVaga(id: string): Promise<void> {
+  const { fin } = await finance();
+  const res = await fin.from("contract_vaga").delete().eq("id", id);
+  if (res.error) throw new Error(res.error.message);
+}
+
+/**
+ * Troca o ocupante de uma vaga (Brenda → João): fecha a ocupação atual e cria a
+ * nova na MESMA vaga (contrato/projeto herdados da que saiu). Sequencial (o repo
+ * não tem transação) — pra não duplicar custo no mês de transição, `newEffectiveFrom`
+ * deve ser ≥ `effectiveTo` (idealmente o dia seguinte). Emite close + create.
+ */
+export async function replaceVagaOccupant(input: {
+  vagaId: string;
+  currentAllocationId: string;
+  effectiveTo: string;
+  newMemberId: string;
+  newPercent?: number | null;
+  newEffectiveFrom: string;
+  note?: string | null;
+}): Promise<{ closed: Allocation; created: Allocation; warning: string | null }> {
+  const closed = await closeAllocation(input.currentAllocationId, input.effectiveTo);
+  const { allocation: created, warning } = await createAllocation({
+    memberId: input.newMemberId,
+    projectId: closed.project_id,
+    contractId: closed.contract_id,
+    vagaId: input.vagaId,
+    kind: "standing",
+    percent: input.newPercent ?? closed.percent,
+    effectiveFrom: input.newEffectiveFrom,
+    note: input.note ?? null,
+  });
+  return { closed, created, warning };
 }
 
 // ─── Premissas + DRE (planilha Hitz) ────────────────────────────────────────
