@@ -6,7 +6,6 @@ import {
   listAllocations,
   createAllocation,
   closeAllocation,
-  listContracts,
 } from "@/lib/finance/dal";
 
 /**
@@ -26,19 +25,10 @@ type AllocationRow = {
   projectName: string;
   /** Teto de PFV/sprint (ProjectMember). 0 = sem teto definido. */
   fpAllocation: number;
-  /** id da labor_allocation vigente (null = nenhuma ainda). */
+  /** id da labor_allocation PROJECT-LEVEL vigente (null = nenhuma ainda). */
   allocationId: string | null;
   percent: number | null;
-  contractId: string | null;
-  contractLabel: string | null;
   effectiveFrom: string | null;
-  effectiveTo: string | null;
-};
-
-type ContractLite = {
-  id: string;
-  label: string;
-  effectiveFrom: string;
   effectiveTo: string | null;
 };
 
@@ -46,7 +36,6 @@ type MemberAllocationState = {
   fpCapacity: number;
   allocations: AllocationRow[];
   projects: { id: string; name: string }[];
-  contractsByProject: Record<string, ContractLite[]>;
 };
 
 /** Estado mesclado das alocações do membro — base do GET e da resposta do PUT. */
@@ -76,8 +65,6 @@ async function buildState(memberId: string): Promise<MemberAllocationState | nul
         fpAllocation: 0,
         allocationId: null,
         percent: null,
-        contractId: null,
-        contractLabel: null,
         effectiveFrom: null,
         effectiveTo: null,
       };
@@ -90,36 +77,19 @@ async function buildState(memberId: string): Promise<MemberAllocationState | nul
     ensureRow(pm.projectId).fpAllocation = pm.fpAllocation ?? 0;
   }
 
+  // SÓ alocação PROJECT-LEVEL (contract_id null) entra aqui. Alocação de
+  // CONTRATO é staffing por vaga → vive só na "Equipe do contrato" (vaga =
+  // fonte única). Misturar as duas superfícies sobre a mesma labor_allocation
+  // orfanava a vaga no close+create e dobrava custo.
   // listAllocations vem desc por effective_from → a 1ª por projeto é a vigente.
   for (const a of allocs) {
+    if (a.contract_id != null) continue; // contrato = vaga UI, não aqui
     const row = ensureRow(a.project_id);
     if (row.allocationId === null) {
       row.allocationId = a.id;
       row.percent = Number(a.percent);
-      row.contractId = a.contract_id;
       row.effectiveFrom = a.effective_from;
       row.effectiveTo = a.effective_to;
-    }
-  }
-
-  // Contratos dos projetos já alocados (pro dropdown abrir preenchido) +
-  // resolução do label do contrato vigente em cada linha.
-  const contractsByProject: Record<string, ContractLite[]> = {};
-  await Promise.all(
-    [...rowByProject.keys()].map(async (projectId) => {
-      const contracts = await listContracts(projectId);
-      contractsByProject[projectId] = contracts.map((c) => ({
-        id: c.id,
-        label: c.label,
-        effectiveFrom: c.effectiveFrom,
-        effectiveTo: c.effectiveTo,
-      }));
-    }),
-  );
-  for (const row of rowByProject.values()) {
-    if (row.contractId) {
-      row.contractLabel =
-        contractsByProject[row.projectId]?.find((c) => c.id === row.contractId)?.label ?? null;
     }
   }
 
@@ -129,7 +99,6 @@ async function buildState(memberId: string): Promise<MemberAllocationState | nul
       a.projectName.localeCompare(b.projectName),
     ),
     projects: (projectsRes.data ?? []).map((p) => ({ id: p.id, name: p.name })),
-    contractsByProject,
   };
 }
 
@@ -208,9 +177,11 @@ export async function PUT(
     listAllocations({ memberId }),
   ]);
   const currentPm = new Map((pmRes.data ?? []).map((r) => [r.projectId, r]));
-  // alocação vigente (a 1ª por projeto, já que vem desc).
+  // alocação PROJECT-LEVEL vigente (a 1ª por projeto, já que vem desc). Pula
+  // contract-bound — staffing de contrato é só na vaga UI, não toca aqui.
   const currentAllocByProject = new Map<string, { id: string; percent: number }>();
   for (const a of allocs) {
+    if (a.contract_id != null) continue;
     if (!currentAllocByProject.has(a.project_id)) {
       currentAllocByProject.set(a.project_id, { id: a.id, percent: Number(a.percent) });
     }
@@ -296,7 +267,7 @@ export async function PUT(
           percent: Number(d.percent),
           effectiveFrom: d.effectiveFrom!,
           effectiveTo: d.effectiveTo ?? null,
-          contractId: d.contractId ?? null,
+          contractId: null, // Member Sheet = só project-level; contrato = vaga UI
         });
       }
     }

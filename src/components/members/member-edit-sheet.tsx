@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Wand2, Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -67,19 +67,11 @@ const NONE = "none"; // sentinela do Select pra "sem cargo / sem torre / sem con
 
 // ─── types ───────────────────────────────────────────────
 
-type ContractLite = {
-  id: string;
-  label: string;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-};
-
 type AllocRow = {
   key: string;
   projectId: string;
   fpAllocation: string;
   percent: string;
-  contractId: string;
   effectiveFrom: string;
   allocationId: string | null;
 };
@@ -188,9 +180,6 @@ function MemberEditForm({
   const [form, setForm] = useState<FormState>(() => initialForm(member));
   const [allocs, setAllocs] = useState<AllocRow[]>([]);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
-  const [contractsByProject, setContractsByProject] = useState<
-    Record<string, ContractLite[]>
-  >({});
   const [loadingAlloc, setLoadingAlloc] = useState<boolean>(!!member);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -206,26 +195,22 @@ function MemberEditForm({
           if (!res.ok || cancelled) return;
           const data = (await res.json()) as {
             projects: { id: string; name: string }[];
-            contractsByProject: Record<string, ContractLite[]>;
             allocations: Array<{
               projectId: string;
               fpAllocation: number;
               percent: number | null;
-              contractId: string | null;
               effectiveFrom: string | null;
               allocationId: string | null;
             }>;
           };
           if (cancelled) return;
           setProjects(data.projects ?? []);
-          setContractsByProject(data.contractsByProject ?? {});
           setAllocs(
             (data.allocations ?? []).map((a) => ({
               key: a.projectId,
               projectId: a.projectId,
               fpAllocation: String(a.fpAllocation ?? 0),
               percent: a.percent != null ? String(a.percent) : "",
-              contractId: a.contractId ?? "",
               effectiveFrom: a.effectiveFrom ?? today(),
               allocationId: a.allocationId,
             })),
@@ -249,25 +234,6 @@ function MemberEditForm({
     };
   }, [member]);
 
-  const ensureContracts = useCallback(
-    async (projectId: string) => {
-      if (!projectId || contractsByProject[projectId]) return;
-      const res = await fetch(`/api/finance/contract?projectId=${projectId}`);
-      if (!res.ok) return;
-      const data = (await res.json()) as { contracts: ContractLite[] };
-      setContractsByProject((prev) => ({
-        ...prev,
-        [projectId]: (data.contracts ?? []).map((c) => ({
-          id: c.id,
-          label: c.label,
-          effectiveFrom: c.effectiveFrom,
-          effectiveTo: c.effectiveTo,
-        })),
-      }));
-    },
-    [contractsByProject],
-  );
-
   // ─── allocation row mutators ───
   let rowSeq = 0;
   const addRow = () =>
@@ -278,7 +244,6 @@ function MemberEditForm({
         projectId: "",
         fpAllocation: "0",
         percent: "",
-        contractId: "",
         effectiveFrom: today(),
         allocationId: null,
       },
@@ -359,7 +324,6 @@ function MemberEditForm({
               projectId: a.projectId,
               fpAllocation: parseInt(a.fpAllocation) || 0,
               percent: a.percent ? parseFloat(a.percent) : 0,
-              contractId: a.contractId || null,
               effectiveFrom: a.effectiveFrom || null,
               allocationId: a.allocationId,
             })),
@@ -389,7 +353,7 @@ function MemberEditForm({
           {editing ? "Editar membro" : "Novo membro"}
         </ResponsiveSheetTitle>
         <ResponsiveSheetDescription>
-          Identidade, acesso, especialidade e alocação em projetos/contratos.
+          Identidade, acesso, especialidade e alocação por projeto (PFV + %). Equipe de contrato é na Equipe do contrato.
         </ResponsiveSheetDescription>
       </ResponsiveSheetHeader>
 
@@ -666,7 +630,6 @@ function MemberEditForm({
           ) : (
             <div className="space-y-2">
               {allocs.map((row) => {
-                const contracts = contractsByProject[row.projectId] ?? [];
                 return (
                   <div
                     key={row.key}
@@ -679,8 +642,7 @@ function MemberEditForm({
                           value={row.projectId || null}
                           onValueChange={(v) => {
                             if (!v) return;
-                            updateRow(row.key, { projectId: v, contractId: "" });
-                            void ensureContracts(v);
+                            updateRow(row.key, { projectId: v });
                           }}
                         >
                           <SelectTrigger>
@@ -719,7 +681,7 @@ function MemberEditForm({
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
                         <FieldLabelSm>PFV / sprint</FieldLabelSm>
                         <Input
@@ -750,36 +712,6 @@ function MemberEditForm({
                             updateRow(row.key, { effectiveFrom: e.target.value })
                           }
                         />
-                      </div>
-                      <div>
-                        <FieldLabelSm>Contrato</FieldLabelSm>
-                        <Select
-                          value={row.contractId || NONE}
-                          onValueChange={(v) =>
-                            v &&
-                            updateRow(row.key, {
-                              contractId: v === NONE ? "" : v,
-                            })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue>
-                              {(v: string | null) =>
-                                !v || v === NONE
-                                  ? "—"
-                                  : contracts.find((c) => c.id === v)?.label ?? "—"
-                              }
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>— Sem contrato</SelectItem>
-                            {contracts.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
-                                {c.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
                       </div>
                     </div>
                   </div>

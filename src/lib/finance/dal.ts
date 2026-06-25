@@ -446,6 +446,15 @@ export async function createAllocation(
 ): Promise<{ allocation: Allocation; warning: string | null }> {
   const warning = await checkAllocation(input);
   const { sb, fin } = await finance();
+  // Invariante: alocação STANDING amarrada a um contrato PRECISA de vaga (vaga =
+  // fonte única do roster). Sem isso, caminhos legados (ex.: Member Sheet) criam
+  // "órfãos" contract-bound que não aparecem no roster mas contam no custo —
+  // e duplicam quando a pessoa também ocupa a vaga. Contrato sem vaga = bloqueio.
+  if ((input.kind ?? "standing") === "standing" && input.contractId && !input.vagaId) {
+    throw new Error(
+      "Alocação a um contrato precisa de vaga — gerencie a equipe na 'Equipe do contrato'. (Alocação só por projeto: deixe o contrato em branco.)",
+    );
+  }
   // Invariante: 1 ocupante ATIVO por vaga (não-void, sem fim). Atribuir numa
   // vaga já ocupada é erro de uso — a ação certa é "Trocar ocupante" (fecha +
   // cria). Sem isso volta a duplicação (a do Guilherme).
