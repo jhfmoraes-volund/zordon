@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireMinAccessLevelApi } from "@/lib/dal";
-import { updateVaga, deleteVaga } from "@/lib/finance/dal";
+import { updateVaga, deleteVaga, deleteVagaHard } from "@/lib/finance/dal";
 
 /** PATCH /api/finance/contract/[id]/vagas/[vagaId] — edita vaga (label/%/fechar). Admin-only. */
 export async function PATCH(
@@ -29,16 +29,22 @@ export async function PATCH(
   }
 }
 
-/** DELETE /api/finance/contract/[id]/vagas/[vagaId] — remove vaga (ocupações sobrevivem). Admin-only. */
+/**
+ * DELETE /api/finance/contract/[id]/vagas/[vagaId] — remove a vaga.
+ *  · default (slot vazio): soft — só apaga a vaga, ocupações sobreviveriam.
+ *  · ?hard=1 (erro/duplicata): apaga a vaga E suas ocupações (sem log). Admin-only.
+ */
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string; vagaId: string }> },
 ) {
   const denied = await requireMinAccessLevelApi("admin");
   if (denied) return denied;
   const { vagaId } = await params;
+  const hard = new URL(req.url).searchParams.get("hard") === "1";
   try {
-    await deleteVaga(vagaId);
+    if (hard) await deleteVagaHard(vagaId);
+    else await deleteVaga(vagaId);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });

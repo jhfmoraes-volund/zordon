@@ -385,27 +385,9 @@ export type ContractVagaInput = {
   effectiveTo?: string | null;
 };
 
-/** Vaga + estado de preenchimento. Ocupante vem das allocations (match por vaga_id). */
-export type VagaWithFill = ContractVaga & { filled: boolean };
-
-/** Resumo previsto × preenchido (inclui o PM derivado de pmId). */
-export type VagaSummary = { total: number; filled: number; empty: number };
-
-/** PM derivado (não é contract_vaga): ocupante = Project.pmId; hasCost = tem alocação. */
-export type PmVaga = {
-  memberId: string | null;
-  memberName: string | null;
-  /** Tem labor_allocation de custo neste contrato? (false = "PM sem custo alocado") */
-  hasCost: boolean;
-  /** allocationId do PM neste contrato, se houver (pra mostrar % / editar). */
-  allocationId: string | null;
-};
-
-export type VagasResponse = {
-  vagas: VagaWithFill[];
-  pm: PmVaga;
-  summary: VagaSummary;
-};
+/** Resposta do GET de vagas. UMA fonte: PM é vaga (position='pm'), sem derivado.
+ *  Ocupante e previsto×preenchido são computados na UI a partir das allocations. */
+export type VagasResponse = { vagas: ContractVaga[] };
 
 // ─── Detalhe por projeto (drill de análise) ─────────────────────────────────
 

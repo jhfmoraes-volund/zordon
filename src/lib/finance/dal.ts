@@ -20,10 +20,6 @@ import type {
   ContractInput,
   ContractVaga,
   ContractVagaInput,
-  VagaWithFill,
-  VagaSummary,
-  PmVaga,
-  VagasResponse,
   ContractMonthOverride,
   ContractMonthOverrideInput,
   ContractMonthRow,
@@ -450,6 +446,21 @@ export async function createAllocation(
 ): Promise<{ allocation: Allocation; warning: string | null }> {
   const warning = await checkAllocation(input);
   const { sb, fin } = await finance();
+  // Invariante: 1 ocupante ATIVO por vaga (não-void, sem fim). Atribuir numa
+  // vaga já ocupada é erro de uso — a ação certa é "Trocar ocupante" (fecha +
+  // cria). Sem isso volta a duplicação (a do Guilherme).
+  if ((input.kind ?? "standing") === "standing" && input.vagaId) {
+    const occ = await fin
+      .from("labor_allocation")
+      .select("id")
+      .eq("vaga_id", input.vagaId)
+      .is("voided_at", null)
+      .is("effective_to", null)
+      .limit(1);
+    if (occ.error) throw new Error(occ.error.message);
+    if ((occ.data ?? []).length > 0)
+      throw new Error("Esta vaga já tem ocupante ativo. Use Trocar ocupante.");
+  }
   const res = await fin
     .from("labor_allocation")
     .insert(allocRow(input, await currentMemberId()))
@@ -621,74 +632,20 @@ export async function deleteAllocation(id: string): Promise<void> {
 // ─── Vagas (staffing por função) ────────────────────────────────────────────
 
 /**
- * Vagas do contrato + preenchimento + a vaga PM derivada (Project.pmId).
- * O ocupante de cada vaga vem das allocations (match por vaga_id na UI). O PM
- * NÃO é contract_vaga — deriva de pmId; hasCost = tem labor_allocation no contrato.
- * Summary inclui o PM (sempre demandado) pra o previsto × preenchido fechar.
+ * Vagas do contrato. UMA fonte: toda função (incl. PM, position='pm') é uma
+ * contract_vaga. Sem PM derivado, sem órfão. O ocupante de cada vaga vem das
+ * allocations (match por vaga_id na UI); previsto×preenchido é computado lá.
  */
-export async function listVagas(contractId: string): Promise<VagasResponse> {
-  const { sb, fin } = await finance();
-
-  const cRes = await fin
-    .from("contract")
-    .select("project_id")
-    .eq("id", contractId)
-    .maybeSingle();
-  if (cRes.error) throw new Error(cRes.error.message);
-  const projectId = (cRes.data?.project_id as string | undefined) ?? null;
-
-  const [vRes, fillRes] = await Promise.all([
-    fin
-      .from("contract_vaga")
-      .select("*")
-      .eq("contract_id", contractId)
-      .order("position", { ascending: true })
-      .order("seq", { ascending: true }),
-    fin.from("v_contract_vaga_fill").select("vaga_id, filled").eq("contract_id", contractId),
-  ]);
-  if (vRes.error) throw new Error(vRes.error.message);
-  const fillMap = new Map<string, boolean>();
-  for (const f of (fillRes.data ?? []) as { vaga_id: string; filled: boolean }[]) {
-    fillMap.set(f.vaga_id, f.filled);
-  }
-  const vagas: VagaWithFill[] = ((vRes.data ?? []) as ContractVaga[]).map((v) => ({
-    ...v,
-    filled: fillMap.get(v.id) ?? false,
-  }));
-
-  // PM derivado de Project.pmId (não é contract_vaga).
-  let pm: PmVaga = { memberId: null, memberName: null, hasCost: false, allocationId: null };
-  if (projectId) {
-    const pRes = await sb.from("Project").select("pmId").eq("id", projectId).maybeSingle();
-    const pmId = (pRes.data?.pmId as string | null | undefined) ?? null;
-    if (pmId) {
-      const [mRes, aRes] = await Promise.all([
-        sb.from("Member").select("name").eq("id", pmId).maybeSingle(),
-        fin
-          .from("labor_allocation")
-          .select("id")
-          .eq("contract_id", contractId)
-          .eq("member_id", pmId)
-          .is("voided_at", null)
-          .is("effective_to", null)
-          .limit(1),
-      ]);
-      const alloc = ((aRes.data ?? [])[0] as { id: string } | undefined) ?? null;
-      pm = {
-        memberId: pmId,
-        memberName: (mRes.data?.name as string) ?? null,
-        hasCost: !!alloc,
-        allocationId: alloc?.id ?? null,
-      };
-    }
-  }
-
-  const builderFilled = vagas.filter((v) => v.filled).length;
-  const total = vagas.length + 1; // +1 = PM (sempre demandado)
-  const filled = builderFilled + (pm.memberId ? 1 : 0);
-  const summary: VagaSummary = { total, filled, empty: total - filled };
-
-  return { vagas, pm, summary };
+export async function listVagas(contractId: string): Promise<ContractVaga[]> {
+  const { fin } = await finance();
+  const res = await fin
+    .from("contract_vaga")
+    .select("*")
+    .eq("contract_id", contractId)
+    .order("position", { ascending: true })
+    .order("seq", { ascending: true });
+  if (res.error) throw new Error(res.error.message);
+  return (res.data ?? []) as ContractVaga[];
 }
 
 export async function createVaga(
@@ -768,11 +725,25 @@ export async function updateVaga(
   return res.data as ContractVaga;
 }
 
-/** Remove a vaga. As ocupações sobrevivem (vaga_id vira null) — o custo é sagrado. */
+/** Remove a vaga VAZIA (sem ocupação). FK on delete set null deixa qualquer
+ *  ocupação órfã — por isso o uso é só pra slot vazio (a UI restringe). */
 export async function deleteVaga(id: string): Promise<void> {
   const { fin } = await finance();
   const res = await fin.from("contract_vaga").delete().eq("id", id);
   if (res.error) throw new Error(res.error.message);
+}
+
+/**
+ * DELETA de verdade: apaga a vaga E suas ocupações (alocações com este vaga_id).
+ * Pra ERRO/DUPLICATA — não é movimentação real, então NÃO vira evento/log. A UI
+ * exige digitar "DELETAR". Apaga ocupação ANTES (senão o FK set null a deixa órfã).
+ */
+export async function deleteVagaHard(id: string): Promise<void> {
+  const { fin } = await finance();
+  const a = await fin.from("labor_allocation").delete().eq("vaga_id", id);
+  if (a.error) throw new Error(a.error.message);
+  const v = await fin.from("contract_vaga").delete().eq("id", id);
+  if (v.error) throw new Error(v.error.message);
 }
 
 /**
