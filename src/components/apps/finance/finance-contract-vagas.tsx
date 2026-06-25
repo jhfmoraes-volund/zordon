@@ -100,6 +100,8 @@ export function ContractVagasEditor({
   members,
   squadMemberIds,
   onChanged,
+  readOnly = false,
+  title,
 }: {
   projectId: string;
   contractId: string;
@@ -111,6 +113,10 @@ export function ContractVagasEditor({
   members: MemberRef[];
   squadMemberIds: string[];
   onChanged: () => void;
+  /** Só leitura (ex.: no hub do projeto) — esconde toda ação; edição vive no sheet. */
+  readOnly?: boolean;
+  /** Rótulo do cabeçalho (default "Equipe do contrato"). No hub passa o nome do contrato. */
+  title?: string;
 }) {
   const [vagas, setVagas] = useState<ContractVaga[] | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
@@ -215,11 +221,11 @@ export function ContractVagasEditor({
     return <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}</div>;
   }
 
-  // spot (pontual) — não é vaga; ajuda ad-hoc em horas (só vigentes).
-  const spots = allocations.filter(
-    (a) => a.contract_id === contractId && a.kind === "spot" && !a.voided_at &&
-      (!a.effective_to || a.effective_to >= today),
-  );
+  // spot (pontual) — não é vaga; ajuda ad-hoc em horas. Mostra TODAS as do
+  // contrato (incl. passadas) — cada uma é custo real registrado num mês.
+  const spots = allocations
+    .filter((a) => a.contract_id === contractId && a.kind === "spot" && !a.voided_at)
+    .sort((a, b) => a.effective_from.localeCompare(b.effective_from));
   // custo do time = ocupantes atuais (todas as vagas, incl. PM).
   const teamCost = [...occByVaga.values()].reduce((s, a) => s + (a.laborCents ?? 0), 0);
 
@@ -233,7 +239,7 @@ export function ContractVagasEditor({
       {/* cabeçalho: previsto × preenchido */}
       <div className="mb-2 flex items-center justify-between">
         <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          <Users className="size-3.5" /> Equipe do contrato
+          <Users className="size-3.5" /> {title ?? "Equipe do contrato"}
         </p>
         <span className="text-xs text-muted-foreground">
           <b className="text-foreground">{total} vaga{total !== 1 ? "s" : ""}</b> · {filled} ocupada{filled !== 1 ? "s" : ""}
@@ -243,7 +249,7 @@ export function ContractVagasEditor({
 
       {vagas.length === 0 ? (
         <div className="surface rounded-md px-3 py-6 text-center text-sm text-muted-foreground">
-          Nenhuma vaga ainda — adicione as funções que o contrato demanda (incl. PM).
+          {readOnly ? "Nenhuma vaga neste contrato." : "Nenhuma vaga ainda — adicione as funções que o contrato demanda (incl. PM)."}
         </div>
       ) : (
         <div className="surface divide-y divide-border/60 overflow-hidden rounded-md">
@@ -257,6 +263,7 @@ export function ContractVagasEditor({
                 occ={occ}
                 today={today}
                 contractTo={contractTo}
+                readOnly={readOnly}
                 onAssign={() =>
                   setAssign({ vagaId: v.id, role, defaultFrom: clampDate(v.effective_from, contractFrom, contractTo) })
                 }
@@ -272,14 +279,17 @@ export function ContractVagasEditor({
       )}
 
       {/* participação pontual (spot) — fora das vagas */}
+      {(spots.length > 0 || !readOnly) && (
       <div className="mt-3">
         <div className="mb-1.5 flex items-center justify-between">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Participação pontual
           </p>
-          <Button size="sm" variant="ghost" onClick={() => setSpotOpen(true)}>
-            <Plus className="size-3.5" /> Pontual
-          </Button>
+          {!readOnly && (
+            <Button size="sm" variant="ghost" onClick={() => setSpotOpen(true)}>
+              <Plus className="size-3.5" /> Pontual
+            </Button>
+          )}
         </div>
         {spots.length > 0 ? (
           <div className="surface divide-y divide-border/60 overflow-hidden rounded-md">
@@ -299,15 +309,18 @@ export function ContractVagasEditor({
           <p className="text-xs italic text-muted-foreground/50">Sem ajuda pontual neste contrato.</p>
         )}
       </div>
+      )}
 
       {/* rodapé: custo + nova vaga */}
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
           Custo do time: <b className="font-mono text-foreground">{brlFromCents(teamCost)}/mês</b>
         </span>
-        <Button size="sm" variant="outline" onClick={() => setNewVaga(true)}>
-          <Plus className="size-3.5" /> Vaga
-        </Button>
+        {!readOnly && (
+          <Button size="sm" variant="outline" onClick={() => setNewVaga(true)}>
+            <Plus className="size-3.5" /> Vaga
+          </Button>
+        )}
       </div>
 
       {/* dialogs */}
@@ -518,6 +531,7 @@ function VagaRow({
   occ,
   today,
   contractTo,
+  readOnly,
   onAssign,
   onReplace,
   onEncerrar,
@@ -529,6 +543,7 @@ function VagaRow({
   occ: AllocationItem | null;
   today: string;
   contractTo: string | null;
+  readOnly?: boolean;
   onAssign: () => void;
   onReplace?: () => void;
   onEncerrar?: () => void;
@@ -542,6 +557,7 @@ function VagaRow({
     <RowShell
       eyebrow={role}
       topRight={
+        readOnly ? undefined : (
         <>
           {!occ && <Button size="sm" variant="outline" onClick={onAssign}>Atribuir pessoa</Button>}
           <DotsMenu>
@@ -554,6 +570,7 @@ function VagaRow({
             <DropdownMenuItem variant="destructive" onClick={onDeletar}>Deletar (apagar erro)</DropdownMenuItem>
           </DotsMenu>
         </>
+        )
       }
     >
       {occ ? (

@@ -59,6 +59,7 @@ import { FinanceAssumptionsForm } from "./finance-assumptions-form";
 import { FinanceFpBilling } from "./finance-fp-billing";
 import { FinanceContracts } from "./finance-contracts";
 import { FinanceContractSheet } from "./finance-contract-sheet";
+import { ContractVagasEditor } from "./finance-contract-vagas";
 import { FinanceAllocationHistorySheet } from "./finance-allocation-history-sheet";
 import { FinanceNfWidget } from "./finance-nf-widget";
 import { FinanceInvoiceSheet } from "./finance-invoice-sheet";
@@ -448,22 +449,16 @@ export function FinanceProjectView({
     <FinanceFpBilling projectId={projectId} contracts={detail.contracts} onChanged={reloadAndBubble} />
   );
 
-  // Equipe — READ-ONLY no hub (escrita vive no sheet do contrato). Contrato
-  // selecionado → "Editar no contrato"; Global → edite via um contrato.
-  // Mostra só o ROSTER ATUAL (ativo): não-void e ainda vigente. Períodos
-  // encerrados são história (no sheet "Histórico de alocação"), não duplicata —
-  // isso bate exatamente com o que a Equipe do contrato (vaga-first) renderiza.
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const isActive = (a: (typeof detail.allocations)[number]) =>
-    !a.voided_at && (!a.effective_to || a.effective_to >= todayIso);
-  const teamRows = (
-    scope.id ? detail.allocations.filter((a) => a.contract_id === scope.id) : detail.allocations
-  ).filter(isActive);
+  // Equipe — READ-ONLY no hub, MESMO componente do sheet (ContractVagasEditor).
+  // Uma fonte de verdade de renderização → zero discrepância entre hub e sheet
+  // (vaga-first, status/datas limitados ao contrato, spots). Escrita vive no
+  // sheet ("Editar no contrato →"). Global = um bloco por contrato.
+  const teamContracts = scope.id ? detail.contracts.filter((c) => c.id === scope.id) : detail.contracts;
   const teamBlock = (
     <div>
       <div className="mb-2 flex items-center justify-between px-1">
         <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          <Users className="size-3.5" /> Equipe {selectedContract ? "· nesta vigência" : "· todas"}
+          <Users className="size-3.5" /> Equipe {selectedContract ? "· nesta vigência" : "· por contrato"}
         </p>
         {selectedContract ? (
           <Button size="sm" variant="outline" onClick={() => setContractSheet({ contract: selectedContract })}>
@@ -473,34 +468,26 @@ export function FinanceProjectView({
           <span className="text-[11px] text-muted-foreground">edite num contrato</span>
         )}
       </div>
-      {teamRows.length === 0 ? (
+      {teamContracts.length === 0 ? (
         <div className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">
-          {selectedContract
-            ? "Ninguém atribuído a este contrato — edite no contrato pra alocar."
-            : "Ninguém alocado — a margem equipe ainda não desconta mão-de-obra."}
+          Nenhum contrato — crie um contrato pra montar a equipe.
         </div>
       ) : (
-        <div className="surface divide-y divide-border/60 overflow-hidden">
-          {teamRows.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 px-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-medium">
-                  <span className="truncate">{a.memberName}</span>
-                  {a.kind === "spot" && (
-                    <span className="shrink-0 rounded-sm bg-muted px-1 py-px text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
-                      pontual
-                    </span>
-                  )}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {a.kind === "spot" ? `${a.days}h` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
-                  {a.effective_to ? fmtDate(a.effective_to) : "atual"}
-                </p>
-              </div>
-              <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                {brlFromCents(a.laborCents ?? 0)}
-              </span>
-            </div>
+        <div className="space-y-4">
+          {teamContracts.map((c) => (
+            <ContractVagasEditor
+              key={c.id}
+              readOnly
+              title={c.label}
+              projectId={projectId}
+              contractId={c.id}
+              contractFrom={c.effectiveFrom.slice(0, 10)}
+              contractTo={c.effectiveTo ? c.effectiveTo.slice(0, 10) : null}
+              allocations={detail.allocations}
+              members={members}
+              squadMemberIds={detail.squadMemberIds}
+              onChanged={() => {}}
+            />
           ))}
         </div>
       )}
