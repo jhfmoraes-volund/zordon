@@ -497,6 +497,7 @@ export async function updateAllocation(
     closedBy?: string | null;
     days?: number | null;
     effectiveFrom?: string;
+    vagaId?: string | null;
   },
 ): Promise<Allocation> {
   const { fin } = await finance();
@@ -504,6 +505,10 @@ export async function updateAllocation(
   if (input.note !== undefined) patch.note = input.note;
   if (input.effectiveTo !== undefined) patch.effective_to = input.effectiveTo;
   if (input.closedBy !== undefined) patch.closed_by = input.closedBy;
+  // vaga_id é metadata de agrupamento (qual função a ocupação preenche), não
+  // valor/período — seguro mesmo em standing (D2 só protege %/datas). Permite
+  // "formalizar" um órfão (alocação ativa sem vaga) ligando-o a uma vaga nova.
+  if (input.vagaId !== undefined) patch.vaga_id = input.vagaId;
   // Correção direta de valor/início — só pra spot (standing é imutável).
   if (input.days !== undefined || input.effectiveFrom !== undefined) {
     const cur = await fin.from("labor_allocation").select("kind").eq("id", id).single();
@@ -691,6 +696,25 @@ export async function createVaga(
   input: ContractVagaInput,
 ): Promise<ContractVaga> {
   const { fin } = await finance();
+  // A vaga não pode perpassar a vigência do contrato (o contrato é o dono das
+  // datas — D: Project/Contract/Proposal SSOT). Clampa/rejeita aqui também, não
+  // só na UI, pra a invariante valer mesmo via API direta.
+  const cRes = await fin
+    .from("contract")
+    .select("effective_from, effective_to")
+    .eq("id", contractId)
+    .maybeSingle();
+  if (cRes.error) throw new Error(cRes.error.message);
+  const cFrom = (cRes.data?.effective_from as string | null) ?? null;
+  const cTo = (cRes.data?.effective_to as string | null) ?? null;
+  if (cFrom && input.effectiveFrom < cFrom)
+    throw new Error(`A vaga não pode começar antes do contrato (${cFrom}).`);
+  if (cTo && input.effectiveFrom > cTo)
+    throw new Error(`A vaga não pode começar depois do fim do contrato (${cTo}).`);
+  if (input.effectiveTo && cTo && input.effectiveTo > cTo)
+    throw new Error(`A vaga não pode terminar depois do contrato (${cTo}).`);
+  if (input.effectiveTo && input.effectiveTo < input.effectiveFrom)
+    throw new Error("O fim da vaga não pode ser antes do início.");
   // seq = próximo dentro de (contract, position) — "2 Builders" = seq 1,2.
   const sRes = await fin
     .from("contract_vaga")
@@ -721,13 +745,24 @@ export async function createVaga(
 
 export async function updateVaga(
   id: string,
-  input: { label?: string | null; expectedPercent?: number | null; effectiveTo?: string | null },
+  input: {
+    label?: string | null;
+    expectedPercent?: number | null;
+    effectiveFrom?: string;
+    effectiveTo?: string | null;
+  },
 ): Promise<ContractVaga> {
   const { fin } = await finance();
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.label !== undefined) patch.label = input.label;
   if (input.expectedPercent !== undefined) patch.expected_percent = input.expectedPercent;
+  // Datas de entrada/saída da vaga são editáveis (podem diferir do contrato).
+  if (input.effectiveFrom !== undefined) patch.effective_from = input.effectiveFrom;
   if (input.effectiveTo !== undefined) patch.effective_to = input.effectiveTo;
+  const from = (input.effectiveFrom ?? null) as string | null;
+  const to = (input.effectiveTo ?? null) as string | null;
+  if (from && to && to < from)
+    throw new Error("O fim da vaga não pode ser antes do início.");
   const res = await fin.from("contract_vaga").update(patch).eq("id", id).select("*").single();
   if (res.error) throw new Error(res.error.message);
   return res.data as ContractVaga;

@@ -450,9 +450,15 @@ export function FinanceProjectView({
 
   // Equipe — READ-ONLY no hub (escrita vive no sheet do contrato). Contrato
   // selecionado → "Editar no contrato"; Global → edite via um contrato.
-  const teamRows = scope.id
-    ? detail.allocations.filter((a) => a.contract_id === scope.id)
-    : detail.allocations;
+  // Mostra só o ROSTER ATUAL (ativo): não-void e ainda vigente. Períodos
+  // encerrados são história (no sheet "Histórico de alocação"), não duplicata —
+  // isso bate exatamente com o que a Equipe do contrato (vaga-first) renderiza.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const isActive = (a: (typeof detail.allocations)[number]) =>
+    !a.voided_at && (!a.effective_to || a.effective_to >= todayIso);
+  const teamRows = (
+    scope.id ? detail.allocations.filter((a) => a.contract_id === scope.id) : detail.allocations
+  ).filter(isActive);
   const teamBlock = (
     <div>
       <div className="mb-2 flex items-center justify-between px-1">

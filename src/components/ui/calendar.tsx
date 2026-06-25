@@ -5,6 +5,7 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { OverlayDepthContext, overlayZIndex } from "@/components/ui/overlay-depth";
 
 /**
  * CalendarField — motor compartilhado de seleção de data via popover.
@@ -139,6 +140,9 @@ export function CalendarField({
 }: CalendarFieldProps) {
   const [open, setOpen] = React.useState(false);
   const isWeek = mode === "week";
+  // Stacked-overlay aware: a picker opened inside a dialog/sheet sits above it.
+  const depth = React.useContext(OverlayDepthContext);
+  const z = overlayZIndex(depth);
 
   // Chave de seleção: dia exato (day) ou segunda da semana (week).
   const selectedKey = value
@@ -218,7 +222,8 @@ export function CalendarField({
 
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Positioner
-          className="isolate z-50 outline-none"
+          className="isolate outline-none"
+          style={{ zIndex: z }}
           side="bottom"
           align="start"
           sideOffset={6}

@@ -11,7 +11,12 @@ export async function PATCH(
   const denied = await requireMinAccessLevelApi("admin");
   if (denied) return denied;
   const { vagaId } = await params;
-  let body: { label?: string | null; expectedPercent?: number | null; effectiveTo?: string | null };
+  let body: {
+    label?: string | null;
+    expectedPercent?: number | null;
+    effectiveFrom?: string;
+    effectiveTo?: string | null;
+  };
   try {
     body = await req.json();
   } catch {

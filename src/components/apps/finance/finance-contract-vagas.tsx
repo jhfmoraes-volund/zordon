@@ -1,10 +1,19 @@
 "use client";
 
 /**
- * Equipe do contrato — VAGA-FIRST (F2.4). O contrato demanda funções (vagas);
- * a pessoa OCUPA a vaga. Mostra previsto × preenchido (buraco visível), a
- * sucessão de ocupantes e o custo por ocupante. PM é vaga derivada de pmId
- * (com custo, como builder). Substitui o ContractTeamEditor plano.
+ * Equipe do contrato — VAGA-FIRST. O contrato demanda funções (vagas); a pessoa
+ * OCUPA a vaga. Mostra previsto × preenchido (buraco visível), a sucessão de
+ * ocupantes e o custo por ocupante. PM é vaga derivada de pmId (com custo, como
+ * builder). Substitui o ContractTeamEditor plano.
+ *
+ * Regras-chave:
+ *  - NUNCA descarta ocupante ativo. Alocação ativa standing SEM vaga_id (legado
+ *    ou criada por fora do fluxo de vaga) aparece como "órfã" — com ação de
+ *    formalizar (criar vaga + linkar). Evita a inconsistência onde a pessoa
+ *    sumia daqui mas continuava na lista plana do hub.
+ *  - Datas de vaga/ocupante HERDAM a vigência do contrato por padrão, mas são
+ *    editáveis dentro de [início, fim] do contrato (entrada/saída podem diferir).
+ *  - Nome da função fica ACIMA do nome da pessoa (eyebrow), aproveitando a largura.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -28,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Field, FormBody } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,6 +68,13 @@ function todayISO(): string {
 function firstOfMonthISO(): string {
   return new Date().toISOString().slice(0, 8) + "01";
 }
+/** Limita `iso` a [min, max] (max opcional). Vazio passa direto. */
+function clampDate(iso: string, min: string, max: string | null): string {
+  if (!iso) return iso;
+  if (min && iso < min) return min;
+  if (max && iso > max) return max;
+  return iso;
+}
 
 type TempStatus = "agendado" | "alocado" | "encerrado";
 function temporalStatus(a: AllocationItem, today: string): TempStatus {
@@ -69,6 +86,8 @@ function temporalStatus(a: AllocationItem, today: string): TempStatus {
 export function ContractVagasEditor({
   projectId,
   contractId,
+  contractFrom,
+  contractTo,
   allocations,
   members,
   squadMemberIds,
@@ -76,6 +95,10 @@ export function ContractVagasEditor({
 }: {
   projectId: string;
   contractId: string;
+  /** Início da vigência do contrato (ISO) — vagas herdam e ficam limitadas a ele. */
+  contractFrom: string;
+  /** Fim da vigência (ISO) ou null (contrato em aberto). */
+  contractTo: string | null;
   allocations: AllocationItem[];
   members: MemberRef[];
   squadMemberIds: string[];
@@ -83,12 +106,19 @@ export function ContractVagasEditor({
 }) {
   const [data, setData] = useState<VagasResponse | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  // form de atribuir (vaga vazia OU custo do PM): vagaId null = PM
-  const [assign, setAssign] = useState<{ vagaId: string | null; memberId: string; role: string } | null>(null);
+  // form de atribuir (vaga vazia OU custo do PM): vaga = null = PM.
+  const [assign, setAssign] = useState<{
+    vagaId: string | null;
+    memberId: string;
+    role: string;
+    defaultFrom: string;
+  } | null>(null);
   // form de trocar ocupante
   const [replace, setReplace] = useState<{ vagaId: string; occ: AllocationItem; role: string } | null>(null);
   // form de nova vaga
-  const [newVaga, setNewVaga] = useState<{ position: string; label: string } | null>(null);
+  const [newVaga, setNewVaga] = useState(false);
+  // form de editar vaga
+  const [editVaga, setEditVaga] = useState<VagaWithFill | null>(null);
   // form de participação pontual (spot — não é vaga)
   const [spotOpen, setSpotOpen] = useState(false);
 
@@ -98,7 +128,11 @@ export function ContractVagasEditor({
       setData((await res.json()) as VagasResponse);
     } catch (e) {
       showErrorToast(e, { label: "Falha ao carregar vagas" });
-      setData({ vagas: [], pm: { memberId: null, memberName: null, hasCost: false, allocationId: null }, summary: { total: 0, filled: 0, empty: 0 } });
+      setData({
+        vagas: [],
+        pm: { memberId: null, memberName: null, hasCost: false, allocationId: null },
+        summary: { total: 0, filled: 0, empty: 0 },
+      });
     }
   }, [contractId]);
 
@@ -113,7 +147,7 @@ export function ContractVagasEditor({
     };
   }, [load]);
 
-  // ocupante atual de cada vaga = alocação ativa (não-void) com aquele vaga_id
+  // ocupante atual de cada vaga = alocação ativa (não-void, vigente) com aquele vaga_id
   const today = todayISO();
   const occByVaga = useMemo(() => {
     const m = new Map<string, AllocationItem>();
@@ -125,6 +159,22 @@ export function ContractVagasEditor({
     }
     return m;
   }, [allocations, contractId, today]);
+
+  const pmId = data?.pm.memberId ?? null;
+
+  // Órfãs: ocupantes ATIVOS standing sem vaga_id (e que não são o PM nem spot).
+  // Sem isso a pessoa some daqui mas continua aparecendo no hub → inconsistência.
+  const orphans = useMemo(() => {
+    return allocations.filter(
+      (a) =>
+        a.contract_id === contractId &&
+        a.kind === "standing" &&
+        !a.voided_at &&
+        a.vaga_id == null &&
+        a.member_id !== pmId &&
+        (!a.effective_to || a.effective_to >= today),
+    );
+  }, [allocations, contractId, pmId, today]);
 
   const memberOptions = useMemo(() => {
     const squad = new Set(squadMemberIds);
@@ -174,20 +224,54 @@ export function ContractVagasEditor({
       },
     });
   }
+  // Formaliza uma órfã: cria a vaga (posição do membro) e linka a alocação a ela.
+  async function formalizar(a: AllocationItem) {
+    try {
+      const memberPos = members.find((m) => m.id === a.member_id)?.position ?? "";
+      const position = (POSITIONS as readonly string[]).includes(memberPos) ? memberPos : "product-builder";
+      const res = await fetchOrThrow(`/api/finance/contract/${contractId}/vagas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          position,
+          effectiveFrom: clampDate(a.effective_from, contractFrom, contractTo),
+          effectiveTo: contractTo,
+        }),
+      });
+      const { vaga } = (await res.json()) as { vaga: { id: string } };
+      await fetchOrThrow(`/api/finance/allocations/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vagaId: vaga.id }),
+      });
+      await refresh();
+    } catch (e) {
+      showErrorToast(e, { label: "Falha ao criar vaga" });
+    }
+  }
 
   if (!data) {
     return <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}</div>;
   }
 
-  const { vagas, pm, summary } = data;
-  // spot (pontual) — não é vaga; ajuda ad-hoc em horas.
+  const { vagas, pm } = data;
+  // spot (pontual) — não é vaga; ajuda ad-hoc em horas (só vigentes).
   const spots = allocations.filter(
     (a) => a.contract_id === contractId && a.kind === "spot" && !a.voided_at &&
       (!a.effective_to || a.effective_to >= today),
   );
-  // custo do time = soma do custo dos ocupantes atuais (laborCents da alocação ativa)
-  const teamCost = [...occByVaga.values()].reduce((s, a) => s + (a.laborCents ?? 0), 0)
-    + (pm.allocationId ? (allocations.find((a) => a.id === pm.allocationId)?.laborCents ?? 0) : 0);
+  // custo do time = ocupantes atuais (vagas + órfãs) + PM.
+  const teamCost =
+    [...occByVaga.values(), ...orphans].reduce((s, a) => s + (a.laborCents ?? 0), 0) +
+    (pm.allocationId ? (allocations.find((a) => a.id === pm.allocationId)?.laborCents ?? 0) : 0);
+
+  // previsto × preenchido (recomputado client-side p/ bater com o que renderiza,
+  // incluindo PM e órfãs). PM é sempre uma função demandada.
+  const filledVagas = vagas.filter((v) => occByVaga.has(v.id)).length;
+  const emptyVagas = vagas.length - filledVagas;
+  const filled = (pm.memberId ? 1 : 0) + filledVagas + orphans.length;
+  const empty = (pm.memberId ? 0 : 1) + emptyVagas;
+  const total = filled + empty;
 
   return (
     <div>
@@ -197,8 +281,8 @@ export function ContractVagasEditor({
           <Users className="size-3.5" /> Equipe do contrato
         </p>
         <span className="text-xs text-muted-foreground">
-          <b className="text-foreground">{summary.total} vagas</b> · {summary.filled} ocupadas
-          {summary.empty > 0 && <> · <b className="text-amber-500">{summary.empty} vazia{summary.empty > 1 ? "s" : ""}</b></>}
+          <b className="text-foreground">{total} vaga{total > 1 ? "s" : ""}</b> · {filled} ocupada{filled > 1 ? "s" : ""}
+          {empty > 0 && <> · <b className="text-amber-500">{empty} vazia{empty > 1 ? "s" : ""}</b></>}
         </span>
       </div>
 
@@ -208,26 +292,44 @@ export function ContractVagasEditor({
           pm={pm}
           alloc={pm.allocationId ? allocations.find((a) => a.id === pm.allocationId) ?? null : null}
           today={today}
-          onAllocCost={() => pm.memberId && setAssign({ vagaId: null, memberId: pm.memberId, role: "PM" })}
+          onAllocCost={() =>
+            pm.memberId && setAssign({ vagaId: null, memberId: pm.memberId, role: "PM", defaultFrom: contractFrom })
+          }
+          onEncerrar={(a) => encerrar(a, pm.memberName ?? "PM")}
         />
 
         {/* Builders / demais vagas */}
         {vagas.map((v) => {
           const occ = occByVaga.get(v.id) ?? null;
-          const role = `${positionLabel(v.position)}${v.label ? ` · ${v.label}` : ` · ${v.seq}`}`;
+          const role = roleLabel(v);
           return (
             <VagaRow
               key={v.id}
               role={role}
               occ={occ}
               today={today}
-              onAssign={() => setAssign({ vagaId: v.id, memberId: "", role })}
+              onAssign={() =>
+                setAssign({ vagaId: v.id, memberId: "", role, defaultFrom: clampDate(v.effective_from, contractFrom, contractTo) })
+              }
               onReplace={occ ? () => setReplace({ vagaId: v.id, occ, role }) : undefined}
               onEncerrar={occ ? () => encerrar(occ, occ.memberName) : undefined}
+              onEditVaga={() => setEditVaga(v)}
               onRemoverVaga={() => removerVaga(v)}
             />
           );
         })}
+
+        {/* Órfãs: ocupantes ativos sem vaga formalizada */}
+        {orphans.map((a) => (
+          <OrphanRow
+            key={a.id}
+            occ={a}
+            role={positionLabel(members.find((m) => m.id === a.member_id)?.position ?? "")}
+            today={today}
+            onFormalizar={() => formalizar(a)}
+            onEncerrar={() => encerrar(a, a.memberName)}
+          />
+        ))}
       </div>
 
       {/* participação pontual (spot) — fora das vagas */}
@@ -264,7 +366,7 @@ export function ContractVagasEditor({
         <span className="text-xs text-muted-foreground">
           Custo do time: <b className="font-mono text-foreground">{brlFromCents(teamCost)}/mês</b>
         </span>
-        <Button size="sm" variant="outline" onClick={() => setNewVaga({ position: "product-builder", label: "" })}>
+        <Button size="sm" variant="outline" onClick={() => setNewVaga(true)}>
           <Plus className="size-3.5" /> Vaga
         </Button>
       </div>
@@ -276,6 +378,9 @@ export function ContractVagasEditor({
           role={assign.role}
           isPm={assign.vagaId === null}
           fixedMemberId={assign.vagaId === null ? assign.memberId : null}
+          defaultFrom={assign.defaultFrom}
+          contractFrom={contractFrom}
+          contractTo={contractTo}
           memberOptions={memberOptions}
           onClose={() => setAssign(null)}
           onSubmit={async ({ memberId, percent, from }) => {
@@ -303,6 +408,8 @@ export function ContractVagasEditor({
           key={replace.vagaId}
           role={replace.role}
           occ={replace.occ}
+          contractFrom={contractFrom}
+          contractTo={contractTo}
           memberOptions={memberOptions}
           onClose={() => setReplace(null)}
           onSubmit={async ({ effectiveTo, newMemberId, newPercent, newFrom }) => {
@@ -325,14 +432,35 @@ export function ContractVagasEditor({
 
       {newVaga && (
         <NewVagaDialog
-          onClose={() => setNewVaga(null)}
-          onSubmit={async ({ position, label }) => {
+          contractFrom={contractFrom}
+          contractTo={contractTo}
+          onClose={() => setNewVaga(false)}
+          onSubmit={async ({ position, label, from, to }) => {
             await fetchOrThrow(`/api/finance/contract/${contractId}/vagas`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ position, label: label || null, effectiveFrom: firstOfMonthISO() }),
+              body: JSON.stringify({ position, label: label || null, effectiveFrom: from, effectiveTo: to || null }),
             });
-            setNewVaga(null);
+            setNewVaga(false);
+            await refresh();
+          }}
+        />
+      )}
+
+      {editVaga && (
+        <EditVagaDialog
+          key={editVaga.id}
+          vaga={editVaga}
+          contractFrom={contractFrom}
+          contractTo={contractTo}
+          onClose={() => setEditVaga(null)}
+          onSubmit={async ({ label, from, to }) => {
+            await fetchOrThrow(`/api/finance/contract/${contractId}/vagas/${editVaga.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ label: label || null, effectiveFrom: from, effectiveTo: to || null }),
+            });
+            setEditVaga(null);
             await refresh();
           }}
         />
@@ -340,6 +468,8 @@ export function ContractVagasEditor({
 
       {spotOpen && (
         <SpotDialog
+          contractFrom={contractFrom}
+          contractTo={contractTo}
           memberOptions={memberOptions}
           onClose={() => setSpotOpen(false)}
           onSubmit={async ({ memberId, hours, from }) => {
@@ -366,6 +496,11 @@ export function ContractVagasEditor({
   );
 }
 
+/** "Builder · 2" ou "Builder · Backend" (rótulo) — texto do eyebrow da vaga. */
+function roleLabel(v: VagaWithFill): string {
+  return `${positionLabel(v.position)}${v.label ? ` · ${v.label}` : ` · ${v.seq}`}`;
+}
+
 // ─── linhas ───────────────────────────────────────────────────────────────
 
 function StatusChip({ status }: { status: TempStatus }) {
@@ -378,11 +513,49 @@ function StatusChip({ status }: { status: TempStatus }) {
   return <Badge variant="outline" className={cn("shrink-0 text-[10px]", s.cls)}>{s.label}</Badge>;
 }
 
-function RoleLabel({ children }: { children: React.ReactNode }) {
+/** Casca vertical: eyebrow (função) ACIMA, ações no topo-direito, corpo abaixo. */
+function RowShell({
+  eyebrow,
+  topRight,
+  children,
+}: {
+  eyebrow: React.ReactNode;
+  topRight?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="w-[120px] shrink-0 pt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+    <div className="group px-3 py-2.5">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {eyebrow}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">{topRight}</div>
+      </div>
       {children}
     </div>
+  );
+}
+
+function OccBody({ name, status, sub }: { name: string; status: TempStatus; sub: string }) {
+  return (
+    <>
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <span className="truncate">{name}</span>
+        <StatusChip status={status} />
+      </div>
+      <p className="text-xs text-muted-foreground">{sub}</p>
+    </>
+  );
+}
+
+function DotsMenu({ children }: { children: React.ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="size-7 opacity-60 group-hover:opacity-100" />}>
+        <MoreVertical className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">{children}</DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -391,40 +564,47 @@ function PmRow({
   alloc,
   today,
   onAllocCost,
+  onEncerrar,
 }: {
   pm: PmVaga;
   alloc: AllocationItem | null | undefined;
   today: string;
   onAllocCost: () => void;
+  onEncerrar: (a: AllocationItem) => void;
 }) {
   return (
-    <div className="flex items-start gap-3 px-3 py-2.5">
-      <RoleLabel>PM</RoleLabel>
-      <div className="min-w-0 flex-1">
-        {pm.memberId ? (
+    <RowShell
+      eyebrow="PM"
+      topRight={
+        pm.memberId && !alloc ? (
+          <Button size="sm" variant="outline" onClick={onAllocCost}>Alocar custo</Button>
+        ) : alloc ? (
+          <DotsMenu>
+            <DropdownMenuItem onClick={() => onEncerrar(alloc)}>Encerrar custo</DropdownMenuItem>
+          </DotsMenu>
+        ) : null
+      }
+    >
+      {pm.memberId ? (
+        alloc ? (
+          <OccBody
+            name={pm.memberName ?? "—"}
+            status={temporalStatus(alloc, today)}
+            sub={`${alloc.percent}% · desde ${fmtDate(alloc.effective_from)} · ${brlFromCents(alloc.laborCents ?? 0)}/mês`}
+          />
+        ) : (
           <>
             <div className="flex items-center gap-2 text-sm font-medium">
               <span className="truncate">{pm.memberName}</span>
-              {alloc ? <StatusChip status={temporalStatus(alloc, today)} /> : (
-                <Badge variant="outline" className="shrink-0 text-[10px] border-amber-500/40 text-amber-500">sem custo</Badge>
-              )}
+              <Badge variant="outline" className="shrink-0 text-[10px] border-amber-500/40 text-amber-500">sem custo</Badge>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {alloc
-                ? `${alloc.percent}% · desde ${fmtDate(alloc.effective_from)} · ${brlFromCents(alloc.laborCents ?? 0)}/mês`
-                : "gestor do projeto — custo não alocado neste contrato"}
-            </p>
+            <p className="text-xs text-muted-foreground">gestor do projeto — custo não alocado neste contrato</p>
           </>
-        ) : (
-          <div className="text-sm text-muted-foreground/60 italic">— sem PM definido —</div>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center">
-        {pm.memberId && !alloc && (
-          <Button size="sm" variant="outline" onClick={onAllocCost}>Alocar custo</Button>
-        )}
-      </div>
-    </div>
+        )
+      ) : (
+        <div className="text-sm italic text-muted-foreground/60">— sem PM definido —</div>
+      )}
+    </RowShell>
   );
 }
 
@@ -435,6 +615,7 @@ function VagaRow({
   onAssign,
   onReplace,
   onEncerrar,
+  onEditVaga,
   onRemoverVaga,
 }: {
   role: string;
@@ -443,48 +624,80 @@ function VagaRow({
   onAssign: () => void;
   onReplace?: () => void;
   onEncerrar?: () => void;
+  onEditVaga: () => void;
   onRemoverVaga: () => void;
 }) {
   return (
-    <div className="group flex items-start gap-3 px-3 py-2.5">
-      <RoleLabel>{role}</RoleLabel>
-      <div className="min-w-0 flex-1">
-        {occ ? (
-          <>
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <span className="truncate">{occ.memberName}</span>
-              <StatusChip status={temporalStatus(occ, today)} />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {occ.percent}% · {fmtDate(occ.effective_from)} →{" "}
-              {occ.effective_to ? fmtDate(occ.effective_to) : "vigente"} · {brlFromCents(occ.laborCents ?? 0)}/mês
-            </p>
-          </>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-sm italic text-muted-foreground/60">— vazio —</span>
-            <Badge variant="outline" className="shrink-0 text-[10px] border-amber-500/40 text-amber-500">Vaga aberta</Badge>
-          </div>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
-        {!occ && (
-          <Button size="sm" variant="outline" onClick={onAssign}>Atribuir pessoa</Button>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="size-7 opacity-0 group-hover:opacity-100" />}>
-            <MoreVertical className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+    <RowShell
+      eyebrow={role}
+      topRight={
+        <>
+          {!occ && <Button size="sm" variant="outline" onClick={onAssign}>Atribuir pessoa</Button>}
+          <DotsMenu>
             {occ && onReplace && <DropdownMenuItem onClick={onReplace}>Trocar ocupante</DropdownMenuItem>}
             {occ && onEncerrar && <DropdownMenuItem onClick={onEncerrar}>Encerrar</DropdownMenuItem>}
             {!occ && <DropdownMenuItem onClick={onAssign}>Atribuir pessoa</DropdownMenuItem>}
+            <DropdownMenuItem onClick={onEditVaga}>Editar vaga</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onRemoverVaga}>Remover vaga</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
+          </DotsMenu>
+        </>
+      }
+    >
+      {occ ? (
+        <OccBody
+          name={occ.memberName}
+          status={temporalStatus(occ, today)}
+          sub={`${occ.percent}% · ${fmtDate(occ.effective_from)} → ${occ.effective_to ? fmtDate(occ.effective_to) : "vigente"} · ${brlFromCents(occ.laborCents ?? 0)}/mês`}
+        />
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-sm italic text-muted-foreground/60">— vazio —</span>
+          <Badge variant="outline" className="shrink-0 text-[10px] border-amber-500/40 text-amber-500">Vaga aberta</Badge>
+        </div>
+      )}
+    </RowShell>
+  );
+}
+
+/** Ocupante ativo sem vaga formalizada (legado / criado por fora). */
+function OrphanRow({
+  occ,
+  role,
+  today,
+  onFormalizar,
+  onEncerrar,
+}: {
+  occ: AllocationItem;
+  role: string;
+  today: string;
+  onFormalizar: () => void;
+  onEncerrar: () => void;
+}) {
+  return (
+    <RowShell
+      eyebrow={
+        <span className="flex items-center gap-1.5">
+          {role || "Sem função"}
+          <span className="rounded-sm bg-amber-500/10 px-1 text-[9px] font-medium text-amber-600">sem vaga</span>
+        </span>
+      }
+      topRight={
+        <>
+          <Button size="sm" variant="outline" onClick={onFormalizar}>Criar vaga</Button>
+          <DotsMenu>
+            <DropdownMenuItem onClick={onFormalizar}>Criar vaga p/ esta pessoa</DropdownMenuItem>
+            <DropdownMenuItem onClick={onEncerrar}>Encerrar</DropdownMenuItem>
+          </DotsMenu>
+        </>
+      }
+    >
+      <OccBody
+        name={occ.memberName}
+        status={temporalStatus(occ, today)}
+        sub={`${occ.percent}% · ${fmtDate(occ.effective_from)} → ${occ.effective_to ? fmtDate(occ.effective_to) : "vigente"} · ${brlFromCents(occ.laborCents ?? 0)}/mês`}
+      />
+    </RowShell>
   );
 }
 
@@ -503,7 +716,7 @@ function MemberSelect({
 }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v ?? "")} disabled={disabled}>
-      <SelectTrigger>
+      <SelectTrigger className="w-full">
         <SelectValue>
           {(v: string | null) => options.find((m) => m.id === v)?.name ?? "Selecione…"}
         </SelectValue>
@@ -519,10 +732,21 @@ function MemberSelect({
   );
 }
 
+function ContractHint({ from, to }: { from: string; to: string | null }) {
+  return (
+    <p className="text-[11px] text-muted-foreground">
+      Vigência do contrato: {fmtDate(from)} → {to ? fmtDate(to) : "em aberto"}. Datas ficam dentro dela.
+    </p>
+  );
+}
+
 function AssignDialog({
   role,
   isPm,
   fixedMemberId,
+  defaultFrom,
+  contractFrom,
+  contractTo,
   memberOptions,
   onClose,
   onSubmit,
@@ -530,16 +754,20 @@ function AssignDialog({
   role: string;
   isPm: boolean;
   fixedMemberId: string | null;
+  defaultFrom: string;
+  contractFrom: string;
+  contractTo: string | null;
   memberOptions: MemberRef[];
   onClose: () => void;
   onSubmit: (v: { memberId: string; percent: number; from: string }) => Promise<void>;
 }) {
   const [memberId, setMemberId] = useState(fixedMemberId ?? "");
   const [percent, setPercent] = useState("100");
-  const [from, setFrom] = useState(firstOfMonthISO());
+  const [from, setFrom] = useState(defaultFrom || contractFrom);
   const [busy, setBusy] = useState(false);
   const pct = parseFloat(percent.replace(",", "."));
-  const valid = memberId && from && pct > 0 && pct <= 100;
+  const inRange = from >= contractFrom && (!contractTo || from <= contractTo);
+  const valid = memberId && from && inRange && pct > 0 && pct <= 100;
 
   return (
     <ResponsiveDialog open onOpenChange={(o) => !o && onClose()}>
@@ -565,9 +793,12 @@ function AssignDialog({
               </Field>
               <Field name="from" required>
                 <Field.Label>Desde</Field.Label>
-                <Field.Control><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field.Control>
+                <Field.Control>
+                  <DatePicker value={from} onChange={setFrom} min={contractFrom} max={contractTo ?? undefined} />
+                </Field.Control>
               </Field>
             </Field.Row>
+            <ContractHint from={contractFrom} to={contractTo} />
           </FormBody>
         </ResponsiveDialogBody>
         <ResponsiveDialogFooter>
@@ -592,23 +823,31 @@ function AssignDialog({
 function ReplaceDialog({
   role,
   occ,
+  contractFrom,
+  contractTo,
   memberOptions,
   onClose,
   onSubmit,
 }: {
   role: string;
   occ: AllocationItem;
+  contractFrom: string;
+  contractTo: string | null;
   memberOptions: MemberRef[];
   onClose: () => void;
   onSubmit: (v: { effectiveTo: string; newMemberId: string; newPercent: number; newFrom: string }) => Promise<void>;
 }) {
-  const [effectiveTo, setEffectiveTo] = useState(todayISO());
+  const start = clampDate(todayISO(), contractFrom, contractTo);
+  const [effectiveTo, setEffectiveTo] = useState(start);
   const [newMemberId, setNewMemberId] = useState("");
   const [newPercent, setNewPercent] = useState(occ.percent != null ? String(occ.percent) : "100");
-  const [newFrom, setNewFrom] = useState(todayISO());
+  const [newFrom, setNewFrom] = useState(start);
   const [busy, setBusy] = useState(false);
   const pct = parseFloat(newPercent.replace(",", "."));
-  const valid = newMemberId && effectiveTo && newFrom && pct > 0 && pct <= 100 && newFrom >= effectiveTo;
+  const inRange =
+    effectiveTo >= contractFrom && newFrom >= contractFrom &&
+    (!contractTo || (effectiveTo <= contractTo && newFrom <= contractTo));
+  const valid = newMemberId && effectiveTo && newFrom && pct > 0 && pct <= 100 && newFrom >= effectiveTo && inRange;
 
   return (
     <ResponsiveDialog open onOpenChange={(o) => !o && onClose()}>
@@ -623,7 +862,9 @@ function ReplaceDialog({
           <FormBody density="compact">
             <Field name="to">
               <Field.Label>Saindo: {occ.memberName} · última data</Field.Label>
-              <Field.Control><Input type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} /></Field.Control>
+              <Field.Control>
+                <DatePicker value={effectiveTo} onChange={setEffectiveTo} min={contractFrom} max={contractTo ?? undefined} />
+              </Field.Control>
             </Field>
             <Field name="newm" required>
               <Field.Label>Entrando</Field.Label>
@@ -636,9 +877,12 @@ function ReplaceDialog({
               </Field>
               <Field name="newfrom" required>
                 <Field.Label>A partir de</Field.Label>
-                <Field.Control><Input type="date" value={newFrom} onChange={(e) => setNewFrom(e.target.value)} /></Field.Control>
+                <Field.Control>
+                  <DatePicker value={newFrom} onChange={setNewFrom} min={effectiveTo || contractFrom} max={contractTo ?? undefined} />
+                </Field.Control>
               </Field>
             </Field.Row>
+            <ContractHint from={contractFrom} to={contractTo} />
           </FormBody>
         </ResponsiveDialogBody>
         <ResponsiveDialogFooter>
@@ -661,20 +905,25 @@ function ReplaceDialog({
 }
 
 function SpotDialog({
+  contractFrom,
+  contractTo,
   memberOptions,
   onClose,
   onSubmit,
 }: {
+  contractFrom: string;
+  contractTo: string | null;
   memberOptions: MemberRef[];
   onClose: () => void;
   onSubmit: (v: { memberId: string; hours: number; from: string }) => Promise<void>;
 }) {
   const [memberId, setMemberId] = useState("");
   const [hours, setHours] = useState("");
-  const [from, setFrom] = useState(firstOfMonthISO());
+  const [from, setFrom] = useState(clampDate(firstOfMonthISO(), contractFrom, contractTo));
   const [busy, setBusy] = useState(false);
   const h = parseFloat(hours.replace(",", "."));
-  const valid = memberId && from && h > 0 && h <= 160;
+  const inRange = from >= contractFrom && (!contractTo || from <= contractTo);
+  const valid = memberId && from && inRange && h > 0 && h <= 160;
 
   return (
     <ResponsiveDialog open onOpenChange={(o) => !o && onClose()}>
@@ -698,7 +947,9 @@ function SpotDialog({
               </Field>
               <Field name="from" required>
                 <Field.Label>Mês</Field.Label>
-                <Field.Control><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field.Control>
+                <Field.Control>
+                  <DatePicker value={from} onChange={setFrom} min={contractFrom} max={contractTo ?? undefined} />
+                </Field.Control>
               </Field>
             </Field.Row>
           </FormBody>
@@ -722,16 +973,39 @@ function SpotDialog({
   );
 }
 
+function PositionSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Select value={value} onValueChange={(v) => v && onChange(v)}>
+      <SelectTrigger className="w-full">
+        <SelectValue>{(v: string | null) => (v ? POSITION_LABELS[v as keyof typeof POSITION_LABELS] : "Selecione…")}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {POSITIONS.map((p) => <SelectItem key={p} value={p}>{POSITION_LABELS[p]}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function NewVagaDialog({
+  contractFrom,
+  contractTo,
   onClose,
   onSubmit,
 }: {
+  contractFrom: string;
+  contractTo: string | null;
   onClose: () => void;
-  onSubmit: (v: { position: string; label: string }) => Promise<void>;
+  onSubmit: (v: { position: string; label: string; from: string; to: string }) => Promise<void>;
 }) {
   const [position, setPosition] = useState("product-builder");
   const [label, setLabel] = useState("");
+  // Herda a vigência do contrato por padrão; editável dentro dela.
+  const [from, setFrom] = useState(contractFrom);
+  const [to, setTo] = useState(contractTo ?? "");
   const [busy, setBusy] = useState(false);
+  const valid =
+    !!position && from >= contractFrom && (!contractTo || from <= contractTo) &&
+    (!to || (to >= from && (!contractTo || to <= contractTo)));
 
   return (
     <ResponsiveDialog open onOpenChange={(o) => !o && onClose()}>
@@ -744,35 +1018,113 @@ function NewVagaDialog({
           <FormBody density="compact">
             <Field name="pos" required>
               <Field.Label>Função</Field.Label>
-              <Field.Control>
-                <Select value={position} onValueChange={(v) => v && setPosition(v)}>
-                  <SelectTrigger>
-                    <SelectValue>{(v: string | null) => (v ? POSITION_LABELS[v as keyof typeof POSITION_LABELS] : "Selecione…")}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {POSITIONS.map((p) => <SelectItem key={p} value={p}>{POSITION_LABELS[p]}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </Field.Control>
+              <Field.Control><PositionSelect value={position} onChange={setPosition} /></Field.Control>
             </Field>
             <Field name="label">
               <Field.Label>Rótulo (opcional)</Field.Label>
               <Field.Control><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex: Builder Backend" /></Field.Control>
             </Field>
+            <Field.Row cols={2}>
+              <Field name="from" required>
+                <Field.Label>Início</Field.Label>
+                <Field.Control>
+                  <DatePicker value={from} onChange={setFrom} min={contractFrom} max={contractTo ?? undefined} />
+                </Field.Control>
+              </Field>
+              <Field name="to">
+                <Field.Label>Fim</Field.Label>
+                <Field.Control>
+                  <DatePicker value={to} onChange={setTo} min={from || contractFrom} max={contractTo ?? undefined} clearable placeholder="em aberto" />
+                </Field.Control>
+              </Field>
+            </Field.Row>
+            <ContractHint from={contractFrom} to={contractTo} />
           </FormBody>
         </ResponsiveDialogBody>
         <ResponsiveDialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>Cancelar</Button>
           <Button
-            disabled={busy}
+            disabled={!valid || busy}
             onClick={async () => {
               setBusy(true);
-              try { await onSubmit({ position, label }); }
+              try { await onSubmit({ position, label, from, to }); }
               catch (e) { showErrorToast(e, { label: "Falha ao criar vaga" }); }
               finally { setBusy(false); }
             }}
           >
             {busy ? "Criando…" : "Criar vaga"}
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
+  );
+}
+
+function EditVagaDialog({
+  vaga,
+  contractFrom,
+  contractTo,
+  onClose,
+  onSubmit,
+}: {
+  vaga: VagaWithFill;
+  contractFrom: string;
+  contractTo: string | null;
+  onClose: () => void;
+  onSubmit: (v: { label: string; from: string; to: string }) => Promise<void>;
+}) {
+  const [label, setLabel] = useState(vaga.label ?? "");
+  const [from, setFrom] = useState(vaga.effective_from);
+  const [to, setTo] = useState(vaga.effective_to ?? "");
+  const [busy, setBusy] = useState(false);
+  const valid =
+    from >= contractFrom && (!contractTo || from <= contractTo) &&
+    (!to || (to >= from && (!contractTo || to <= contractTo)));
+
+  return (
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()}>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Editar vaga · {positionLabel(vaga.position)}</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Rótulo e datas de entrada/saída da função (a posição não muda — pra trocar, remova e crie).
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody className="py-4">
+          <FormBody density="compact">
+            <Field name="label">
+              <Field.Label>Rótulo (opcional)</Field.Label>
+              <Field.Control><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex: Builder Backend" /></Field.Control>
+            </Field>
+            <Field.Row cols={2}>
+              <Field name="from" required>
+                <Field.Label>Início</Field.Label>
+                <Field.Control>
+                  <DatePicker value={from} onChange={setFrom} min={contractFrom} max={contractTo ?? undefined} />
+                </Field.Control>
+              </Field>
+              <Field name="to">
+                <Field.Label>Fim</Field.Label>
+                <Field.Control>
+                  <DatePicker value={to} onChange={setTo} min={from || contractFrom} max={contractTo ?? undefined} clearable placeholder="em aberto" />
+                </Field.Control>
+              </Field>
+            </Field.Row>
+            <ContractHint from={contractFrom} to={contractTo} />
+          </FormBody>
+        </ResponsiveDialogBody>
+        <ResponsiveDialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancelar</Button>
+          <Button
+            disabled={!valid || busy}
+            onClick={async () => {
+              setBusy(true);
+              try { await onSubmit({ label, from, to }); }
+              catch (e) { showErrorToast(e, { label: "Falha ao editar vaga" }); }
+              finally { setBusy(false); }
+            }}
+          >
+            {busy ? "Salvando…" : "Salvar"}
           </Button>
         </ResponsiveDialogFooter>
       </ResponsiveDialogContent>

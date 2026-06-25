@@ -22,6 +22,7 @@ export async function PATCH(
     effectiveTo?: string | null;
     days?: number | null;
     effectiveFrom?: string;
+    vagaId?: string | null;
   };
   try {
     body = (await req.json()) as typeof body;

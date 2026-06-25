@@ -5,6 +5,7 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
+import { OverlayDepthContext, overlayZIndex } from "@/components/ui/overlay-depth"
 
 const Select = SelectPrimitive.Root
 
@@ -70,6 +71,10 @@ function SelectContent({
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
   >) {
+  // Context flows through the portal: when this Select is rendered inside a
+  // stacked overlay (dialog-on-sheet), bump z above it. depth 0 → 50 (no change).
+  const depth = React.useContext(OverlayDepthContext)
+  const z = overlayZIndex(depth)
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
@@ -78,7 +83,8 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
-        className="isolate z-50"
+        style={{ zIndex: z }}
+        className="isolate"
       >
         <SelectPrimitive.Popup
           data-slot="select-content"

@@ -488,6 +488,8 @@ export function FinanceContractSheet({
                 <ContractVagasEditor
                   projectId={projectId}
                   contractId={cid}
+                  contractFrom={contract ? contract.effectiveFrom.slice(0, 10) : form.from}
+                  contractTo={contract?.effectiveTo ? contract.effectiveTo.slice(0, 10) : null}
                   allocations={allocations}
                   members={members}
                   squadMemberIds={squadMemberIds}
