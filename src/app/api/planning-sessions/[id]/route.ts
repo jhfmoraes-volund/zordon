@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   getUser,
   requireProjectViewApi,
-  requireProjectEditSessionsApi,
+  requirePlanningOperateApi,
 } from "@/lib/dal";
 import {
   getSession,
@@ -57,7 +57,7 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requireProjectEditSessionsApi(session.projectId);
+  const denied = await requirePlanningOperateApi(session.projectId);
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);
@@ -85,7 +85,7 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requireProjectEditSessionsApi(session.projectId);
+  const denied = await requirePlanningOperateApi(session.projectId);
   if (denied) return denied;
 
   try {

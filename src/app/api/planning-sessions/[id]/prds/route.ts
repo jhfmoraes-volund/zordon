@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireProjectEditSessionsApi, requireProjectViewApi } from "@/lib/dal";
+import { requirePlanningOperateApi, requireProjectViewApi } from "@/lib/dal";
 import {
   getSession,
   addLinkedPrd,
@@ -67,7 +67,7 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requireProjectEditSessionsApi(session.projectId);
+  const denied = await requirePlanningOperateApi(session.projectId);
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);

@@ -375,9 +375,23 @@ export function RituaisFileView({
       {loading ? (
         <p className="px-1 py-8 text-center text-sm text-muted-foreground">Carregando…</p>
       ) : visible.length === 0 ? (
-        <p className="px-1 py-8 text-center text-sm text-muted-foreground">
-          Nenhum ritual em {projectName} — crie o primeiro arquivo deste app.
-        </p>
+        <div className="px-1 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            {restricted && restrictToKinds
+              ? `Nenhum ${KIND_META[restrictToKinds[0]].label} ainda.`
+              : `Nenhum ritual em ${projectName} — crie o primeiro arquivo deste app.`}
+          </p>
+          {/* grant_only: opera como PM — pode criar o ritual concedido. */}
+          {restricted && restrictToKinds && restrictToKinds.length > 0 && (
+            <Button
+              size="sm"
+              className="mt-3"
+              onClick={() => handlePickRitual(restrictToKinds[0])}
+            >
+              <Plus className="size-3.5" /> Criar {KIND_META[restrictToKinds[0]].label}
+            </Button>
+          )}
+        </div>
       ) : (
         <AppFileList>{visible.map(renderRow)}</AppFileList>
       )}

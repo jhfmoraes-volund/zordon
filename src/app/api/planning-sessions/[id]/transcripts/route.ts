@@ -13,7 +13,7 @@ import { db } from "@/lib/db";
 import {
   getCurrentMember,
   requireProjectViewApi,
-  requireProjectEditSessionsApi,
+  requirePlanningOperateApi,
 } from "@/lib/dal";
 import { getMemberIntegrationToken } from "@/lib/member-integrations";
 import { getMeetingDetail, type MeetingSource } from "@/lib/meetings";
@@ -179,7 +179,7 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requireProjectEditSessionsApi(session.projectId);
+  const denied = await requirePlanningOperateApi(session.projectId);
   if (denied) return denied;
 
   const member = await getCurrentMember();

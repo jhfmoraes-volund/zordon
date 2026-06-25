@@ -4,7 +4,7 @@ import {
   getUser,
   getMemberId,
   requireProjectViewApi,
-  requireProjectEditTasksApi,
+  requirePlanningOperateApi,
 } from "@/lib/dal";
 import {
   createSession,
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const denied = await requireProjectEditTasksApi(parsed.data.projectId);
+  const denied = await requirePlanningOperateApi(parsed.data.projectId);
   if (denied) return denied;
 
   // Singleton: "1 planning viva por projeto". Se já existe uma ATIVA, devolve ela

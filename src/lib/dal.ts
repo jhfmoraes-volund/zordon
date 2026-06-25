@@ -460,6 +460,29 @@ export async function canEditSessions(projectId: string): Promise<boolean> {
   return ids.includes(projectId);
 }
 
+/**
+ * True iff o *acting* user pode OPERAR o ritual de Planning do projeto — com
+ * poder de PM, sem fricção (criar, editar metadados, anexar transcript, linkar
+ * contexto, editar PRD, concluir/aplicar o plano).
+ *   - Manager: yes
+ *   - ProjectAccess contributor/lead: yes
+ *   - Grant ativo de `ritual.planning` no projeto: yes (override — opera como PM
+ *     SÓ no Planning; NÃO destrava as APIs de editar tasks/design sessions
+ *     soltas, que continuam em canEditTasks/canEditSessions).
+ *
+ * Por que um guard dedicado: as rotas do Planning rodam via service-role (db()),
+ * gated por TS. Usar este guard (em vez de canEditTasks/canEditSessions, que são
+ * compartilhados) confina o poder do grant ao ritual concedido.
+ */
+export async function canOperatePlanning(projectId: string): Promise<boolean> {
+  const level = await getEffectiveAccessLevel();
+  if (hasMinAccessLevel(level, "manager")) return true;
+  if (await hasAccessGrant("ritual.planning", projectId)) return true;
+  const list = await getProjectAccessList();
+  const row = list.find((r) => r.projectId === projectId);
+  return row?.role === "contributor" || row?.role === "lead";
+}
+
 /** True se o nível efetivo é guest. Helper p/ filtros de visibility e PFV. */
 export function isGuest(level: AccessLevel | null | undefined): boolean {
   return level === "guest";
@@ -590,6 +613,22 @@ export async function requireProjectEditSessionsApi(
   if (!user) return new Response("Unauthorized", { status: 401 });
   if (await canEditSessions(projectId)) return null;
   return new Response("Forbidden — cannot edit sessions in this project", {
+    status: 403,
+  });
+}
+
+/**
+ * Route Handler guard: caller can OPERATE the Planning ritual (PM-equivalente,
+ * grant-aware). Use nas rotas de ESCRITA/operação do Planning (criar, editar,
+ * concluir, anexar) — confina o poder do grant de ritual.planning ao Planning.
+ */
+export async function requirePlanningOperateApi(
+  projectId: string,
+): Promise<Response | null> {
+  const user = await getUser();
+  if (!user) return new Response("Unauthorized", { status: 401 });
+  if (await canOperatePlanning(projectId)) return null;
+  return new Response("Forbidden — cannot operate planning in this project", {
     status: 403,
   });
 }
