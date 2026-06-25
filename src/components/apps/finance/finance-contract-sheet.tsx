@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 import {
   ResponsiveSheet,
@@ -31,7 +31,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog, type ConfirmState } from "@/components/ui/confirm-dialog";
 import { StatusChipSelect } from "@/components/ui/status-chip-select";
 import { StatusChip } from "@/components/ui/status-chip";
 import { CONTRACT_STATUS } from "@/lib/status-chips";
@@ -40,11 +39,10 @@ import { toast } from "sonner";
 import { fetchOrThrow, showErrorToast } from "@/lib/optimistic/toast";
 import { brlFromCents } from "@/lib/format-currency";
 import { fmtDate } from "@/lib/date-utils";
-import { positionLabel } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+import { ContractVagasEditor } from "./finance-contract-vagas";
 import type {
   AllocationItem,
-  AllocationKind,
   BillingType,
   ClauseKind,
   Contract,
@@ -487,7 +485,7 @@ export function FinanceContractSheet({
                 </div>
               )}
               <div className="border-t pt-4">
-                <ContractTeamEditor
+                <ContractVagasEditor
                   projectId={projectId}
                   contractId={cid}
                   allocations={allocations}
@@ -627,315 +625,6 @@ function ClauseEditor({
 
 /** Equipe do contrato — alocações que gravam `contract_id`. Mostra também as
  *  não atribuídas (legado contract_id null) com ação de atribuir a este contrato. */
-function ContractTeamEditor({
-  projectId,
-  contractId,
-  allocations,
-  members,
-  squadMemberIds,
-  onChanged,
-}: {
-  projectId: string;
-  contractId: string;
-  allocations: AllocationItem[];
-  members: MemberRef[];
-  squadMemberIds: string[];
-  onChanged: () => void;
-}) {
-  type AllocForm = {
-    id: string | null;
-    kind: AllocationKind;
-    memberId: string;
-    percent: string;
-    days: string;
-    from: string;
-    to: string;
-  };
-  const [form, setForm] = useState<AllocForm | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-
-  const mine = allocations.filter((a) => a.contract_id === contractId);
-  const unassigned = allocations.filter((a) => a.contract_id === null);
-
-  const memberOptions = useMemo(() => {
-    const squad = new Set(squadMemberIds);
-    return members
-      .filter((m) => !m.isExternal)
-      .sort((a, b) => (squad.has(a.id) ? 0 : 1) - (squad.has(b.id) ? 0 : 1) || a.name.localeCompare(b.name));
-  }, [members, squadMemberIds]);
-
-  function openAdd() {
-    setForm({ id: null, kind: "standing", memberId: "", percent: "", days: "", from: firstOfMonthISO(), to: "" });
-  }
-  function openAddSpot() {
-    setForm({ id: null, kind: "spot", memberId: "", percent: "", days: "", from: firstOfMonthISO(), to: "" });
-  }
-  function openEdit(a: AllocationItem) {
-    setForm({
-      id: a.id,
-      kind: a.kind,
-      memberId: a.member_id,
-      percent: a.percent != null ? String(a.percent) : "",
-      days: a.days != null ? String(a.days) : "",
-      from: a.effective_from,
-      to: a.effective_to ?? "",
-    });
-  }
-
-  async function save() {
-    if (!form) return;
-    const isSpot = form.kind === "spot";
-    const percent = parseFloat(form.percent.replace(",", "."));
-    const days = parseFloat(form.days.replace(",", "."));
-    if (!form.memberId || !form.from) return;
-    if (isSpot ? !(days > 0 && days <= 160) : !(percent > 0 && percent <= 100)) return;
-    setBusy(true);
-    try {
-      const res = await fetchOrThrow(
-        form.id ? `/api/finance/allocations/${form.id}` : "/api/finance/allocations",
-        {
-          method: form.id ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            memberId: form.memberId,
-            projectId,
-            kind: form.kind,
-            ...(isSpot ? { days } : { percent }),
-            effectiveFrom: form.from,
-            effectiveTo: form.to || null,
-            contractId,
-          }),
-        },
-      );
-      const { warning } = (await res.json().catch(() => ({}))) as { warning?: string | null };
-      if (warning) toast.warning(warning);
-      if (isSpot && !form.id) toast.success("Participação pontual criada — acesso de builder concedido");
-      setForm(null);
-      onChanged();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao salvar alocação" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function assign(a: AllocationItem) {
-    try {
-      await fetchOrThrow(`/api/finance/allocations/${a.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          memberId: a.member_id,
-          projectId,
-          kind: a.kind,
-          ...(a.kind === "spot" ? { days: a.days } : { percent: a.percent }),
-          effectiveFrom: a.effective_from,
-          effectiveTo: a.effective_to,
-          contractId,
-        }),
-      });
-      onChanged();
-    } catch (e) {
-      showErrorToast(e, { label: "Falha ao atribuir alocação" });
-    }
-  }
-
-  function remove(a: AllocationItem) {
-    setConfirm({
-      title: "Remover alocação?",
-      description: `${a.memberName} deixará de compor o custo de equipe deste contrato.`,
-      destructive: true,
-      confirmLabel: "Remover",
-      onConfirm: async () => {
-        try {
-          await fetchOrThrow(`/api/finance/allocations/${a.id}`, { method: "DELETE" });
-          onChanged();
-        } catch (e) {
-          showErrorToast(e, { label: "Falha ao remover alocação" });
-        }
-      },
-    });
-  }
-
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Equipe nesta vigência
-        </p>
-        {!form && (
-          <div className="flex gap-1.5">
-            <Button size="sm" variant="outline" onClick={openAdd}>
-              <Plus className="size-3.5" /> Membro
-            </Button>
-            <Button size="sm" variant="outline" onClick={openAddSpot}>
-              Pontual
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {form && (
-        <div className="mb-2 rounded-md border bg-muted/20 p-3">
-          <FormBody density="compact">
-            <Field.Row cols={2}>
-              <Field name="member" required>
-                <Field.Label>Membro</Field.Label>
-                <Field.Control>
-                  <Select value={form.memberId} onValueChange={(v) => setForm((f) => (f ? { ...f, memberId: v ?? "" } : f))}>
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(v: string | null) => memberOptions.find((m) => m.id === v)?.name ?? "Selecione…"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {memberOptions.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                          {m.position ? ` · ${positionLabel(m.position)}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field.Control>
-              </Field>
-              {form.kind === "spot" ? (
-                <Field name="days" required>
-                  <Field.Label>Horas</Field.Label>
-                  <Field.Control>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="160"
-                      step="0.5"
-                      value={form.days}
-                      onChange={(e) => setForm((f) => (f ? { ...f, days: e.target.value } : f))}
-                      placeholder="ex: 8"
-                    />
-                  </Field.Control>
-                </Field>
-              ) : (
-                <Field name="percent" required>
-                  <Field.Label>Alocação (%)</Field.Label>
-                  <Field.Control>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="1"
-                      value={form.percent}
-                      onChange={(e) => setForm((f) => (f ? { ...f, percent: e.target.value } : f))}
-                      placeholder="ex: 50"
-                    />
-                  </Field.Control>
-                </Field>
-              )}
-            </Field.Row>
-            <Field.Row cols={2}>
-              <Field name="from" required>
-                <Field.Label>Início</Field.Label>
-                <Field.Control>
-                  <DatePicker data-slot="button" value={form.from} onChange={(iso) => setForm((f) => (f ? { ...f, from: iso } : f))} />
-                </Field.Control>
-              </Field>
-              <Field name="to">
-                <Field.Label>Fim (opcional)</Field.Label>
-                <Field.Control>
-                  <DatePicker data-slot="button" clearable value={form.to} onChange={(iso) => setForm((f) => (f ? { ...f, to: iso } : f))} />
-                </Field.Control>
-              </Field>
-            </Field.Row>
-          </FormBody>
-          {form.kind === "spot" && (
-            <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-              Participação pontual: horas de ajuda (custo = salário-mês ÷ 160h × horas), teto 160h.
-              Custo entra no mês do início. O builder ganha acesso permanente ao projeto.
-            </p>
-          )}
-          <div className="mt-2 flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setForm(null)} disabled={busy}>
-              Cancelar
-            </Button>
-            <Button size="sm" onClick={save} disabled={busy}>
-              {busy ? "Salvando…" : "Salvar"}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {mine.length === 0 ? (
-        <p className="rounded-md border px-3 py-4 text-center text-xs text-muted-foreground">
-          Ninguém alocado a este contrato.
-        </p>
-      ) : (
-        <div className="surface divide-y divide-border/60 overflow-hidden rounded-md">
-          {mine.map((a) => (
-            <div key={a.id} className="group flex items-center gap-3 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {a.memberName}
-                  {a.kind === "spot" && <span className="ml-1.5 text-[10px] text-amber-600">pontual</span>}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {a.kind === "spot" ? `${a.days}h` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
-                  {a.effective_to ? fmtDate(a.effective_to) : "atual"}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  title="Editar"
-                  aria-label="Editar"
-                  onClick={() => openEdit(a)}
-                  className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
-                >
-                  <Pencil className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="Remover"
-                  aria-label="Remover"
-                  onClick={() => remove(a)}
-                  className="rounded-sm p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-rose-500 group-hover:opacity-100"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {unassigned.length > 0 && (
-        <div className="mt-2">
-          <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-            Sem contrato — atribuir a este
-          </p>
-          <div className="surface divide-y divide-border/60 overflow-hidden rounded-md">
-            {unassigned.map((a) => (
-              <div key={a.id} className="flex items-center gap-3 px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{a.memberName}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {a.kind === "spot" ? `${a.days}h` : `${a.percent}%`} · {fmtDate(a.effective_from)} →{" "}
-                    {a.effective_to ? fmtDate(a.effective_to) : "atual"}
-                  </p>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => assign(a)}>
-                  Atribuir
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
-    </div>
-  );
-}
-
 /** Overrides de valor por mês (substituem a mensalidade base só no mês indicado). */
 function MonthOverrides({ contractId, onChanged }: { contractId: string; onChanged: () => void }) {
   const [overrides, setOverrides] = useState<ContractMonthOverride[] | null>(null);
