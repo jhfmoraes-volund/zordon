@@ -314,7 +314,7 @@ export function ContractVagasEditor({
       {/* rodapé: custo + nova vaga */}
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
-          Custo do time: <b className="font-mono text-foreground">{brlFromCents(teamCost)}/mês</b>
+          Custo do time: <b className="font-mono text-foreground">{brlFromCents(teamCost)}/contrato</b>
         </span>
         {!readOnly && (
           <Button size="sm" variant="outline" onClick={() => setNewVaga(true)}>
@@ -577,7 +577,7 @@ function VagaRow({
         <OccBody
           name={occ.memberName}
           status={temporalStatus(occ, today, contractTo)}
-          sub={`${occ.percent}% · ${fmtDate(occ.effective_from)} → ${end ? fmtDate(end) : "vigente"} · ${brlFromCents(occ.laborCents ?? 0)}/mês`}
+          sub={`${occ.percent}% · ${fmtDate(occ.effective_from)} → ${end ? fmtDate(end) : "vigente"} · ${brlFromCents(occ.laborCents ?? 0)}`}
         />
       ) : (
         <div className="flex items-center gap-2">
