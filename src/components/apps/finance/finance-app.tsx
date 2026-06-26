@@ -24,6 +24,13 @@ import { Banknote, Receipt, SlidersHorizontal, TrendingUp, Users, Wallet } from 
 
 import { AppFileList, AppFileRow, AppFileBadge } from "@/components/apps/app-file-list";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { brlFromCents, pct } from "@/lib/format-currency";
 import type {
   Category,
@@ -226,18 +233,42 @@ export function FinanceApp({
     <div className="space-y-4">
       {/* ─── Header: período + ações ─────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <select
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
-          aria-label="Ano"
-        >
-          {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            aria-label="Ano"
+          >
+            {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          {/* Abrir qualquer projeto (mesmo sem movimento financeiro) — handoff
+              pós-criação não depende mais do deep-link. Newest-first. */}
+          {projects.length > 0 && (
+            <Select
+              value=""
+              onValueChange={(v) => {
+                const hit = projects.find((p) => p.id === v);
+                if (hit) openProject(hit);
+              }}
+            >
+              <SelectTrigger size="sm" className="w-[180px]" aria-label="Abrir projeto">
+                <SelectValue>{() => "Abrir projeto…"}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           <Button
             size="sm"

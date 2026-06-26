@@ -303,7 +303,9 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
               projectId,
               label: "Contrato 1",
               status: form.kind === "proposal" ? "proposed" : "active",
-              billingType: "squad", // placeholder; admin ajusta no S&OP
+              // Billing reflete o engajamento escolhido no sheet (continuous=squad ·
+              // fixed_scope=encomenda). Valores/vigência ficam pro S&OP.
+              billingType: form.engagementType === "continuous" ? "squad" : "fixed_scope",
               effectiveFrom: today,
               effectiveTo: null,
             }),
@@ -378,6 +380,26 @@ export function ProjectEditSheet({ open, onOpenChange, project, onSaved }: Props
                     : form.kind === "proposal"
                       ? "Cria um contrato em Proposta — vigência, valor e equipe são configurados no S&OP."
                       : "Cria um contrato Ativo — vigência, valor e equipe são configurados no S&OP."}
+                </Field.Hint>
+              </Field>
+            )}
+
+            {/* Tipo de engajamento na criação (não-interno): define o billing do
+                contrato stub. Interno não tem contrato → não aparece. */}
+            {!project && form.kind !== "internal" && (
+              <Field name="project-engagement-new">
+                <Field.Label>Tipo de engajamento</Field.Label>
+                <Field.Control>
+                  <StatusChipSelect
+                    variant="input"
+                    value={form.engagementType}
+                    options={PROJECT_ENGAGEMENT}
+                    onValueChange={(v) => setForm({ ...form, engagementType: v })}
+                  />
+                </Field.Control>
+                <Field.Hint>
+                  Squad as a Service = faturamento recorrente; Por encomenda = faturado por PFV
+                  entregue. Define o billing do contrato (valores ajustáveis no S&OP).
                 </Field.Hint>
               </Field>
             )}
