@@ -25,6 +25,7 @@ import {
 } from "@/lib/dal/pm-review";
 import { buildProjectProfile } from "./profile";
 import type { PromptContext, SystemPrompt } from "../../types";
+import { renderTodayBlock } from "@/lib/agent/today";
 
 // ─── Context loader ───────────────────────────────────────────────────────
 
@@ -492,7 +493,9 @@ ${notesBlock}
           )
           .join("\n");
 
-  const volatile = `## Camada Sistema — Sprint atual
+  const volatile = `${renderTodayBlock()}
+
+## Camada Sistema — Sprint atual
 
 ### Tasks da sprint
 ${sprintScopeBlock}

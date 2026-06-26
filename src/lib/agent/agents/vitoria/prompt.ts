@@ -8,6 +8,7 @@ import type {
   ProfileBlocker,
 } from "./profile";
 import type { SprintOutcome } from "@/lib/dal/sprint-outcomes";
+import { renderTodayBlock } from "@/lib/agent/today";
 
 type PendingAction = {
   id: string;
@@ -468,7 +469,9 @@ ${avgVelocity != null ? `**Velocity média**: ~${avgVelocity} PFV/sprint — cal
 **projectId**: ${projectId}`
     : `**projectId**: ${projectId} _(nome não carregado — projeto pode ter sido removido)_`;
 
-  const volatile = `## Projeto em que você está trabalhando
+  const volatile = `${renderTodayBlock()}
+
+## Projeto em que você está trabalhando
 
 ${projectIdentityBlock}
 

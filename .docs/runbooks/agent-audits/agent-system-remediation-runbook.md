@@ -88,9 +88,10 @@ CI de `main` está vermelho **em prod** e o `sync-main.sh` empurra direto sem PR
 - **Ação:** registrar `read_prd` no toolset live do Vitor e adicionar no `update_prd` a regra "leia antes; mande o array COMPLETO (REPLACE)".
 - **Verificação:** edição parcial de um PRD multi-campo preserva os campos não citados.
 
-### 3.2 Injetar bloco `## Hoje` no prompt da Vitoria (todas as surfaces)  ·  **S**
+### 3.2 Injetar bloco `## Hoje` no prompt da Vitoria (todas as surfaces)  ·  **S**  ·  ✅ FEITO 2026-06-25
 
-- **Problema:** Vitoria faz planning semanal e raciocina sobre datas de sprint **sem âncora de hoje** — anti-pattern §14 que a própria doutrina marca como obrigatório.
+- **Feito:** helper compartilhado `src/lib/agent/today.ts` (`renderTodayBlock()`); Alpha refatorado pra reusar (output idêntico); `## Hoje` injetado no bloco VOLÁTIL (cache-correto) de planning (`prompt.ts`), `pm-review.ts` e `release-planning.ts`. tsc+eslint limpos. Prompt-only → sem mudança de tool/daemon/surface artifacts.
+- **Problema (original):** Vitoria faz planning semanal e raciocina sobre datas de sprint **sem âncora de hoje** — anti-pattern §14 que a própria doutrina marca como obrigatório.
 - **Evidência:** `src/lib/agent/agents/vitoria/prompt.ts` (sem âncora); `release-planning.ts` (zero); padrão pronto em `src/lib/agent/agents/alpha/context.ts:892-902`.
 - **Ação:** adicionar um bloco `## Hoje` (data + nº da semana/sprint corrente) no prompt das surfaces da Vitoria, reusando o helper do Alpha.
 
@@ -116,11 +117,12 @@ CI de `main` está vermelho **em prod** e o `sync-main.sh` empurra direto sem PR
 - **Evidência:** `scripts/prompt-tools-coherence.test.ts:22` (hardcoda `prd_drafting`).
 - **Ação:** rodar os 2 asserts-invariante nas 3 fases. **Cuidado:** Test2/Test4 são fase-específicos — não envolver tudo num loop cego; separar invariante de fase-específico.
 
-### 4.3 Paridade/limpeza de prompts daemon↔in-process  ·  **S→M**
+### 4.3 Paridade/limpeza de prompts daemon↔in-process  ·  **S→M**  ·  (b) ✅ FEITO 2026-06-25
 
-- **Problema:** (a) `buildPMReviewPrompt` morto no daemon mirror (~300 linhas que driftam); (b) 3 read-tools que o prompt de `release_planning` manda usar não estão registradas no path in-process (fallback OpenRouter trava).
-- **Evidência:** daemon `pm-review.ts:178` (sem refs); `release-planning.ts:144-151` (prompt) vs `:246-286` (tools).
-- **Ação:** (a) deletar o prompt morto do daemon; (b) registrar as 3 factories que já existem no path in-process.
+- **Problema:** (a) `buildPMReviewPrompt` morto no daemon mirror (~300 linhas que driftam); (b) read-tools que o prompt de `release_planning` manda usar não estão registradas no path in-process (fallback OpenRouter trava).
+- **Evidência:** daemon `pm-review.ts:178` (sem refs); `release-planning.ts` prompt referencia `describe_structured_source`/`query_structured_source` vs assembly in-process que não as montava.
+- **Feito (b):** `describe_structured_source` + `query_structured_source` montadas no toolset in-process do release_planning ([release-planning.ts](../../../src/lib/agent/agents/vitoria/release-planning.ts)) — paridade com o registry (path daemon já as tinha). tsc+eslint limpos.
+- **Pendente (a):** deletar o `buildPMReviewPrompt` morto do daemon mirror.
 
 ---
 

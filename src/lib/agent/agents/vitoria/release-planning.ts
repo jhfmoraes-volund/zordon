@@ -29,6 +29,11 @@ import {
 } from "@/lib/dal/planning-session";
 import { getPrdById } from "@/lib/dal/product-requirements";
 import { createReadContextSourceTool } from "@/lib/agent/tools/read-context-source";
+import {
+  createDescribeStructuredSourceTool,
+  createQueryStructuredSourceTool,
+} from "@/lib/agent/tools/structured-source";
+import { renderTodayBlock } from "@/lib/agent/today";
 import { createListContextSourcesTool } from "@/lib/agent/tools/context-source";
 import { createListPrdsTool } from "@/lib/agent/tools/prd";
 import { buildVitoriaTools } from "./tools";
@@ -219,7 +224,9 @@ Apresente a proposta em texto curto: o que entra em cada sprint e o porquê. Qua
     : `## Modo atual: ACT
 Execute com confirmação proporcional: tasks pontuais que o PM pediu, faça direto; plano completo (várias tasks de uma vez), proponha curto e peça ok antes.`;
 
-  const volatile = `${modeBlock}
+  const volatile = `${renderTodayBlock()}
+
+${modeBlock}
 
 ${projectMemoryMd ? `## Memória do projeto (curada pelo Vitor)\n${projectMemoryMd.slice(0, 4000)}\n` : ""}`;
 
@@ -246,6 +253,11 @@ export async function buildReleasePlanningTools(
   return {
     ...taskTools,
     read_context_source: createReadContextSourceTool(),
+    // Insumos estruturados (JSON/CSV) — o prompt manda usar describe/query quando
+    // read_context_source devolve um stub `structured:true`. Estavam só no path
+    // daemon (registry); faltavam no in-process (fallback OpenRouter travava). 4.3b.
+    describe_structured_source: createDescribeStructuredSourceTool(),
+    query_structured_source: createQueryStructuredSourceTool(),
     // PRD-universe saiu do prompt (D14/Fase 3.0) — o agente descobre via SENSE.
     list_prds: createListPrdsTool(projectId),
 
