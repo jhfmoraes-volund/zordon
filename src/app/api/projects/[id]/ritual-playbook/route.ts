@@ -2,8 +2,8 @@
 //   GET ?ritualType=pm_review  → capabilities autoradas (ênfase/redact/…)
 //   PUT { ritualType, capabilities, enabled? } → valida no registry + upsert
 //
-// Autoridade = mesma do PM Review (admin OU ProjectAccess.role='lead'). GET lê
-// quem vê o projeto; PUT exige canCreatePMReviewForProject. db()=service_role
+// Autoridade = PM Review (Manager/PM ou acima, ou grant ritual.pm_review). GET lê
+// quem vê o projeto; PUT exige pm_review.write. db()=service_role
 // (bypassa RLS) → autorização vive no guard.
 //
 // Nota: load_context(granola_folder) NÃO é autorado aqui — vem dos bindings de
@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireProjectViewApi } from "@/lib/dal";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getCurrentMember } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { playbookCapabilitiesSchema } from "@/lib/rituals/capability-registry";
@@ -76,14 +76,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: projectId } = await params;
-  const denied = await requireProjectViewApi(projectId);
+  // PM Review = Manager (PM) ou acima (ou grant ritual.pm_review). authz-catalog.ts.
+  const denied = await requireCapabilityApi("pm_review.write", { projectId });
   if (denied) return denied;
-  if (!(await canCreatePMReviewForProject(projectId))) {
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem editar o playbook." },
-      { status: 403 },
-    );
-  }
 
   const parsed = putSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getActorMemberId } from "@/lib/dal";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   addPMReviewNote,
   PM_REVIEW_NOTE_KINDS,
@@ -30,12 +30,10 @@ export async function POST(
   if (!pm)
     return NextResponse.json({ error: "PM Review não encontrado" }, { status: 404 });
 
-  const allowed = await canCreatePMReviewForProject(pm.projectId);
-  if (!allowed)
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem editar." },
-      { status: 403 },
-    );
+  const denied = await requireCapabilityApi("pm_review.write", {
+    projectId: pm.projectId,
+  });
+  if (denied) return denied;
 
   const body = (await req.json().catch(() => null)) as {
     kind?: string;

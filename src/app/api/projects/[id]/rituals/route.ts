@@ -15,7 +15,7 @@ import {
   type PMReviewNoteKind,
 } from "@/lib/dal/pm-review";
 import { listForProject as listPlanningSessionsForProject } from "@/lib/dal/planning-session";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { canDo } from "@/lib/access/require-capability";
 
 type RitualItem =
   | {
@@ -70,7 +70,7 @@ export async function GET(
     await Promise.all([
       listPMReviewsForProject(projectId),
       listPlanningSessionsForProject(projectId),
-      canCreatePMReviewForProject(projectId),
+      canDo("pm_review.write", { projectId }),
     ]);
 
   const items: RitualItem[] = [];

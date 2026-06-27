@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import {
-  getCurrentMember,
-  requireProjectEditTasksApi,
-} from "@/lib/dal";
+import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { buildRepoManifest } from "@/lib/composio/manifest";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -21,7 +19,7 @@ export async function POST(_req: Request, { params }: RouteParams) {
   }
 
   const { id: projectId } = await params;
-  const denied = await requireProjectEditTasksApi(projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId });
   if (denied) return denied;
 
   const supabase = db();

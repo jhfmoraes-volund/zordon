@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { updateVaga, deleteVaga, deleteVagaHard } from "@/lib/finance/dal";
 
 /** PATCH /api/finance/contract/[id]/vagas/[vagaId] — edita vaga (label/%/fechar). Admin-only. */
@@ -8,7 +8,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string; vagaId: string }> },
 ) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const { vagaId } = await params;
   let body: {
@@ -38,7 +38,7 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string; vagaId: string }> },
 ) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.admin");
   if (denied) return denied;
   const { vagaId } = await params;
   const hard = new URL(req.url).searchParams.get("hard") === "1";

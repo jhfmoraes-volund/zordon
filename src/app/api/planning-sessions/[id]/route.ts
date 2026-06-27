@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  getUser,
-  requireProjectViewApi,
-  requirePlanningOperateApi,
-} from "@/lib/dal";
+import { getUser, requireProjectViewApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   getSession,
   updateSession,
@@ -57,7 +54,9 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requirePlanningOperateApi(session.projectId);
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);
@@ -85,7 +84,9 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requirePlanningOperateApi(session.projectId);
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
   if (denied) return denied;
 
   try {

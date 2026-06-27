@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
+import { projectIdForSprint } from "@/lib/dal/sprint";
 
 /**
  * PATCH /api/sprints/[id]/members/[memberId]
@@ -15,10 +15,16 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; memberId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id: sprintId, memberId } = await params;
+
+  const projectId = await projectIdForSprint(sprintId);
+  if (!projectId) return NextResponse.json({ error: "Sprint not found" }, { status: 404 });
+
+  // Override de alocação (fpAllocation) por sprint = ato de staffing → manager+
+  // (preserva a regra anterior requireMinLevelApi(MANAGER), não afrouxa).
+  const denied = await requireCapabilityApi("member.write");
   if (denied) return denied;
 
-  const { id: sprintId, memberId } = await params;
   const body = await req.json().catch(() => ({}));
   const fpAllocation = Number(body?.fpAllocation);
 
@@ -29,17 +35,10 @@ export async function PATCH(
   const supabase = db();
 
   // Valida que o membro está no projeto do sprint
-  const { data: sprint } = await supabase
-    .from("Sprint")
-    .select("id, projectId")
-    .eq("id", sprintId)
-    .maybeSingle();
-  if (!sprint) return NextResponse.json({ error: "Sprint not found" }, { status: 404 });
-
   const { data: pm } = await supabase
     .from("ProjectMember")
     .select("id")
-    .eq("projectId", sprint.projectId)
+    .eq("projectId", projectId)
     .eq("memberId", memberId)
     .maybeSingle();
   if (!pm) {
@@ -73,10 +72,16 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; memberId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id: sprintId, memberId } = await params;
+
+  const projectId = await projectIdForSprint(sprintId);
+  if (!projectId) return NextResponse.json({ error: "Sprint not found" }, { status: 404 });
+
+  // Override de alocação (fpAllocation) por sprint = ato de staffing → manager+
+  // (preserva a regra anterior requireMinLevelApi(MANAGER), não afrouxa).
+  const denied = await requireCapabilityApi("member.write");
   if (denied) return denied;
 
-  const { id: sprintId, memberId } = await params;
   const { error } = await db()
     .from("SprintMember")
     .delete()

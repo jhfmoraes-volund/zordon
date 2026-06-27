@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { isGuestActor } from "@/lib/guest-payload";
 
 export async function GET(req: NextRequest) {
@@ -92,10 +93,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const body = await req.json();
+  if (!body?.projectId) {
+    return NextResponse.json({ error: "projectId obrigatório" }, { status: 400 });
+  }
+  // Criar sprint: manager (qualquer projeto) ou contributor+ no projeto.
+  const denied = await requireCapabilityApi("sprint.write", {
+    projectId: body.projectId,
+  });
+  if (denied) return denied;
+
   const supabase = db();
 
   const { data: sprint, error } = await supabase

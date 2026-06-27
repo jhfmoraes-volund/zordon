@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUser } from "@/lib/dal";
 import { getSession, updateStatus } from "@/lib/dal/planning-session";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id: sessionId } = await params;
 
   // Validate session exists
@@ -16,6 +13,12 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
+
+  // db() bypassa RLS — gate explícito por projeto (grant-aware via ritual.planning).
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
+  if (denied) return denied;
 
   // Only allow abort if in orchestrating or error state
   if (!["orchestrating", "error"].includes(session.status)) {

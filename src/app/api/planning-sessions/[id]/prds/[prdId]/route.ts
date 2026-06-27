@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getUser } from "@/lib/dal";
-import { updatePrdAssignment, removeLinkedPrd } from "@/lib/dal/planning-session";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
+import {
+  getSession,
+  updatePrdAssignment,
+  removeLinkedPrd,
+} from "@/lib/dal/planning-session";
 
 const updateSchema = z.object({
   sprintStart: z.number().int().min(1).max(12).optional(),
@@ -14,10 +18,17 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; prdId: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const { id: sessionId, prdId } = await params;
 
-  const { prdId } = await params;
+  // db() bypassa RLS — gate por projeto da planning (grant-aware via ritual.planning).
+  const session = await getSession(sessionId);
+  if (!session) {
+    return NextResponse.json({ error: "session not found" }, { status: 404 });
+  }
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
+  if (denied) return denied;
 
   const body = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(body);
@@ -41,10 +52,17 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; prdId: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const { id: sessionId, prdId } = await params;
 
-  const { prdId } = await params;
+  // db() bypassa RLS — gate por projeto da planning (grant-aware via ritual.planning).
+  const session = await getSession(sessionId);
+  if (!session) {
+    return NextResponse.json({ error: "session not found" }, { status: 404 });
+  }
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
+  if (denied) return denied;
 
   try {
     await removeLinkedPrd(prdId);

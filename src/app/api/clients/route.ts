@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function GET() {
   // Carteira de clientes é dado executivo → só manager (PM) ou admin.
@@ -16,7 +17,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireMinAccessLevelApi("manager");
+  const denied = await requireCapabilityApi("client.write");
   if (denied) return denied;
 
   const body = await req.json();

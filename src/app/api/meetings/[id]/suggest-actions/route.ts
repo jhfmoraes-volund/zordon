@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireMinLevelApi, getCurrentMember } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   extractActions,
   type ExtractedTodo,
@@ -40,7 +40,9 @@ export async function POST(
 }
 
 async function handle(params: Promise<{ id: string }>) {
-  const denied = await requireMinLevelApi(MANAGER);
+  // Disparar extração de IA + persistir Todos é operação de PM. Reconcilia
+  // requireMinLevelApi(MANAGER): sem projectId, meeting.edit gateia manager+.
+  const denied = await requireCapabilityApi("meeting.edit");
   if (denied) return denied;
 
   const me = await getCurrentMember();

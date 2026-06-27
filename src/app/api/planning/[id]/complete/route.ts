@@ -8,7 +8,8 @@
  * mesma sprint (discutindo com Vitoria os ajustes).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { requirePlanningOperateApi, getCurrentMember } from "@/lib/dal";
+import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getPlanningById, concludePlanning } from "@/lib/dal/planning";
 import { recordPlanningEventFromCeremony } from "@/lib/dal/planning-event";
 
@@ -30,7 +31,9 @@ export async function POST(
     return NextResponse.json({ error: "Planning não encontrada" }, { status: 404 });
   }
 
-  const denied = await requirePlanningOperateApi(planning.projectId);
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: planning.projectId,
+  });
   if (denied) return denied;
 
   const me = await getCurrentMember();

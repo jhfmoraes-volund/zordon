@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePlanningOperateApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getSession } from "@/lib/dal/planning-session";
 
 export async function DELETE(
@@ -17,7 +17,9 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requirePlanningOperateApi(session.projectId);
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
   if (denied) return denied;
 
   const { error } = await db()

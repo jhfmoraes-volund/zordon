@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { db } from "@/lib/db";
 
 /**
@@ -20,7 +19,19 @@ export async function PATCH(
   { params }: { params: Promise<{ ref: string }> },
 ) {
   const { ref } = await params;
-  const denied = await requireMinLevelApi(MANAGER);
+
+  // projectId p/ graduar não-managers (cap project-scoped); lookup inline.
+  const { data: _row } = await db()
+    .from("UserStory")
+    .select("projectId")
+    .eq("reference", ref)
+    .maybeSingle();
+  const projectId = _row?.projectId;
+  if (!projectId) {
+    return NextResponse.json({ error: "Story not found" }, { status: 404 });
+  }
+
+  const denied = await requireCapabilityApi("story.edit", { projectId });
   if (denied) return denied;
 
   const body = await req.json().catch(() => ({}));

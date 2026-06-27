@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getNextSprintDefaults } from "@/lib/sprint-dates";
 
 export async function GET() {
@@ -46,8 +47,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  // Criar projeto é admin-only (admin é dono da estrutura). Ver authz-catalog.ts.
+  const denied = await requireCapabilityApi("project.create");
+  if (denied) return denied;
 
   const { memberIds, ...data } = await req.json();
   const supabase = db();

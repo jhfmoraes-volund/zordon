@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { promote } from "@/lib/dal/opportunities";
 
 // Validation schema for POST body (optional projectName)
@@ -18,8 +18,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
+  // Promover CRIA um Project → exige direito de criar projeto (admin-only).
+  const denied = await requireCapabilityApi("project.create");
+  if (denied) return denied;
 
   const { id } = await params;
 

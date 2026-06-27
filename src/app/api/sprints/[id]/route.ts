@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getAccessLevel, getUser } from "@/lib/dal";
-import { hasMinAccessLevel } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
+import { projectIdForSprint } from "@/lib/dal/sprint";
 import type { Database } from "@/lib/supabase/database.types";
 
 type SprintUpdate = Database["public"]["Tables"]["Sprint"]["Update"];
@@ -22,10 +22,12 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id } = await params;
+  const projectId = await projectIdForSprint(id);
+  if (!projectId) return new NextResponse("Sprint não encontrada", { status: 404 });
+  const denied = await requireCapabilityApi("sprint.write", { projectId });
+  if (denied) return denied;
+
   const body = await req.json();
 
   if (body.status === "active") {
@@ -85,15 +87,10 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
-  const accessLevel = await getAccessLevel();
-  if (!hasMinAccessLevel(accessLevel, "manager")) {
-    return NextResponse.json({ error: "Apenas PMs e admins podem excluir sprints." }, { status: 403 });
-  }
-
   const { id } = await params;
+  // Deletar sprint é destrutivo → manager+ (preserva regra atual). authz-catalog.ts
+  const denied = await requireCapabilityApi("sprint.delete");
+  if (denied) return denied;
 
   let taskAction: "moveToBacklog" | "delete" | null = null;
   try {

@@ -7,7 +7,8 @@
  * Auth: caller precisa ter acesso ao projeto da planning.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { requireProjectViewApi, getCurrentMember } from "@/lib/dal";
+import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getPlanningById } from "@/lib/dal/planning";
 import { db } from "@/lib/db";
 import type { Database } from "@/lib/supabase/database.types";
@@ -25,7 +26,13 @@ export async function PUT(
     return NextResponse.json({ error: "Planning não encontrada" }, { status: 404 });
   }
 
-  const denied = await requireProjectViewApi(planning.projectId);
+  // Registrar a decisão (approved/rejected/pending) de uma action é OPERAR o
+  // Planning — não basta VER o projeto. Reconciliado de requireProjectViewApi
+  // (view-level, frouxo demais p/ mutação) p/ ritual.planning, o mesmo gate da
+  // rota irmã .../complete. (tightening — ver flag)
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: planning.projectId,
+  });
   if (denied) return denied;
 
   const me = await getCurrentMember();

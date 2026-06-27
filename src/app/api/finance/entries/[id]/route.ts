@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { deleteEntry, updateEntry } from "@/lib/finance/dal";
 import type { EntryInput } from "@/lib/finance/types";
 
@@ -9,7 +9,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const { id } = await params;
   let body: EntryInput;
@@ -30,7 +30,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.admin");
   if (denied) return denied;
   const { id } = await params;
   try {

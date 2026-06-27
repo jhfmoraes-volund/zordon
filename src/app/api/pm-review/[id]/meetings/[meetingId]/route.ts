@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { unlinkMeetingFromPMReview } from "@/lib/dal/pm-review";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function DELETE(
   _req: NextRequest,
@@ -17,12 +17,10 @@ export async function DELETE(
   if (!pm)
     return NextResponse.json({ error: "PM Review não encontrado" }, { status: 404 });
 
-  const allowed = await canCreatePMReviewForProject(pm.projectId);
-  if (!allowed)
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem editar." },
-      { status: 403 },
-    );
+  const denied = await requireCapabilityApi("pm_review.write", {
+    projectId: pm.projectId,
+  });
+  if (denied) return denied;
 
   await unlinkMeetingFromPMReview({ pmReviewId: id, meetingId });
   return NextResponse.json({ ok: true });

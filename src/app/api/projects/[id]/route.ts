@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { OPEN_STATUSES } from "@/lib/function-points";
 import { getUser, getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { isGuestActor } from "@/lib/guest-payload";
 import { parseDriveFolderId } from "@/lib/drive";
 
@@ -373,10 +374,11 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id } = await params;
+  // Editar metadados do projeto é admin-only (estrutura). Ver authz-catalog.ts.
+  const denied = await requireCapabilityApi("project.edit", { projectId: id });
+  if (denied) return denied;
+
   const { memberIds, ...data } = await req.json();
   const supabase = db();
 
@@ -447,10 +449,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id } = await params;
+  // Deletar projeto (cascata destrutiva) é admin-only. Ver authz-catalog.ts.
+  const denied = await requireCapabilityApi("project.delete", { projectId: id });
+  if (denied) return denied;
+
   const { error } = await db().from("Project").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

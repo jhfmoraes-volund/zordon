@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getSession, updateStatus } from "@/lib/dal/planning-session";
 import {
   runPlanningOrchestrateJob,
@@ -17,9 +17,6 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id: sessionId } = await params;
 
   // Validate session exists and is in draft
@@ -27,6 +24,12 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
+
+  // db() bypassa RLS — orquestrar é operar o Planning (grant-aware).
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
+  if (denied) return denied;
 
   if (session.status !== "draft") {
     return NextResponse.json(

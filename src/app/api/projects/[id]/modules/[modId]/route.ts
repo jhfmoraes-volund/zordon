@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { deleteModule, updateModule } from "@/lib/dal/story-hierarchy";
 
 const moduleNameRe = /^[A-Z][A-Z0-9_]*$/;
@@ -14,10 +13,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; modId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id: projectId, modId } = await params;
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId,
+  });
   if (denied) return denied;
 
-  const { modId } = await params;
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
@@ -40,10 +41,12 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; modId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id: projectId, modId } = await params;
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId,
+  });
   if (denied) return denied;
 
-  const { modId } = await params;
   try {
     await deleteModule(modId);
     return new NextResponse(null, { status: 204 });

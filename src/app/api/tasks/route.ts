@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { suggestFunctionPoints } from "@/lib/function-points";
-import { getCurrentMember, getUser, requireProjectMemberApi } from "@/lib/dal";
+import { getCurrentMember, getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { isGuestActor, maskFPListIfGuest, maskFPIfGuest } from "@/lib/guest-payload";
 import { recordTaskCreated } from "@/lib/dal/task-activity-recorder";
 import { flattenTagEmbed, type TaskTagEmbedRow } from "@/lib/task-tags";
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
   if (!data.projectId) {
     return NextResponse.json({ error: "projectId required" }, { status: 400 });
   }
-  const denied = await requireProjectMemberApi(data.projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId: data.projectId });
   if (denied) return denied;
 
   const currentMember = await getCurrentMember();

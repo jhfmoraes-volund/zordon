@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createPrdDraftSession } from "@/lib/sessions/prd-session/dal";
 import { z } from "zod";
 
@@ -23,6 +24,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    const denied = await requireCapabilityApi("session.edit", {
+      projectId: parsed.data.projectId,
+    });
+    if (denied) return denied;
 
     const member = await getCurrentMember();
     if (!member) {

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createAllocation, listAllocations } from "@/lib/finance/dal";
 import type { AllocationInput } from "@/lib/finance/types";
 
 /** GET /api/finance/allocations?projectId=&memberId=&contractId= — alocações. Admin-only. */
 export async function GET(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const { searchParams } = new URL(req.url);
   try {
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
 /** POST /api/finance/allocations — cria alocação (valida Σ%≤100). Admin-only. */
 export async function POST(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   let body: AllocationInput;
   try {

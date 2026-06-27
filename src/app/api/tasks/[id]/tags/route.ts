@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getUser, requireProjectMemberApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { listTagsForTask, setTagsForTask } from "@/lib/dal/task-tags";
 import { TASK_TAG_LIMIT } from "@/lib/task-tags";
 import { snapshotTaskHydrated } from "@/lib/dal/task-snapshot";
@@ -44,7 +45,7 @@ export async function PUT(
   const task = await loadTaskOr404(taskId);
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
-  const denied = await requireProjectMemberApi(task.projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId: task.projectId });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);

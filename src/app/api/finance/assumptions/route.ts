@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   deleteAssumptionsOverride,
   getEffectiveAssumptions,
@@ -10,7 +10,7 @@ import type { AssumptionsInput } from "@/lib/finance/types";
 
 /** GET /api/finance/assumptions?projectId= — premissas vigentes (override→global). */
 export async function GET(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const { searchParams } = new URL(req.url);
   try {
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
 
 /** PUT /api/finance/assumptions — upsert global (projectId null) ou override. */
 export async function PUT(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   let body: { projectId: string | null } & AssumptionsInput;
   try {
@@ -44,7 +44,7 @@ export async function PUT(req: Request) {
 
 /** DELETE /api/finance/assumptions?projectId= — remove override (volta ao global). */
 export async function DELETE(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.admin");
   if (denied) return denied;
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");

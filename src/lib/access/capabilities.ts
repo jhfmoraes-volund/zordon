@@ -42,6 +42,13 @@ export const CAPABILITIES: Capability[] = [
     appKey: "finance",
   },
   {
+    key: "app.ferias",
+    label: "Férias & Folgas",
+    kind: "app",
+    scope: "global",
+    appKey: "ferias",
+  },
+  {
     key: "app.forge",
     label: "Forge",
     kind: "app",

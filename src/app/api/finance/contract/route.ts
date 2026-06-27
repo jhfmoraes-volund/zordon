@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createContract, listContracts } from "@/lib/finance/dal";
 import type { ContractInput } from "@/lib/finance/types";
 
 /** GET /api/finance/contract?projectId= — contratos do projeto (por vigência). Admin-only. */
 export async function GET(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const projectId = new URL(req.url).searchParams.get("projectId");
   if (!projectId) return NextResponse.json({ error: "projectId obrigatório" }, { status: 400 });
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
 /** POST /api/finance/contract — cria um contrato (vigência) no projeto. Admin-only. */
 export async function POST(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   let body: { projectId: string } & ContractInput;
   try {

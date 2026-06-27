@@ -4246,6 +4246,7 @@ export type Database = {
       }
       Member: {
         Row: {
+          contractType: string | null
           createdAt: string
           dailyTodosEveningEnabled: boolean
           dailyTodosEveningTime: string
@@ -4281,6 +4282,7 @@ export type Database = {
           userId: string | null
         }
         Insert: {
+          contractType?: string | null
           createdAt?: string
           dailyTodosEveningEnabled?: boolean
           dailyTodosEveningTime?: string
@@ -4316,6 +4318,7 @@ export type Database = {
           userId?: string | null
         }
         Update: {
+          contractType?: string | null
           createdAt?: string
           dailyTodosEveningEnabled?: boolean
           dailyTodosEveningTime?: string

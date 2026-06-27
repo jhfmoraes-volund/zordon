@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import {
-  getActorMemberId,
-  requireProjectEditTasksApi,
-} from "@/lib/dal";
+import { getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { snapshotAcceptance } from "@/lib/dal/task-snapshot";
 import {
   diffAcceptance,
@@ -47,7 +45,7 @@ export async function PATCH(
   const projectId = await fetchTaskProjectId(id);
   if (!projectId) return new NextResponse("Not found", { status: 404 });
 
-  const denied = await requireProjectEditTasksApi(projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId });
   if (denied) return denied;
 
   const json = await req.json().catch(() => null);

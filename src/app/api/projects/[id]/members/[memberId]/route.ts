@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 /**
  * PATCH /api/projects/[id]/members/[memberId]
@@ -15,9 +14,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; memberId: string }> },
 ) {
-  // Alocação por projeto é gestão de time → MANAGER (coerente com o override
-  // de sprint, que já exige MANAGER, e com /members/[id] gateado em MANAGER).
-  const denied = await requireMinLevelApi(MANAGER);
+  // Alocação por projeto é gestão de time → manager+ (coerente com o override
+  // de sprint, que já exige manager, e com /members/[id] gateado em manager).
+  const denied = await requireCapabilityApi("member.write");
   if (denied) return denied;
 
   const { id: projectId, memberId } = await params;
@@ -63,7 +62,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; memberId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const denied = await requireCapabilityApi("member.write");
   if (denied) return denied;
 
   const { id: projectId, memberId } = await params;

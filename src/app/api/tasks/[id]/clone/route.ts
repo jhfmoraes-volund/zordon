@@ -3,9 +3,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   getActorMemberId,
-  requireProjectEditTasksApi,
   requireProjectViewApi,
 } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getAcForTask, createAc } from "@/lib/dal/story-hierarchy";
 import { createActivity } from "@/lib/dal/task-activity";
 import { flattenTagEmbed, type TaskTagEmbedRow } from "@/lib/task-tags";
@@ -72,7 +72,7 @@ export async function POST(
   }
 
   // Edit access on target project
-  const deniedTarget = await requireProjectEditTasksApi(targetProjectId);
+  const deniedTarget = await requireCapabilityApi("task.edit", { projectId: targetProjectId });
   if (deniedTarget) return deniedTarget;
 
   const { data: targetProject } = await supabase

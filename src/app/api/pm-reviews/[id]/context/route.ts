@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function GET(
   _req: NextRequest,
@@ -24,13 +24,11 @@ export async function GET(
     return NextResponse.json({ error: "PM Review not found" }, { status: 404 });
   }
 
-  const allowed = await canCreatePMReviewForProject(pm.projectId);
-  if (!allowed) {
-    return NextResponse.json(
-      { error: "Access denied. Only PMs (lead) or admins can view." },
-      { status: 403 },
-    );
-  }
+  // Leitura de PM Review = quem vê o projeto (pm_review.view), incl. PMs.
+  const denied = await requireCapabilityApi("pm_review.view", {
+    projectId: pm.projectId,
+  });
+  if (denied) return denied;
 
   // Fetch all context links with ContextSource metadata
   const { data: links, error } = await supabase

@@ -9,7 +9,8 @@
  * o ativo automaticamente.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { requireProjectViewApi, getCurrentMember } from "@/lib/dal";
+import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getSession } from "@/lib/dal/planning-session";
 import { startNewReleasePlanningThread } from "@/lib/agent/context";
 
@@ -24,7 +25,10 @@ export async function POST(
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
 
-  const denied = await requireProjectViewApi(session.projectId);
+  // db() bypassa RLS — abrir thread novo é operar o Planning, não só ver.
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
   if (denied) return denied;
 
   const member = await getCurrentMember();

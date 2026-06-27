@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requirePlanningOperateApi, requireProjectViewApi } from "@/lib/dal";
+import { requireProjectViewApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   getSession,
   addLinkedPrd,
@@ -67,7 +68,9 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requirePlanningOperateApi(session.projectId);
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);

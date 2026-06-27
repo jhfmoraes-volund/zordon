@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEffectiveAccessLevel } from "@/lib/dal";
-import { hasMinAccessLevel } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +20,8 @@ export async function POST(
 ) {
   const { id: runId } = await params;
 
-  const accessLevel = await getEffectiveAccessLevel();
-  if (!hasMinAccessLevel(accessLevel, "manager")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const denied = await requireCapabilityApi("forge.operate");
+  if (denied) return denied;
 
   const supabase = db();
 

@@ -1,13 +1,15 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi, getCurrentMember } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  // Criar action item (Todo) de reunião é operação de PM. Reconcilia
+  // requireMinLevelApi(MANAGER): sem projectId, meeting.edit gateia manager+.
+  const denied = await requireCapabilityApi("meeting.edit");
   if (denied) return denied;
 
   const me = await getCurrentMember();

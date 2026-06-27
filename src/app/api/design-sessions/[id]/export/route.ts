@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionAccessApi } from "@/lib/dal";
+import { requireSessionEditApi } from "@/lib/dal";
 import { db } from "@/lib/db";
 
 /**
@@ -14,7 +14,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: sessionId } = await params;
-  const denied = await requireSessionAccessApi(sessionId);
+  const denied = await requireSessionEditApi(sessionId);
   if (denied) return denied;
 
   const supabase = db();

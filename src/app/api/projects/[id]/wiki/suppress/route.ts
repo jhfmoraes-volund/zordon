@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getUser, getActorMemberId, canEditTasks } from "@/lib/dal";
+import { getUser, getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { parseSuppressed, type SuppressedEntry } from "@/lib/wiki/suppressed";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -38,8 +39,11 @@ async function authAndParse(
     };
   }
 
-  if (!(await canEditTasks(idParsed.data))) {
-    return { ok: false, res: new NextResponse("Forbidden", { status: 403 }) };
+  const denied = await requireCapabilityApi("task.edit", {
+    projectId: idParsed.data,
+  });
+  if (denied) {
+    return { ok: false, res: denied as NextResponse };
   }
 
   const memberId = await getActorMemberId();

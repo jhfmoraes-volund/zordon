@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getEffectiveAccessLevel } from "@/lib/dal";
-import { hasMinAccessLevel } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { setForgeSourceSession } from "@/lib/dal/forge-project";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +23,8 @@ export async function POST(
 ) {
   const { id: projectId } = await params;
 
-  const accessLevel = await getEffectiveAccessLevel();
-  if (!hasMinAccessLevel(accessLevel, "manager")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const denied = await requireCapabilityApi("forge.operate");
+  if (denied) return denied;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

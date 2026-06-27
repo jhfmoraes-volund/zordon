@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import type { Database } from "@/lib/supabase/database.types";
 
 type ActionUpdate = Database["public"]["Tables"]["Todo"]["Update"];
@@ -10,7 +9,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; actionId: string }> }
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  // Action item (Todo) de reunião é operação de PM. Reconcilia
+  // requireMinLevelApi(MANAGER): sem projectId, meeting.edit gateia manager+.
+  const denied = await requireCapabilityApi("meeting.edit");
   if (denied) return denied;
 
   const { actionId } = await params;
@@ -57,7 +58,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; actionId: string }> }
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const denied = await requireCapabilityApi("meeting.edit");
   if (denied) return denied;
 
   const { actionId } = await params;

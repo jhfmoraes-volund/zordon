@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createEntry, listEntries } from "@/lib/finance/dal";
 import type { EntryInput } from "@/lib/finance/types";
 
 /** GET /api/finance/entries?categoryId=&projectId= — itens (drill). Admin-only. */
 export async function GET(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const { searchParams } = new URL(req.url);
   try {
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
 
 /** POST /api/finance/entries — cria transação. Admin-only. */
 export async function POST(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   let body: EntryInput;
   try {

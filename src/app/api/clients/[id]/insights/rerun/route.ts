@@ -5,7 +5,8 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireMinAccessLevelApi, getMemberId } from "@/lib/dal";
+import { getMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -18,7 +19,7 @@ export async function POST(
 ) {
   const { id: clientId } = await params;
 
-  const denied = await requireMinAccessLevelApi("manager");
+  const denied = await requireCapabilityApi("client.write");
   if (denied) return denied;
 
   const supabase = db();

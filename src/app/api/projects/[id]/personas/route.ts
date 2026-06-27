@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  requireProjectViewApi,
-  requireMinLevelApi,
-} from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireProjectViewApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   createPersona,
   getPersonasForProject,
@@ -32,7 +29,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const denied = await requireMinLevelApi(MANAGER);
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId: id,
+  });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);

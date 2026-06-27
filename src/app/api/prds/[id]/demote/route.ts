@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  canEditTasks,
-  getActorMemberId,
-  requireMinLevelApi,
-} from "@/lib/dal";
-import { BUILDER } from "@/lib/roles";
+import { getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { demotePrd, getPrdById } from "@/lib/dal/product-requirements";
 
 export const dynamic = "force-dynamic";
@@ -14,18 +10,18 @@ type RouteContext = { params: Promise<{ id: string }> };
 // Despromove um PRD aprovado de volta pra draft (limpa approvedAt/By), destravando
 // a edição. Caminho dedicado porque o PATCH trata `approved` como imutável.
 export async function POST(_req: NextRequest, ctx: RouteContext) {
-  const denied = await requireMinLevelApi(BUILDER);
-  if (denied) return denied;
-
   const { id } = await ctx.params;
   const current = await getPrdById(id);
   if (!current) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  if (!(await canEditTasks(current.projectId))) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // Reconcilia o gate legacy (requireMinLevelApi(BUILDER) + canEditTasks):
+  // task.edit = manager bypass + ProjectAccess contributor/lead — mesmo nível.
+  const denied = await requireCapabilityApi("task.edit", {
+    projectId: current.projectId,
+  });
+  if (denied) return denied;
 
   const memberId = await getActorMemberId();
 

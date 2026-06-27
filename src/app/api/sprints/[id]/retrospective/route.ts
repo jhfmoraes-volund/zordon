@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser, getMemberId } from "@/lib/dal";
+import { getMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
+import { projectIdForSprint } from "@/lib/dal/sprint";
 
 type Body = {
   goodPoints?: string | null;
@@ -18,10 +20,12 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id } = await params;
+  const projectId = await projectIdForSprint(id);
+  if (!projectId) return new NextResponse("Sprint não encontrada", { status: 404 });
+  const denied = await requireCapabilityApi("sprint.view", { projectId });
+  if (denied) return denied;
+
   const { data, error } = await db()
     .from("SprintRetrospective")
     .select("*")
@@ -35,10 +39,12 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id } = await params;
+  const projectId = await projectIdForSprint(id);
+  if (!projectId) return new NextResponse("Sprint não encontrada", { status: 404 });
+  const denied = await requireCapabilityApi("sprint.write", { projectId });
+  if (denied) return denied;
+
   const body = (await req.json().catch(() => ({}))) as Body;
   const memberId = await getMemberId();
 

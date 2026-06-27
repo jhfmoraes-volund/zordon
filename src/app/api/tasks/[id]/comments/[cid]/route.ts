@@ -3,8 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   getActorMemberId,
-  requireProjectCommentApi,
 } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   decorateForViewer,
   deleteComment,
@@ -69,7 +69,7 @@ async function authorizeAuthor(cid: string): Promise<
       ),
     };
   }
-  const denied = await requireProjectCommentApi(projectId);
+  const denied = await requireCapabilityApi("task.comment", { projectId });
   if (denied) return { ok: false, response: denied };
 
   const me = await getActorMemberId();

@@ -1,13 +1,14 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; reviewId: string }> }
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  // Editar review de reunião é operação de PM (manager+). Reconcilia
+  // requireMinLevelApi(MANAGER): sem projectId, meeting.edit gateia manager+.
+  const denied = await requireCapabilityApi("meeting.edit");
   if (denied) return denied;
 
   const { reviewId } = await params;

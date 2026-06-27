@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function GET() {
   const user = await getUser();
@@ -24,8 +25,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const denied = await requireCapabilityApi("squad.write");
+  if (denied) return denied;
 
   const { memberIds, projectIds, ...data } = await req.json();
   const supabase = db();

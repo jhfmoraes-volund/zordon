@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  getActorMemberId,
-  requireProjectEditTasksApi,
-} from "@/lib/dal";
+import { getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   deleteAc,
   getStoryByReference,
@@ -25,7 +23,9 @@ export async function PATCH(
   const story = await getStoryByReference(ref);
   if (!story) return new NextResponse("Not found", { status: 404 });
 
-  const denied = await requireProjectEditTasksApi(story.projectId);
+  const denied = await requireCapabilityApi("story.edit", {
+    projectId: story.projectId,
+  });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);
@@ -70,7 +70,9 @@ export async function DELETE(
   const story = await getStoryByReference(ref);
   if (!story) return new NextResponse("Not found", { status: 404 });
 
-  const denied = await requireProjectEditTasksApi(story.projectId);
+  const denied = await requireCapabilityApi("story.edit", {
+    projectId: story.projectId,
+  });
   if (denied) return denied;
 
   try {

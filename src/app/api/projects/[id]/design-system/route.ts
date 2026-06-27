@@ -8,8 +8,8 @@
  * db()=service_role → autorização vive nos guards.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi, requireProjectViewApi, getActorMemberId } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireProjectViewApi, getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { isOverSizeLimit } from "@/lib/design-session/file-extraction";
 import {
   getProjectDesignSystem,
@@ -41,10 +41,12 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id: projectId } = await params;
+  const denied = await requireCapabilityApi("project.configure", {
+    projectId,
+  });
   if (denied) return denied;
 
-  const { id: projectId } = await params;
   const memberId = await getActorMemberId();
   if (!memberId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -86,10 +88,12 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id: projectId } = await params;
+  const denied = await requireCapabilityApi("project.configure", {
+    projectId,
+  });
   if (denied) return denied;
 
-  const { id: projectId } = await params;
   try {
     await deleteProjectDesignSystem(projectId);
     return NextResponse.json({ ok: true });

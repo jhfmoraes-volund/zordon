@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { deleteClause, updateClause } from "@/lib/finance/dal";
 import type { ContractClauseInput } from "@/lib/finance/types";
 
 /** PATCH /api/finance/contract-clause/[id]. Admin-only. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const { id } = await params;
   let body: Partial<Pick<ContractClauseInput, "kind" | "text" | "sort">>;
@@ -24,7 +24,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 /** DELETE /api/finance/contract-clause/[id]. Admin-only. */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.admin");
   if (denied) return denied;
   const { id } = await params;
   try {

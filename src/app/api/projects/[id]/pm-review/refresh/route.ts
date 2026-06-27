@@ -3,12 +3,12 @@
 // Roda o MESMO núcleo do cron (refreshPMReviewForProject) pra um projeto, sob
 // demanda: usado como (a) bootstrap ao LIGAR a automação no card — acha-ou-cria
 // o PMReview da semana e sintetiza 1× — e (b) futuro "Atualizar agora" manual.
-// Autoridade = mesma do PM Review (admin OU lead). Ação explícita: não checa o
-// flag `enabled` aqui (o card liga via PUT antes de chamar).
+// Autoridade = mesma do PM Review (Manager/PM ou acima, ou grant). Ação explícita:
+// não checa o flag `enabled` aqui (o card liga via PUT antes de chamar).
 
 import { NextResponse } from "next/server";
-import { requireProjectViewApi, getCurrentMember } from "@/lib/dal";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   refreshPMReviewForProject,
@@ -22,14 +22,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: projectId } = await params;
-  const denied = await requireProjectViewApi(projectId);
+  // PM Review = Manager (PM) ou acima (ou grant ritual.pm_review). authz-catalog.ts.
+  const denied = await requireCapabilityApi("pm_review.write", { projectId });
   if (denied) return denied;
-  if (!(await canCreatePMReviewForProject(projectId))) {
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem rodar o PM Review." },
-      { status: 403 },
-    );
-  }
 
   const admin = createAdminClient();
 

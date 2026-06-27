@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinLevelApi, getCurrentMember } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   approveProposedModule,
   getStoryByReference,
@@ -20,13 +20,16 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ ref: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
-  if (denied) return denied;
-  const member = await getCurrentMember();
-
   const { ref } = await params;
   const story = await getStoryByReference(ref);
   if (!story) return new NextResponse("Not found", { status: 404 });
+
+  const denied = await requireCapabilityApi("story.edit", {
+    projectId: story.projectId,
+  });
+  if (denied) return denied;
+  const member = await getCurrentMember();
+
   if (!story.proposedModuleName) {
     return NextResponse.json(
       { error: "story has no proposedModuleName" },

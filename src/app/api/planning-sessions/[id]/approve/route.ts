@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { z } from "zod";
 import { promises as fs } from "fs";
 import path from "path";
@@ -37,6 +38,13 @@ export async function POST(
       { status: 404 }
     );
   }
+
+  // db() / RLS-client bypass — gate explícito por projeto. Aprovar é operar o
+  // Planning (manager, contributor+, ou grant ritual.planning).
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
+  if (denied) return denied;
 
   // Validate status
   if (session.status !== "in-review") {

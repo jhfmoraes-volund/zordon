@@ -5,7 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function DELETE(
   _req: NextRequest,
@@ -25,13 +25,10 @@ export async function DELETE(
     return NextResponse.json({ error: "PM Review not found" }, { status: 404 });
   }
 
-  const allowed = await canCreatePMReviewForProject(pm.projectId);
-  if (!allowed) {
-    return NextResponse.json(
-      { error: "Access denied. Only PMs (lead) or admins can edit." },
-      { status: 403 },
-    );
-  }
+  const denied = await requireCapabilityApi("pm_review.write", {
+    projectId: pm.projectId,
+  });
+  if (denied) return denied;
 
   // Delete link (WHERE pinning both id and pmReviewId for safety)
   const { error } = await supabase

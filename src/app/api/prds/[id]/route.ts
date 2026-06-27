@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  canEditTasks,
-  canViewProject,
-  getActorMemberId,
-  requireMinLevelApi,
-} from "@/lib/dal";
-import { BUILDER } from "@/lib/roles";
+import { getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   deletePrd,
   getPrdById,
@@ -48,32 +43,33 @@ const PatchBody = z
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: RouteContext) {
-  const denied = await requireMinLevelApi(BUILDER);
-  if (denied) return denied;
-
   const { id } = await ctx.params;
   const prd = await getPrdById(id);
   if (!prd) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  if (!(await canViewProject(prd.projectId))) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // Reconcilia o gate legacy (requireMinLevelApi(BUILDER) + canViewProject):
+  // project.view = manager bypass + ProjectAccess viewer+ + grant — mesmo nível.
+  const denied = await requireCapabilityApi("project.view", {
+    projectId: prd.projectId,
+  });
+  if (denied) return denied;
+
   return NextResponse.json({ data: prd });
 }
 
 export async function PATCH(req: NextRequest, ctx: RouteContext) {
-  const denied = await requireMinLevelApi(BUILDER);
-  if (denied) return denied;
-
   const { id } = await ctx.params;
   const current = await getPrdById(id);
   if (!current) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  if (!(await canEditTasks(current.projectId))) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // Reconcilia o gate legacy (requireMinLevelApi(BUILDER) + canEditTasks):
+  // task.edit = manager bypass + ProjectAccess contributor/lead — mesmo nível.
+  const denied = await requireCapabilityApi("task.edit", {
+    projectId: current.projectId,
+  });
+  if (denied) return denied;
 
   if (current.status === "approved" || current.status === "superseded") {
     return NextResponse.json(
@@ -115,18 +111,18 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 }
 
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
-  const denied = await requireMinLevelApi(BUILDER);
-  if (denied) return denied;
-
   const { id } = await ctx.params;
   const current = await getPrdById(id);
   if (!current) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  if (!(await canEditTasks(current.projectId))) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // Reconcilia o gate legacy (requireMinLevelApi(BUILDER) + canEditTasks):
+  // task.edit = manager bypass + ProjectAccess contributor/lead — mesmo nível.
+  const denied = await requireCapabilityApi("task.edit", {
+    projectId: current.projectId,
+  });
+  if (denied) return denied;
 
   try {
     await deletePrd(id);

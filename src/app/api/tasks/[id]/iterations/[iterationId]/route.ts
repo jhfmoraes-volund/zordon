@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireProjectMemberApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function PUT(
   req: NextRequest,
@@ -18,7 +18,7 @@ export async function PUT(
   if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
-  const denied = await requireProjectMemberApi(task.projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId: task.projectId });
   if (denied) return denied;
 
   const { data: iteration, error } = await supabase

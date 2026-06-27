@@ -10,11 +10,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import {
-  getCurrentMember,
-  requireProjectViewApi,
-  requirePlanningOperateApi,
-} from "@/lib/dal";
+import { getCurrentMember, requireProjectViewApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getMemberIntegrationToken } from "@/lib/member-integrations";
 import { getMeetingDetail, type MeetingSource } from "@/lib/meetings";
 import { buildGranolaClient } from "@/lib/granola";
@@ -179,7 +176,9 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
-  const denied = await requirePlanningOperateApi(session.projectId);
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
   if (denied) return denied;
 
   const member = await getCurrentMember();

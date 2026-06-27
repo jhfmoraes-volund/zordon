@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   updatePMReviewNote,
   deletePMReviewNote,
@@ -12,7 +12,7 @@ import {
   type PMReviewNoteKind,
 } from "@/lib/dal/pm-review";
 
-async function authorize(pmReviewId: string): Promise<NextResponse | null> {
+async function authorize(pmReviewId: string): Promise<Response | null> {
   const { data: pm } = await db()
     .from("PMReview")
     .select("projectId")
@@ -21,13 +21,7 @@ async function authorize(pmReviewId: string): Promise<NextResponse | null> {
   if (!pm)
     return NextResponse.json({ error: "PM Review não encontrado" }, { status: 404 });
 
-  const allowed = await canCreatePMReviewForProject(pm.projectId);
-  if (!allowed)
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem editar notas." },
-      { status: 403 },
-    );
-  return null;
+  return requireCapabilityApi("pm_review.write", { projectId: pm.projectId });
 }
 
 export async function PATCH(

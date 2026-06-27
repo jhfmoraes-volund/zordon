@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser, requireProjectMemberApi } from "@/lib/dal";
+import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function GET(
   _req: NextRequest,
@@ -37,7 +38,7 @@ export async function POST(
   if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
-  const denied = await requireProjectMemberApi(task.projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId: task.projectId });
   if (denied) return denied;
 
   // Auto-increment iteration number

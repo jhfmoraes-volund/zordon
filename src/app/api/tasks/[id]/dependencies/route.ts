@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import {
-  requireProjectEditTasksApi,
-  requireProjectViewApi,
-} from "@/lib/dal";
+import { requireProjectViewApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   DEPENDENCY_KINDS,
   listDependenciesForTask,
@@ -77,7 +75,7 @@ export async function PUT(
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  const denied = await requireProjectEditTasksApi(task.projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId: task.projectId });
   if (denied) return denied;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

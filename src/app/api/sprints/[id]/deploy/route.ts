@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deployOrchestrator } from "@/lib/deploy";
-import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
+import { projectIdForSprint } from "@/lib/dal/sprint";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id } = await params;
+  const projectId = await projectIdForSprint(id);
+  if (!projectId) return new NextResponse("Sprint não encontrada", { status: 404 });
+  const denied = await requireCapabilityApi("sprint.write", { projectId });
+  if (denied) return denied;
+
   const { environment, triggeredBy } = await req.json();
 
   try {

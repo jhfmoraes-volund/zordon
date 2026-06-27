@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { listVagas, createVaga } from "@/lib/finance/dal";
 import type { ContractVagaInput } from "@/lib/finance/types";
 
 /** GET /api/finance/contract/[id]/vagas — vagas do contrato (incl. PM como vaga). Admin-only. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const { id } = await params;
   try {
@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 /** POST /api/finance/contract/[id]/vagas — cria vaga (auto seq). Admin-only. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const { id } = await params;
   let body: ContractVagaInput;

@@ -3,17 +3,15 @@
 //   GET  → folders disponíveis (token do member logado) + bindings já criados
 //   POST → cria binding { folderId, folderName? } (memberId = member logado)
 //
-// Autoridade: mesma do PM Review — admin global OU ProjectAccess.role='lead'
-// (a feature compartilha autoridade com PM Review). Espelha /api/pm-review e a
-// RLS de "ProjectGranolaFolder" (is_manager() OR can_create_pm_review). Como as
-// rotas usam service_role (bypassa RLS), a autorização vive no guard:
+// Autoridade: mesma do PM Review — Manager/PM ou acima (ou grant ritual.pm_review).
+// Como as rotas usam service_role (bypassa RLS), a autorização vive no guard:
 //   - GET  → requireProjectViewApi (quem vê o projeto lê os bindings)
-//   - POST → + canCreatePMReviewForProject (só PM-lead/admin escreve)
+//   - POST → pm_review.write (só Manager/PM ou acima escreve)
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentMember, requireProjectViewApi } from "@/lib/dal";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getMemberGranolaClient } from "@/lib/member-integrations";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -115,14 +113,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: projectId } = await params;
-  const denied = await requireProjectViewApi(projectId);
+  // PM Review = Manager (PM) ou acima (ou grant ritual.pm_review). authz-catalog.ts.
+  const denied = await requireCapabilityApi("pm_review.write", { projectId });
   if (denied) return denied;
-  if (!(await canCreatePMReviewForProject(projectId))) {
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem vincular folders." },
-      { status: 403 },
-    );
-  }
 
   const member = await getCurrentMember();
   if (!member) {

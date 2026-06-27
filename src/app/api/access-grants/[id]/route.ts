@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getUser, requireMinAccessLevelApi } from "@/lib/dal";
+import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { revokeGrant } from "@/lib/access/grants-dal";
 
 /** DELETE → revoga (soft) um grant ativo (admin-only). */
@@ -8,7 +9,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("access_grant.manage");
   if (denied) return denied;
   const actor = await getUser();
   if (!actor) return new NextResponse("Unauthorized", { status: 401 });

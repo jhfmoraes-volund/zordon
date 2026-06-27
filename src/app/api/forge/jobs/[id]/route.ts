@@ -1,11 +1,11 @@
 /**
  * PATCH /api/forge/jobs/[id]
  * Cancel a ForgeJob (only if status is queued or claimed).
- * Auth: is_manager OR is_admin only.
+ * Auth: forge.operate (manager+ ou grant app.forge).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getJob, updateJobStatus } from "@/lib/forge/dal/job";
 
 const CancelJobSchema = z.object({
@@ -16,8 +16,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  // Auth: only manager or admin
-  const denied = await requireMinAccessLevelApi("manager");
+  // Auth: forge.operate (manager+ ou grant app.forge)
+  const denied = await requireCapabilityApi("forge.operate");
   if (denied) return denied;
 
   const { id: jobId } = await params;

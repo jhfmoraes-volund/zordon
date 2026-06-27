@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireProjectEditTasksApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { setTaskUserStory } from "@/lib/dal/story-hierarchy";
 import { snapshotTaskHydrated } from "@/lib/dal/task-snapshot";
 import { recordTaskChanges } from "@/lib/dal/task-activity-recorder";
@@ -23,7 +23,7 @@ export async function POST(
     .maybeSingle();
   if (!task) return new NextResponse("Not found", { status: 404 });
 
-  const denied = await requireProjectEditTasksApi(task.projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId: task.projectId });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);

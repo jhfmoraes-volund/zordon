@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -20,10 +19,11 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; userId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
-  if (denied) return denied;
-
   const { id: projectId, userId } = await params;
+  const denied = await requireCapabilityApi("project.manage_access", {
+    projectId,
+  });
+  if (denied) return denied;
 
   // Confirma que o user é um guest do projeto.
   const { data: access } = await db()

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { deletePersona, updatePersona } from "@/lib/dal/story-hierarchy";
 
 const patchSchema = z.object({
@@ -13,10 +12,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; perId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id: projectId, perId } = await params;
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId,
+  });
   if (denied) return denied;
 
-  const { perId } = await params;
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
@@ -39,10 +40,12 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; perId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id: projectId, perId } = await params;
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId,
+  });
   if (denied) return denied;
 
-  const { perId } = await params;
   try {
     await deletePersona(perId);
     return new NextResponse(null, { status: 204 });

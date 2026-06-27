@@ -12,7 +12,7 @@ import {
   mondayOf,
 } from "@/lib/dal/pm-review";
 import { requireProjectViewApi } from "@/lib/dal";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 async function loadProjectId(id: string): Promise<string | null> {
   const { data } = await db()
@@ -50,12 +50,8 @@ export async function PATCH(
   if (!projectId)
     return NextResponse.json({ error: "PM Review não encontrado" }, { status: 404 });
 
-  const allowed = await canCreatePMReviewForProject(projectId);
-  if (!allowed)
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem editar." },
-      { status: 403 },
-    );
+  const denied = await requireCapabilityApi("pm_review.write", { projectId });
+  if (denied) return denied;
 
   const body = (await req.json().catch(() => null)) as {
     referenceWeek?: string | null;
@@ -101,12 +97,8 @@ export async function DELETE(
   if (!projectId)
     return NextResponse.json({ error: "PM Review não encontrado" }, { status: 404 });
 
-  const allowed = await canCreatePMReviewForProject(projectId);
-  if (!allowed)
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem excluir." },
-      { status: 403 },
-    );
+  const denied = await requireCapabilityApi("pm_review.write", { projectId });
+  if (denied) return denied;
 
   // Hard delete em qualquer status. Cascata (ON DELETE CASCADE) derruba
   // PMReviewNote / PMReviewMeetingLink / PMReviewTranscriptLink / EntityLink.

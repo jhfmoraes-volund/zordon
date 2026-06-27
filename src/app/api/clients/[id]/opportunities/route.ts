@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getUser, getMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { listByClient, create } from "@/lib/dal/opportunities";
 import type { OpportunityStatus } from "@/lib/dal/opportunities";
 
@@ -50,8 +51,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
+  // CRUD de oportunidade é manager+ (gestão comercial). Ver authz-catalog.ts.
+  const denied = await requireCapabilityApi("opportunity.write");
+  if (denied) return denied;
 
   const memberId = await getMemberId();
   if (!memberId) {

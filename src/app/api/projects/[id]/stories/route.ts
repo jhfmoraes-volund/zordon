@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  requireProjectViewApi,
-  requireProjectEditTasksApi,
-  getActorMemberId,
-} from "@/lib/dal";
+import { requireProjectViewApi, getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   createStory,
   getStoriesForProject,
@@ -52,7 +49,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const denied = await requireProjectEditTasksApi(id);
+  const denied = await requireCapabilityApi("story.edit", { projectId: id });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);

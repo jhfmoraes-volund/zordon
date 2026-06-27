@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireProjectEditTasksApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getNextSprintDefaults } from "@/lib/sprint-dates";
 import { SPRINT_GOAL_MAX_LENGTH } from "@/components/sprint/types";
 
@@ -44,7 +44,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: projectId } = await params;
-  const denied = await requireProjectEditTasksApi(projectId);
+  const denied = await requireCapabilityApi("sprint.write", { projectId });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);

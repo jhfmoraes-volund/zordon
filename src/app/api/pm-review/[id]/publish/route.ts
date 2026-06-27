@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { transitionPMReviewStatus } from "@/lib/dal/pm-review";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function POST(
   _req: NextRequest,
@@ -24,12 +24,8 @@ export async function POST(
   if (!projectId)
     return NextResponse.json({ error: "PM Review não encontrado" }, { status: 404 });
 
-  const allowed = await canCreatePMReviewForProject(projectId);
-  if (!allowed)
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem publicar." },
-      { status: 403 },
-    );
+  const denied = await requireCapabilityApi("pm_review.write", { projectId });
+  if (denied) return denied;
 
   try {
     const updated = await transitionPMReviewStatus(id, "published");

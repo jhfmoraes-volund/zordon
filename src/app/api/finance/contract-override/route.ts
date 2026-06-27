@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { listContractOverrides, upsertContractOverride } from "@/lib/finance/dal";
 import type { ContractMonthOverrideInput } from "@/lib/finance/types";
 
 /** GET /api/finance/contract-override?contractId= — overrides de mês do contrato. Admin-only. */
 export async function GET(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const contractId = new URL(req.url).searchParams.get("contractId");
   if (!contractId) return NextResponse.json({ error: "contractId obrigatório" }, { status: 400 });
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
 /** POST /api/finance/contract-override — upsert por (contrato, mês). Admin-only. */
 export async function POST(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   let body: { contractId: string } & ContractMonthOverrideInput;
   try {

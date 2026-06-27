@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentMember, requireMinLevelApi } from "@/lib/dal";
 import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { runAgent } from "@/lib/agent/engine";
 import {
   ensureAgentThread,
@@ -95,7 +96,11 @@ export async function GET(req: NextRequest) {
  * Sends a message to Alpha and streams the AI response.
  */
 export async function POST(req: NextRequest) {
-  const denied = await requireMinLevelApi(MANAGER);
+  // Operar o agente de ops (Alpha) é ação de PM/manager. Reconciliado de
+  // requireMinLevelApi(MANAGER) para o gate único, preservando o nível manager+.
+  // FLAG: não há capability dedicada a "operar agente" no catálogo —
+  // context_source.write (manager+) é o stand-in mais próximo em espírito.
+  const denied = await requireCapabilityApi("context_source.write");
   if (denied) return denied;
 
   const body = await req.json();

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 const ALLOWED_ROLES = [
   "viewer",
@@ -20,9 +19,11 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; userId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
-  if (denied) return denied;
   const { id: projectId, userId } = await params;
+  const denied = await requireCapabilityApi("project.manage_access", {
+    projectId,
+  });
+  if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const role = body?.role as AccessRole | undefined;
   if (!role || !ALLOWED_ROLES.includes(role)) {
@@ -48,9 +49,11 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; userId: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
-  if (denied) return denied;
   const { id: projectId, userId } = await params;
+  const denied = await requireCapabilityApi("project.manage_access", {
+    projectId,
+  });
+  if (denied) return denied;
   const { error } = await db()
     .from("ProjectAccess")
     .delete()

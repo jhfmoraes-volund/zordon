@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { z } from "zod";
 
 const RequestSchema = z.object({
@@ -24,6 +25,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     const { prdIds } = parsed.data;
+
+    const denied = await requireCapabilityApi("prd.write");
+    if (denied) return denied;
 
     const member = await getCurrentMember();
     if (!member) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getUser, requireProjectMemberApi } from "@/lib/dal";
+import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { deleteTag, recolorTag, renameTag } from "@/lib/dal/task-tags";
 import { TAG_TONES } from "@/lib/task-tags";
 
@@ -24,7 +25,9 @@ export async function PATCH(
   const tag = await loadTagOr404(tagId);
   if (!tag) return NextResponse.json({ error: "Tag not found" }, { status: 404 });
 
-  const denied = await requireProjectMemberApi(tag.projectId);
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId: tag.projectId,
+  });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);
@@ -69,7 +72,9 @@ export async function DELETE(
   const tag = await loadTagOr404(tagId);
   if (!tag) return NextResponse.json({ error: "Tag not found" }, { status: 404 });
 
-  const denied = await requireProjectMemberApi(tag.projectId);
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId: tag.projectId,
+  });
   if (denied) return denied;
 
   await deleteTag(tagId);

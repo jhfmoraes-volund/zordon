@@ -10,8 +10,7 @@
  * Auth: caller precisa de admin global OU ProjectAccess.role='lead'.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { requireProjectViewApi } from "@/lib/dal";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createPMReview, mondayOf } from "@/lib/dal/pm-review";
 
 type Body = {
@@ -27,16 +26,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "projectId obrigatório" }, { status: 400 });
   }
 
-  const denied = await requireProjectViewApi(body.projectId);
+  // PM Review = ritual de PM: qualquer manager (PM) opera em qualquer projeto
+  // (P2), ou quem tem grant ritual.pm_review. Ver authz-catalog.ts.
+  const denied = await requireCapabilityApi("pm_review.write", {
+    projectId: body.projectId,
+  });
   if (denied) return denied;
-
-  const allowed = await canCreatePMReviewForProject(body.projectId);
-  if (!allowed) {
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem criar PM Reviews." },
-      { status: 403 },
-    );
-  }
 
   // Normaliza referenceWeek → segunda da semana.
   const week = body.referenceWeek

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { extractTextFromBuffer } from "@/lib/design-session/file-extraction";
 import * as driveAdapter from "@/lib/context-sources/adapters/drive";
 import { z } from "zod";
@@ -116,6 +117,13 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data;
+
+  // Autorização — gerir context sources do projeto é manager+ (cap manager-global).
+  const denied = await requireCapabilityApi("context_source.write", {
+    projectId: data.projectId,
+  });
+  if (denied) return denied;
+
   const supabase = db();
 
   try {

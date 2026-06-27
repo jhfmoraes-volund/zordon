@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getActorMemberId, getUser, requireProjectMemberApi } from "@/lib/dal";
+import { getActorMemberId, getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { isGuestActor, maskFPIfGuest } from "@/lib/guest-payload";
 import { setTagsForTask } from "@/lib/dal/task-tags";
 import {
@@ -71,7 +72,7 @@ export async function PUT(
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  const denied = await requireProjectMemberApi(before.task.projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId: before.task.projectId });
   if (denied) return denied;
 
   // Handle assignment updates
@@ -170,7 +171,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  const denied = await requireProjectMemberApi(current.projectId);
+  const denied = await requireCapabilityApi("task.edit", { projectId: current.projectId });
   if (denied) return denied;
 
   // `?hard=true` → exclusão permanente (remove a linha). Sem o flag, é

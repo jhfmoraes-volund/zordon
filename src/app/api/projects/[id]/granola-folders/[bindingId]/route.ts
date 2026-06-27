@@ -2,8 +2,7 @@
 //   DELETE /api/projects/[id]/granola-folders/[bindingId]
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireProjectViewApi } from "@/lib/dal";
-import { canCreatePMReviewForProject } from "@/lib/pm-review/permission";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function DELETE(
@@ -11,14 +10,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; bindingId: string }> },
 ) {
   const { id: projectId, bindingId } = await params;
-  const denied = await requireProjectViewApi(projectId);
+  // PM Review = Manager (PM) ou acima (ou grant ritual.pm_review). authz-catalog.ts.
+  const denied = await requireCapabilityApi("pm_review.write", { projectId });
   if (denied) return denied;
-  if (!(await canCreatePMReviewForProject(projectId))) {
-    return NextResponse.json(
-      { error: "Apenas PMs (lead) ou admins podem desvincular folders." },
-      { status: 403 },
-    );
-  }
 
   const admin = createAdminClient();
 

@@ -5,6 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import * as gsheetsAdapter from "@/lib/context-sources/adapters/gsheets";
 import * as githubAdapter from "@/lib/context-sources/adapters/github";
 import * as notionAdapter from "@/lib/context-sources/adapters/notion";
@@ -15,6 +16,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+
+  // Autorização — refresh de context source é manager+ (cap manager-global).
+  const denied = await requireCapabilityApi("context_source.write");
+  if (denied) return denied;
+
   const supabase = db();
 
   // Fetch ContextSource metadata

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { update } from "@/lib/dal/opportunities";
 import { db } from "@/lib/db";
 
@@ -25,8 +25,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
+  const denied = await requireCapabilityApi("opportunity.write");
+  if (denied) return denied;
 
   const { id } = await params;
 
@@ -59,8 +59,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
+  const denied = await requireCapabilityApi("opportunity.write");
+  if (denied) return denied;
 
   const { id } = await params;
 

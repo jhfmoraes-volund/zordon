@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { setDefinitionOfDone } from "@/lib/dal/story-hierarchy";
 
 const patchSchema = z.object({
@@ -12,10 +11,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  const { id } = await params;
+  const denied = await requireCapabilityApi("project.configure", {
+    projectId: id,
+  });
   if (denied) return denied;
 
-  const { id } = await params;
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {

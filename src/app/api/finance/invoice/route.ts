@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createInvoice, listInvoices } from "@/lib/finance/dal";
 import type { InvoiceInput } from "@/lib/finance/types";
 
 /** GET /api/finance/invoice?contractId= | ?projectId= — NFs (cobrança). Admin-only. */
 export async function GET(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   const url = new URL(req.url);
   const contractId = url.searchParams.get("contractId") ?? undefined;
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
 
 /** POST /api/finance/invoice — emite/cria uma NF (humano; ver Q1/agente humano-only). Admin-only. */
 export async function POST(req: Request) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("finance.access");
   if (denied) return denied;
   let body: InvoiceInput;
   try {

@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireProjectViewApi, getCurrentMember } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { getSession } from "@/lib/dal/planning-session";
 import { releasePlanningChatConnector } from "@/lib/agent/connectors/release-planning-chat";
 import { ensureReleasePlanningThread } from "@/lib/agent/context";
@@ -102,6 +103,13 @@ export async function POST(
   if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
+
+  // db() bypassa RLS — escrever no chat do ritual é operar o Planning.
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: session.projectId,
+  });
+  if (denied) return denied;
+
   if (session.status === "approved") {
     return NextResponse.json(
       { error: "Release planning aprovado é read-only.", status: session.status },

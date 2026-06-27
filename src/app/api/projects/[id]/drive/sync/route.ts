@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { executeTool, getConnectionStatus } from "@/lib/composio/client";
 import { folderStage, STAGE_ORDER, type DriveStage } from "@/lib/drive/stage";
 
@@ -84,10 +84,12 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
   const { id } = await params;
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId: id,
+  });
+  if (denied) return denied;
+
   const supabase = db();
 
   const { data: project, error: projectError } = await supabase

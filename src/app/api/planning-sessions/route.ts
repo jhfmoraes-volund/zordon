@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  getUser,
-  getMemberId,
-  requireProjectViewApi,
-  requirePlanningOperateApi,
-} from "@/lib/dal";
+import { getUser, getMemberId, requireProjectViewApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   createSession,
   listForProject,
@@ -43,7 +39,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const denied = await requirePlanningOperateApi(parsed.data.projectId);
+  const denied = await requireCapabilityApi("ritual.planning", {
+    projectId: parsed.data.projectId,
+  });
   if (denied) return denied;
 
   // Singleton: "1 planning viva por projeto". Se já existe uma ATIVA, devolve ela

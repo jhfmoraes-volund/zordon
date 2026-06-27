@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getAccessLevel, getActorMemberId, getUser } from "@/lib/dal";
+import { getActorMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { generateSprintGrid } from "@/lib/dal/generate-sprint-grid";
-import { hasMinAccessLevel } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -22,18 +22,12 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
-
-  const accessLevel = await getAccessLevel();
-  if (!hasMinAccessLevel(accessLevel, "manager")) {
-    return NextResponse.json(
-      { error: "Apenas PMs e admins podem gerar sprints." },
-      { status: 403 },
-    );
-  }
-
   const { id: projectId } = await params;
+  const denied = await requireCapabilityApi("project.configure", {
+    projectId,
+  });
+  if (denied) return denied;
+
   const parsed = bodySchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues }, { status: 400 });

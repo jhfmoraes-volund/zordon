@@ -3,9 +3,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   getActorMemberId,
-  requireProjectCommentApi,
   requireProjectViewApi,
 } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   createComment,
   decorateForViewer,
@@ -95,7 +95,7 @@ export async function POST(
   const projectId = await fetchTaskProjectId(id);
   if (!projectId) return new NextResponse("Not found", { status: 404 });
 
-  const denied = await requireProjectCommentApi(projectId);
+  const denied = await requireCapabilityApi("task.comment", { projectId });
   if (denied) return denied;
 
   const json = await req.json().catch(() => null);

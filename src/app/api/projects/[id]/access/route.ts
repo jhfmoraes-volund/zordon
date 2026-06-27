@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getUser, requireMinLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import {
   MANAGER,
   resolveAccessLevel,
@@ -218,9 +219,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
-  if (denied) return denied;
   const { id: projectId } = await params;
+  const denied = await requireCapabilityApi("project.manage_access", {
+    projectId,
+  });
+  if (denied) return denied;
   const me = await getUser();
   if (!me) return new NextResponse("Unauthorized", { status: 401 });
 

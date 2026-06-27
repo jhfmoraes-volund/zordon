@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { canEditTasks, getActorMemberId, getUser } from "@/lib/dal";
+import { getActorMemberId, getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { TASK_TAG_LIMIT } from "@/lib/task-tags";
 import { notifyMembers } from "@/lib/dal/notifications";
 
@@ -86,8 +87,8 @@ export async function PATCH(req: NextRequest) {
   // All projects must pass the edit-tasks gate. If any fails, refuse the
   // entire batch — partial edits are confusing for the user.
   for (const projectId of byProject.keys()) {
-    const ok = await canEditTasks(projectId);
-    if (!ok) {
+    const denied = await requireCapabilityApi("task.edit", { projectId });
+    if (denied) {
       return NextResponse.json(
         { error: "Forbidden — cannot edit tasks in one of the involved projects" },
         { status: 403 },

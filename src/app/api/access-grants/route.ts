@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getUser, requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { CAPABILITY_BY_KEY } from "@/lib/access/capabilities";
 import {
   getMemberUserId,
@@ -46,7 +47,7 @@ const createSchema = z.object({
 
 /** POST → concede uma capability a um membro (admin-only). */
 export async function POST(req: NextRequest) {
-  const denied = await requireMinAccessLevelApi("admin");
+  const denied = await requireCapabilityApi("access_grant.manage");
   if (denied) return denied;
   const actor = await getUser();
   if (!actor) return new NextResponse("Unauthorized", { status: 401 });

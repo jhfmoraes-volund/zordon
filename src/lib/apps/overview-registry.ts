@@ -1,48 +1,33 @@
 /**
  * Zordon Apps — registry da área de Apps do Overview (org-level).
  *
- * Mesmo conceito dos apps que moram nos projetos (src/lib/apps/registry.ts),
- * mas os apps são diferentes: operam na escala da operação inteira, não de um
- * projeto. Por isso não emitem context pool (`produces` vazio) — o contrato
- * "app = unidade de input de contexto" é do escopo de projeto.
+ * Barrel do App SDK: cada app é um módulo auto-contido em
+ * src/lib/apps/defs/overview/<key>.tsx (metadata + Surface via defineApp).
+ * Adicionar app = criar o def + 1 linha aqui — use a skill /new-app.
  *
- * O registry é só metadata — o dispatch de superfície vive em
- * src/components/overview/overview-apps-desktop.tsx. A visibilidade por nível
- * de acesso é resolvida no server (apps-view.tsx) e refiltrada aqui no client.
+ * Apps de Overview operam na escala da operação inteira (não de um projeto),
+ * por isso não emitem context pool (`produces` vazio). O dispatch de superfície
+ * e o filtro de acesso vivem no <AppHost> (src/components/apps/app-host.tsx);
+ * a visibilidade é resolvida no server (apps-view.tsx) e refiltrada lá.
+ *
+ * Os marcadores <new-app:*> abaixo são âncoras pro gerador scripts/new-app.ts —
+ * não remova.
  */
-import { KeyRound, Wallet } from "lucide-react";
+import { type AppModule } from "@/lib/apps/define-app";
+import { accessApp } from "@/lib/apps/defs/overview/access";
+import { financeApp } from "@/lib/apps/defs/overview/finance";
+import { feriasApp } from "@/lib/apps/defs/overview/ferias";
+// <new-app:import>
 
-import { type AppDef } from "./registry";
-
-export const OVERVIEW_APP_REGISTRY: AppDef[] = [
-  {
-    key: "finance",
-    name: "S&OP",
-    tagline: "Receita, despesa e margem por projeto",
-    description:
-      "Análise financeira da operação — receita e despesa por projeto e por mês, com margem de ganho. Dado sensível: visível só para admin.",
-    icon: Wallet,
-    dot: "bg-emerald-500",
-    window: "3xl",
-    produces: {},
-    minAccessLevel: "admin",
-    status: "installed",
-  },
-  {
-    key: "access",
-    name: "Acessos",
-    tagline: "Acesso efetivo e concessões por membro",
-    description:
-      "Visão do acesso efetivo de cada membro (nível global + projetos + concessões) e override por capability — libera/revoga apps e rituais por projeto. Admin-only.",
-    icon: KeyRound,
-    dot: "bg-rose-500",
-    window: "3xl",
-    produces: {},
-    minAccessLevel: "admin",
-    status: "installed",
-  },
+export const OVERVIEW_APP_REGISTRY: AppModule<"overview">[] = [
+  financeApp,
+  accessApp,
+  feriasApp,
+  // <new-app:entry>
 ];
 
-export function getOverviewApp(key: string): AppDef | undefined {
+export function getOverviewApp(
+  key: string,
+): AppModule<"overview"> | undefined {
   return OVERVIEW_APP_REGISTRY.find((a) => a.key === key);
 }

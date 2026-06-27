@@ -1,11 +1,12 @@
 /**
  * POST /api/forge/jobs
  * Create a new ForgeJob (status=queued).
- * Auth: is_manager OR is_admin only.
+ * Auth: forge.operate (manager+ ou grant app.forge).
  */
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMinAccessLevelApi, getMemberId } from "@/lib/dal";
+import { getMemberId } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createJob } from "@/lib/forge/dal/job";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -20,8 +21,8 @@ const CreateJobSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  // Auth: only manager or admin
-  const denied = await requireMinAccessLevelApi("manager");
+  // Auth: forge.operate (manager+ ou grant app.forge)
+  const denied = await requireCapabilityApi("forge.operate");
   if (denied) return denied;
 
   const memberId = await getMemberId();

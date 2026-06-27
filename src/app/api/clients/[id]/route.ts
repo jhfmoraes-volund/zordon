@@ -1,12 +1,12 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requireMinAccessLevelApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = await requireMinAccessLevelApi("manager");
+  const denied = await requireCapabilityApi("client.write");
   if (denied) return denied;
 
   const { id } = await params;
@@ -25,7 +25,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const denied = await requireMinAccessLevelApi("manager");
+  const denied = await requireCapabilityApi("client.write");
   if (denied) return denied;
 
   const { id } = await params;

@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { OPEN_STATUSES } from "@/lib/function-points";
 
 /**
@@ -142,8 +143,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const denied = await requireCapabilityApi("squad.write");
+  if (denied) return denied;
 
   const { id } = await params;
   const { memberIds, projectIds, ...data } = await req.json();
@@ -189,8 +190,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  const denied = await requireCapabilityApi("squad.write");
+  if (denied) return denied;
 
   const { id } = await params;
   const { error } = await db().from("Squad").delete().eq("id", id);

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  requireProjectViewApi,
-  requireProjectEditTasksApi,
-} from "@/lib/dal";
+import { requireProjectViewApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { db } from "@/lib/db";
 import {
   dismissStory,
@@ -71,7 +69,9 @@ export async function PATCH(
   const story = await resolveStory(ref);
   if (!story) return new NextResponse("Not found", { status: 404 });
 
-  const denied = await requireProjectEditTasksApi(story.projectId);
+  const denied = await requireCapabilityApi("story.edit", {
+    projectId: story.projectId,
+  });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);
@@ -100,10 +100,12 @@ export async function DELETE(
   const story = await resolveStory(ref);
   if (!story) return new NextResponse("Not found", { status: 404 });
 
-  // Soft delete (sets `dismissedAt`). Allowed for anyone who can edit tasks
+  // Soft delete (sets `dismissedAt`). Allowed for anyone who can edit stories
   // in the project — builders need to descartar indicações do Vitor dentro do
   // briefing. Underlying data is preserved.
-  const denied = await requireProjectEditTasksApi(story.projectId);
+  const denied = await requireCapabilityApi("story.edit", {
+    projectId: story.projectId,
+  });
   if (denied) return denied;
 
   try {

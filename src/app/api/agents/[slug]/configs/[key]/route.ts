@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireMinLevelApi } from "@/lib/dal";
-import { MANAGER } from "@/lib/roles";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { invalidateAgentConfigCache } from "@/lib/agent/config";
 import { getSettingsSchema } from "@/lib/agent/settings-registry";
 import type { SettingField } from "@/lib/agent/settings-schema";
@@ -14,7 +13,11 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string; key: string }> },
 ) {
-  const denied = await requireMinLevelApi(MANAGER);
+  // Editar config/settings de um agente é configuração de sistema (manager+).
+  // Reconciliado de requireMinLevelApi(MANAGER) preservando o nível manager+.
+  // FLAG: não há capability dedicada a "config de agente"; context_source.write
+  // (manager+, "alimentam agentes/Wiki") é o stand-in mais próximo.
+  const denied = await requireCapabilityApi("context_source.write");
   if (denied) return denied;
 
   const { slug, key } = await params;

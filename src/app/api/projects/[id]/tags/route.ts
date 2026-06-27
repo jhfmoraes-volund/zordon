@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, requireProjectMemberApi } from "@/lib/dal";
+import { requireCapabilityApi } from "@/lib/access/require-capability";
 import { createTag, listTagsForProject } from "@/lib/dal/task-tags";
 import { TAG_TONES } from "@/lib/task-tags";
 
@@ -26,7 +27,9 @@ export async function POST(
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const { id: projectId } = await params;
-  const denied = await requireProjectMemberApi(projectId);
+  const denied = await requireCapabilityApi("project.content_edit", {
+    projectId,
+  });
   if (denied) return denied;
 
   const body = await req.json().catch(() => null);
